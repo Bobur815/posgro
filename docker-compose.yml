@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: grocery-pos-db
+    environment:
+      POSTGRES_USER: ${DB_USER:-grocery_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_password}
+      POSTGRES_DB: grocery_pos
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: always
+    networks:
+      - grocery-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-grocery_user} -d grocery_pos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: grocery-pos-api
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-grocery_user}:${DB_PASSWORD:-secure_password}@postgres:5432/grocery_pos
+      JWT_SECRET: ${JWT_SECRET}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+    networks:
+      - grocery-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: grocery-pos-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - api
+    restart: always
+    networks:
+      - grocery-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  grocery-network:
+    driver: bridge

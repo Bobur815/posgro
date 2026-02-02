@@ -1,0 +1,72 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+dist-electron/
+dist-renderer/
+out/
+build/
+*.exe
+*.dmg
+*.AppImage
+
+# Database files
+*.db
+*.db-journal
+*.db.lock
+pos-local.db
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.pos
+.env.server
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Prisma
+prisma/*.db
+
+# Temporary files
+tmp/
+temp/
+.cache/
+
+# TypeScript
+*.tsbuildinfo
+
+# Electron Builder
+/release/
+
+# Misc
+.eslintcache
+.prettiercache

@@ -1,0 +1,186 @@
+// Grocery POS - Prisma Schema
+// Works with both SQLite (POS) and PostgreSQL (VPS)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Connection URL removed from schema: move connection URLs for Migrate to prisma.config.ts
+  // and pass either `adapter` for a direct database connection or `accelerateUrl` for Accelerate
+  // to the PrismaClient constructor. See https://pris.ly/d/config-datasource and https://pris.ly/d/prisma7-client-config
+}
+
+// ==================== USER MANAGEMENT ====================
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+model User {
+  id        String   @id @default(cuid())
+  phone  String   @unique
+  password  String   // Bcrypt hashed
+  role      UserRole @default(USER)
+  nameUz    String   @map("name_uz")
+  nameRu    String   @map("name_ru")
+  active    Boolean  @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+// ==================== PRODUCTS & INVENTORY ====================
+
+model Category {
+  id       Int    @id @default(autoincrement())
+  nameUz   String    @map("name_uz")
+  nameRu   String    @map("name_ru")
+  active   Boolean   @default(true)
+  products Product[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("categories")
+}
+
+model Product {
+  id         Int   @id @default(autoincrement())
+  barcode    String   @unique
+  nameUz     String   @map("name_uz")
+  nameRu     String   @map("name_ru")
+  price      Decimal  @db.Decimal(10, 2)
+  cost       Decimal? @db.Decimal(10, 2) // Purchase cost (admin only)
+  stock    Decimal @default(0) @db.Decimal(10, 3)
+  minStock Decimal @default(0) @db.Decimal(10, 3) @map("min_stock") // Low stock alert
+  unit       String   @default("шт") // шт, кг, л, etc
+  categoryId Int   @map("category_id")
+  category   Category @relation(fields: [categoryId], references: [id])
+  active     Boolean  @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  sales              SaleItem[]
+  inventoryMovements InventoryArrival[]
+
+  @@map("products")
+}
+
+// ==================== SALES ====================
+
+model Sale {
+  id             String   @id @default(cuid())
+  receiptNumber  String   @unique @map("receipt_number") // Auto-generated
+  totalAmount    Decimal  @map("total_amount") @db.Decimal(10, 2)
+  discountAmount Decimal  @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  finalAmount    Decimal  @map("final_amount") @db.Decimal(10, 2)
+  paymentMethod  String   @map("payment_method") // cash, card
+
+  cashierId   String @map("cashier_id")
+  cashierName String @map("cashier_name") // Denormalized for reports
+  terminalId  String @map("terminal_id") // TERMINAL_01, TERMINAL_02
+
+  // Sync tracking
+  synced   Boolean   @default(false)
+  syncedAt DateTime? @map("synced_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  items SaleItem[]
+
+  @@index([cashierId])
+  @@index([terminalId])
+  @@index([synced])
+  @@index([createdAt])
+  @@map("sales")
+}
+
+model SaleItem {
+  id     String @id @default(cuid())
+  saleId String @map("sale_id")
+  sale   Sale   @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  productId Int  @map("product_id")
+  product   Product @relation(fields: [productId], references: [id])
+
+  productName String  @map("product_name") // Denormalized
+  barcode     String
+  quantity    Decimal @db.Decimal(10, 3) // 1.5 kg, etc
+  unitPrice   Decimal @map("unit_price") @db.Decimal(10, 2)
+  subtotal    Decimal @db.Decimal(10, 2)
+
+  @@map("sale_items")
+}
+
+// ==================== INVENTORY MANAGEMENT ====================
+
+model InventoryArrival {
+  id        String  @id @default(cuid())
+  productId Int  @map("product_id")
+  product   Product @relation(fields: [productId], references: [id])
+
+  quantity  Decimal  @db.Decimal(10, 3)
+  cost      Decimal  @db.Decimal(10, 2) // Purchase cost per unit
+  totalCost Decimal  @map("total_cost") @db.Decimal(10, 2)
+
+  supplierId String?   @map("supplier_id")
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+
+  notes String? @db.Text
+
+  createdBy String   @map("created_by") // User ID or Telegram ID
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([productId])
+  @@index([createdAt])
+  @@map("inventory_arrivals")
+}
+
+model Supplier {
+  id      String  @id @default(cuid())
+  nameUz  String  @map("name_uz")
+  nameRu  String  @map("name_ru")
+  phone   String?
+  address String? @db.Text
+  active  Boolean @default(true)
+
+  arrivals InventoryArrival[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("suppliers")
+}
+
+// ==================== SYSTEM SETTINGS ====================
+
+model SystemSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String @db.Text
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+model AuditLog {
+  id       String  @id @default(cuid())
+  userId   String  @map("user_id")
+  userName String  @map("user_name")
+  action   String // "create_product", "delete_sale", etc
+  entity   String // "product", "sale", "user"
+  entityId String  @map("entity_id")
+  details  String? @db.Text // JSON
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

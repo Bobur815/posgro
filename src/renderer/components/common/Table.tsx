@@ -1,0 +1,117 @@
+import React from 'react';
+import styled from 'styled-components';
+
+interface Column<T> {
+  key: string;
+  header: string;
+  render?: (item: T) => React.ReactNode;
+}
+
+interface TableProps<T> {
+  columns: Column<T>[];
+  data: T[];
+  loading?: boolean;
+  emptyMessage?: string;
+}
+
+const Container = styled.div`
+  overflow-x: auto;
+  background-color: ${({ theme }) => theme.colors.surface};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  box-shadow: ${({ theme }) => theme.shadows.sm};
+`;
+
+const StyledTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+`;
+
+const Thead = styled.thead`
+  background-color: ${({ theme }) => theme.colors.background};
+`;
+
+const Th = styled.th`
+  padding: ${({ theme }) => theme.spacing.md};
+  text-align: left;
+  font-weight: 600;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-size: 14px;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
+`;
+
+const Tbody = styled.tbody``;
+
+const Tr = styled.tr`
+  &:hover {
+    background-color: ${({ theme }) => theme.colors.background};
+  }
+`;
+
+const Td = styled.td`
+  padding: ${({ theme }) => theme.spacing.md};
+  color: ${({ theme }) => theme.colors.text};
+  font-size: 14px;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
+`;
+
+const EmptyRow = styled.tr``;
+
+const EmptyCell = styled.td`
+  padding: ${({ theme }) => theme.spacing.xl};
+  text-align: center;
+  color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
+const LoadingOverlay = styled.div`
+  padding: ${({ theme }) => theme.spacing.xl};
+  text-align: center;
+  color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
+export function Table<T extends Record<string, unknown>>({
+  columns,
+  data,
+  loading = false,
+  emptyMessage = 'No data',
+}: TableProps<T>) {
+  if (loading) {
+    return (
+      <Container>
+        <LoadingOverlay>Loading...</LoadingOverlay>
+      </Container>
+    );
+  }
+
+  return (
+    <Container>
+      <StyledTable>
+        <Thead>
+          <tr>
+            {columns.map((column) => (
+              <Th key={column.key}>{column.header}</Th>
+            ))}
+          </tr>
+        </Thead>
+        <Tbody>
+          {data.length === 0 ? (
+            <EmptyRow>
+              <EmptyCell colSpan={columns.length}>{emptyMessage}</EmptyCell>
+            </EmptyRow>
+          ) : (
+            data.map((item, index) => (
+              <Tr key={index}>
+                {columns.map((column) => (
+                  <Td key={column.key}>
+                    {column.render
+                      ? column.render(item)
+                      : (item[column.key] as React.ReactNode)}
+                  </Td>
+                ))}
+              </Tr>
+            ))
+          )}
+        </Tbody>
+      </StyledTable>
+    </Container>
+  );
+}

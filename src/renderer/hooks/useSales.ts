@@ -1,0 +1,113 @@
+import { useState, useCallback } from 'react';
+
+interface Sale {
+  id: string;
+  receiptNumber: string;
+  totalAmount: number;
+  discountAmount: number;
+  finalAmount: number;
+  paymentMethod: string;
+  cashierName: string;
+  createdAt: string;
+  items: SaleItem[];
+}
+
+interface SaleItem {
+  productId: string;
+  productName: string;
+  barcode: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+}
+
+interface CreateSaleData {
+  items: Array<{
+    productId: string;
+    productName: string;
+    barcode: string;
+    quantity: number;
+    unitPrice: number;
+  }>;
+  paymentMethod: 'cash' | 'card';
+  discountAmount?: number;
+}
+
+interface Summary {
+  date: string;
+  totalSales: number;
+  totalRevenue: number;
+  totalItems: number;
+  cashSales: number;
+  cardSales: number;
+  averageTransaction: number;
+}
+
+export function useSales() {
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadSales = useCallback(async (filters?: { startDate?: string; endDate?: string }) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const data = await window.electronAPI.sales.getAll(filters);
+      setSales(data as Sale[]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load sales');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const createSale = useCallback(async (data: CreateSaleData): Promise<Sale | null> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const sale = await window.electronAPI.sales.create(data);
+      return sale as Sale;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create sale');
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const getSaleById = useCallback(async (id: string): Promise<Sale | null> => {
+    try {
+      const sale = await window.electronAPI.sales.getById(id);
+      return sale as Sale;
+    } catch (err) {
+      console.error('Failed to get sale:', err);
+      return null;
+    }
+  }, []);
+
+  const getTodaySummary = useCallback(async (): Promise<Summary | null> => {
+    setIsLoading(true);
+
+    try {
+      const summary = await window.electronAPI.sales.getTodaySummary();
+      return summary as Summary;
+    } catch (err) {
+      console.error('Failed to get summary:', err);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  return {
+    sales,
+    isLoading,
+    error,
+    loadSales,
+    createSale,
+    getSaleById,
+    getTodaySummary,
+  };
+}
