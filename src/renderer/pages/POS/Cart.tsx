@@ -1,8 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
 import { useCartStore } from '../../store/cart-store';
 import { Button } from '../../components/common/Button';
+import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+import { EmptyPlaceholder } from '../../components/common/EmptyPlaceholder';
+import { ShoppingCart, Trash } from 'lucide-react';
+import { formatCurrency } from '@shared/utils';
 
 const Container = styled.div`
   display: flex;
@@ -62,6 +66,7 @@ const ItemRow = styled.div`
 const ItemName = styled.span`
   font-weight: 500;
   color: ${({ theme }) => theme.colors.text};
+  font-size: 14px;
 `;
 
 const ItemPrice = styled.span`
@@ -93,6 +98,11 @@ const QuantityButton = styled.button`
     background-color: ${({ theme }) => theme.colors.primary};
     color: white;
   }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 `;
 
 const Quantity = styled.span`
@@ -120,31 +130,34 @@ const Footer = styled.div`
   background-color: ${({ theme }) => theme.colors.background};
 `;
 
-const TotalRow = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+const TotalsSection = styled.div`
   margin-bottom: ${({ theme }) => theme.spacing.md};
 `;
 
-const TotalLabel = styled.span`
-  font-size: 18px;
-  font-weight: bold;
-  color: ${({ theme }) => theme.colors.text};
-`;
-
-const TotalAmount = styled.span`
-  font-size: 24px;
-  font-weight: bold;
-  color: ${({ theme }) => theme.colors.primary};
-`;
-
-const EmptyCart = styled.div`
-  flex: 1;
+const TotalRow = styled.div<{ $bold?: boolean; $large?: boolean }>`
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  color: ${({ theme }) => theme.colors.textSecondary};
+  padding: ${({ theme }) => theme.spacing.xs} 0;
+
+  ${({ $bold }) => $bold && `font-weight: bold;`}
+  ${({ $large }) => $large && `
+    font-size: 20px;
+    padding-top: 8px;
+    margin-top: 8px;
+    border-top: 2px solid currentColor;
+  `}
+`;
+
+const TotalLabel = styled.span<{ $muted?: boolean }>`
+  color: ${({ theme, $muted }) => $muted ? theme.colors.textSecondary : theme.colors.text};
+`;
+
+const TotalAmount = styled.span<{ $primary?: boolean; $negative?: boolean }>`
+  color: ${({ theme, $primary, $negative }) =>
+    $negative ? theme.colors.error :
+    $primary ? theme.colors.primary :
+    theme.colors.text};
 `;
 
 interface CartProps {
@@ -153,23 +166,20 @@ interface CartProps {
 
 export function Cart({ onCheckout }: CartProps) {
   const { t } = useTranslation();
-  const { items, total, updateQuantity, removeItem, clearCart } = useCartStore();
-
-  const formatCurrency = (amount: number) => {
-    return amount.toLocaleString('uz-UZ') + ' сум';
-  };
+  const { items, subtotal, tax, discount, total, updateQuantity, removeItem, clearCart } = useCartStore();
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   return (
     <Container>
       <Header>
         <Title>{t('pos.cart')} ({items.length})</Title>
         {items.length > 0 && (
-          <ClearButton onClick={clearCart}>{t('common.clear')}</ClearButton>
+          <ClearButton onClick={() => setShowClearConfirm(true)}>{t('common.clear')}</ClearButton>
         )}
       </Header>
 
       {items.length === 0 ? (
-        <EmptyCart>{t('pos.emptyCart')}</EmptyCart>
+        <EmptyPlaceholder icon={<ShoppingCart size={48} />} title={t('pos.emptyCart')} />
       ) : (
         <ItemsList>
           {items.map((item) => (
@@ -192,7 +202,7 @@ export function Cart({ onCheckout }: CartProps) {
                   +
                 </QuantityButton>
                 <RemoveButton onClick={() => removeItem(item.productId)}>
-                  {t('common.remove')}
+                  <Trash size={16} />
                 </RemoveButton>
               </QuantityControls>
             </CartItem>
@@ -201,18 +211,51 @@ export function Cart({ onCheckout }: CartProps) {
       )}
 
       <Footer>
-        <TotalRow>
-          <TotalLabel>{t('pos.total')}:</TotalLabel>
-          <TotalAmount>{formatCurrency(total)}</TotalAmount>
-        </TotalRow>
+        <TotalsSection>
+          <TotalRow>
+            <TotalLabel $muted>{t('pos.subtotal')}:</TotalLabel>
+            <TotalAmount>{formatCurrency(subtotal)}</TotalAmount>
+          </TotalRow>
+          {tax > 0 && (
+            <TotalRow>
+              <TotalLabel $muted>{t('pos.tax')}:</TotalLabel>
+              <TotalAmount>{formatCurrency(tax)}</TotalAmount>
+            </TotalRow>
+          )}
+          {discount > 0 && (
+            <TotalRow>
+              <TotalLabel $muted>{t('pos.discount')}:</TotalLabel>
+              <TotalAmount $negative>-{formatCurrency(discount)}</TotalAmount>
+            </TotalRow>
+          )}
+          <TotalRow $bold $large>
+            <TotalLabel>{t('pos.total')}:</TotalLabel>
+            <TotalAmount $primary>{formatCurrency(total)}</TotalAmount>
+          </TotalRow>
+        </TotalsSection>
         <Button
           fullWidth
           onClick={onCheckout}
           disabled={items.length === 0}
         >
-          {t('pos.pay')}
+          {t('pos.pay')} - {formatCurrency(total)}
         </Button>
       </Footer>
+
+      {showClearConfirm && (
+        <ConfirmDialog
+          title={t('common.clear')}
+          message={t('pos.clearCartConfirm', 'Are you sure you want to clear the cart?')}
+          confirmLabel={t('common.clear')}
+          cancelLabel={t('common.cancel')}
+          variant="danger"
+          onConfirm={() => {
+            clearCart();
+            setShowClearConfirm(false);
+          }}
+          onCancel={() => setShowClearConfirm(false)}
+        />
+      )}
     </Container>
   );
 }

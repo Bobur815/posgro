@@ -1,13 +1,17 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 
 // Expose protected methods to the renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
   // Authentication
   auth: {
-    login: (username: string, password: string) =>
-      ipcRenderer.invoke('auth:login', username, password),
+    login: (phone: string, password: string) =>
+      ipcRenderer.invoke('auth:login', phone, password),
+    loginWithPin: (pin: string) =>
+      ipcRenderer.invoke('auth:loginWithPin', pin),
     logout: () => ipcRenderer.invoke('auth:logout'),
     getProfile: () => ipcRenderer.invoke('auth:getProfile'),
+    restoreSession: (token: string) =>
+      ipcRenderer.invoke('auth:restoreSession', token),
   },
 
   // Products
@@ -22,6 +26,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('products:update', id, data),
     delete: (id: string) => ipcRenderer.invoke('products:delete', id),
     search: (query: string) => ipcRenderer.invoke('products:search', query),
+    getAnalytics: (productId: number, startDate?: string, endDate?: string) =>
+      ipcRenderer.invoke('products:getAnalytics', productId, startDate, endDate),
   },
 
   // Sales
@@ -59,6 +65,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getLowStock: () => ipcRenderer.invoke('inventory:getLowStock'),
   },
 
+  // Suppliers
+  suppliers: {
+    getAll: (includeInactive?: boolean) =>
+      ipcRenderer.invoke('suppliers:getAll', includeInactive),
+    getById: (id: string) => ipcRenderer.invoke('suppliers:getById', id),
+    create: (data: unknown) => ipcRenderer.invoke('suppliers:create', data),
+    update: (id: string, data: unknown) =>
+      ipcRenderer.invoke('suppliers:update', id, data),
+    delete: (id: string) => ipcRenderer.invoke('suppliers:delete', id),
+    getTransactions: (filters?: unknown) =>
+      ipcRenderer.invoke('suppliers:getTransactions', filters),
+    createTransaction: (data: unknown) =>
+      ipcRenderer.invoke('suppliers:createTransaction', data),
+    updateTransaction: (id: string, data: unknown) =>
+      ipcRenderer.invoke('suppliers:updateTransaction', id, data),
+    deleteTransaction: (id: string) =>
+      ipcRenderer.invoke('suppliers:deleteTransaction', id),
+    getBalance: (supplierId: string) =>
+      ipcRenderer.invoke('suppliers:getBalance', supplierId),
+    recordPayment: (data: unknown) =>
+      ipcRenderer.invoke('suppliers:recordPayment', data),
+  },
+
   // Sync
   sync: {
     trigger: () => ipcRenderer.invoke('sync:trigger'),
@@ -68,8 +97,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('sync:completed', callback);
     },
     onFailed: (callback: (error: { message: string }) => void) => {
-      ipcRenderer.on('sync:failed', (_event, error) => callback(error));
-      return () => ipcRenderer.removeListener('sync:failed', callback);
+      const handler = (_event: IpcRendererEvent, error: { message: string }) => callback(error);
+      ipcRenderer.on('sync:failed', handler);
+      return () => ipcRenderer.removeListener('sync:failed', handler);
     },
   },
 
@@ -93,6 +123,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
     getTerminalId: () => ipcRenderer.invoke('app:getTerminalId'),
+    getStoreInfo: () => ipcRenderer.invoke('app:getStoreInfo'),
     quit: () => ipcRenderer.invoke('app:quit'),
   },
 });
@@ -102,9 +133,11 @@ declare global {
   interface Window {
     electronAPI: {
       auth: {
-        login: (username: string, password: string) => Promise<unknown>;
+        login: (phone: string, password: string) => Promise<unknown>;
+        loginWithPin: (pin: string) => Promise<unknown>;
         logout: () => Promise<void>;
         getProfile: () => Promise<unknown>;
+        restoreSession: (token: string) => Promise<unknown>;
       };
       products: {
         getAll: (filters?: unknown) => Promise<unknown[]>;
@@ -114,6 +147,7 @@ declare global {
         update: (id: string, data: unknown) => Promise<unknown>;
         delete: (id: string) => Promise<boolean>;
         search: (query: string) => Promise<unknown[]>;
+        getAnalytics: (productId: number, startDate?: string, endDate?: string) => Promise<unknown>;
       };
       sales: {
         create: (data: unknown) => Promise<unknown>;
@@ -137,6 +171,19 @@ declare global {
         getArrivals: (filters?: unknown) => Promise<unknown[]>;
         getLowStock: () => Promise<unknown[]>;
       };
+      suppliers: {
+        getAll: (includeInactive?: boolean) => Promise<unknown[]>;
+        getById: (id: string) => Promise<unknown>;
+        create: (data: unknown) => Promise<unknown>;
+        update: (id: string, data: unknown) => Promise<unknown>;
+        delete: (id: string) => Promise<boolean>;
+        getTransactions: (filters?: unknown) => Promise<unknown[]>;
+        createTransaction: (data: unknown) => Promise<unknown>;
+        updateTransaction: (id: string, data: unknown) => Promise<unknown>;
+        deleteTransaction: (id: string) => Promise<boolean>;
+        getBalance: (supplierId: string) => Promise<unknown>;
+        recordPayment: (data: unknown) => Promise<unknown>;
+      };
       sync: {
         trigger: () => Promise<void>;
         getStatus: () => Promise<unknown>;
@@ -156,6 +203,7 @@ declare global {
       app: {
         getVersion: () => Promise<string>;
         getTerminalId: () => Promise<string>;
+        getStoreInfo: () => Promise<{ storeId: string; storeName: string }>;
         quit: () => Promise<void>;
       };
     };

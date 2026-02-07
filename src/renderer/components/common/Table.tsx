@@ -1,10 +1,11 @@
-import React from 'react';
-import styled from 'styled-components';
+import { useTranslation } from "react-i18next";
+import React from "react";
+import styled from "styled-components";
 
 interface Column<T> {
-  key: string;
+  key: Extract<keyof T, string> | string;
   header: string;
-  render?: (item: T) => React.ReactNode;
+  render?: (item: T, index: number) => React.ReactNode;
 }
 
 interface TableProps<T> {
@@ -20,7 +21,7 @@ const Container = styled.div`
   border-radius: ${({ theme }) => theme.borderRadius};
   box-shadow: ${({ theme }) => theme.shadows.sm};
 `;
-
+  
 const StyledTable = styled.table`
   width: 100%;
   border-collapse: collapse;
@@ -68,16 +69,18 @@ const LoadingOverlay = styled.div`
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
-export function Table<T extends Record<string, unknown>>({
+export function Table<T>({
   columns,
   data,
   loading = false,
-  emptyMessage = 'No data',
+  emptyMessage = "No data",
 }: TableProps<T>) {
+  const { t } = useTranslation();
+
   if (loading) {
     return (
       <Container>
-        <LoadingOverlay>Loading...</LoadingOverlay>
+        <LoadingOverlay>{t("common.loading")}</LoadingOverlay>
       </Container>
     );
   }
@@ -103,8 +106,8 @@ export function Table<T extends Record<string, unknown>>({
                 {columns.map((column) => (
                   <Td key={column.key}>
                     {column.render
-                      ? column.render(item)
-                      : (item[column.key] as React.ReactNode)}
+                      ? column.render(item, index)
+                      : (item as any)[column.key]}
                   </Td>
                 ))}
               </Tr>

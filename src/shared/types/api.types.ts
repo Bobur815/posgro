@@ -1,3 +1,5 @@
+import { DiscountType } from "./sale.types";
+
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
@@ -21,6 +23,7 @@ export interface PaginationQuery {
 }
 
 export interface SyncRequest {
+  storeId: string;
   terminalId: string;
   sales: SaleSyncPayload[];
   lastSyncTime: string;
@@ -28,11 +31,12 @@ export interface SyncRequest {
 
 export interface SaleSyncPayload {
   id: string;
+  storeId: string;
   receiptNumber: string;
   items: SaleItemSyncPayload[];
   subtotal: number;
   discount: number;
-  discountType: 'PERCENTAGE' | 'FIXED';
+  discountType: DiscountType;
   finalAmount: number;
   paidAmount: number;
   changeAmount: number;
@@ -64,6 +68,7 @@ export interface SyncResponse {
 
 export interface ProductSyncData {
   id: string;
+  storeId: string;
   barcode: string;
   nameRu: string;
   nameUz: string;

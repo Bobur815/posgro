@@ -1,9 +1,11 @@
-export type UserRole = 'ADMIN' | 'USER';
+import { UserRole } from '../constants/roles';
 
 export interface User {
   id: string;
-  email: string;
-  name: string;
+  storeId: string | null; // Null for SUPER_ADMIN
+  phone: string;
+  nameUz: string;
+  nameRu: string;
   role: UserRole;
   isActive: boolean;
   createdAt: Date;
@@ -11,23 +13,27 @@ export interface User {
 }
 
 export interface UserCreateInput {
-  email: string;
+  storeId: string;
+  phone: string;
   password: string;
-  name: string;
+  nameUz: string;
+  nameRu: string;
   role?: UserRole;
 }
 
 export interface UserUpdateInput {
-  email?: string;
+  phone?: string;
   password?: string;
-  name?: string;
+  nameUz?: string;
+  nameRu?: string;
   role?: UserRole;
   isActive?: boolean;
 }
 
 export interface UserLoginInput {
-  email: string;
+  phone: string;
   password: string;
+  storeId?: string; // Optional: for store-scoped login
 }
 
 export interface AuthResponse {
@@ -37,7 +43,9 @@ export interface AuthResponse {
 
 export interface CurrentUser {
   id: string;
-  email: string;
-  name: string;
+  storeId: string | null;
+  phone: string;
+  nameUz: string;
+  nameRu: string;
   role: UserRole;
 }

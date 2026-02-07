@@ -1,15 +1,155 @@
+// src/main/ipc/products-handlers.ts
 import { ipcMain } from 'electron';
 import { getPrismaClient } from '../database/sqlite-client';
 import { getCurrentUser } from './auth-handlers';
+import { Product, ProductFilterParams } from '@shared/types';
+
+function toNumber(value: unknown): number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') return parseFloat(value) || 0;
+  if (typeof value === 'object' && value !== null) {
+    if ('toNumber' in value && typeof (value as any).toNumber === 'function') {
+      return (value as any).toNumber();
+    }
+  }
+  return 0;
+}
+
+function toNumberOrUndefined(value: unknown): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  return toNumber(value);
+}
+
+function toISOString(value: unknown): string {
+  if (!value) return new Date().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'string') return value;
+  return new Date().toISOString();
+}
+
+function serializeProduct(product: any): Product | null {
+  if (!product) return null;
+
+  const result: Product = {
+    id: Number(product.id),
+    barcode: String(product.barcode || ''),
+    nameRu: String(product.nameRu || ''),
+    nameUz: String(product.nameUz || ''),
+    price: toNumber(product.price),
+    costPrice: toNumberOrUndefined(product.cost),
+    stock: toNumber(product.stock),
+    minStock: toNumber(product.minStock),
+    unit: String(product.unit || 'шт') as Product['unit'],
+    categoryId: product.categoryId != null ? Number(product.categoryId) : undefined,
+    supplierId: product.supplierId || undefined,
+    productionDate: product.productionDate ? toISOString(product.productionDate) : undefined,
+    expiryDate: product.expiryDate ? toISOString(product.expiryDate) : undefined,
+    discountPercent: toNumberOrUndefined(product.discountPercent),
+    isOnPromotion: Boolean(product.isOnPromotion ?? false),
+    isActive: Boolean(product.active ?? true),
+    createdAt: toISOString(product.createdAt),
+    updatedAt: toISOString(product.updatedAt),
+  };
+
+  if (product.category) {
+    result.category = {
+      id: Number(product.category.id),
+      nameRu: String(product.category.nameRu || ''),
+      nameUz: String(product.category.nameUz || ''),
+      createdAt: toISOString(product.category.createdAt),
+      updatedAt: toISOString(product.category.updatedAt),
+    };
+  }
+
+  if (product.supplier) {
+    result.supplier = {
+      id: String(product.supplier.id),
+      nameRu: String(product.supplier.nameRu || ''),
+      nameUz: String(product.supplier.nameUz || ''),
+      phone: product.supplier.phone || undefined,
+      address: product.supplier.address || undefined,
+      active: Boolean(product.supplier.active ?? true),
+      balance: toNumber(product.supplier.balance),
+      createdAt: toISOString(product.supplier.createdAt),
+    };
+  }
+
+  return result;
+}
+
+/** Ensure the value is a plain JSON-safe object that Electron IPC can clone. */
+function ipcSafe<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value));
+}
 
 export function setupProductsHandlers(): void {
-  ipcMain.handle('products:getAll', async (_event, filters) => {
+  ipcMain.handle('products:getAll', async (_event, filters?: ProductFilterParams) => {
     const prisma = getPrismaClient();
 
     const where: Record<string, unknown> = {};
 
+    // Text search (query)
+    if (filters?.query) {
+      const q = filters.query.toLowerCase();
+      const numericId = Number(q);
+      const orConditions: any[] = [
+        { barcode: { contains: q } },
+        { nameRu: { contains: q } },
+        { nameUz: { contains: q } },
+      ];
+      if (!isNaN(numericId) && Number.isInteger(numericId) && numericId > 0) {
+        orConditions.unshift({ id: { equals: numericId } });
+      }
+      where.OR = orConditions;
+    }
+
     if (filters?.categoryId) {
       where.categoryId = filters.categoryId;
+    }
+
+    if (filters?.supplierId) {
+      where.supplierId = filters.supplierId;
+    }
+
+    // Price range
+    if (filters?.priceMin !== undefined || filters?.priceMax !== undefined) {
+      const priceFilter: Record<string, number> = {};
+      if (filters?.priceMin !== undefined) priceFilter.gte = filters.priceMin;
+      if (filters?.priceMax !== undefined) priceFilter.lte = filters.priceMax;
+      where.price = priceFilter;
+    }
+
+    // Unit
+    if (filters?.unit && filters.unit !== 'all') {
+      where.unit = filters.unit;
+    }
+
+    // Promotion status
+    if (filters?.promotionStatus === 'on_promotion') {
+      where.isOnPromotion = true;
+    } else if (filters?.promotionStatus === 'no_promotion') {
+      where.isOnPromotion = false;
+    }
+
+    // Stock availability (partial — out_of_stock and in_stock can be done in Prisma)
+    if (filters?.availability === 'out_of_stock') {
+      where.stock = { lte: 0 };
+    } else if (filters?.availability === 'in_stock' || filters?.availability === 'low_stock') {
+      where.stock = { gt: 0 };
+    }
+
+    // Expiry status
+    if (filters?.expiryStatus && filters.expiryStatus !== 'all') {
+      const now = new Date();
+      const threeDaysLater = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+      if (filters.expiryStatus === 'expired') {
+        where.expiryDate = { lt: now, not: null };
+      } else if (filters.expiryStatus === 'expiring_soon') {
+        where.expiryDate = { gte: now, lte: threeDaysLater };
+      } else if (filters.expiryStatus === 'fresh') {
+        where.expiryDate = { gt: threeDaysLater };
+      }
     }
 
     if (filters?.active !== undefined) {
@@ -18,45 +158,67 @@ export function setupProductsHandlers(): void {
       where.active = true;
     }
 
-    return prisma.product.findMany({
+    let products = await prisma.product.findMany({
       where,
-      include: { category: true },
+      include: { category: true, supplier: true },
       orderBy: { nameRu: 'asc' },
     });
+
+    // Post-filter for low_stock (Prisma can't compare two columns)
+    if (filters?.availability === 'low_stock') {
+      products = products.filter((p: any) => {
+        const stock = toNumber(p.stock);
+        const minStock = toNumber(p.minStock);
+        return stock <= minStock;
+      });
+    }
+
+    return ipcSafe(products.map(serializeProduct));
   });
 
-  ipcMain.handle('products:getById', async (_event, id: string) => {
+  ipcMain.handle('products:getById', async (_event, id: number | string) => {
     const prisma = getPrismaClient();
-    return prisma.product.findUnique({
-      where: { id },
-      include: { category: true },
+    const product = await prisma.product.findUnique({
+      where: { id: Number(id) },
+      include: { category: true, supplier: true },
     });
+    return ipcSafe(serializeProduct(product));
   });
 
   ipcMain.handle('products:getByBarcode', async (_event, barcode: string) => {
     const prisma = getPrismaClient();
-    return prisma.product.findUnique({
+    const product = await prisma.product.findUnique({
       where: { barcode },
-      include: { category: true },
+      include: { category: true, supplier: true },
     });
+    return ipcSafe(serializeProduct(product));
   });
 
   ipcMain.handle('products:search', async (_event, query: string) => {
     const prisma = getPrismaClient();
     const searchQuery = query.toLowerCase();
+    const numericId = Number(searchQuery);
 
-    return prisma.product.findMany({
+    const orConditions: any[] = [
+      { barcode: { contains: searchQuery } },
+      { nameRu: { contains: searchQuery } },
+      { nameUz: { contains: searchQuery } },
+    ];
+
+    if (!isNaN(numericId) && Number.isInteger(numericId) && numericId > 0) {
+      orConditions.unshift({ id: { equals: numericId } });
+    }
+
+    const products = await prisma.product.findMany({
       where: {
         active: true,
-        OR: [
-          { barcode: { contains: searchQuery } },
-          { nameRu: { contains: searchQuery } },
-          { nameUz: { contains: searchQuery } },
-        ],
+        OR: orConditions,
       },
-      include: { category: true },
+      include: { category: true, supplier: true },
       take: 20,
     });
+
+    return ipcSafe(products.map(serializeProduct));
   });
 
   ipcMain.handle('products:create', async (_event, data) => {
@@ -87,19 +249,24 @@ export function setupProductsHandlers(): void {
         minStock: data.minStock || 0,
         unit: data.unit || 'шт',
         categoryId: data.categoryId,
+        supplierId: data.supplierId || null,
+        productionDate: data.productionDate ? new Date(data.productionDate) : null,
+        expiryDate: data.expiryDate ? new Date(data.expiryDate) : null,
+        discountPercent: data.discountPercent ?? 0,
+        isOnPromotion: data.isOnPromotion ?? false,
         active: true,
       },
-      include: { category: true },
+      include: { category: true, supplier: true },
     });
 
     // Log action
     await prisma.auditLog.create({
       data: {
         userId: currentUser.id,
-        userName: currentUser.username,
+        phone: currentUser.phone,
         action: 'create_product',
         entity: 'product',
-        entityId: product.id,
+        entityId: String(product.id),
         details: JSON.stringify({
           barcode: product.barcode,
           name: product.nameRu,
@@ -107,10 +274,10 @@ export function setupProductsHandlers(): void {
       },
     });
 
-    return product;
+    return ipcSafe(serializeProduct(product));
   });
 
-  ipcMain.handle('products:update', async (_event, id: string, data) => {
+  ipcMain.handle('products:update', async (_event, id: number, data) => {
     const currentUser = getCurrentUser();
     if (!currentUser || currentUser.role !== 'ADMIN') {
       throw new Error('Unauthorized');
@@ -123,7 +290,7 @@ export function setupProductsHandlers(): void {
       const existing = await prisma.product.findFirst({
         where: {
           barcode: data.barcode,
-          NOT: { id },
+          id: { not: id },
         },
       });
 
@@ -132,31 +299,49 @@ export function setupProductsHandlers(): void {
       }
     }
 
+    const updateData: Record<string, unknown> = {
+      barcode: data.barcode,
+      nameUz: data.nameUz,
+      nameRu: data.nameRu,
+      price: data.price,
+      cost: data.cost,
+      stock: data.stock,
+      minStock: data.minStock,
+      unit: data.unit,
+      categoryId: data.categoryId,
+      active: data.active,
+    };
+
+    if (data.supplierId !== undefined) {
+      updateData.supplierId = data.supplierId || null;
+    }
+    if (data.productionDate !== undefined) {
+      updateData.productionDate = data.productionDate ? new Date(data.productionDate) : null;
+    }
+    if (data.expiryDate !== undefined) {
+      updateData.expiryDate = data.expiryDate ? new Date(data.expiryDate) : null;
+    }
+    if (data.discountPercent !== undefined) {
+      updateData.discountPercent = data.discountPercent;
+    }
+    if (data.isOnPromotion !== undefined) {
+      updateData.isOnPromotion = data.isOnPromotion;
+    }
+
     const product = await prisma.product.update({
       where: { id },
-      data: {
-        barcode: data.barcode,
-        nameUz: data.nameUz,
-        nameRu: data.nameRu,
-        price: data.price,
-        cost: data.cost,
-        stock: data.stock,
-        minStock: data.minStock,
-        unit: data.unit,
-        categoryId: data.categoryId,
-        active: data.active,
-      },
-      include: { category: true },
+      data: updateData,
+      include: { category: true, supplier: true },
     });
 
     // Log action
     await prisma.auditLog.create({
       data: {
         userId: currentUser.id,
-        userName: currentUser.username,
+        phone: currentUser.phone,
         action: 'update_product',
         entity: 'product',
-        entityId: product.id,
+        entityId: String(product.id),
         details: JSON.stringify({
           barcode: product.barcode,
           name: product.nameRu,
@@ -164,10 +349,10 @@ export function setupProductsHandlers(): void {
       },
     });
 
-    return product;
+    return ipcSafe(serializeProduct(product));
   });
 
-  ipcMain.handle('products:delete', async (_event, id: string) => {
+  ipcMain.handle('products:delete', async (_event, id: number) => {
     const currentUser = getCurrentUser();
     if (!currentUser || currentUser.role !== 'ADMIN') {
       throw new Error('Unauthorized');
@@ -185,13 +370,101 @@ export function setupProductsHandlers(): void {
     await prisma.auditLog.create({
       data: {
         userId: currentUser.id,
-        userName: currentUser.username,
+        phone: currentUser.phone,
         action: 'delete_product',
         entity: 'product',
-        entityId: id,
+        entityId: String(id),
       },
     });
 
     return true;
+  });
+
+  // Product analytics API
+  ipcMain.handle('products:getAnalytics', async (_event, productId: number, startDate?: string, endDate?: string) => {
+    const currentUser = getCurrentUser();
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+      throw new Error('Unauthorized');
+    }
+
+    const prisma = getPrismaClient();
+
+    // Default to last 30 days if no dates provided
+    const end = endDate ? new Date(endDate) : new Date();
+    const start = startDate ? new Date(startDate) : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Set end date to end of day
+    end.setHours(23, 59, 59, 999);
+    start.setHours(0, 0, 0, 0);
+
+    // Get sale items for this product in the date range
+    const saleItems = await prisma.saleItem.findMany({
+      where: {
+        productId,
+        sale: {
+          createdAt: {
+            gte: start,
+            lte: end,
+          },
+        },
+      },
+      include: {
+        sale: true,
+      },
+    });
+
+    // Get the product for cost price
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+    });
+
+    const costPrice = product?.cost ? toNumber(product.cost) : 0;
+
+    // Calculate analytics
+    let totalUnitsSold = 0;
+    let totalRevenue = 0;
+    let totalCost = 0;
+
+    for (const item of saleItems) {
+      const qty = toNumber(item.quantity);
+      const subtotal = toNumber(item.subtotal);
+      totalUnitsSold += qty;
+      totalRevenue += subtotal;
+      totalCost += qty * costPrice;
+    }
+
+    const profit = totalRevenue - totalCost;
+    const profitMargin = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
+
+    // Calculate days in range
+    const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    const avgDailySales = daysDiff > 0 ? totalUnitsSold / daysDiff : 0;
+
+    // Calculate inventory value
+    const currentStock = product ? toNumber(product.stock) : 0;
+    const inventoryValue = currentStock * costPrice;
+
+    return ipcSafe({
+      productId,
+      period: {
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        days: daysDiff,
+      },
+      sales: {
+        totalUnitsSold,
+        totalRevenue,
+        totalCost,
+        profit,
+        profitMargin: Math.round(profitMargin * 100) / 100,
+        avgDailySales: Math.round(avgDailySales * 100) / 100,
+        transactionCount: saleItems.length,
+      },
+      inventory: {
+        currentStock,
+        costPrice,
+        inventoryValue,
+      },
+    });
   });
 }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 import styled from 'styled-components';
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -50,12 +50,14 @@ const ErrorText = styled.span`
   color: ${({ theme }) => theme.colors.error};
 `;
 
-export function Input({ label, error, className, ...props }: InputProps) {
-  return (
-    <Container className={className}>
-      {label && <Label>{label}</Label>}
-      <StyledInput $hasError={Boolean(error)} {...props} />
-      {error && <ErrorText>{error}</ErrorText>}
-    </Container>
-  );
-}
+export const Input = forwardRef<HTMLInputElement, InputProps>(
+  ({ label, error, className, ...props }, ref) => {
+    return (
+      <Container className={className}>
+        {label && <Label>{label}</Label>}
+        <StyledInput $hasError={Boolean(error)} ref={ref} {...props} />
+        {error && <ErrorText>{error}</ErrorText>}
+      </Container>
+    );
+  }
+);

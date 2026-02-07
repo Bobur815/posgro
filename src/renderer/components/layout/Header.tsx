@@ -25,6 +25,25 @@ const Right = styled.div`
   gap: ${({ theme }) => theme.spacing.md};
 `;
 
+const MenuButton = styled.button`
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  padding: 4px 8px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: ${({ theme }) => theme.colors.background};
+    color: ${({ theme }) => theme.colors.text};
+  }
+`;
+
 const SyncStatus = styled.div<{ $syncing?: boolean }>`
   display: flex;
   align-items: center;

@@ -1,18 +1,21 @@
-import { BrowserWindow, screen } from 'electron';
+import { BrowserWindow, screen, Menu, globalShortcut } from 'electron';
 import path from 'path';
 
 export function createWindow(): BrowserWindow {
-  // Get primary display dimensions
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  // Get full primary display size (including taskbar area)
+  const { width, height } = screen.getPrimaryDisplay().bounds;
 
-  // Create the browser window
+  // Remove default menu bar (File, Edit, View, etc.)
+  Menu.setApplicationMenu(null);
+
+  // Create the browser window at full screen size
   const mainWindow = new BrowserWindow({
-    width: Math.min(1400, width),
-    height: Math.min(900, height),
-    minWidth: 1024,
-    minHeight: 768,
+    x: 0,
+    y: 0,
+    width,
+    height,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, '../preload/preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
@@ -20,13 +23,29 @@ export function createWindow(): BrowserWindow {
     show: false,
     title: 'Grocery POS',
     icon: path.join(__dirname, '../../build/icon.ico'),
+    autoHideMenuBar: true, // Hide menu bar
   });
 
-  // Show window when ready to prevent visual flash
+  // Show window when ready
   mainWindow.once('ready-to-show', () => {
+    mainWindow.maximize(); // Remove space around window
+    mainWindow.setBounds({ x: 0, y: 0, width, height }); // Cover taskbar
+    mainWindow.setMaximizable(false);
+    mainWindow.setResizable(false);
     mainWindow.show();
     mainWindow.focus();
   });
+
+  // Register devtools shortcut in development
+  if (process.env.NODE_ENV === 'development') {
+    globalShortcut.register('CommandOrControl+Shift+I', () => {
+      mainWindow.webContents.toggleDevTools();
+    });
+
+    mainWindow.on('closed', () => {
+      globalShortcut.unregister('CommandOrControl+Shift+I');
+    });
+  }
 
   // Load the app
   if (process.env.NODE_ENV === 'development') {

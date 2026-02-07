@@ -1,12 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import styled from 'styled-components';
-import { useProducts } from '../../hooks/useProducts';
-import { useAuthStore } from '../../store/auth-store';
-import { Table } from '../../components/common/Table';
-import { Button } from '../../components/common/Button';
-import { Input } from '../../components/common/Input';
+// src/renderer/pages/Products/ProductList.tsx
+import React, { useEffect, useState,  } from "react";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import styled from "styled-components";
+import { useProducts } from "../../hooks/useProducts";
+import { useAuthStore } from "../../store/auth-store";
+import { Table } from "../../components/common/Table";
+import { Button } from "../../components/common/Button";
+import { Input } from "../../components/common/Input";
+import { ProductFilters } from "../../components/products/ProductFilters";
+import { Product, ProductFilterParams } from "@shared/types";
+import { ChevronDown, ChevronUp, Edit, ListIndentIncrease, Trash } from "lucide-react";
 
 const Container = styled.div`
   display: flex;
@@ -39,77 +43,125 @@ export function ProductList() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { products, loadProducts, search, isLoading } = useProducts();
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const isAdmin = user?.role === 'ADMIN';
+  const { products, categories, suppliers, loadProducts, loadCategories, loadSuppliers, isLoading } = useProducts();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filters, setFilters] = useState<ProductFilterParams>({});
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const isAdmin = user?.role === "ADMIN";
 
   useEffect(() => {
     loadProducts();
-  }, [loadProducts]);
+    loadCategories();
+    loadSuppliers();
+  }, [loadProducts, loadCategories, loadSuppliers]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
+      const params: ProductFilterParams = { ...filters };
       if (searchQuery) {
-        search(searchQuery);
-      } else {
-        loadProducts();
+        params.query = searchQuery;
       }
+      loadProducts(params);
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, search, loadProducts]);
+  }, [searchQuery, filters, loadProducts]);
 
   const formatCurrency = (amount: number) => {
-    return amount.toLocaleString('uz-UZ') + ' сум';
+    return amount.toLocaleString("uz-UZ") + " сум";
   };
 
   const columns = [
-    { key: 'barcode', header: t('products.barcode') },
+    {key: "index", header: "#", render: (_: Product, index: number) => index + 1},
+    {key: "id", header: t("pos.id")},
+    { key: "barcode", header: t("products.barcode") },
     {
-      key: 'name',
-      header: t('products.name'),
-      render: (product: { nameRu: string; nameUz: string }) =>
-        i18n.language === 'uz' ? product.nameUz : product.nameRu,
+      key: "name",
+      header: t("products.name"),
+      render: (product: Product) =>
+        i18n.language === "uz" ? product.nameUz : product.nameRu,
     },
     {
-      key: 'price',
-      header: t('products.price'),
-      render: (product: { price: number }) => formatCurrency(product.price),
+      key: "price",
+      header: t("products.price"),
+      render: (product: Product) => formatCurrency(product.price),
     },
     {
-      key: 'stock',
-      header: t('products.stock'),
-      render: (product: { stock: number; minStock: number }) => (
-        <span style={{ color: product.stock <= product.minStock ? '#f44336' : 'inherit' }}>
+      key: "stock",
+      header: t("products.stock"),
+      render: (product: Product) => (
+        <span
+          style={{
+            color: product.stock <= product.minStock ? "#f44336" : "inherit",
+          }}
+        >
           {product.stock} {product.unit}
         </span>
       ),
     },
     {
-      key: 'category',
-      header: t('products.category'),
-      render: (product: { category?: { nameRu: string; nameUz: string } }) =>
+      key: "expiryDate",
+      header: t("products.expiryDate"),
+      render: (product: Product) =>
+        product.expiryDate
+          ? new Date(product.expiryDate).toLocaleDateString(i18n.language)
+          : "-",
+    },
+    {
+      key: "supplier",
+      header: t("products.supplier"),
+      render: (product: Product) =>
+        product.supplier
+          ? i18n.language === "uz"
+            ? product.supplier.nameUz
+            : product.supplier.nameRu
+          : "-",
+    },
+    {
+      key: "category",
+      header: t("products.category"),
+      render: (product: Product) =>
         product.category
-          ? i18n.language === 'uz'
+          ? i18n.language === "uz"
             ? product.category.nameUz
             : product.category.nameRu
-          : '-',
+          : "-",
     },
   ];
 
   if (isAdmin) {
     columns.push({
-      key: 'actions',
-      header: '',
-      render: (product: { id: string }) => (
+      key: "actions",
+      header: t("common.actions"),
+      render: (product: Product) => (
+        <div style={{ display: "flex", gap: "8px" }}>
         <Button
           variant="secondary"
           size="small"
+          tooltip={t("common.edit")}
           onClick={() => navigate(`/products/${product.id}/edit`)}
         >
-          {t('common.edit')}
+          <Edit size={16}/>
         </Button>
+
+        <Button
+          variant="danger"
+          size="small"
+          tooltip={t("common.delete")}
+          onClick={() => navigate(`/products/${product.id}/delete`)}
+        >
+          <Trash size={16}/>
+        </Button>
+
+        <Button
+          variant="primary"
+          size="small"
+          tooltip={t("products.viewDetails")}
+          onClick={() => navigate(`/products/${product.id}`)}
+        >
+          <ListIndentIncrease size={16} />
+        </Button>
+        </div>
       ),
     });
   }
@@ -117,10 +169,10 @@ export function ProductList() {
   return (
     <Container>
       <Header>
-        <Title>{t('products.title')}</Title>
+        <Title>{t("products.title")}</Title>
         {isAdmin && (
-          <Button onClick={() => navigate('/products/new')}>
-            {t('products.addProduct')}
+          <Button style={{fontSize: "24px"}} onClick={() => navigate("/products/new")}>
+           {t("products.addProduct")}
           </Button>
         )}
       </Header>
@@ -128,17 +180,29 @@ export function ProductList() {
       <Filters>
         <SearchInput
           type="text"
-          placeholder={t('common.search')}
+          placeholder={t("common.search")}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
+
+        <Button style={{ padding: "0px 12px" }} size="small" onClick={() => setIsFilterOpen(!isFilterOpen)}>
+          {t("filters.filters")} {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
+        </Button>
       </Filters>
 
-      <Table
+      <ProductFilters
+        filters={filters}
+        onChange={setFilters}
+        categories={categories as any}
+        suppliers={suppliers as any}
+        isOpen={isFilterOpen}
+      />
+
+      <Table<Product>
         columns={columns}
         data={products}
         loading={isLoading}
-        emptyMessage={t('products.noProducts')}
+        emptyMessage={t("products.noProducts")}
       />
     </Container>
   );

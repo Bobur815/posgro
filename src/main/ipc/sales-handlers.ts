@@ -74,7 +74,7 @@ export function setupSalesHandlers(): void {
     await prisma.auditLog.create({
       data: {
         userId: currentUser.id,
-        userName: currentUser.username,
+        phone: currentUser.phone,
         action: 'create_sale',
         entity: 'sale',
         entityId: sale.id,

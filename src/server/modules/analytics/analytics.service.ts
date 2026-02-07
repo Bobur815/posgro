@@ -1,11 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Sale, SaleItem } from '@prisma/client';
+
+type SaleWithItems = Sale & { items: SaleItem[] };
 
 @Injectable()
 export class AnalyticsService {
   constructor(private prisma: PrismaService) {}
 
-  async getDailyAnalytics(date: Date) {
+  async getDailyAnalytics(storeId: string, date: Date) {
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
 
@@ -14,6 +17,7 @@ export class AnalyticsService {
 
     const sales = await this.prisma.sale.findMany({
       where: {
+        storeId,
         createdAt: {
           gte: startOfDay,
           lte: endOfDay,
@@ -24,33 +28,39 @@ export class AnalyticsService {
 
     const totalSales = sales.length;
     const totalRevenue = sales.reduce(
-      (sum, sale) => sum + Number(sale.finalAmount),
+      (sum: number, sale: SaleWithItems) => sum + Number(sale.finalAmount),
       0,
     );
 
     // Sales by cashier
-    const salesByCashier = sales.reduce((acc, sale) => {
-      if (!acc[sale.cashierName]) {
-        acc[sale.cashierName] = { count: 0, revenue: 0 };
-      }
-      acc[sale.cashierName].count++;
-      acc[sale.cashierName].revenue += Number(sale.finalAmount);
-      return acc;
-    }, {} as Record<string, { count: number; revenue: number }>);
+    const salesByCashier = sales.reduce(
+      (acc: Record<string, { count: number; revenue: number }>, sale: SaleWithItems) => {
+        if (!acc[sale.cashierName]) {
+          acc[sale.cashierName] = { count: 0, revenue: 0 };
+        }
+        acc[sale.cashierName].count++;
+        acc[sale.cashierName].revenue += Number(sale.finalAmount);
+        return acc;
+      },
+      {},
+    );
 
     // Sales by hour
-    const salesByHour = sales.reduce((acc, sale) => {
-      const hour = new Date(sale.createdAt).getHours();
-      if (!acc[hour]) {
-        acc[hour] = { count: 0, revenue: 0 };
-      }
-      acc[hour].count++;
-      acc[hour].revenue += Number(sale.finalAmount);
-      return acc;
-    }, {} as Record<number, { count: number; revenue: number }>);
+    const salesByHour = sales.reduce(
+      (acc: Record<number, { count: number; revenue: number }>, sale: SaleWithItems) => {
+        const hour = new Date(sale.createdAt).getHours();
+        if (!acc[hour]) {
+          acc[hour] = { count: 0, revenue: 0 };
+        }
+        acc[hour].count++;
+        acc[hour].revenue += Number(sale.finalAmount);
+        return acc;
+      },
+      {},
+    );
 
     // Top products
-    const productSales: Record<string, { name: string; quantity: number; revenue: number }> = {};
+    const productSales: Record<number, { name: string; quantity: number; revenue: number }> = {};
     for (const sale of sales) {
       for (const item of sale.items) {
         if (!productSales[item.productId]) {
@@ -77,12 +87,13 @@ export class AnalyticsService {
     };
   }
 
-  async getMonthlyAnalytics(year: number, month: number) {
+  async getMonthlyAnalytics(storeId: string, year: number, month: number) {
     const startOfMonth = new Date(year, month, 1);
     const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
 
     const sales = await this.prisma.sale.findMany({
       where: {
+        storeId,
         createdAt: {
           gte: startOfMonth,
           lte: endOfMonth,
@@ -93,20 +104,23 @@ export class AnalyticsService {
 
     const totalSales = sales.length;
     const totalRevenue = sales.reduce(
-      (sum, sale) => sum + Number(sale.finalAmount),
+      (sum: number, sale: SaleWithItems) => sum + Number(sale.finalAmount),
       0,
     );
 
     // Sales by day
-    const salesByDay = sales.reduce((acc, sale) => {
-      const day = new Date(sale.createdAt).getDate();
-      if (!acc[day]) {
-        acc[day] = { count: 0, revenue: 0 };
-      }
-      acc[day].count++;
-      acc[day].revenue += Number(sale.finalAmount);
-      return acc;
-    }, {} as Record<number, { count: number; revenue: number }>);
+    const salesByDay = sales.reduce(
+      (acc: Record<number, { count: number; revenue: number }>, sale: SaleWithItems) => {
+        const day = new Date(sale.createdAt).getDate();
+        if (!acc[day]) {
+          acc[day] = { count: 0, revenue: 0 };
+        }
+        acc[day].count++;
+        acc[day].revenue += Number(sale.finalAmount);
+        return acc;
+      },
+      {},
+    );
 
     return {
       year,
@@ -118,9 +132,10 @@ export class AnalyticsService {
     };
   }
 
-  async getProductPerformance(startDate: Date, endDate: Date) {
+  async getProductPerformance(storeId: string, startDate: Date, endDate: Date) {
     const sales = await this.prisma.sale.findMany({
       where: {
+        storeId,
         createdAt: {
           gte: startDate,
           lte: endDate,
@@ -130,8 +145,8 @@ export class AnalyticsService {
     });
 
     const productStats: Record<
-      string,
-      { id: string; name: string; quantity: number; revenue: number; salesCount: number }
+      number,
+      { id: number; name: string; quantity: number; revenue: number; salesCount: number }
     > = {};
 
     for (const sale of sales) {

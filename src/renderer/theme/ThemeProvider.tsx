@@ -33,7 +33,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   return (
     <ThemeContext.Provider value={{ theme, mode, toggleTheme }}>
       <StyledThemeProvider theme={theme}>
-        <GlobalStyles />
+        <GlobalStyles theme={theme} />
         {children}
       </StyledThemeProvider>
     </ThemeContext.Provider>

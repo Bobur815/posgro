@@ -1,5 +1,6 @@
 import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { UserRole } from '@prisma/client';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -19,6 +20,11 @@ export class RolesGuard implements CanActivate {
 
     if (!user) {
       return false;
+    }
+
+    // SUPER_ADMIN has access to everything
+    if (user.role === UserRole.SUPER_ADMIN) {
+      return true;
     }
 
     return requiredRoles.includes(user.role);

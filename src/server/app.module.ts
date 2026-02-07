@@ -8,6 +8,8 @@ import { SalesModule } from './modules/sales/sales.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
+import { SuppliersModule } from './modules/suppliers/suppliers.module';
+import { StoresModule } from './modules/stores/stores.module';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { TelegramModule } from './modules/telegram/telegram.module';
     InventoryModule,
     AnalyticsModule,
     TelegramModule,
+    SuppliersModule,
+    StoresModule,
   ],
 })
 export class AppModule {}

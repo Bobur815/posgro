@@ -1,7 +1,13 @@
-export type ProductUnit = 'PCS' | 'KG' | 'L' | 'M';
+import { Supplier } from './supplier.types';
+
+export type ProductUnit = 'шт' | 'кг' | 'л' | 'м';
+
+// Re-export Supplier for backwards compatibility
+export type { Supplier } from './supplier.types';
 
 export interface Product {
-  id: string;
+  id: number;
+  storeId?: string;
   barcode: string;
   nameRu: string;
   nameUz: string;
@@ -12,23 +18,47 @@ export interface Product {
   unit: ProductUnit;
   stock: number;
   minStock: number;
-  categoryId?: string;
+  categoryId?: number;
   category?: Category;
+  supplierId?: string;
+  supplier?: Supplier;
+  productionDate?: string;
+  expiryDate?: string;
+  discountPercent?: number;
+  isOnPromotion: boolean;
   isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Category {
-  id: string;
+  id: number;
+  storeId?: string;
   nameRu: string;
   nameUz: string;
-  parentId?: string;
+  parentId?: number;
   parent?: Category;
   children?: Category[];
   products?: Product[];
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type StockAvailability = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock';
+export type ExpiryStatus = 'all' | 'fresh' | 'expiring_soon' | 'expired';
+export type PromotionStatus = 'all' | 'on_promotion' | 'no_promotion';
+
+export interface ProductFilterParams {
+  query?: string;
+  categoryId?: number;
+  supplierId?: string;
+  priceMin?: number;
+  priceMax?: number;
+  availability?: StockAvailability;
+  expiryStatus?: ExpiryStatus;
+  unit?: ProductUnit | 'all';
+  promotionStatus?: PromotionStatus;
+  active?: boolean;
 }
 
 export interface ProductCreateInput {
@@ -42,7 +72,12 @@ export interface ProductCreateInput {
   unit?: ProductUnit;
   stock?: number;
   minStock?: number;
-  categoryId?: string;
+  categoryId?: number;
+  supplierId?: string;
+  productionDate?: string;
+  expiryDate?: string;
+  discountPercent?: number;
+  isOnPromotion?: boolean;
 }
 
 export interface ProductUpdateInput {
@@ -56,13 +91,18 @@ export interface ProductUpdateInput {
   unit?: ProductUnit;
   stock?: number;
   minStock?: number;
-  categoryId?: string;
+  categoryId?: number;
   isActive?: boolean;
+  supplierId?: string;
+  productionDate?: string;
+  expiryDate?: string;
+  discountPercent?: number;
+  isOnPromotion?: boolean;
 }
 
 export interface ProductSearchQuery {
   query?: string;
-  categoryId?: string;
+  categoryId?: number;
   isActive?: boolean;
   lowStock?: boolean;
   page?: number;
@@ -70,7 +110,7 @@ export interface ProductSearchQuery {
 }
 
 export interface LowStockProduct {
-  id: string;
+  id: number;
   barcode: string;
   nameRu: string;
   nameUz: string;

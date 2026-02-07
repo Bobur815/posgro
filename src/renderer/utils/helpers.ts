@@ -1,5 +1,7 @@
 // General utility functions
 
+import { TFunction } from "i18next";
+
 // Generate unique ID
 export function generateId(): string {
   return Math.random().toString(36).substring(2, 15) +
@@ -156,3 +158,40 @@ export const storage = {
     localStorage.clear();
   },
 };
+
+export function getExpiryDays(t: TFunction, productionDate?: string, expiryDate?: string): string {
+  let prodDate: Date;
+  if (!productionDate) {
+    prodDate = new Date();
+  } else {
+    prodDate = new Date(productionDate);
+  }
+
+  if (!expiryDate) {
+    return 'N/A';
+  }
+  const expDate = new Date(expiryDate);
+  const diffTime = Math.abs(expDate.getTime() - prodDate.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  if (isNaN(diffDays)) {
+    return 'N/A';
+  }
+  const pluralDays = diffDays === 1 ? t('common.day') : t('common.days');
+  return `${diffDays} ${pluralDays}`;
+}
+
+export function getExpireInDays(t: TFunction, expiryDays: string, expiryDate?: string): string {
+  if (expiryDays === 'N/A' || !expiryDate) {
+    return 'N/A';
+  }
+
+  const expDate = new Date(expiryDate);
+  const today = new Date();
+  const diffTime = expDate.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  if (isNaN(diffDays)) {
+    return 'N/A';
+  }
+  const pluralDays = diffDays === 1 ? t('common.day') : t('common.days');
+  return `${diffDays} ${pluralDays}`;
+}

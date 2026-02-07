@@ -3,6 +3,8 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
+import { JwtPayload, LoginResponse } from './types/auth.types';
+import { UserRole } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -11,10 +13,11 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async login(loginDto: LoginDto) {
-    const { username, password } = loginDto;
+  async login(loginDto: LoginDto): Promise<LoginResponse> {
+    const { storeId, phone, password } = loginDto;
 
-    const user = await this.usersService.findByUsername(username);
+    // Find user by phone within the store scope (or global for SUPER_ADMIN)
+    const user = await this.usersService.findByPhoneAndStore(phone, storeId);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -23,14 +26,20 @@ export class AuthService {
       throw new UnauthorizedException('Account is deactivated');
     }
 
+    // SUPER_ADMIN doesn't need storeId, but regular users do
+    if (user.role !== UserRole.SUPER_ADMIN && !user.storeId) {
+      throw new UnauthorizedException('User is not assigned to any store');
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const payload = {
+    const payload: JwtPayload = {
       sub: user.id,
-      username: user.username,
+      storeId: user.storeId,
+      phone: user.phone,
       role: user.role,
     };
 
@@ -40,7 +49,8 @@ export class AuthService {
       token,
       user: {
         id: user.id,
-        username: user.username,
+        storeId: user.storeId,
+        phone: user.phone,
         role: user.role,
         nameUz: user.nameUz,
         nameRu: user.nameRu,
@@ -48,11 +58,12 @@ export class AuthService {
     };
   }
 
-  async validateUser(payload: any) {
+  async validateUser(payload: JwtPayload) {
     const user = await this.usersService.findById(payload.sub);
     if (!user || !user.active) {
       return null;
     }
-    return user;
+    // Attach storeId from token to user object for easy access
+    return { ...user, storeId: payload.storeId };
   }
 }

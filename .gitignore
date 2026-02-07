@@ -70,3 +70,10 @@ temp/
 # Misc
 .eslintcache
 .prettiercache
+nul
+
+# Generated (Prisma)
+src/generated/
+
+# Claude Code
+.claude/

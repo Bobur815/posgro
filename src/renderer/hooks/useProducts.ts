@@ -1,25 +1,28 @@
-import { useState, useCallback } from 'react';
-import { useProductsStore } from '../store/products-store';
+import { useCallback } from 'react';
+import { useProductsStore, Category } from '../store/products-store';
+import { Product, Supplier, ProductFilterParams } from '@shared/types';
 
 export function useProducts() {
   const {
     products,
     categories,
+    suppliers,
     isLoading,
     error,
     setProducts,
     setCategories,
+    setSuppliers,
     setLoading,
     setError,
   } = useProductsStore();
 
-  const loadProducts = useCallback(async (filters?: { categoryId?: string; active?: boolean }) => {
+  const loadProducts = useCallback(async (filters?: ProductFilterParams) => {
     setLoading(true);
     setError(null);
 
     try {
       const data = await window.electronAPI.products.getAll(filters);
-      setProducts(data as any[]);
+      setProducts(data as Product[]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load products');
     } finally {
@@ -30,18 +33,27 @@ export function useProducts() {
   const loadCategories = useCallback(async () => {
     try {
       const data = await window.electronAPI.categories.getAll();
-      setCategories(data as any[]);
+      setCategories(data as Category[]);
     } catch (err) {
       console.error('Failed to load categories:', err);
     }
   }, [setCategories]);
 
-  const search = useCallback(async (query: string) => {
+  const loadSuppliers = useCallback(async () => {
+    try {
+      const data = await window.electronAPI.suppliers.getAll();
+      setSuppliers(data as Supplier[]);
+    } catch (err) {
+      console.error('Failed to load suppliers:', err);
+    }
+  }, [setSuppliers]);
+
+  const search = useCallback(async (query: string, extraFilters?: ProductFilterParams) => {
     setLoading(true);
 
     try {
-      const data = await window.electronAPI.products.search(query);
-      setProducts(data as any[]);
+      const data = await window.electronAPI.products.getAll({ ...extraFilters, query });
+      setProducts(data as Product[]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Search failed');
     } finally {
@@ -52,7 +64,7 @@ export function useProducts() {
   const searchByBarcode = useCallback(async (barcode: string) => {
     try {
       const product = await window.electronAPI.products.getByBarcode(barcode);
-      return product;
+      return product as Product | null;
     } catch (err) {
       console.error('Failed to find product:', err);
       return null;
@@ -62,14 +74,14 @@ export function useProducts() {
   const getById = useCallback(async (id: string) => {
     try {
       const product = await window.electronAPI.products.getById(id);
-      return product;
+      return product as Product | null;
     } catch (err) {
       console.error('Failed to get product:', err);
       return null;
     }
   }, []);
 
-  const createProduct = useCallback(async (data: any) => {
+  const createProduct = useCallback(async (data: Partial<Product>) => {
     setLoading(true);
 
     try {
@@ -84,7 +96,7 @@ export function useProducts() {
     }
   }, [loadProducts, setLoading, setError]);
 
-  const updateProduct = useCallback(async (id: string, data: any) => {
+  const updateProduct = useCallback(async (id: string, data: Partial<Product>) => {
     setLoading(true);
 
     try {
@@ -117,7 +129,7 @@ export function useProducts() {
   const getLowStock = useCallback(async () => {
     try {
       const data = await window.electronAPI.inventory.getLowStock();
-      return data;
+      return data as Product[];
     } catch (err) {
       console.error('Failed to get low stock:', err);
       return [];
@@ -127,10 +139,12 @@ export function useProducts() {
   return {
     products,
     categories,
+    suppliers,
     isLoading,
     error,
     loadProducts,
     loadCategories,
+    loadSuppliers,
     search,
     searchByBarcode,
     getById,

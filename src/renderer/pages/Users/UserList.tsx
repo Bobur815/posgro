@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
 import { Table } from '../../components/common/Table';
 import { Button } from '../../components/common/Button';
+import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 
 const Container = styled.div`
   display: flex;
@@ -44,7 +45,7 @@ const RoleBadge = styled.span<{ $role: string }>`
 
 interface User {
   id: string;
-  username: string;
+  phone: string;
   nameRu: string;
   nameUz: string;
   role: 'ADMIN' | 'USER';
@@ -57,6 +58,7 @@ export function UserList() {
   const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [userToToggle, setUserToToggle] = useState<User | null>(null);
 
   useEffect(() => {
     loadUsers();
@@ -83,7 +85,7 @@ export function UserList() {
   };
 
   const columns = [
-    { key: 'username', header: t('users.username') },
+    { key: 'phone', header: t('users.phone') },
     {
       key: 'name',
       header: t('users.name'),
@@ -127,7 +129,7 @@ export function UserList() {
           <Button
             size="small"
             variant={user.active ? 'danger' : 'primary'}
-            onClick={() => handleToggleActive(user)}
+            onClick={() => setUserToToggle(user)}
           >
             {user.active ? t('users.deactivate') : t('users.activate')}
           </Button>
@@ -149,6 +151,25 @@ export function UserList() {
         loading={isLoading}
         emptyMessage={t('users.noUsers')}
       />
+
+      {userToToggle && (
+        <ConfirmDialog
+          title={userToToggle.active ? t('users.deactivate') : t('users.activate')}
+          message={
+            userToToggle.active
+              ? t('users.deactivateConfirm', { name: i18n.language === 'uz' ? userToToggle.nameUz : userToToggle.nameRu })
+              : t('users.activateConfirm', { name: i18n.language === 'uz' ? userToToggle.nameUz : userToToggle.nameRu })
+          }
+          confirmLabel={userToToggle.active ? t('users.deactivate') : t('users.activate')}
+          cancelLabel={t('common.cancel')}
+          variant={userToToggle.active ? 'danger' : 'primary'}
+          onConfirm={() => {
+            handleToggleActive(userToToggle);
+            setUserToToggle(null);
+          }}
+          onCancel={() => setUserToToggle(null)}
+        />
+      )}
     </Container>
   );
 }

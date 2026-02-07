@@ -1,12 +1,15 @@
-export type PaymentMethod = 'CASH' | 'CARD' | 'MIXED';
+import { PaymentMethod } from '../constants/payment-methods';
+
+export type DiscountType = 'PERCENTAGE' | 'FIXED';
 
 export interface Sale {
   id: string;
+  storeId: string;
   receiptNumber: string;
   items: SaleItem[];
   subtotal: number;
   discount: number;
-  discountType: 'PERCENTAGE' | 'FIXED';
+  discountType: DiscountType;
   finalAmount: number;
   paidAmount: number;
   changeAmount: number;
@@ -49,7 +52,7 @@ export interface CartItem {
 export interface SaleCreateInput {
   items: SaleItemInput[];
   discount?: number;
-  discountType?: 'PERCENTAGE' | 'FIXED';
+  discountType?: DiscountType;
   paymentMethod: PaymentMethod;
   paidAmount: number;
   cashAmount?: number;
@@ -64,11 +67,12 @@ export interface SaleItemInput {
 
 export interface SaleSyncData {
   id: string;
+  storeId: string;
   receiptNumber: string;
   items: SaleItem[];
   subtotal: number;
   discount: number;
-  discountType: 'PERCENTAGE' | 'FIXED';
+  discountType: DiscountType;
   finalAmount: number;
   paidAmount: number;
   changeAmount: number;

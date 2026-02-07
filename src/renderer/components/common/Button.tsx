@@ -6,6 +6,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   size?: 'small' | 'medium' | 'large';
   fullWidth?: boolean;
   children: React.ReactNode;
+  tooltip?: string;
 }
 
 const StyledButton = styled.button<{
@@ -34,12 +35,12 @@ const StyledButton = styled.button<{
       case 'small':
         return css`
           padding: ${theme.spacing.xs} ${theme.spacing.sm};
-          font-size: 12px;
+          font-size: 14px;
         `;
       case 'large':
         return css`
           padding: ${theme.spacing.md} ${theme.spacing.xl};
-          font-size: 16px;
+          font-size: 18px;
         `;
       default:
         return css`
@@ -94,9 +95,10 @@ const StyledButton = styled.button<{
 
 export function Button({
   variant = 'primary',
-  size = 'medium',
+  size = 'large',
   fullWidth = false,
   children,
+  tooltip,
   ...props
 }: ButtonProps) {
   return (
@@ -104,6 +106,7 @@ export function Button({
       $variant={variant}
       $size={size}
       $fullWidth={fullWidth}
+      title={tooltip}
       {...props}
     >
       {children}

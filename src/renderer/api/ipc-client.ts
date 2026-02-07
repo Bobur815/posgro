@@ -6,8 +6,8 @@ export const ipc = typeof window !== 'undefined' ? window.electronAPI : null;
 
 // Type-safe helper functions
 export const auth = {
-  login: (username: string, password: string) =>
-    ipc?.auth.login(username, password),
+  login: (phone: string, password: string) =>
+    ipc?.auth.login(phone, password),
   logout: () => ipc?.auth.logout(),
   getProfile: () => ipc?.auth.getProfile(),
 };
@@ -21,6 +21,8 @@ export const products = {
   update: (id: string, data: unknown) => ipc?.products.update(id, data),
   delete: (id: string) => ipc?.products.delete(id),
   search: (query: string) => ipc?.products.search(query),
+  getAnalytics: (productId: number, startDate?: string, endDate?: string) =>
+    ipc?.products.getAnalytics(productId, startDate, endDate),
 };
 
 export const sales = {
@@ -49,6 +51,21 @@ export const inventory = {
   getArrivals: (filters?: { productId?: string }) =>
     ipc?.inventory.getArrivals(filters),
   getLowStock: () => ipc?.inventory.getLowStock(),
+};
+
+export const suppliers = {
+  getAll: (includeInactive?: boolean) => ipc?.suppliers.getAll(includeInactive),
+  getById: (id: string) => ipc?.suppliers.getById(id),
+  create: (data: unknown) => ipc?.suppliers.create(data),
+  update: (id: string, data: unknown) => ipc?.suppliers.update(id, data),
+  delete: (id: string) => ipc?.suppliers.delete(id),
+  getTransactions: (filters?: unknown) => ipc?.suppliers.getTransactions(filters),
+  createTransaction: (data: unknown) => ipc?.suppliers.createTransaction(data),
+  updateTransaction: (id: string, data: unknown) =>
+    ipc?.suppliers.updateTransaction(id, data),
+  deleteTransaction: (id: string) => ipc?.suppliers.deleteTransaction(id),
+  getBalance: (supplierId: string) => ipc?.suppliers.getBalance(supplierId),
+  recordPayment: (data: unknown) => ipc?.suppliers.recordPayment(data),
 };
 
 export const sync = {

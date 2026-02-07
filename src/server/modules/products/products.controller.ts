@@ -8,67 +8,102 @@ import {
   Param,
   Query,
   UseGuards,
+  ParseIntPipe,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { StoreGuard } from '../../common/guards/store.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentStore } from '../../common/decorators/current-store.decorator';
+import { UserRole } from '@prisma/client';
+import { ProductFilters } from './types/product.types';
 
+@ApiTags('products')
 @Controller('products')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StoreGuard)
+@ApiBearerAuth('JWT-auth')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Get()
+  @ApiOperation({ summary: 'Get all products for the store' })
+  @ApiQuery({ name: 'categoryId', required: false, type: Number })
+  @ApiQuery({ name: 'active', required: false, type: Boolean })
+  @ApiQuery({ name: 'updatedAfter', required: false, type: String })
+  @ApiResponse({ status: 200, description: 'List of products' })
   async findAll(
+    @CurrentStore() storeId: string,
     @Query('categoryId') categoryId?: string,
     @Query('active') active?: string,
     @Query('updatedAfter') updatedAfter?: string,
   ) {
-    const filters: any = {};
+    const filters: ProductFilters = {};
 
-    if (categoryId) filters.categoryId = categoryId;
+    if (categoryId) filters.categoryId = parseInt(categoryId, 10);
     if (active !== undefined) filters.active = active === 'true';
     if (updatedAfter) filters.updatedAfter = new Date(updatedAfter);
 
-    return this.productsService.findAll(filters);
+    return this.productsService.findAll(storeId, filters);
   }
 
   @Get('search')
-  async search(@Query('q') query: string) {
-    return this.productsService.search(query);
+  @ApiOperation({ summary: 'Search products by name or barcode' })
+  @ApiQuery({ name: 'q', required: true, description: 'Search query' })
+  @ApiResponse({ status: 200, description: 'Search results' })
+  async search(@CurrentStore() storeId: string, @Query('q') query: string) {
+    return this.productsService.search(storeId, query || '');
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.productsService.findById(id);
+  @ApiOperation({ summary: 'Get product by ID' })
+  @ApiResponse({ status: 200, description: 'Product details' })
+  @ApiResponse({ status: 404, description: 'Product not found' })
+  async findOne(@CurrentStore() storeId: string, @Param('id', ParseIntPipe) id: number) {
+    return this.productsService.findById(id, storeId);
   }
 
   @Get('barcode/:barcode')
-  async findByBarcode(@Param('barcode') barcode: string) {
-    return this.productsService.findByBarcode(barcode);
+  @ApiOperation({ summary: 'Get product by barcode' })
+  @ApiResponse({ status: 200, description: 'Product details' })
+  async findByBarcode(@CurrentStore() storeId: string, @Param('barcode') barcode: string) {
+    return this.productsService.findByBarcode(storeId, barcode);
   }
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('ADMIN')
-  async create(@Body() createProductDto: CreateProductDto) {
-    return this.productsService.create(createProductDto);
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Create new product (Admin only)' })
+  @ApiResponse({ status: 201, description: 'Product created' })
+  @ApiResponse({ status: 409, description: 'Barcode already exists' })
+  async create(@CurrentStore() storeId: string, @Body() createProductDto: CreateProductDto) {
+    return this.productsService.create(storeId, createProductDto);
   }
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles('ADMIN')
-  async update(@Param('id') id: string, @Body() updateProductDto: UpdateProductDto) {
-    return this.productsService.update(id, updateProductDto);
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update product (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Product updated' })
+  @ApiResponse({ status: 404, description: 'Product not found' })
+  async update(
+    @CurrentStore() storeId: string,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateProductDto: UpdateProductDto,
+  ) {
+    return this.productsService.update(id, storeId, updateProductDto);
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('ADMIN')
-  async remove(@Param('id') id: string) {
-    return this.productsService.deactivate(id);
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Deactivate product (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Product deactivated' })
+  @ApiResponse({ status: 404, description: 'Product not found' })
+  async remove(@CurrentStore() storeId: string, @Param('id', ParseIntPipe) id: number) {
+    return this.productsService.deactivate(id, storeId);
   }
 }

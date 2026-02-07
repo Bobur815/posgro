@@ -4,6 +4,9 @@ import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { UzbekPhoneInput } from '../../components/common/UzbekPhoneInput';
+import { isUzPhoneComplete } from '@shared/utils/phone';
+import { convertUzbekText } from '@shared/utils/transliterator';
 
 const Container = styled.div`
   max-width: 500px;
@@ -59,7 +62,7 @@ export function UserForm() {
   const isEdit = Boolean(id);
 
   const [formData, setFormData] = useState({
-    username: '',
+    phone: '',
     password: '',
     nameRu: '',
     nameUz: '',
@@ -79,15 +82,16 @@ export function UserForm() {
       const users = await window.electronAPI.users.getAll();
       const user = (users as Array<{
         id: string;
-        username: string;
+        phone: string;
         nameRu: string;
         nameUz: string;
         role: string;
       }>).find((u) => u.id === id);
 
       if (user) {
+        const digits = user.phone.startsWith('998') ? user.phone.slice(3) : user.phone;
         setFormData({
-          username: user.username,
+          phone: digits,
           password: '',
           nameRu: user.nameRu,
           nameUz: user.nameUz,
@@ -124,7 +128,10 @@ export function UserForm() {
           return;
         }
 
-        await window.electronAPI.users.create(formData);
+        await window.electronAPI.users.create({
+          ...formData,
+          phone: '998' + formData.phone,
+        });
       }
 
       navigate('/users');
@@ -139,17 +146,43 @@ export function UserForm() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  // Auto-transliterate between Uzbek Latin and Cyrillic
+  const handleNameUzChange = (value: string) => {
+    setFormData((prev) => {
+      const converted = convertUzbekText(value); // Latin → Cyrillic
+      return {
+        ...prev,
+        nameUz: value,
+        nameRu: prev.nameRu === '' || prev.nameRu === convertUzbekText(prev.nameUz)
+          ? converted
+          : prev.nameRu,
+      };
+    });
+  };
+
+  const handleNameRuChange = (value: string) => {
+    setFormData((prev) => {
+      const converted = convertUzbekText(value); // Cyrillic → Latin
+      return {
+        ...prev,
+        nameRu: value,
+        nameUz: prev.nameUz === '' || prev.nameUz === convertUzbekText(prev.nameRu)
+          ? converted
+          : prev.nameUz,
+      };
+    });
+  };
+
   return (
     <Container>
       <Title>{isEdit ? t('users.editUser') : t('users.addUser')}</Title>
 
       <Form onSubmit={handleSubmit}>
-        <Input
-          label={t('users.username')}
-          value={formData.username}
-          onChange={(e) => handleChange('username', e.target.value)}
+        <UzbekPhoneInput
+          label={t('users.phone')}
+          valueDigits={formData.phone}
+          onDigitsChange={(digits) => handleChange('phone', digits)}
           disabled={isEdit}
-          required
         />
 
         <Input
@@ -162,16 +195,16 @@ export function UserForm() {
         />
 
         <Input
-          label={t('users.nameRu')}
-          value={formData.nameRu}
-          onChange={(e) => handleChange('nameRu', e.target.value)}
+          label={t('users.nameUz')}
+          value={formData.nameUz}
+          onChange={(e) => handleNameUzChange(e.target.value)}
           required
         />
 
         <Input
-          label={t('users.nameUz')}
-          value={formData.nameUz}
-          onChange={(e) => handleChange('nameUz', e.target.value)}
+          label={t('users.nameRu')}
+          value={formData.nameRu}
+          onChange={(e) => handleNameRuChange(e.target.value)}
           required
         />
 
@@ -192,7 +225,7 @@ export function UserForm() {
           <Button type="button" variant="secondary" onClick={() => navigate('/users')}>
             {t('common.cancel')}
           </Button>
-          <Button type="submit" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading || (!isEdit && !isUzPhoneComplete(formData.phone))}>
             {isLoading ? t('common.saving') : t('common.save')}
           </Button>
         </Actions>

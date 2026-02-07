@@ -2,8 +2,8 @@ import { format, formatDistance, parseISO } from 'date-fns';
 import { ru, uz } from 'date-fns/locale';
 
 // Currency formatter
-export function formatCurrency(amount: number, locale: string = 'uz'): string {
-  return amount.toLocaleString(locale === 'uz' ? 'uz-UZ' : 'ru-RU') + ' сум';
+export function formatCurrency(amount: number): string {
+  return amount.toLocaleString() + ' сум';
 }
 
 // Compact currency (for large numbers)

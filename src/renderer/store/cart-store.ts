@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
-interface CartItem {
-  productId: string;
+export interface CartItem {
+  productId: number;
   productName: string;
   barcode: string;
   unitPrice: number;
@@ -11,21 +11,31 @@ interface CartItem {
 
 interface CartState {
   items: CartItem[];
+  subtotal: number;
+  taxRate: number;
+  tax: number;
+  discount: number;
   total: number;
   itemCount: number;
-  addItem: (item: CartItem) => void;
-  removeItem: (productId: string) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
+  addItem: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
+  removeItem: (productId: number) => void;
+  updateQuantity: (productId: number, quantity: number) => void;
+  setDiscount: (discount: number) => void;
+  setTaxRate: (rate: number) => void;
   clearCart: () => void;
 }
 
 export const useCartStore = create<CartState>((set, get) => ({
   items: [],
+  subtotal: 0,
+  taxRate: 0, // Default 0%, can be configured
+  tax: 0,
+  discount: 0,
   total: 0,
   itemCount: 0,
 
   addItem: (item) => {
-    const { items } = get();
+    const { items, taxRate, discount } = get();
     const existingIndex = items.findIndex((i) => i.productId === item.productId);
 
     let newItems: CartItem[];
@@ -34,40 +44,35 @@ export const useCartStore = create<CartState>((set, get) => ({
       // Increase quantity of existing item
       newItems = items.map((i, index) => {
         if (index === existingIndex) {
-          const newQuantity = Math.min(i.quantity + item.quantity, i.stock);
+          const newQuantity = Math.min(i.quantity + (item.quantity || 1), i.stock);
           return { ...i, quantity: newQuantity };
         }
         return i;
       });
     } else {
       // Add new item
-      newItems = [...items, item];
+      newItems = [...items, { ...item, quantity: item.quantity || 1 }];
     }
 
-    const total = calculateTotal(newItems);
-    const itemCount = newItems.reduce((sum, i) => sum + i.quantity, 0);
-
-    set({ items: newItems, total, itemCount });
+    const totals = calculateTotals(newItems, taxRate, discount);
+    set({ items: newItems, ...totals });
   },
 
   removeItem: (productId) => {
-    const { items } = get();
+    const { items, taxRate, discount } = get();
     const newItems = items.filter((i) => i.productId !== productId);
-    const total = calculateTotal(newItems);
-    const itemCount = newItems.reduce((sum, i) => sum + i.quantity, 0);
-
-    set({ items: newItems, total, itemCount });
+    const totals = calculateTotals(newItems, taxRate, discount);
+    set({ items: newItems, ...totals });
   },
 
   updateQuantity: (productId, quantity) => {
-    const { items } = get();
+    const { items, taxRate, discount } = get();
 
     if (quantity <= 0) {
       // Remove item if quantity is 0 or less
       const newItems = items.filter((i) => i.productId !== productId);
-      const total = calculateTotal(newItems);
-      const itemCount = newItems.reduce((sum, i) => sum + i.quantity, 0);
-      set({ items: newItems, total, itemCount });
+      const totals = calculateTotals(newItems, taxRate, discount);
+      set({ items: newItems, ...totals });
       return;
     }
 
@@ -79,17 +84,32 @@ export const useCartStore = create<CartState>((set, get) => ({
       return i;
     });
 
-    const total = calculateTotal(newItems);
-    const itemCount = newItems.reduce((sum, i) => sum + i.quantity, 0);
+    const totals = calculateTotals(newItems, taxRate, discount);
+    set({ items: newItems, ...totals });
+  },
 
-    set({ items: newItems, total, itemCount });
+  setDiscount: (discount) => {
+    const { items, taxRate } = get();
+    const totals = calculateTotals(items, taxRate, discount);
+    set({ discount, ...totals });
+  },
+
+  setTaxRate: (taxRate) => {
+    const { items, discount } = get();
+    const totals = calculateTotals(items, taxRate, discount);
+    set({ taxRate, ...totals });
   },
 
   clearCart: () => {
-    set({ items: [], total: 0, itemCount: 0 });
+    set({ items: [], subtotal: 0, tax: 0, discount: 0, total: 0, itemCount: 0 });
   },
 }));
 
-function calculateTotal(items: CartItem[]): number {
-  return items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+function calculateTotals(items: CartItem[], taxRate: number, discount: number) {
+  const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  const tax = subtotal * (taxRate / 100);
+  const total = Math.max(0, subtotal + tax - discount);
+  const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
+
+  return { subtotal, tax, total, itemCount };
 }

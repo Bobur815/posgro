@@ -3,16 +3,20 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
+import { USER_ROLES } from '@shared/constants';
+import { UserRole } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll() {
+  async findAll(storeId: string) {
     return this.prisma.user.findMany({
+      where: { storeId },
       select: {
         id: true,
-        username: true,
+        storeId: true,
+        phone: true,
         role: true,
         nameUz: true,
         nameRu: true,
@@ -23,12 +27,32 @@ export class UsersService {
     });
   }
 
+  async findAllStores() {
+    // For SUPER_ADMIN: get users across all stores
+    return this.prisma.user.findMany({
+      select: {
+        id: true,
+        storeId: true,
+        phone: true,
+        role: true,
+        nameUz: true,
+        nameRu: true,
+        active: true,
+        createdAt: true,
+        store: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async findById(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
-        username: true,
+        storeId: true,
+        phone: true,
+        password: true,
         role: true,
         nameUz: true,
         nameRu: true,
@@ -44,32 +68,60 @@ export class UsersService {
     return user;
   }
 
-  async findByUsername(username: string) {
-    return this.prisma.user.findUnique({
-      where: { username },
+  async findByPhoneAndStore(phone: string, storeId?: string) {
+    // First try to find SUPER_ADMIN (has no storeId)
+    const superAdmin = await this.prisma.user.findFirst({
+      where: {
+        phone,
+        role: UserRole.SUPER_ADMIN,
+        storeId: null,
+      },
     });
+
+    if (superAdmin) {
+      return superAdmin;
+    }
+
+    // If storeId is provided, find user within that store
+    if (storeId) {
+      return this.prisma.user.findUnique({
+        where: {
+          storeId_phone: { storeId, phone },
+        },
+      });
+    }
+
+    return null;
   }
 
-  async create(createUserDto: CreateUserDto) {
-    const existing = await this.findByUsername(createUserDto.username);
+  async create(createUserDto: CreateUserDto, storeId: string) {
+    // Check if user already exists in this store
+    const existing = await this.prisma.user.findUnique({
+      where: {
+        storeId_phone: { storeId, phone: createUserDto.phone },
+      },
+    });
+
     if (existing) {
-      throw new ConflictException('Username already exists');
+      throw new ConflictException('Phone number already exists in this store');
     }
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
     const user = await this.prisma.user.create({
       data: {
-        username: createUserDto.username,
+        storeId,
+        phone: createUserDto.phone,
         password: hashedPassword,
-        role: createUserDto.role || 'USER',
+        role: createUserDto.role || USER_ROLES.USER,
         nameUz: createUserDto.nameUz,
         nameRu: createUserDto.nameRu,
         active: true,
       },
       select: {
         id: true,
-        username: true,
+        storeId: true,
+        phone: true,
         role: true,
         nameUz: true,
         nameRu: true,
@@ -81,10 +133,15 @@ export class UsersService {
     return user;
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto) {
-    await this.findById(id);
+  async update(id: string, updateUserDto: UpdateUserDto, storeId: string) {
+    const user = await this.findById(id);
 
-    const data: any = {};
+    // Ensure user belongs to the store
+    if (user.storeId !== storeId) {
+      throw new NotFoundException('User not found');
+    }
+
+    const data: Record<string, unknown> = {};
 
     if (updateUserDto.nameUz) data.nameUz = updateUserDto.nameUz;
     if (updateUserDto.nameRu) data.nameRu = updateUserDto.nameRu;
@@ -100,7 +157,8 @@ export class UsersService {
       data,
       select: {
         id: true,
-        username: true,
+        storeId: true,
+        phone: true,
         role: true,
         nameUz: true,
         nameRu: true,
@@ -110,12 +168,42 @@ export class UsersService {
     });
   }
 
-  async deactivate(id: string) {
-    await this.findById(id);
+  async activate(id: string, storeId: string) {
+    const user = await this.findById(id);
+    if (user.storeId !== storeId) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { active: true },
+    });
+
+    return { success: true };
+  }
+
+  async deactivate(id: string, storeId: string) {
+    const user = await this.findById(id);
+    if (user.storeId !== storeId) {
+      throw new NotFoundException('User not found');
+    }
 
     await this.prisma.user.update({
       where: { id },
       data: { active: false },
+    });
+
+    return { success: true };
+  }
+
+  async delete(id: string, storeId: string) {
+    const user = await this.findById(id);
+    if (user.storeId !== storeId) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.prisma.user.delete({
+      where: { id },
     });
 
     return { success: true };

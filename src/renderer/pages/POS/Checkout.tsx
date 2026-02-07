@@ -20,7 +20,7 @@ const TotalSection = styled.div`
 `;
 
 const TotalLabel = styled.div`
-  font-size: 18px;
+  font-size: 16px;
   color: ${({ theme }) => theme.colors.textSecondary};
   margin-bottom: ${({ theme }) => theme.spacing.sm};
 `;
@@ -29,6 +29,20 @@ const TotalAmount = styled.div`
   font-size: 36px;
   font-weight: bold;
   color: ${({ theme }) => theme.colors.primary};
+`;
+
+const SummarySection = styled.div`
+  background-color: ${({ theme }) => theme.colors.background};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  padding: ${({ theme }) => theme.spacing.md};
+`;
+
+const SummaryRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  padding: ${({ theme }) => theme.spacing.xs} 0;
+  font-size: 14px;
+  color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
 const PaymentMethods = styled.div`
@@ -43,7 +57,7 @@ const PaymentButton = styled.button<{ $selected?: boolean }>`
     ${({ theme, $selected }) => ($selected ? theme.colors.primary : theme.colors.border)};
   border-radius: ${({ theme }) => theme.borderRadius};
   background-color: ${({ theme, $selected }) =>
-    $selected ? theme.colors.primary + '10' : theme.colors.surface};
+    $selected ? theme.colors.primary + '15' : theme.colors.surface};
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
@@ -79,12 +93,18 @@ const SuccessMessage = styled.div`
 const SuccessIcon = styled.div`
   font-size: 64px;
   margin-bottom: ${({ theme }) => theme.spacing.md};
+  color: ${({ theme }) => theme.colors.success};
+`;
+
+const SuccessText = styled.div`
+  font-size: 18px;
+  color: ${({ theme }) => theme.colors.text};
+  margin-bottom: ${({ theme }) => theme.spacing.sm};
 `;
 
 const ReceiptNumber = styled.div`
   font-size: 14px;
   color: ${({ theme }) => theme.colors.textSecondary};
-  margin-top: ${({ theme }) => theme.spacing.md};
 `;
 
 interface CheckoutProps {
@@ -94,7 +114,7 @@ interface CheckoutProps {
 
 export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   const { t } = useTranslation();
-  const { items, total, clearCart } = useCartStore();
+  const { items, subtotal, tax, discount, total, clearCart } = useCartStore();
   const { createSale, isLoading } = useSales();
 
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
@@ -102,21 +122,21 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   const [receiptNumber, setReceiptNumber] = useState('');
 
   const formatCurrency = (amount: number) => {
-    return amount.toLocaleString('uz-UZ') + ' сум';
+    return amount.toLocaleString('uz-UZ') + " so'm";
   };
 
   const handlePayment = async () => {
     try {
       const saleData = {
         items: items.map((item) => ({
-          productId: item.productId,
+          productId: String(item.productId),
           productName: item.productName,
           barcode: item.barcode,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
         })),
         paymentMethod,
-        discountAmount: 0,
+        discountAmount: discount,
       };
 
       const sale = await createSale(saleData);
@@ -141,7 +161,7 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
       <Modal title={t('pos.paymentComplete')} onClose={onComplete}>
         <SuccessMessage>
           <SuccessIcon>✓</SuccessIcon>
-          <div>{t('pos.thankYou')}</div>
+          <SuccessText>{t('pos.thankYou')}</SuccessText>
           <ReceiptNumber>
             {t('pos.receiptNumber')}: {receiptNumber}
           </ReceiptNumber>
@@ -160,6 +180,29 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
           <TotalLabel>{t('pos.totalToPay')}</TotalLabel>
           <TotalAmount>{formatCurrency(total)}</TotalAmount>
         </TotalSection>
+
+        <SummarySection>
+          <SummaryRow>
+            <span>{t('pos.subtotal')}</span>
+            <span>{formatCurrency(subtotal)}</span>
+          </SummaryRow>
+          {tax > 0 && (
+            <SummaryRow>
+              <span>{t('pos.tax')}</span>
+              <span>{formatCurrency(tax)}</span>
+            </SummaryRow>
+          )}
+          {discount > 0 && (
+            <SummaryRow>
+              <span>{t('pos.discount')}</span>
+              <span>-{formatCurrency(discount)}</span>
+            </SummaryRow>
+          )}
+          <SummaryRow>
+            <span>{t('pos.itemsCount')}</span>
+            <span>{items.length}</span>
+          </SummaryRow>
+        </SummarySection>
 
         <PaymentMethods>
           <PaymentButton

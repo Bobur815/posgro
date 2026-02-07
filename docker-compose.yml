@@ -5,8 +5,8 @@ services:
     image: postgres:15-alpine
     container_name: grocery-pos-db
     environment:
-      POSTGRES_USER: ${DB_USER:-grocery_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_password}
+      POSTGRES_USER: ${DB_USER:postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:postgres}
       POSTGRES_DB: grocery_pos
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -16,7 +16,7 @@ services:
     networks:
       - grocery-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-grocery_user} -d grocery_pos"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:postgres} -d grocery_pos"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -27,7 +27,7 @@ services:
       dockerfile: Dockerfile
     container_name: grocery-pos-api
     environment:
-      DATABASE_URL: postgresql://${DB_USER:-grocery_user}:${DB_PASSWORD:-secure_password}@postgres:5432/grocery_pos
+      DATABASE_URL: postgresql://${DB_USER:postgres}:${DB_PASSWORD:postgres}@postgres:5432/grocery_pos
       JWT_SECRET: ${JWT_SECRET}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       NODE_ENV: production

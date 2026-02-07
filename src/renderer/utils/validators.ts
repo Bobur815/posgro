@@ -51,14 +51,9 @@ export function isPrice(value: number): boolean {
   return isNonNegativeNumber(value) && Number(value.toFixed(2)) === value;
 }
 
-export function isUsername(value: string): boolean {
-  // Alphanumeric and underscore, 3-20 characters
-  return /^[a-zA-Z0-9_]{3,20}$/.test(value);
-}
-
 export function isStrongPassword(value: string): boolean {
-  // At least 8 characters, 1 uppercase, 1 lowercase, 1 number
-  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d@$!%*?&]{8,}$/.test(value);
+  // At least 6 characters, 1 uppercase, 1 lowercase, 1 number
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d@$!%*?&]{6,}$/.test(value);
 }
 
 // Validation result interface

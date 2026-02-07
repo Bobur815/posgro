@@ -2,6 +2,10 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { PrismaService } from '../../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
 import { SyncSaleDto } from './dto/sync-sale.dto';
+import { Sale, SaleItem } from '@prisma/client';
+import { SaleFilters, SaleWhereInput, SaleUser } from './types/sale.types';
+
+type SaleWithItems = Sale & { items: SaleItem[] };
 
 @Injectable()
 export class SalesService {
@@ -10,12 +14,8 @@ export class SalesService {
     private productsService: ProductsService,
   ) {}
 
-  async findAll(filters?: {
-    startDate?: Date;
-    endDate?: Date;
-    cashierId?: string;
-  }) {
-    const where: any = {};
+  async findAll(storeId: string, filters?: SaleFilters) {
+    const where: SaleWhereInput = { storeId };
 
     if (filters?.cashierId) where.cashierId = filters.cashierId;
 
@@ -33,25 +33,25 @@ export class SalesService {
     });
   }
 
-  async findById(id: string, user?: any) {
+  async findById(id: string, storeId: string, user?: SaleUser) {
     const sale = await this.prisma.sale.findUnique({
       where: { id },
       include: { items: true },
     });
 
-    if (!sale) {
+    if (!sale || sale.storeId !== storeId) {
       throw new NotFoundException('Sale not found');
     }
 
     // Non-admin users can only see their own sales
-    if (user && user.role !== 'ADMIN' && sale.cashierId !== user.id) {
+    if (user && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN' && sale.cashierId !== user.id) {
       throw new ForbiddenException('Access denied');
     }
 
     return sale;
   }
 
-  async syncFromTerminal(syncSaleDto: SyncSaleDto) {
+  async syncFromTerminal(storeId: string, syncSaleDto: SyncSaleDto) {
     // Check if sale already exists (idempotency)
     const existing = await this.prisma.sale.findUnique({
       where: { id: syncSaleDto.id },
@@ -65,9 +65,10 @@ export class SalesService {
     const sale = await this.prisma.sale.create({
       data: {
         id: syncSaleDto.id,
+        storeId,
         receiptNumber: syncSaleDto.receiptNumber,
         totalAmount: syncSaleDto.totalAmount,
-        discountAmount: syncSaleDto.discountAmount || 0,
+        discountAmount: syncSaleDto.discountAmount || '0',
         finalAmount: syncSaleDto.finalAmount,
         paymentMethod: syncSaleDto.paymentMethod,
         cashierId: syncSaleDto.cashierId,
@@ -95,6 +96,7 @@ export class SalesService {
     for (const item of syncSaleDto.items) {
       await this.productsService.updateStock(
         item.productId,
+        storeId,
         -parseFloat(item.quantity),
       );
     }
@@ -102,14 +104,15 @@ export class SalesService {
     return { id: sale.id, synced: true };
   }
 
-  async getDailySummary(date: Date, cashierId?: string) {
+  async getDailySummary(storeId: string, date: Date, cashierId?: string) {
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
 
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
-    const where: any = {
+    const where: SaleWhereInput = {
+      storeId,
       createdAt: {
         gte: startOfDay,
         lte: endOfDay,
@@ -125,15 +128,15 @@ export class SalesService {
 
     const totalSales = sales.length;
     const totalRevenue = sales.reduce(
-      (sum, sale) => sum + Number(sale.finalAmount),
+      (sum: number, sale: SaleWithItems) => sum + Number(sale.finalAmount),
       0,
     );
     const totalItems = sales.reduce(
-      (sum, sale) => sum + sale.items.length,
+      (sum: number, sale: SaleWithItems) => sum + sale.items.length,
       0,
     );
-    const cashSales = sales.filter((s) => s.paymentMethod === 'cash').length;
-    const cardSales = sales.filter((s) => s.paymentMethod === 'card').length;
+    const cashSales = sales.filter((s: SaleWithItems) => s.paymentMethod === 'cash').length;
+    const cardSales = sales.filter((s: SaleWithItems) => s.paymentMethod === 'card').length;
 
     return {
       date: startOfDay.toISOString().split('T')[0],

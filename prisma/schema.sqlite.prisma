@@ -1,0 +1,269 @@
+// Grocery POS - SQLite Schema for Electron POS Terminal
+// This schema is for local offline-first operation
+// Data syncs with the PostgreSQL server
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma-sqlite"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("SQLITE_DATABASE_URL")
+}
+
+// ==================== LOCAL STORE CONFIG ====================
+// Terminal is assigned to ONE store - stored in local config
+
+model LocalConfig {
+  id         String   @id @default("config")
+  storeId    String   @map("store_id")
+  storeName  String   @map("store_name")
+  terminalId String   @map("terminal_id")
+  apiUrl     String   @map("api_url")
+  storePin   String?  @map("store_pin") // 4-digit PIN (bcrypt hashed) for quick cashier login
+  lastSync   DateTime @default(now()) @map("last_sync")
+
+  @@map("local_config")
+}
+
+// ==================== USER MANAGEMENT ====================
+
+model User {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  password  String
+  role      String   @default("USER") // ADMIN, USER
+  nameUz    String   @map("name_uz")
+  nameRu    String   @map("name_ru")
+  active    Boolean  @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+// ==================== PRODUCTS & INVENTORY ====================
+
+model Category {
+  id        Int       @id @default(autoincrement())
+  nameUz    String    @map("name_uz")
+  nameRu    String    @map("name_ru")
+  active    Boolean   @default(true)
+  products  Product[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@map("categories")
+}
+
+model Product {
+  id              Int      @id @default(autoincrement())
+  barcode         String   @unique
+  nameUz          String   @map("name_uz")
+  nameRu          String   @map("name_ru")
+  price           Decimal
+  cost            Decimal?
+  stock           Decimal  @default(0)
+  minStock        Decimal  @default(0) @map("min_stock")
+  unit            String   @default("шт")
+  categoryId      Int      @map("category_id")
+  category        Category @relation(fields: [categoryId], references: [id])
+  supplierId      String?  @map("supplier_id")
+  supplier        Supplier? @relation(fields: [supplierId], references: [id])
+  productionDate  DateTime? @map("production_date")
+  expiryDate      DateTime? @map("expiry_date")
+  discountPercent Decimal?  @default(0) @map("discount_percent")
+  isOnPromotion   Boolean   @default(false) @map("is_on_promotion")
+  active          Boolean  @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  sales              SaleItem[]
+  inventoryMovements InventoryArrival[]
+
+  @@map("products")
+}
+
+// ==================== SALES ====================
+
+model Sale {
+  id             String   @id @default(cuid())
+  receiptNumber  String   @unique @map("receipt_number")
+  totalAmount    Decimal  @map("total_amount")
+  discountAmount Decimal  @default(0) @map("discount_amount")
+  finalAmount    Decimal  @map("final_amount")
+  paymentMethod  String   @map("payment_method")
+
+  cashierId   String @map("cashier_id")
+  cashierName String @map("cashier_name")
+  terminalId  String @map("terminal_id")
+
+  // Sync tracking
+  synced   Boolean   @default(false)
+  syncedAt DateTime? @map("synced_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  items SaleItem[]
+
+  @@index([synced])
+  @@index([createdAt])
+  @@map("sales")
+}
+
+model SaleItem {
+  id          String  @id @default(cuid())
+  saleId      String  @map("sale_id")
+  sale        Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  productId   Int     @map("product_id")
+  product     Product @relation(fields: [productId], references: [id])
+
+  productName String  @map("product_name")
+  barcode     String
+  quantity    Decimal
+  unitPrice   Decimal @map("unit_price")
+  subtotal    Decimal
+
+  @@map("sale_items")
+}
+
+// ==================== SYSTEM SETTINGS ====================
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+// ==================== INVENTORY MANAGEMENT ====================
+
+model InventoryArrival {
+  id        String   @id @default(cuid())
+  productId Int      @map("product_id")
+  product   Product  @relation(fields: [productId], references: [id])
+
+  quantity  Decimal
+  cost      Decimal
+  totalCost Decimal  @map("total_cost")
+
+  supplierId String?   @map("supplier_id")
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+
+  notes String?
+
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([productId])
+  @@index([createdAt])
+  @@map("inventory_arrivals")
+}
+
+model Supplier {
+  id      String  @id @default(cuid())
+  nameUz  String  @map("name_uz")
+  nameRu  String  @map("name_ru")
+  phone   String?
+  address String?
+  active  Boolean @default(true)
+  balance Decimal @default(0) // Negative = we owe them, Positive = they owe us
+
+  arrivals     InventoryArrival[]
+  products     Product[]
+  transactions SupplierTransaction[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("suppliers")
+}
+
+// ==================== SUPPLIER TRANSACTIONS ====================
+
+enum SupplierTransactionType {
+  PURCHASE    // We received goods (increases our debt)
+  PAYMENT     // We paid supplier (decreases our debt)
+  RETURN      // We returned goods (decreases our debt)
+  ADVANCE     // We paid in advance (supplier owes us)
+  ADJUSTMENT  // Manual balance correction
+}
+
+enum SupplierPaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  INSTALLMENT
+  ONE_TO_ONE    // Previous debt cleared against new purchase
+}
+
+model SupplierTransaction {
+  id         String   @id @default(cuid())
+  supplierId String   @map("supplier_id")
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  type          SupplierTransactionType
+  paymentMethod SupplierPaymentMethod   @map("payment_method") // CASH, CARD, BANK_TRANSFER, INSTALLMENT, ONE_TO_ONE
+  amount        Decimal // Positive = reduces our debt, Negative = increases our debt
+  description   String?
+
+  // Reference to related entity (e.g., InventoryArrival)
+  referenceId   String? @map("reference_id")
+  referenceType String? @map("reference_type")
+
+  dueDate   DateTime? @map("due_date")
+  paidAt    DateTime? @map("paid_at")
+
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([supplierId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("supplier_transactions")
+}
+
+// ==================== AUDIT LOG ====================
+
+model AuditLog {
+  id       String  @id @default(cuid())
+  userId   String  @map("user_id")
+  phone    String
+  action   String
+  entity   String
+  entityId String  @map("entity_id")
+  details  String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ==================== SYNC QUEUE ====================
+// Track what needs to be synced to server
+
+model SyncQueue {
+  id        String   @id @default(cuid())
+  entity    String   // "sale", "product_stock_update"
+  entityId  String   @map("entity_id")
+  action    String   // "create", "update", "delete"
+  payload   String   // JSON data
+  attempts  Int      @default(0)
+  lastError String?  @map("last_error")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([entity])
+  @@map("sync_queue")
+}

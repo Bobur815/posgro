@@ -1,34 +1,38 @@
-import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { Layout } from './components/layout/Layout';
-import { ProtectedRoute } from './components/protected/ProtectedRoute';
-import { RoleGuard } from './components/protected/RoleGuard';
-import { useAuthStore } from './store/auth-store';
+import React from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+import { Layout } from "./components/layout/Layout";
+import { ProtectedRoute } from "./components/protected/ProtectedRoute";
+import { RoleGuard } from "./components/protected/RoleGuard";
+import { useAuthStore } from "./store/auth-store";
 
 // Pages
-import { LoginPage } from './pages/Login/LoginPage';
-import { POSScreen } from './pages/POS/POSScreen';
-import { ProductList } from './pages/Products/ProductList';
-import { ProductForm } from './pages/Products/ProductForm';
-import { StockManagement } from './pages/Products/StockManagement';
-import { DailySummary } from './pages/Reports/DailySummary';
-import { MonthlyReport } from './pages/Reports/MonthlyReport';
-import { Analytics } from './pages/Reports/Analytics';
-import { SettingsPage } from './pages/Settings/SettingsPage';
-import { UserSettings } from './pages/Settings/UserSettings';
-import { SystemSettings } from './pages/Settings/SystemSettings';
-import { UserList } from './pages/Users/UserList';
-import { UserForm } from './pages/Users/UserForm';
+import { PinLoginPage } from "./pages/Login/PinLoginPage";
+import { POSScreen } from "./pages/POS/POSScreen";
+import { ProductList } from "./pages/Products/ProductList";
+import { ProductForm } from "./pages/Products/ProductForm";
+import { ProductDetails } from "./pages/Products/ProductDetails";
+import { StockManagement } from "./pages/Products/StockManagement";
+import { DailySummary } from "./pages/Reports/DailySummary";
+import { MonthlyReport } from "./pages/Reports/MonthlyReport";
+import { Analytics } from "./pages/Reports/Analytics";
+import { SettingsPage } from "./pages/Settings/SettingsPage";
+import { UserSettings } from "./pages/Settings/UserSettings";
+import { SystemSettings } from "./pages/Settings/SystemSettings";
+import { UserList } from "./pages/Users/UserList";
+import { UserForm } from "./pages/Users/UserForm";
+import { SupplierList, SupplierForm, SupplierDetails } from "./pages/Suppliers";
 
 function App() {
   const { isAuthenticated } = useAuthStore();
 
   return (
     <Routes>
-      {/* Public routes */}
+      {/* Public routes - Login */}
       <Route
         path="/login"
-        element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />}
+        element={
+          isAuthenticated ? <Navigate to="/" replace /> : <PinLoginPage />
+        }
       />
 
       {/* Protected routes */}
@@ -48,15 +52,25 @@ function App() {
         <Route
           path="products/new"
           element={
-            <RoleGuard allowedRoles={['ADMIN']}>
+            <RoleGuard allowedRoles={["ADMIN"]}>
               <ProductForm />
             </RoleGuard>
           }
         />
+
+        <Route
+          path="products/:id"
+          element={
+            <RoleGuard allowedRoles={["ADMIN", "USER"]}>
+              <ProductDetails />
+            </RoleGuard>
+          }
+        />
+
         <Route
           path="products/:id/edit"
           element={
-            <RoleGuard allowedRoles={['ADMIN']}>
+            <RoleGuard allowedRoles={["ADMIN"]}>
               <ProductForm />
             </RoleGuard>
           }
@@ -64,7 +78,7 @@ function App() {
         <Route
           path="products/stock"
           element={
-            <RoleGuard allowedRoles={['ADMIN']}>
+            <RoleGuard allowedRoles={["ADMIN"]}>
               <StockManagement />
             </RoleGuard>
           }
@@ -75,7 +89,7 @@ function App() {
         <Route
           path="reports/monthly"
           element={
-            <RoleGuard allowedRoles={['ADMIN']}>
+            <RoleGuard allowedRoles={["ADMIN"]}>
               <MonthlyReport />
             </RoleGuard>
           }
@@ -83,7 +97,7 @@ function App() {
         <Route
           path="reports/analytics"
           element={
-            <RoleGuard allowedRoles={['ADMIN']}>
+            <RoleGuard allowedRoles={["ADMIN"]}>
               <Analytics />
             </RoleGuard>
           }
@@ -93,7 +107,7 @@ function App() {
         <Route
           path="settings"
           element={
-            <RoleGuard allowedRoles={['ADMIN']}>
+            <RoleGuard allowedRoles={["ADMIN"]}>
               <SettingsPage />
             </RoleGuard>
           }
@@ -102,7 +116,7 @@ function App() {
         <Route
           path="settings/system"
           element={
-            <RoleGuard allowedRoles={['ADMIN']}>
+            <RoleGuard allowedRoles={["ADMIN"]}>
               <SystemSettings />
             </RoleGuard>
           }
@@ -112,7 +126,7 @@ function App() {
         <Route
           path="users"
           element={
-            <RoleGuard allowedRoles={['ADMIN']}>
+            <RoleGuard allowedRoles={["ADMIN"]}>
               <UserList />
             </RoleGuard>
           }
@@ -120,7 +134,7 @@ function App() {
         <Route
           path="users/new"
           element={
-            <RoleGuard allowedRoles={['ADMIN']}>
+            <RoleGuard allowedRoles={["ADMIN"]}>
               <UserForm />
             </RoleGuard>
           }
@@ -128,8 +142,42 @@ function App() {
         <Route
           path="users/:id/edit"
           element={
-            <RoleGuard allowedRoles={['ADMIN']}>
+            <RoleGuard allowedRoles={["ADMIN"]}>
               <UserForm />
+            </RoleGuard>
+          }
+        />
+
+        {/* Supplier Management (Admin only) */}
+        <Route
+          path="suppliers"
+          element={
+            <RoleGuard allowedRoles={["ADMIN"]}>
+              <SupplierList />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="suppliers/new"
+          element={
+            <RoleGuard allowedRoles={["ADMIN"]}>
+              <SupplierForm />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="suppliers/:id"
+          element={
+            <RoleGuard allowedRoles={["ADMIN"]}>
+              <SupplierDetails />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="suppliers/:id/edit"
+          element={
+            <RoleGuard allowedRoles={["ADMIN"]}>
+              <SupplierForm />
             </RoleGuard>
           }
         />

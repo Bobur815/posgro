@@ -2,17 +2,14 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { ProductFilters, ProductWhereInput } from './types/product.types';
 
 @Injectable()
 export class ProductsService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(filters?: {
-    categoryId?: string;
-    active?: boolean;
-    updatedAfter?: Date;
-  }) {
-    const where: any = {};
+  async findAll(storeId: string, filters?: ProductFilters) {
+    const where: ProductWhereInput = { storeId };
 
     if (filters?.categoryId) where.categoryId = filters.categoryId;
     if (filters?.active !== undefined) where.active = filters.active;
@@ -27,31 +24,32 @@ export class ProductsService {
     });
   }
 
-  async findById(id: string) {
+  async findById(id: number, storeId: string) {
     const product = await this.prisma.product.findUnique({
       where: { id },
       include: { category: true },
     });
 
-    if (!product) {
+    if (!product || product.storeId !== storeId) {
       throw new NotFoundException('Product not found');
     }
 
     return product;
   }
 
-  async findByBarcode(barcode: string) {
+  async findByBarcode(storeId: string, barcode: string) {
     return this.prisma.product.findUnique({
-      where: { barcode },
+      where: { storeId_barcode: { storeId, barcode } },
       include: { category: true },
     });
   }
 
-  async search(query: string) {
+  async search(storeId: string, query: string) {
     const searchQuery = query.toLowerCase();
 
     return this.prisma.product.findMany({
       where: {
+        storeId,
         active: true,
         OR: [
           { barcode: { contains: searchQuery } },
@@ -64,14 +62,15 @@ export class ProductsService {
     });
   }
 
-  async create(createProductDto: CreateProductDto) {
-    const existing = await this.findByBarcode(createProductDto.barcode);
+  async create(storeId: string, createProductDto: CreateProductDto) {
+    const existing = await this.findByBarcode(storeId, createProductDto.barcode);
     if (existing) {
-      throw new ConflictException('Product with this barcode already exists');
+      throw new ConflictException('Product with this barcode already exists in this store');
     }
 
     return this.prisma.product.create({
       data: {
+        storeId,
         barcode: createProductDto.barcode,
         nameUz: createProductDto.nameUz,
         nameRu: createProductDto.nameRu,
@@ -87,19 +86,20 @@ export class ProductsService {
     });
   }
 
-  async update(id: string, updateProductDto: UpdateProductDto) {
-    await this.findById(id);
+  async update(id: number, storeId: string, updateProductDto: UpdateProductDto) {
+    await this.findById(id, storeId);
 
     if (updateProductDto.barcode) {
       const existing = await this.prisma.product.findFirst({
         where: {
+          storeId,
           barcode: updateProductDto.barcode,
           NOT: { id },
         },
       });
 
       if (existing) {
-        throw new ConflictException('Product with this barcode already exists');
+        throw new ConflictException('Product with this barcode already exists in this store');
       }
     }
 
@@ -110,8 +110,8 @@ export class ProductsService {
     });
   }
 
-  async deactivate(id: string) {
-    await this.findById(id);
+  async deactivate(id: number, storeId: string) {
+    await this.findById(id, storeId);
 
     await this.prisma.product.update({
       where: { id },
@@ -121,8 +121,8 @@ export class ProductsService {
     return { success: true };
   }
 
-  async updateStock(id: string, quantity: number) {
-    await this.findById(id);
+  async updateStock(id: number, storeId: string, quantity: number) {
+    await this.findById(id, storeId);
 
     return this.prisma.product.update({
       where: { id },

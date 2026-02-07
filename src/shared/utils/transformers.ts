@@ -1,3 +1,5 @@
+import { DiscountType } from "@shared/types/sale.types";
+
 // Format currency (Uzbek Som)
 export const formatCurrency = (
   amount: number,
@@ -70,7 +72,7 @@ export const parseBarcode = (input: string): string => {
 export const calculateDiscount = (
   subtotal: number,
   discount: number,
-  discountType: 'PERCENTAGE' | 'FIXED',
+  discountType: DiscountType,
 ): number => {
   if (discountType === 'PERCENTAGE') {
     return Math.round((subtotal * discount) / 100);

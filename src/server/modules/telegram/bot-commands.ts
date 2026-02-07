@@ -100,7 +100,7 @@ export const commands = {
         await ctx.reply(`❌ Failed to add inventory. Product not found.`);
       }
     } catch (error) {
-      await ctx.reply(`❌ Error: ${error.message}`);
+      await ctx.reply(`❌ Error: ${error}`);
     }
   },
 };

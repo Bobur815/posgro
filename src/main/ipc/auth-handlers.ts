@@ -7,7 +7,7 @@ import { getAppConfig } from '../config/app-config';
 
 interface JwtPayload {
   sub: string;
-  username: string;
+  phone: string;
   role: string;
   iat: number;
   exp: number;
@@ -15,20 +15,20 @@ interface JwtPayload {
 
 let currentUser: {
   id: string;
-  username: string;
+  phone: string;
   role: string;
   nameUz: string;
   nameRu: string;
 } | null = null;
 
 export function setupAuthHandlers(): void {
-  ipcMain.handle('auth:login', async (_event, username: string, password: string) => {
+  ipcMain.handle('auth:login', async (_event, phone: string, password: string) => {
     const prisma = getPrismaClient();
     const config = getAppConfig();
 
     // Find user in local database
     const user = await prisma.user.findUnique({
-      where: { username },
+      where: { phone },
     });
 
     if (!user) {
@@ -49,7 +49,7 @@ export function setupAuthHandlers(): void {
     const token = jwt.sign(
       {
         sub: user.id,
-        username: user.username,
+        phone: user.phone,
         role: user.role,
       },
       config.jwtSecret || 'local-secret-key',
@@ -64,7 +64,7 @@ export function setupAuthHandlers(): void {
     // Set current user
     currentUser = {
       id: user.id,
-      username: user.username,
+      phone: user.phone,
       role: user.role,
       nameUz: user.nameUz,
       nameRu: user.nameRu,
@@ -74,10 +74,85 @@ export function setupAuthHandlers(): void {
     await prisma.auditLog.create({
       data: {
         userId: user.id,
-        userName: user.username,
+        phone: user.phone,
         action: 'login',
         entity: 'user',
         entityId: user.id,
+        details: JSON.stringify({ terminalId: config.terminalId }),
+      },
+    });
+
+    return {
+      token,
+      user: currentUser,
+    };
+  });
+
+  ipcMain.handle('auth:loginWithPin', async (_event, pin: string) => {
+    const prisma = getPrismaClient();
+    const config = getAppConfig();
+
+    // Get store config with PIN
+    const localConfig = await prisma.localConfig.findUnique({
+      where: { id: 'config' },
+    });
+
+    if (!localConfig || !localConfig.storePin) {
+      throw new Error('Store PIN not configured');
+    }
+
+    // Verify PIN
+    const isPinValid = await bcrypt.compare(pin, localConfig.storePin);
+    if (!isPinValid) {
+      throw new Error('Invalid PIN');
+    }
+
+    // Find default cashier (first active USER)
+    const cashier = await prisma.user.findFirst({
+      where: {
+        role: 'USER',
+        active: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (!cashier) {
+      throw new Error('No cashier account found');
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      {
+        sub: cashier.id,
+        phone: cashier.phone,
+        role: cashier.role,
+      },
+      config.jwtSecret || 'local-secret-key',
+      {
+        expiresIn: '8h',
+      }
+    );
+
+    // Store token for sync operations
+    await setAuthToken(token);
+
+    // Set current user
+    currentUser = {
+      id: cashier.id,
+      phone: cashier.phone,
+      role: cashier.role,
+      nameUz: cashier.nameUz,
+      nameRu: cashier.nameRu,
+    };
+
+    // Log login
+    await prisma.auditLog.create({
+      data: {
+        userId: cashier.id,
+        phone: cashier.phone,
+        action: 'pin_login',
+        entity: 'user',
+        entityId: cashier.id,
         details: JSON.stringify({ terminalId: config.terminalId }),
       },
     });
@@ -97,7 +172,7 @@ export function setupAuthHandlers(): void {
       await prisma.auditLog.create({
         data: {
           userId: currentUser.id,
-          userName: currentUser.username,
+          phone: currentUser.phone,
           action: 'logout',
           entity: 'user',
           entityId: currentUser.id,
@@ -118,6 +193,48 @@ export function setupAuthHandlers(): void {
     return currentUser;
   });
 
+  // Restore session from stored token (called on app start)
+  ipcMain.handle('auth:restoreSession', async (_event, token: string) => {
+    if (!token) {
+      return null;
+    }
+
+    const config = getAppConfig();
+
+    try {
+      // Verify the token
+      const decoded = jwt.verify(token, config.jwtSecret || 'local-secret-key') as JwtPayload;
+
+      // Get user from database
+      const prisma = getPrismaClient();
+      const user = await prisma.user.findUnique({
+        where: { id: decoded.sub },
+      });
+
+      if (!user || !user.active) {
+        return null;
+      }
+
+      // Restore current user
+      currentUser = {
+        id: user.id,
+        phone: user.phone,
+        role: user.role,
+        nameUz: user.nameUz,
+        nameRu: user.nameRu,
+      };
+
+      // Restore token for sync
+      await setAuthToken(token);
+
+      return currentUser;
+    } catch (err) {
+      // Token invalid or expired
+      console.log('Session restore failed:', err);
+      return null;
+    }
+  });
+
   // Users management (Admin only)
   ipcMain.handle('users:getAll', async () => {
     if (!currentUser || currentUser.role !== 'ADMIN') {
@@ -128,7 +245,7 @@ export function setupAuthHandlers(): void {
     return prisma.user.findMany({
       select: {
         id: true,
-        username: true,
+        phone: true,
         role: true,
         nameUz: true,
         nameRu: true,
@@ -151,7 +268,7 @@ export function setupAuthHandlers(): void {
 
     const user = await prisma.user.create({
       data: {
-        username: data.username,
+        phone: data.phone,
         password: hashedPassword,
         role: data.role || 'USER',
         nameUz: data.nameUz,
@@ -160,7 +277,7 @@ export function setupAuthHandlers(): void {
       },
       select: {
         id: true,
-        username: true,
+        phone: true,
         role: true,
         nameUz: true,
         nameRu: true,
@@ -172,11 +289,11 @@ export function setupAuthHandlers(): void {
     await prisma.auditLog.create({
       data: {
         userId: currentUser.id,
-        userName: currentUser.username,
+        phone: currentUser.phone,
         action: 'create_user',
         entity: 'user',
         entityId: user.id,
-        details: JSON.stringify({ username: user.username }),
+        details: JSON.stringify({ phone: user.phone }),
       },
     });
 
@@ -208,7 +325,7 @@ export function setupAuthHandlers(): void {
       data: updateData,
       select: {
         id: true,
-        username: true,
+        phone: true,
         role: true,
         nameUz: true,
         nameRu: true,
@@ -240,7 +357,7 @@ export function setupAuthHandlers(): void {
     await prisma.auditLog.create({
       data: {
         userId: currentUser.id,
-        userName: currentUser.username,
+        phone: currentUser.phone,
         action: 'delete_user',
         entity: 'user',
         entityId: id,
