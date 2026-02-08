@@ -136,6 +136,16 @@ export function useProducts() {
     }
   }, []);
 
+  const getTopSelling = useCallback(async (limit?: number) => {
+    try {
+      const data = await window.electronAPI.products.getTopSelling(limit);
+      return data as Product[];
+    } catch (err) {
+      console.error('Failed to get top selling products:', err);
+      return [];
+    }
+  }, []);
+
   return {
     products,
     categories,
@@ -152,5 +162,6 @@ export function useProducts() {
     updateProduct,
     deleteProduct,
     getLowStock,
+    getTopSelling,
   };
 }

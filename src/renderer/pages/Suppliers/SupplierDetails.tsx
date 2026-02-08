@@ -14,7 +14,7 @@ import {
   SupplierTransactionType,
   SupplierPaymentMethod,
 } from '@shared/types';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency as formatCurrencyBase } from '../../utils/formatters';
 
 const Container = styled.div`
   display: flex;
@@ -161,6 +161,7 @@ const AmountCell = styled.span<{ $negative?: boolean }>`
 
 export function SupplierDetails() {
   const { t, i18n } = useTranslation();
+  const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
   const navigate = useNavigate();
   const { id } = useParams();
   const { user } = useAuthStore();

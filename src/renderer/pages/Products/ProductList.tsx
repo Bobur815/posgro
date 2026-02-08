@@ -68,7 +68,8 @@ export function ProductList() {
   }, [searchQuery, filters, loadProducts]);
 
   const formatCurrency = (amount: number) => {
-    return amount.toLocaleString("uz-UZ") + " сум";
+    const formatted = amount.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'uz-UZ');
+    return i18n.language === 'ru' ? `${formatted} сум` : `${formatted} so'm`;
   };
 
   const columns = [

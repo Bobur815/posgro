@@ -74,7 +74,8 @@
     "paymentComplete": "To'lov amalga oshirildi",
     "thankYou": "Xaridingiz uchun rahmat!",
     "receiptNumber": "Chek raqami",
-    "searchProducts": "Qidirish uchun nomini kiriting"
+    "searchProducts": "Qidirish uchun nomini kiriting",
+    "newTab": "Yangi varaq"
   },
   "products": {
     "title": "Mahsulotlar",

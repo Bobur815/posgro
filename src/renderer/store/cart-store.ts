@@ -7,9 +7,10 @@ export interface CartItem {
   unitPrice: number;
   quantity: number;
   stock: number;
+  unit?: string;
 }
 
-interface CartState {
+interface TabCart {
   items: CartItem[];
   subtotal: number;
   taxRate: number;
@@ -17,32 +18,122 @@ interface CartState {
   discount: number;
   total: number;
   itemCount: number;
+}
+
+function emptyTabCart(): TabCart {
+  return { items: [], subtotal: 0, taxRate: 0, tax: 0, discount: 0, total: 0, itemCount: 0 };
+}
+
+let tabCounter = 1;
+const firstTabId = `tab-${tabCounter}`;
+
+interface CartState {
+  tabs: Record<string, TabCart>;
+  tabOrder: string[];
+  activeTabId: string;
+
+  // Tab management
+  addTab: () => string;
+  removeTab: (tabId: string) => void;
+  setActiveTab: (tabId: string) => void;
+
+  // Cart operations (operate on active tab)
   addItem: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
   removeItem: (productId: number) => void;
   updateQuantity: (productId: number, quantity: number) => void;
   setDiscount: (discount: number) => void;
   setTaxRate: (rate: number) => void;
   clearCart: () => void;
+
+  // Computed from active tab (kept flat for backward compat)
+  items: CartItem[];
+  subtotal: number;
+  taxRate: number;
+  tax: number;
+  discount: number;
+  total: number;
+  itemCount: number;
+}
+
+function activeCart(state: CartState): TabCart {
+  return state.tabs[state.activeTabId] || emptyTabCart();
+}
+
+function flatFromActive(tabs: Record<string, TabCart>, activeTabId: string) {
+  const cart = tabs[activeTabId] || emptyTabCart();
+  return {
+    items: cart.items,
+    subtotal: cart.subtotal,
+    taxRate: cart.taxRate,
+    tax: cart.tax,
+    discount: cart.discount,
+    total: cart.total,
+    itemCount: cart.itemCount,
+  };
 }
 
 export const useCartStore = create<CartState>((set, get) => ({
-  items: [],
-  subtotal: 0,
-  taxRate: 0, // Default 0%, can be configured
-  tax: 0,
-  discount: 0,
-  total: 0,
-  itemCount: 0,
+  tabs: { [firstTabId]: emptyTabCart() },
+  tabOrder: [firstTabId],
+  activeTabId: firstTabId,
+
+  // Flat fields from active tab
+  ...flatFromActive({ [firstTabId]: emptyTabCart() }, firstTabId),
+
+  addTab: () => {
+    tabCounter++;
+    const newId = `tab-${tabCounter}`;
+    const { tabs, tabOrder } = get();
+    const newTabs = { ...tabs, [newId]: emptyTabCart() };
+    set({
+      tabs: newTabs,
+      tabOrder: [...tabOrder, newId],
+      activeTabId: newId,
+      ...flatFromActive(newTabs, newId),
+    });
+    return newId;
+  },
+
+  removeTab: (tabId) => {
+    const { tabs, tabOrder, activeTabId } = get();
+    if (tabOrder.length <= 1) return; // Can't remove last tab
+
+    const newTabOrder = tabOrder.filter((id) => id !== tabId);
+    const newTabs = { ...tabs };
+    delete newTabs[tabId];
+
+    let newActiveId = activeTabId;
+    if (activeTabId === tabId) {
+      const oldIndex = tabOrder.indexOf(tabId);
+      newActiveId = newTabOrder[Math.min(oldIndex, newTabOrder.length - 1)];
+    }
+
+    set({
+      tabs: newTabs,
+      tabOrder: newTabOrder,
+      activeTabId: newActiveId,
+      ...flatFromActive(newTabs, newActiveId),
+    });
+  },
+
+  setActiveTab: (tabId) => {
+    const { tabs } = get();
+    if (!tabs[tabId]) return;
+    set({
+      activeTabId: tabId,
+      ...flatFromActive(tabs, tabId),
+    });
+  },
 
   addItem: (item) => {
-    const { items, taxRate, discount } = get();
-    const existingIndex = items.findIndex((i) => i.productId === item.productId);
+    const state = get();
+    const cart = activeCart(state);
+    const existingIndex = cart.items.findIndex((i) => i.productId === item.productId);
 
     let newItems: CartItem[];
 
     if (existingIndex >= 0) {
-      // Increase quantity of existing item
-      newItems = items.map((i, index) => {
+      newItems = cart.items.map((i, index) => {
         if (index === existingIndex) {
           const newQuantity = Math.min(i.quantity + (item.quantity || 1), i.stock);
           return { ...i, quantity: newQuantity };
@@ -50,60 +141,104 @@ export const useCartStore = create<CartState>((set, get) => ({
         return i;
       });
     } else {
-      // Add new item
-      newItems = [...items, { ...item, quantity: item.quantity || 1 }];
+      newItems = [...cart.items, { ...item, quantity: item.quantity || 1 }];
     }
 
-    const totals = calculateTotals(newItems, taxRate, discount);
-    set({ items: newItems, ...totals });
+    const totals = calculateTotals(newItems, cart.taxRate, cart.discount);
+    const updatedCart = { ...cart, items: newItems, ...totals };
+    const newTabs = { ...state.tabs, [state.activeTabId]: updatedCart };
+    set({ tabs: newTabs, items: newItems, ...totals });
   },
 
   removeItem: (productId) => {
-    const { items, taxRate, discount } = get();
-    const newItems = items.filter((i) => i.productId !== productId);
-    const totals = calculateTotals(newItems, taxRate, discount);
-    set({ items: newItems, ...totals });
+    const state = get();
+    const cart = activeCart(state);
+    const newItems = cart.items.filter((i) => i.productId !== productId);
+    const totals = calculateTotals(newItems, cart.taxRate, cart.discount);
+    const updatedCart = { ...cart, items: newItems, ...totals };
+    const newTabs = { ...state.tabs, [state.activeTabId]: updatedCart };
+    set({ tabs: newTabs, items: newItems, ...totals });
   },
 
   updateQuantity: (productId, quantity) => {
-    const { items, taxRate, discount } = get();
+    const state = get();
+    const cart = activeCart(state);
+    const rounded = Math.round(quantity * 100) / 100;
 
-    if (quantity <= 0) {
-      // Remove item if quantity is 0 or less
-      const newItems = items.filter((i) => i.productId !== productId);
-      const totals = calculateTotals(newItems, taxRate, discount);
-      set({ items: newItems, ...totals });
+    if (rounded <= 0) {
+      const newItems = cart.items.filter((i) => i.productId !== productId);
+      const totals = calculateTotals(newItems, cart.taxRate, cart.discount);
+      const updatedCart = { ...cart, items: newItems, ...totals };
+      const newTabs = { ...state.tabs, [state.activeTabId]: updatedCart };
+      set({ tabs: newTabs, items: newItems, ...totals });
       return;
     }
 
-    const newItems = items.map((i) => {
+    const newItems = cart.items.map((i) => {
       if (i.productId === productId) {
-        const newQuantity = Math.min(quantity, i.stock);
+        const newQuantity = Math.min(rounded, i.stock);
         return { ...i, quantity: newQuantity };
       }
       return i;
     });
 
-    const totals = calculateTotals(newItems, taxRate, discount);
-    set({ items: newItems, ...totals });
+    const totals = calculateTotals(newItems, cart.taxRate, cart.discount);
+    const updatedCart = { ...cart, items: newItems, ...totals };
+    const newTabs = { ...state.tabs, [state.activeTabId]: updatedCart };
+    set({ tabs: newTabs, items: newItems, ...totals });
   },
 
   setDiscount: (discount) => {
-    const { items, taxRate } = get();
-    const totals = calculateTotals(items, taxRate, discount);
-    set({ discount, ...totals });
+    const state = get();
+    const cart = activeCart(state);
+    const totals = calculateTotals(cart.items, cart.taxRate, discount);
+    const updatedCart = { ...cart, discount, ...totals };
+    const newTabs = { ...state.tabs, [state.activeTabId]: updatedCart };
+    set({ tabs: newTabs, discount, ...totals });
   },
 
   setTaxRate: (taxRate) => {
-    const { items, discount } = get();
-    const totals = calculateTotals(items, taxRate, discount);
-    set({ taxRate, ...totals });
+    const state = get();
+    const cart = activeCart(state);
+    const totals = calculateTotals(cart.items, taxRate, cart.discount);
+    const updatedCart = { ...cart, taxRate, ...totals };
+    const newTabs = { ...state.tabs, [state.activeTabId]: updatedCart };
+    set({ tabs: newTabs, taxRate, ...totals });
   },
 
   clearCart: () => {
-    set({ items: [], subtotal: 0, tax: 0, discount: 0, total: 0, itemCount: 0 });
+    const state = get();
+    const cleared = emptyTabCart();
+    const newTabs = { ...state.tabs, [state.activeTabId]: cleared };
+    set({
+      tabs: newTabs,
+      items: [],
+      subtotal: 0,
+      tax: 0,
+      discount: 0,
+      total: 0,
+      itemCount: 0,
+    });
   },
 }));
+
+// Selector for tab bar
+export function useTabsSelector() {
+  return useCartStore((state) => ({
+    tabOrder: state.tabOrder,
+    activeTabId: state.activeTabId,
+    tabs: state.tabs,
+    addTab: state.addTab,
+    removeTab: state.removeTab,
+    setActiveTab: state.setActiveTab,
+  }));
+}
+
+export function getTabLabel(tabs: Record<string, TabCart>, tabId: string): string {
+  const cart = tabs[tabId];
+  if (!cart || cart.items.length === 0) return '—';
+  return cart.items[0].productName;
+}
 
 function calculateTotals(items: CartItem[], taxRate: number, discount: number) {
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);

@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('products:update', id, data),
     delete: (id: string) => ipcRenderer.invoke('products:delete', id),
     search: (query: string) => ipcRenderer.invoke('products:search', query),
+    getTopSelling: (limit?: number) => ipcRenderer.invoke('products:getTopSelling', limit),
     getAnalytics: (productId: number, startDate?: string, endDate?: string) =>
       ipcRenderer.invoke('products:getAnalytics', productId, startDate, endDate),
   },
@@ -147,6 +148,7 @@ declare global {
         update: (id: string, data: unknown) => Promise<unknown>;
         delete: (id: string) => Promise<boolean>;
         search: (query: string) => Promise<unknown[]>;
+        getTopSelling: (limit?: number) => Promise<unknown[]>;
         getAnalytics: (productId: number, startDate?: string, endDate?: string) => Promise<unknown>;
       };
       sales: {

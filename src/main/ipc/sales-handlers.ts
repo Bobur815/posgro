@@ -4,6 +4,10 @@ import { getCurrentUser } from './auth-handlers';
 import { getAppConfig } from '../config/app-config';
 import { format } from 'date-fns';
 
+function ipcSafe<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value));
+}
+
 export function setupSalesHandlers(): void {
   ipcMain.handle('sales:create', async (_event, data) => {
     const currentUser = getCurrentUser();
@@ -20,7 +24,7 @@ export function setupSalesHandlers(): void {
     // Calculate totals
     let totalAmount = 0;
     const items = data.items.map((item: {
-      productId: string;
+      productId: number | string;
       productName: string;
       barcode: string;
       quantity: number;
@@ -29,7 +33,7 @@ export function setupSalesHandlers(): void {
       const subtotal = item.quantity * item.unitPrice;
       totalAmount += subtotal;
       return {
-        productId: item.productId,
+        productId: Number(item.productId),
         productName: item.productName,
         barcode: item.barcode,
         quantity: item.quantity,
@@ -86,7 +90,7 @@ export function setupSalesHandlers(): void {
       },
     });
 
-    return sale;
+    return ipcSafe(sale);
   });
 
   ipcMain.handle('sales:getAll', async (_event, filters) => {
@@ -122,12 +126,13 @@ export function setupSalesHandlers(): void {
       where.cashierId = filters.cashierId;
     }
 
-    return prisma.sale.findMany({
+    const sales = await prisma.sale.findMany({
       where,
       include: { items: true },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
+    return ipcSafe(sales);
   });
 
   ipcMain.handle('sales:getById', async (_event, id: string) => {
@@ -152,7 +157,7 @@ export function setupSalesHandlers(): void {
       throw new Error('Unauthorized');
     }
 
-    return sale;
+    return ipcSafe(sale);
   });
 
   ipcMain.handle('sales:getTodaySummary', async () => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
 import { useCartStore } from '../../store/cart-store';
@@ -6,7 +6,8 @@ import { Button } from '../../components/common/Button';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { EmptyPlaceholder } from '../../components/common/EmptyPlaceholder';
 import { ShoppingCart, Trash } from 'lucide-react';
-import { formatCurrency } from '@shared/utils';
+import { formatCurrency as formatCurrencyBase } from '@shared/utils';
+import { formatQuantity } from '../../utils/formatters';
 
 const Container = styled.div`
   display: flex;
@@ -66,12 +67,13 @@ const ItemRow = styled.div`
 const ItemName = styled.span`
   font-weight: 500;
   color: ${({ theme }) => theme.colors.text};
-  font-size: 14px;
+  font-size: 16px;
 `;
 
 const ItemPrice = styled.span`
   color: ${({ theme }) => theme.colors.primary};
   font-weight: bold;
+  font-size: 16px;
 `;
 
 const QuantityControls = styled.div`
@@ -109,6 +111,7 @@ const Quantity = styled.span`
   min-width: 40px;
   text-align: center;
   font-weight: 500;
+  font-size: 16px;
 `;
 
 const RemoveButton = styled.button`
@@ -142,7 +145,7 @@ const TotalRow = styled.div<{ $bold?: boolean; $large?: boolean }>`
 
   ${({ $bold }) => $bold && `font-weight: bold;`}
   ${({ $large }) => $large && `
-    font-size: 20px;
+    font-size: 22px;
     padding-top: 8px;
     margin-top: 8px;
     border-top: 2px solid currentColor;
@@ -165,8 +168,9 @@ interface CartProps {
 }
 
 export function Cart({ onCheckout }: CartProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { items, subtotal, tax, discount, total, updateQuantity, removeItem, clearCart } = useCartStore();
+  const formatCurrency = useCallback((amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz'), [i18n.language]);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   return (
@@ -182,31 +186,40 @@ export function Cart({ onCheckout }: CartProps) {
         <EmptyPlaceholder icon={<ShoppingCart size={48} />} title={t('pos.emptyCart')} />
       ) : (
         <ItemsList>
-          {items.map((item) => (
-            <CartItem key={item.productId}>
-              <ItemRow>
-                <ItemName>{item.productName}</ItemName>
-                <ItemPrice>{formatCurrency(item.unitPrice * item.quantity)}</ItemPrice>
-              </ItemRow>
-              <QuantityControls>
-                <QuantityButton
-                  onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                >
-                  -
-                </QuantityButton>
-                <Quantity>{item.quantity}</Quantity>
-                <QuantityButton
-                  onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                  disabled={item.quantity >= item.stock}
-                >
-                  +
-                </QuantityButton>
-                <RemoveButton onClick={() => removeItem(item.productId)}>
-                  <Trash size={16} />
-                </RemoveButton>
-              </QuantityControls>
-            </CartItem>
-          ))}
+          {items.map((item) => {
+            const isWeighed = item.unit === 'кг' || item.unit === 'л';
+            const step = isWeighed ? 0.1 : 1;
+
+            return (
+              <CartItem key={item.productId}>
+                <ItemRow>
+                  <ItemName>{item.productName}</ItemName>
+                  <ItemPrice>{formatCurrency(item.unitPrice * item.quantity)}</ItemPrice>
+                </ItemRow>
+                <QuantityControls>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <QuantityButton
+                      onClick={() => updateQuantity(item.productId, Math.round((item.quantity - step) * 100) / 100)}
+                    >
+                      -
+                    </QuantityButton>
+                    <Quantity>{formatQuantity(item.quantity, item.unit || 'шт', i18n.language as 'ru' | 'uz')}</Quantity>
+                    <QuantityButton
+                      onClick={() => updateQuantity(item.productId, Math.round((item.quantity + step) * 100) / 100)}
+                      disabled={item.quantity >= item.stock}
+                    >
+                      +
+                    </QuantityButton>
+                    x
+                    <ItemPrice>{formatCurrency(item.unitPrice)}</ItemPrice>
+                  </div>
+                  <RemoveButton onClick={() => removeItem(item.productId)}>
+                    <Trash size={22} />
+                  </RemoveButton>
+                </QuantityControls>
+              </CartItem>
+            );
+          })}
         </ItemsList>
       )}
 

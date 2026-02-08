@@ -6,6 +6,7 @@ import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { ProductFilters } from '../../components/products/ProductFilters';
 import { ProductFilterParams } from '@shared/types';
+import { formatQuantity } from '../../utils/formatters';
 
 const Container = styled.div`
   flex: 1;
@@ -115,6 +116,7 @@ interface Product {
   price: number;
   stock: number;
   minStock: number;
+  unit?: string;
 }
 
 interface ProductSearchProps {
@@ -126,12 +128,18 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<ProductFilterParams>({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const { products, categories, suppliers, search, loadProducts, loadCategories, loadSuppliers, isLoading } = useProducts();
+  const [topSelling, setTopSelling] = useState<Product[]>([]);
+  const { products, categories, suppliers, search, loadProducts, loadCategories, loadSuppliers, getTopSelling, isLoading } = useProducts();
 
   useEffect(() => {
     loadCategories();
     loadSuppliers();
   }, [loadCategories, loadSuppliers]);
+
+  // Load top-selling products on mount
+  useEffect(() => {
+    getTopSelling().then((data) => setTopSelling(data as unknown as Product[]));
+  }, [getTopSelling]);
 
   const hasActiveFilters =
     filters.categoryId ||
@@ -156,14 +164,17 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
   }, [searchQuery, filters, loadProducts, hasActiveFilters]);
 
   const formatCurrency = (amount: number) => {
-    return amount.toLocaleString('uz-UZ') + " so'm";
+    const formatted = amount.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'uz-UZ');
+    return i18n.language === 'ru' ? `${formatted} сум` : `${formatted} so'm`;
   };
 
   const getProductName = (product: Product) => {
     return i18n.language === 'uz' ? product.nameUz : product.nameRu;
   };
 
-  const displayProducts = (searchQuery.trim() || hasActiveFilters) ? (products as unknown as Product[]) : [];
+  const displayProducts = (searchQuery.trim() || hasActiveFilters)
+    ? (products as unknown as Product[])
+    : topSelling;
 
   return (
     <Container>
@@ -173,11 +184,11 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('pos.searchProducts')}
+            placeholder={t('common.search')}
             style={{ flex: 1 }}
           />
-          <Button size="small" onClick={() => setIsFilterOpen(!isFilterOpen)}>
-            {isFilterOpen ? t('filters.hide') : t('filters.filters')}
+          <Button size="medium" onClick={() => setIsFilterOpen(!isFilterOpen)}>
+            {t('filters.filters')} {isFilterOpen ? '▲' : '▼'}
           </Button>
         </SearchRow>
         <ProductFilters
@@ -194,11 +205,7 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
         {isLoading ? (
           <NoResults>{t('common.loading')}</NoResults>
         ) : displayProducts.length === 0 ? (
-          (searchQuery.trim() || hasActiveFilters) ? (
-            <NoResults>{t('products.noResults')}</NoResults>
-          ) : (
-            <NoResults>{t('pos.searchProducts')}</NoResults>
-          )
+          <NoResults>{t('products.noResults')}</NoResults>
         ) : (
           displayProducts.map((product) => (
             <ProductCard
@@ -212,7 +219,7 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
               <ProductStock $low={product.stock <= product.minStock}>
                 {product.stock <= 0
                   ? t('products.outOfStock')
-                  : `${t('products.stock')}: ${product.stock}`}
+                  : `${t('products.stock')}: ${formatQuantity(product.stock, product.unit || 'шт', i18n.language as 'ru' | 'uz')}`}
               </ProductStock>
             </ProductCard>
           ))

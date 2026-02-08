@@ -221,6 +221,32 @@ export function setupProductsHandlers(): void {
     return ipcSafe(products.map(serializeProduct));
   });
 
+  ipcMain.handle('products:getTopSelling', async (_event, limit: number = 50) => {
+    const prisma = getPrismaClient();
+
+    // Aggregate total sold quantity per product from sale items
+    const topProducts = await prisma.saleItem.groupBy({
+      by: ['productId'],
+      _sum: { quantity: true },
+      orderBy: { _sum: { quantity: 'desc' } },
+      take: limit,
+    });
+
+    const productIds = topProducts.map((p: any) => p.productId);
+
+    // Fetch full product details for these IDs
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds }, active: true },
+      include: { category: true, supplier: true },
+    });
+
+    // Sort by sales rank
+    const orderMap = new Map(productIds.map((id: number, idx: number) => [id, idx]));
+    products.sort((a: any, b: any) => (orderMap.get(a.id) ?? 999) - (orderMap.get(b.id) ?? 999));
+
+    return ipcSafe(products.map(serializeProduct));
+  });
+
   ipcMain.handle('products:create', async (_event, data) => {
     const currentUser = getCurrentUser();
     if (!currentUser || currentUser.role !== 'ADMIN') {

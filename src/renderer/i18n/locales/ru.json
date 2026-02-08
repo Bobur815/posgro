@@ -74,7 +74,8 @@
     "paymentComplete": "Оплата завершена",
     "thankYou": "Спасибо за покупку!",
     "receiptNumber": "Номер чека",
-    "searchProducts": "Введите название для поиска"
+    "searchProducts": "Введите название для поиска",
+    "newTab": "Новая вкладка"
   },
   "products": {
     "title": "Товары",

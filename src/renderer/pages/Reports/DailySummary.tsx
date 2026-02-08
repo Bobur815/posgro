@@ -56,7 +56,7 @@ interface Summary {
 }
 
 export function DailySummary() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { getTodaySummary, isLoading } = useSales();
   const [summary, setSummary] = useState<Summary | null>(null);
 
@@ -70,7 +70,8 @@ export function DailySummary() {
   };
 
   const formatCurrency = (amount: number) => {
-    return amount.toLocaleString('uz-UZ') + ' сум';
+    const formatted = amount.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'uz-UZ');
+    return i18n.language === 'ru' ? `${formatted} сум` : `${formatted} so'm`;
   };
 
   if (isLoading) {

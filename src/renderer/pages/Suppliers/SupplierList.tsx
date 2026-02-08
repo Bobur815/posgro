@@ -8,7 +8,7 @@ import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useSuppliers } from '../../hooks/useSuppliers';
 import { useToast } from '../../context/ToastContext';
 import { Supplier } from '@shared/types';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency as formatCurrencyBase } from '../../utils/formatters';
 
 const Container = styled.div`
   display: flex;
@@ -66,6 +66,7 @@ const CheckboxLabel = styled.label`
 
 export function SupplierList() {
   const { t, i18n } = useTranslation();
+  const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
   const navigate = useNavigate();
   const toast = useToast();
   const { suppliers, isLoading, loadSuppliers, deleteSupplier, error } = useSuppliers();

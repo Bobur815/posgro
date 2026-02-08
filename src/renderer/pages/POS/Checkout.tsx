@@ -113,7 +113,7 @@ interface CheckoutProps {
 }
 
 export function Checkout({ onComplete, onCancel }: CheckoutProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { items, subtotal, tax, discount, total, clearCart } = useCartStore();
   const { createSale, isLoading } = useSales();
 
@@ -122,7 +122,8 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   const [receiptNumber, setReceiptNumber] = useState('');
 
   const formatCurrency = (amount: number) => {
-    return amount.toLocaleString('uz-UZ') + " so'm";
+    const formatted = amount.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'uz-UZ');
+    return i18n.language === 'ru' ? `${formatted} сум` : `${formatted} so'm`;
   };
 
   const handlePayment = async () => {

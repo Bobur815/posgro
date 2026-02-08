@@ -2,19 +2,22 @@ import { format, formatDistance, parseISO } from 'date-fns';
 import { ru, uz } from 'date-fns/locale';
 
 // Currency formatter
-export function formatCurrency(amount: number): string {
-  return amount.toLocaleString() + ' сум';
+export function formatCurrency(amount: number, locale: 'ru' | 'uz' = 'ru'): string {
+  const formatted = amount.toLocaleString(locale === 'ru' ? 'ru-RU' : 'uz-UZ');
+  return locale === 'ru' ? `${formatted} сум` : `${formatted} so'm`;
 }
 
 // Compact currency (for large numbers)
-export function formatCompactCurrency(amount: number): string {
+export function formatCompactCurrency(amount: number, locale: 'ru' | 'uz' = 'ru'): string {
+  const suffix = locale === 'ru' ? 'сум' : "so'm";
   if (amount >= 1000000) {
-    return (amount / 1000000).toFixed(1) + 'M сум';
+    return (amount / 1000000).toFixed(1) + `M ${suffix}`;
   }
   if (amount >= 1000) {
-    return (amount / 1000).toFixed(1) + 'K сум';
+    return (amount / 1000).toFixed(1) + `K ${suffix}`;
   }
-  return amount.toLocaleString() + ' сум';
+  const formatted = amount.toLocaleString(locale === 'ru' ? 'ru-RU' : 'uz-UZ');
+  return `${formatted} ${suffix}`;
 }
 
 // Date formatters
@@ -42,11 +45,22 @@ export function formatRelativeTime(date: Date | string, locale: string = 'ru'): 
 }
 
 // Quantity formatter
-export function formatQuantity(quantity: number, unit: string): string {
+const unitLabels: Record<string, { ru: string; uz: string }> = {
+  'шт': { ru: 'шт', uz: 'dona' },
+  'кг': { ru: 'кг', uz: 'kg' },
+  'л': { ru: 'л', uz: 'l' },
+  'м': { ru: 'м', uz: 'm' },
+};
+
+export function formatQuantity(quantity: number, unit: string, locale: 'ru' | 'uz' = 'ru'): string {
+  const label = unitLabels[unit]?.[locale] || unit;
   if (unit === 'кг' || unit === 'л') {
-    return quantity.toFixed(3) + ' ' + unit;
+    const formatted = quantity % 1 === 0
+      ? quantity.toString()
+      : quantity.toFixed(1);
+    return formatted + ' ' + label;
   }
-  return Math.floor(quantity) + ' ' + unit;
+  return Math.floor(quantity) + ' ' + label;
 }
 
 // Percentage formatter

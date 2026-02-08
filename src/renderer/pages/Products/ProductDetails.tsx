@@ -243,7 +243,8 @@ export function ProductDetails() {
   };
 
   const formatCurrency = (amount: number) => {
-    return amount.toLocaleString("uz-UZ") + " so'm";
+    const formatted = amount.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'uz-UZ');
+    return i18n.language === 'ru' ? `${formatted} сум` : `${formatted} so'm`;
   };
 
   const formatDate = (dateString?: string) => {
