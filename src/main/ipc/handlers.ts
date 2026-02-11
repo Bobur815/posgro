@@ -40,6 +40,15 @@ function setupCategoriesHandlers(): void {
       data,
     });
   });
+
+  ipcMain.handle('categories:delete', async (_event, id: string) => {
+    const prisma = getPrismaClient();
+    await prisma.category.update({
+      where: { id },
+      data: { active: false },
+    });
+    return true;
+  });
 }
 
 function toNumber(value: unknown): number {
@@ -412,13 +421,28 @@ function setupInventoryHandlers(): void {
       },
     });
 
-    // Update product stock
+    // Update product stock and cost
+    const productUpdate: Record<string, unknown> = {
+      stock: { increment: data.quantity },
+      cost: data.cost, // Update cost to latest purchase cost
+    };
+
+    if (data.newPrice !== undefined && data.priceMode) {
+      if (data.priceMode === 'immediate') {
+        // Change price immediately for all stock
+        productUpdate.price = data.newPrice;
+        productUpdate.pendingPrice = null;
+        productUpdate.pendingPriceThreshold = null;
+      } else if (data.priceMode === 'deferred') {
+        // Apply new price after old stock is sold (when stock drops to new arrival qty)
+        productUpdate.pendingPrice = data.newPrice;
+        productUpdate.pendingPriceThreshold = data.quantity;
+      }
+    }
+
     await prisma.product.update({
       where: { id: data.productId },
-      data: {
-        stock: { increment: data.quantity },
-        cost: data.cost, // Update cost to latest purchase cost
-      },
+      data: productUpdate,
     });
 
     // If supplier is specified, create a supplier transaction (PURCHASE type)

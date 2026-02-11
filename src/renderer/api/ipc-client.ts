@@ -27,6 +27,8 @@ export const products = {
 
 export const sales = {
   create: (data: unknown) => ipc?.sales.create(data),
+  update: (id: string, data: unknown) => ipc?.sales.update(id, data),
+  delete: (id: string) => ipc?.sales.delete(id),
   getAll: (filters?: { startDate?: string; endDate?: string }) =>
     ipc?.sales.getAll(filters),
   getById: (id: string) => ipc?.sales.getById(id),
@@ -44,6 +46,7 @@ export const categories = {
   getAll: () => ipc?.categories.getAll(),
   create: (data: unknown) => ipc?.categories.create(data),
   update: (id: string, data: unknown) => ipc?.categories.update(id, data),
+  delete: (id: string) => ipc?.categories.delete(id),
 };
 
 export const inventory = {

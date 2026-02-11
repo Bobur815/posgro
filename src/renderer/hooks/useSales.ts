@@ -87,6 +87,37 @@ export function useSales() {
     }
   }, []);
 
+  const updateSale = useCallback(async (id: string, data: CreateSaleData): Promise<Sale | null> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const sale = await window.electronAPI.sales.update(id, data);
+      return sale as Sale;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update sale');
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const deleteSale = useCallback(async (id: string): Promise<boolean> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await window.electronAPI.sales.delete(id);
+      setSales((prev) => prev.filter((s) => s.id !== id));
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete sale');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const getTodaySummary = useCallback(async (): Promise<Summary | null> => {
     setIsLoading(true);
 
@@ -107,6 +138,8 @@ export function useSales() {
     error,
     loadSales,
     createSale,
+    updateSale,
+    deleteSale,
     getSaleById,
     getTodaySummary,
   };

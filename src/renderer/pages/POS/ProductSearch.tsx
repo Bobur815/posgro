@@ -7,6 +7,7 @@ import { Button } from '../../components/common/Button';
 import { ProductFilters } from '../../components/products/ProductFilters';
 import { ProductFilterParams } from '@shared/types';
 import { formatQuantity } from '../../utils/formatters';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 const Container = styled.div`
   flex: 1;
@@ -36,6 +37,7 @@ const ProductsGrid = styled.div`
   flex: 1;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  align-content: start;
   gap: ${({ theme }) => theme.spacing.sm};
   overflow-y: auto;
   padding: ${({ theme }) => theme.spacing.sm};
@@ -117,6 +119,8 @@ interface Product {
   stock: number;
   minStock: number;
   unit?: string;
+  pendingPrice?: number | null;
+  pendingPriceThreshold?: number | null;
 }
 
 interface ProductSearchProps {
@@ -163,6 +167,20 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery, filters, loadProducts, hasActiveFilters]);
 
+  // Refresh products when stock changes (after sale/edit/delete)
+  useEffect(() => {
+    const refresh = () => {
+      getTopSelling().then((data) => setTopSelling(data as unknown as Product[]));
+      if (searchQuery.trim() || hasActiveFilters) {
+        const params: ProductFilterParams = { ...filters };
+        if (searchQuery.trim()) params.query = searchQuery;
+        loadProducts(params);
+      }
+    };
+    window.addEventListener('stock-updated', refresh);
+    return () => window.removeEventListener('stock-updated', refresh);
+  }, [getTopSelling, searchQuery, hasActiveFilters, filters, loadProducts]);
+
   const formatCurrency = (amount: number) => {
     const formatted = amount.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'uz-UZ');
     return i18n.language === 'ru' ? `${formatted} сум` : `${formatted} so'm`;
@@ -188,7 +206,7 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
             style={{ flex: 1 }}
           />
           <Button size="medium" onClick={() => setIsFilterOpen(!isFilterOpen)}>
-            {t('filters.filters')} {isFilterOpen ? '▲' : '▼'}
+            {t('filters.filters')} {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
           </Button>
         </SearchRow>
         <ProductFilters

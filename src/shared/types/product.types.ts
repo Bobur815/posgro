@@ -26,6 +26,8 @@ export interface Product {
   expiryDate?: string;
   discountPercent?: number;
   isOnPromotion: boolean;
+  pendingPrice?: number | null;
+  pendingPriceThreshold?: number | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

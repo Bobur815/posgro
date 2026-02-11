@@ -52,6 +52,7 @@
     "expand": "Kengaytirish"
   },
   "pos": {
+    "clearCartConfirm": "Savatni tozalash istaysizmi?",
     "id": "Kod",
     "title": "Kassa",
     "scanBarcode": "Shtrix-kodni skanerlang yoki nomini kiriting",
@@ -65,6 +66,7 @@
     "discount": "Chegirma",
     "total": "Jami",
     "pay": "To'lash",
+    "save": "Saqlash",
     "cash": "Naqd",
     "card": "Karta",
     "checkout": "To'lov",
@@ -75,7 +77,18 @@
     "thankYou": "Xaridingiz uchun rahmat!",
     "receiptNumber": "Chek raqami",
     "searchProducts": "Qidirish uchun nomini kiriting",
-    "newTab": "Yangi varaq"
+    "newTab": "Yangi varaq",
+    "salesHistory": "Sotuvlar tarixi",
+    "noSales": "Sotuvlar hali yo'q",
+    "receipt": "Chek",
+    "items": "ta mahsulot",
+    "today": "Bugun",
+    "editingSale": "Sotuvni tahrirlash",
+    "printReceipt": "Chekni chop etish",
+    "receiptPrinted": "Chek chop etishga yuborildi",
+    "saleUpdated": "Sotuv yangilandi",
+    "saleDeleted": "Sotuv o'chirildi",
+    "deleteSaleConfirm": "Bu sotuvni o'chirasizmi? Mahsulot qoldiqlari tiklanadi."
   },
   "products": {
     "title": "Mahsulotlar",
@@ -136,7 +149,15 @@
     "notes": "Izoh",
     "lowStockItems": "ta kam qoldiqli mahsulot",
     "productExists": "Mahsulot mavjud",
-    "arrivalCreated": "Mahsulot kirimi yaratildi"
+    "arrivalCreated": "Mahsulot kirimi yaratildi",
+    "priceChanged": "Tan narxi o'zgardi — sotuv narxini yangilaysizmi?",
+    "keepCurrentPrice": "Joriy narxni saqlash",
+    "changePriceImmediately": "Narxni hozir o'zgartirish",
+    "changePriceImmediatelyDesc": "Yangi narx barcha qoldiqqa qo'llaniladi",
+    "changePriceAfterOldStock": "Eski qoldiq sotilgandan keyin o'zgartirish",
+    "changePriceAfterOldStockDesc": "{{stock}} sotilgandan keyin narx o'zgaradi",
+    "pendingPriceLabel": "Kutilayotgan narx",
+    "afterStockDrops": "qoldiq {{threshold}} ga tushgandan keyin"
   },
   "reports": {
     "title": "Hisobotlar",
@@ -264,6 +285,55 @@
     "syncing": "Sinxronlanmoqda...",
     "lastSync": "Oxirgi sinxronizatsiya",
     "notSynced": "Sinxronlanmagan"
+  },
+  "categories": {
+    "title": "Kategoriyalar",
+    "nameRu": "Nomi (RU)",
+    "nameUz": "Nomi (UZ)",
+    "categoryCreated": "Kategoriya yaratildi",
+    "categoryUpdated": "Kategoriya yangilandi",
+    "categoryDeleted": "Kategoriya o'chirildi",
+    "confirmDelete": "Bu kategoriyani o'chirishni tasdiqlaysizmi?"
+  },
+  "units": {
+    "piece": "Dona",
+    "kg": "Kilogramm",
+    "liter": "Litr",
+    "meter": "Metr"
+  },
+  "priceTags": {
+    "title": "Narx yorliqlari",
+    "settingsDescription": "Narx yorliqlari shablonlari va chop etish",
+    "createTemplate": "Shablon yaratish",
+    "editTemplate": "Shablonni tahrirlash",
+    "templateName": "Shablon nomi",
+    "width": "Kengligi (mm)",
+    "height": "Balandligi (mm)",
+    "mm": "mm",
+    "dimensions": "O'lchamlar",
+    "tagElements": "Yorliq elementlari",
+    "el_name": "Nomi",
+    "el_price": "Narxi",
+    "el_barcode": "Shtrix-kod",
+    "el_articleId": "Artikul (ID)",
+    "el_productionDate": "Ishlab chiqarilgan sana",
+    "el_expiryDate": "Yaroqlilik muddati",
+    "el_customText1": "Matn 1",
+    "el_customText2": "Matn 2",
+    "customTextPlaceholder": "Matn kiriting...",
+    "fontSettings": "Shrift sozlamalari",
+    "fontSize": "Shrift o'lchami",
+    "fontWeight": "Shrift qalinligi",
+    "preview": "Ko'rib chiqish",
+    "print": "Chop etish",
+    "printTags": "Narx yorliqlarini chop etish",
+    "selectProducts": "Mahsulotlarni tanlang",
+    "quantity": "Miqdori",
+    "noTemplates": "Shablonlar topilmadi. Birinchi shablonni yarating.",
+    "confirmDelete": "Bu shablonni o'chirishni tasdiqlaysizmi?",
+    "sampleName": "Mahsulot",
+    "selectedCount": "Tanlandi: {{count}} mahsulot, {{tags}} yorliq",
+    "back": "Orqaga"
   },
   "suppliers": {
     "title": "Yetkazib beruvchilar",

@@ -47,6 +47,8 @@ function serializeProduct(product: any): Product | null {
     expiryDate: product.expiryDate ? toISOString(product.expiryDate) : undefined,
     discountPercent: toNumberOrUndefined(product.discountPercent),
     isOnPromotion: Boolean(product.isOnPromotion ?? false),
+    pendingPrice: product.pendingPrice != null ? toNumber(product.pendingPrice) : null,
+    pendingPriceThreshold: product.pendingPriceThreshold != null ? toNumber(product.pendingPriceThreshold) : null,
     isActive: Boolean(product.active ?? true),
     createdAt: toISOString(product.createdAt),
     updatedAt: toISOString(product.updatedAt),
@@ -303,20 +305,21 @@ export function setupProductsHandlers(): void {
     return ipcSafe(serializeProduct(product));
   });
 
-  ipcMain.handle('products:update', async (_event, id: number, data) => {
+  ipcMain.handle('products:update', async (_event, id: number | string, data) => {
     const currentUser = getCurrentUser();
     if (!currentUser || currentUser.role !== 'ADMIN') {
       throw new Error('Unauthorized');
     }
 
     const prisma = getPrismaClient();
+    const numericId = Number(id);
 
     // Check if barcode is being changed and if new barcode exists
     if (data.barcode) {
       const existing = await prisma.product.findFirst({
         where: {
           barcode: data.barcode,
-          id: { not: id },
+          id: { not: numericId },
         },
       });
 
@@ -325,19 +328,18 @@ export function setupProductsHandlers(): void {
       }
     }
 
-    const updateData: Record<string, unknown> = {
-      barcode: data.barcode,
-      nameUz: data.nameUz,
-      nameRu: data.nameRu,
-      price: data.price,
-      cost: data.cost,
-      stock: data.stock,
-      minStock: data.minStock,
-      unit: data.unit,
-      categoryId: data.categoryId,
-      active: data.active,
-    };
+    const updateData: Record<string, unknown> = {};
 
+    if (data.barcode !== undefined) updateData.barcode = data.barcode;
+    if (data.nameUz !== undefined) updateData.nameUz = data.nameUz;
+    if (data.nameRu !== undefined) updateData.nameRu = data.nameRu;
+    if (data.price !== undefined) updateData.price = data.price;
+    if (data.cost !== undefined) updateData.cost = data.cost;
+    if (data.stock !== undefined) updateData.stock = data.stock;
+    if (data.minStock !== undefined) updateData.minStock = data.minStock;
+    if (data.unit !== undefined) updateData.unit = data.unit;
+    if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
+    if (data.active !== undefined) updateData.active = data.active;
     if (data.supplierId !== undefined) {
       updateData.supplierId = data.supplierId || null;
     }
@@ -355,7 +357,7 @@ export function setupProductsHandlers(): void {
     }
 
     const product = await prisma.product.update({
-      where: { id },
+      where: { id: numericId },
       data: updateData,
       include: { category: true, supplier: true },
     });
@@ -378,17 +380,18 @@ export function setupProductsHandlers(): void {
     return ipcSafe(serializeProduct(product));
   });
 
-  ipcMain.handle('products:delete', async (_event, id: number) => {
+  ipcMain.handle('products:delete', async (_event, id: number | string) => {
     const currentUser = getCurrentUser();
     if (!currentUser || currentUser.role !== 'ADMIN') {
       throw new Error('Unauthorized');
     }
 
     const prisma = getPrismaClient();
+    const numericId = Number(id);
 
     // Soft delete
     await prisma.product.update({
-      where: { id },
+      where: { id: numericId },
       data: { active: false },
     });
 

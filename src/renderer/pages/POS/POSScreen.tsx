@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { Cart } from "./Cart";
@@ -7,13 +7,15 @@ import { Checkout } from "./Checkout";
 import { PosTabBar } from "./PosTabBar";
 import { useCartStore } from "../../store/cart-store";
 import { useProducts } from "../../hooks/useProducts";
+import { useSales } from "../../hooks/useSales";
+import { useToast } from "../../context/ToastContext";
 import { Delete, SendHorizontal, Trash } from "lucide-react";
 
 const PageWrapper = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${({ theme }) => theme.spacing.sm};
-  height: calc(100vh - 120px);
+  height: calc(100vh - 20px);
 `;
 
 const Container = styled.div`
@@ -182,6 +184,8 @@ interface Product {
   stock: number;
   minStock: number;
   unit?: string;
+  pendingPrice?: number | null;
+  pendingPriceThreshold?: number | null;
 }
 
 type InputMode = "barcode" | "quantity" | "id";
@@ -195,8 +199,95 @@ export function POSScreen() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [error, setError] = useState("");
 
-  const { addItem, activeTabId } = useCartStore();
+  const { addItem, items, discount, clearCart, activeTabId, editingSaleId } = useCartStore();
   const { searchByBarcode, getById } = useProducts();
+  const { createSale, updateSale, isLoading: isPayingLoading } = useSales();
+  const toast = useToast();
+  const payingRef = useRef(false);
+
+  const addProductToCart = useCallback(
+    (product: Product, qty: number) => {
+      const productName =
+        i18n.language === "uz" ? product.nameUz : product.nameRu;
+
+      const hasPending =
+        product.pendingPrice != null &&
+        product.pendingPriceThreshold != null &&
+        product.pendingPrice !== product.price;
+
+      if (hasPending) {
+        const oldPrice = Number(product.price);
+        const newPrice = Number(product.pendingPrice!);
+        const threshold = product.pendingPriceThreshold!;
+        // Old stock = total stock - threshold (portion at old price)
+        const totalOldStock = product.stock - threshold;
+
+        // Check how much of old-price stock is already in cart
+        const alreadyInCartOld = items
+          .filter((i) => i.productId === product.id && i.unitPrice === oldPrice)
+          .reduce((sum, i) => sum + i.quantity, 0);
+
+        const remainingOldStock = Math.max(0, totalOldStock - alreadyInCartOld);
+
+        if (remainingOldStock <= 0) {
+          // All old stock used up, add at new price
+          addItem({
+            productId: product.id,
+            productName,
+            barcode: product.barcode,
+            unitPrice: newPrice,
+            quantity: qty,
+            stock: threshold,
+            unit: product.unit,
+          });
+        } else if (qty <= remainingOldStock) {
+          // Fits entirely in old stock
+          addItem({
+            productId: product.id,
+            productName,
+            barcode: product.barcode,
+            unitPrice: oldPrice,
+            quantity: qty,
+            stock: totalOldStock,
+            unit: product.unit,
+          });
+        } else {
+          // Split: fill old stock, rest at new price
+          addItem({
+            productId: product.id,
+            productName,
+            barcode: product.barcode,
+            unitPrice: oldPrice,
+            quantity: remainingOldStock,
+            stock: totalOldStock,
+            unit: product.unit,
+          });
+          addItem({
+            productId: product.id,
+            productName,
+            barcode: product.barcode,
+            unitPrice: newPrice,
+            quantity: qty - remainingOldStock,
+            stock: threshold,
+            unit: product.unit,
+          });
+        }
+        return;
+      }
+
+      // Normal add (no pending price)
+      addItem({
+        productId: product.id,
+        productName,
+        barcode: product.barcode,
+        unitPrice: Number(product.price),
+        quantity: qty,
+        stock: product.stock,
+        unit: product.unit,
+      });
+    },
+    [addItem, items, i18n.language],
+  );
 
   // Reset local input state when switching tabs
   useEffect(() => {
@@ -214,18 +305,7 @@ export function POSScreen() {
       const product = (await getById(id.trim())) as Product | null;
       if (product) {
         const qty = parseFloat(quantity) || 1;
-        const productName =
-          i18n.language === "uz" ? product.nameUz : product.nameRu;
-
-        addItem({
-          productId: product.id,
-          productName,
-          barcode: product.barcode,
-          unitPrice: Number(product.price),
-          quantity: qty,
-          stock: product.stock,
-          unit: product.unit,
-        });
+        addProductToCart(product, qty);
 
         setId("");
         setBarcode("");
@@ -241,7 +321,7 @@ export function POSScreen() {
       setError(t("products.noResults"));
       setId("");
     }
-  }, [id, quantity, getById, addItem, t, i18n.language]);
+  }, [id, quantity, getById, addProductToCart, t]);
 
   const handleBarcodeSubmit = useCallback(async () => {
     if (inputMode === "id") {
@@ -257,18 +337,7 @@ export function POSScreen() {
       const product = (await searchByBarcode(barcode.trim())) as Product | null;
       if (product) {
         const qty = parseFloat(quantity) || 1;
-        const productName =
-          i18n.language === "uz" ? product.nameUz : product.nameRu;
-
-        addItem({
-          productId: product.id,
-          productName,
-          barcode: product.barcode,
-          unitPrice: Number(product.price),
-          quantity: qty,
-          stock: product.stock,
-          unit: product.unit,
-        });
+        addProductToCart(product, qty);
 
         // Reset inputs
         setBarcode("");
@@ -287,11 +356,51 @@ export function POSScreen() {
     barcode,
     quantity,
     searchByBarcode,
-    addItem,
+    addProductToCart,
     t,
-    i18n.language,
     handleIdSubmit,
   ]);
+
+  const handleQuickPay = useCallback(
+    async (method: "cash" | "card") => {
+      if (items.length === 0 || payingRef.current) return;
+      payingRef.current = true;
+
+      try {
+        const saleData = {
+          items: items.map((item) => ({
+            productId: String(item.productId),
+            productName: item.productName,
+            barcode: item.barcode,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+          })),
+          paymentMethod: method,
+          discountAmount: discount,
+        };
+
+        const sale = editingSaleId
+          ? await updateSale(editingSaleId, saleData)
+          : await createSale(saleData);
+
+        if (sale) {
+          clearCart();
+          window.dispatchEvent(new Event("stock-updated"));
+          toast.success(
+            editingSaleId
+              ? t("pos.saleUpdated")
+              : `${t("pos.paymentComplete")} — ${t("pos.receiptNumber")}: ${sale.receiptNumber}`,
+          );
+        }
+      } catch (err) {
+        console.error("Quick pay failed:", err);
+        toast.error(t("common.error"));
+      } finally {
+        payingRef.current = false;
+      }
+    },
+    [items, discount, editingSaleId, createSale, updateSale, clearCart, toast, t],
+  );
 
   // Handle keyboard input
   useEffect(() => {
@@ -353,11 +462,28 @@ export function POSScreen() {
         e.preventDefault();
         setInputMode("quantity");
       }
+      // F10 - open checkout
+      else if (e.key === "F10") {
+        e.preventDefault();
+        if (items.length > 0) {
+          setShowCheckout(true);
+        }
+      }
+      // F11 - quick pay cash
+      else if (e.key === "F11") {
+        e.preventDefault();
+        handleQuickPay("cash");
+      }
+      // F12 - quick pay card
+      else if (e.key === "F12") {
+        e.preventDefault();
+        handleQuickPay("card");
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [inputMode, barcode, quantity, showCheckout, handleBarcodeSubmit]);
+  }, [inputMode, barcode, quantity, showCheckout, handleBarcodeSubmit, handleQuickPay]);
 
   const handleNumberClick = (num: string) => {
     if (inputMode === "barcode") {
@@ -393,19 +519,7 @@ export function POSScreen() {
 
   const handleProductSelect = (product: Product) => {
     const qty = parseFloat(quantity) || 1;
-    const productName =
-      i18n.language === "uz" ? product.nameUz : product.nameRu;
-
-    addItem({
-      productId: product.id,
-      productName,
-      barcode: product.barcode,
-      unitPrice: product.price,
-      quantity: qty,
-      stock: product.stock,
-      unit: product.unit,
-    });
-
+    addProductToCart(product, qty);
     setQuantity("1");
     setError("");
   };
@@ -423,7 +537,14 @@ export function POSScreen() {
             <ProductSearch onSelect={handleProductSelect} />
           </ProductsSection>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px", minHeight: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+              minHeight: 0,
+            }}
+          >
             <InputSection>
               <InputPanel>
                 <InputLabel>{t("pos.barcode")}</InputLabel>
@@ -504,12 +625,17 @@ export function POSScreen() {
                   <SendHorizontal size={30} />
                 </NumButton>
               </NumberPad>
+              
             </NumberPadSection>
           </div>
         </LeftSection>
 
         <CartSection>
-          <Cart onCheckout={() => setShowCheckout(true)} />
+          <Cart
+            onCheckout={() => setShowCheckout(true)}
+            onQuickPay={handleQuickPay}
+            isQuickPayDisabled={isPayingLoading}
+          />
         </CartSection>
 
         {showCheckout && (

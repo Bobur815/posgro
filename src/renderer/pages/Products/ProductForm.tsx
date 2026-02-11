@@ -15,6 +15,9 @@ import {
   SupplierPaymentMethod,
 } from "@shared/types";
 import { convertUzbekText } from "@shared/utils/transliterator";
+import { Settings } from "lucide-react";
+import { SupplierManagementModal } from "./SupplierManagementModal";
+import { CategoryManagementModal } from "./CategoryManagementModal";
 
 const Container = styled.div`
   max-width: 600px;
@@ -104,6 +107,63 @@ const ModalActions = styled.div`
   margin-top: ${({ theme }) => theme.spacing.md};
 `;
 
+const ProfitBadge = styled.span<{ $negative?: boolean }>`
+  font-size: 13px;
+  font-weight: 600;
+  color: ${({ theme, $negative }) =>
+    $negative ? theme.colors.error : theme.colors.success};
+`;
+
+const PriceChangeSection = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.spacing.sm};
+  padding: ${({ theme }) => theme.spacing.md};
+  background-color: ${({ theme }) => theme.colors.warning}10;
+  border: 1px solid ${({ theme }) => theme.colors.warning}40;
+  border-radius: ${({ theme }) => theme.borderRadius};
+`;
+
+const PriceChangeTitle = styled.div`
+  font-size: 13px;
+  font-weight: 600;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const RadioOption = styled.label<{ $active?: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.sm};
+  padding: ${({ theme }) => theme.spacing.sm} ${({ theme }) => theme.spacing.md};
+  border: 1px solid
+    ${({ theme, $active }) =>
+      $active ? theme.colors.primary : theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  cursor: pointer;
+  background-color: ${({ theme, $active }) =>
+    $active ? theme.colors.primary + "10" : "transparent"};
+  transition: all 0.15s;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.primary};
+  }
+`;
+
+const RadioText = styled.div`
+  flex: 1;
+`;
+
+const RadioLabel = styled.div`
+  font-size: 13px;
+  font-weight: 500;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const RadioDescription = styled.div`
+  font-size: 11px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
 const PAYMENT_METHODS: SupplierPaymentMethod[] = [
   "CASH",
   "CARD",
@@ -111,6 +171,8 @@ const PAYMENT_METHODS: SupplierPaymentMethod[] = [
   "INSTALLMENT",
   "ONE_TO_ONE",
 ];
+
+const UNIT_OPTIONS: ProductUnit[] = ["шт", "кг", "л", "м"];
 
 export function ProductForm() {
   const { t, i18n } = useTranslation();
@@ -158,11 +220,15 @@ export function ProductForm() {
   const [arrivalData, setArrivalData] = useState({
     quantity: "",
     cost: "",
+    newPrice: "",
+    priceMode: "none" as "none" | "immediate" | "deferred",
     notes: "",
     supplierId: "",
     paymentMethod: "INSTALLMENT" as SupplierPaymentMethod,
   });
   const [isSubmittingArrival, setIsSubmittingArrival] = useState(false);
+  const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
 
   useEffect(() => {
     loadCategories();
@@ -182,10 +248,11 @@ export function ProductForm() {
       if (product) {
         setExistingProduct(product);
         setShowArrivalModal(true);
-        // Pre-fill arrival cost with product's current cost
         setArrivalData((prev) => ({
           ...prev,
           cost: product.costPrice ? String(product.costPrice) : "",
+          newPrice: String(product.price),
+          priceMode: "none",
           supplierId: product.supplierId || "",
         }));
       }
@@ -196,22 +263,32 @@ export function ProductForm() {
   const handleBarcodeChange = (value: string) => {
     setFormData((prev) => ({ ...prev, barcode: value }));
 
-    // Clear previous timeout
     if (barcodeCheckTimeout.current) {
       clearTimeout(barcodeCheckTimeout.current);
     }
 
-    // Debounce barcode check (500ms delay for typing, instant for scanner)
     if (value.length >= 8) {
-      // Likely a scanned barcode - check immediately
       checkBarcode(value);
     } else if (value.length >= 3) {
-      // User typing - debounce
       barcodeCheckTimeout.current = setTimeout(() => {
         checkBarcode(value);
       }, 800);
     }
   };
+
+  const costChanged =
+    existingProduct &&
+    arrivalData.cost !== "" &&
+    Number(arrivalData.cost) !== (existingProduct.costPrice ?? 0);
+
+  const arrivalProfitMargin =
+    arrivalData.cost && arrivalData.newPrice
+      ? (
+          ((Number(arrivalData.newPrice) - Number(arrivalData.cost)) /
+            Number(arrivalData.cost)) *
+          100
+        ).toFixed(1)
+      : null;
 
   const handleArrivalSubmit = async () => {
     if (!existingProduct || !arrivalData.quantity || !arrivalData.cost) return;
@@ -228,6 +305,12 @@ export function ProductForm() {
           ? arrivalData.paymentMethod
           : undefined,
         createdBy: user?.id,
+        newPrice:
+          arrivalData.priceMode !== "none"
+            ? Number(arrivalData.newPrice)
+            : undefined,
+        priceMode:
+          arrivalData.priceMode !== "none" ? arrivalData.priceMode : undefined,
       });
 
       toast.success(t("inventory.arrivalCreated") || t("common.saved"));
@@ -237,6 +320,8 @@ export function ProductForm() {
       setArrivalData({
         quantity: "",
         cost: "",
+        newPrice: "",
+        priceMode: "none",
         notes: "",
         supplierId: "",
         paymentMethod: "INSTALLMENT",
@@ -264,6 +349,33 @@ export function ProductForm() {
     };
     return labels[method];
   };
+
+  const getUnitLabel = (unit: ProductUnit) => {
+    const labels: Record<ProductUnit, string> = {
+      "шт": t("units.piece"),
+      "кг": t("units.kg"),
+      "л": t("units.liter"),
+      "м": t("units.meter"),
+    };
+    return labels[unit];
+  };
+
+  const formatCurrency = (amount: number) => {
+    const formatted = amount.toLocaleString(
+      i18n.language === "ru" ? "ru-RU" : "uz-UZ",
+    );
+    return `${formatted} ${t("common.currency")}`;
+  };
+
+  // Compute profit margin for form
+  const formProfitMargin =
+    formData.price && formData.cost
+      ? (
+          ((Number(formData.price) - Number(formData.cost)) /
+            Number(formData.cost)) *
+          100
+        ).toFixed(1)
+      : null;
 
   const loadProduct = async () => {
     if (!id) return;
@@ -342,14 +454,12 @@ export function ProductForm() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  // Auto-transliterate between Uzbek Latin and Cyrillic
   const handleNameUzChange = (value: string) => {
     setFormData((prev) => {
-      const converted = convertUzbekText(value); // Latin → Cyrillic
+      const converted = convertUzbekText(value);
       return {
         ...prev,
         nameUz: value,
-        // Only auto-fill if nameRu is empty or matches previous conversion
         nameRu:
           prev.nameRu === "" || prev.nameRu === convertUzbekText(prev.nameUz)
             ? converted
@@ -360,11 +470,10 @@ export function ProductForm() {
 
   const handleNameRuChange = (value: string) => {
     setFormData((prev) => {
-      const converted = convertUzbekText(value); // Cyrillic → Latin
+      const converted = convertUzbekText(value);
       return {
         ...prev,
         nameRu: value,
-        // Only auto-fill if nameUz is empty or matches previous conversion
         nameUz:
           prev.nameUz === "" || prev.nameUz === convertUzbekText(prev.nameRu)
             ? converted
@@ -406,7 +515,7 @@ export function ProductForm() {
 
         <Row>
           <Input
-            label={t("products.price")}
+            label={`${t("products.price")}${formProfitMargin !== null ? ` (${formProfitMargin}%)` : ""}`}
             type="number"
             value={formData.price}
             onChange={(e) => handleChange("price", e.target.value)}
@@ -436,41 +545,73 @@ export function ProductForm() {
         </Row>
 
         <Row>
-          <Input
-            label={t("products.unit")}
-            value={formData.unit}
-            onChange={(e) => handleChange("unit", e.target.value)}
-          />
           <FormGroup>
-            <Label>{t("products.category")}</Label>
+            <Label>{t("products.unit")}</Label>
             <Select
-              value={formData.categoryId}
-              onChange={(e) => handleChange("categoryId", e.target.value)}
-              required
+              value={formData.unit}
+              onChange={(e) => handleChange("unit", e.target.value)}
             >
-              <option value="">{t("products.selectCategory")}</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.nameRu}
+              {UNIT_OPTIONS.map((unit) => (
+                <option key={unit} value={unit}>
+                  {getUnitLabel(unit)}
                 </option>
               ))}
             </Select>
+          </FormGroup>
+          <FormGroup>
+            <Label>{t("products.category")}</Label>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <Select
+                value={formData.categoryId}
+                onChange={(e) => handleChange("categoryId", e.target.value)}
+                required
+                style={{ flex: 1 }}
+              >
+                <option value="">{t("products.selectCategory")}</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {i18n.language === "uz" ? cat.nameUz : cat.nameRu}
+                  </option>
+                ))}
+              </Select>
+              <Button
+                type="button"
+                variant="secondary"
+                size="small"
+                onClick={() => setShowCategoryModal(true)}
+                style={{ flexShrink: 0 }}
+              >
+                <Settings size={16} />
+              </Button>
+            </div>
           </FormGroup>
         </Row>
 
         <FormGroup>
           <Label>{t("filters.supplier")}</Label>
-          <Select
-            value={formData.supplierId}
-            onChange={(e) => handleChange("supplierId", e.target.value)}
-          >
-            <option value="">{t("filters.allSuppliers")}</option>
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.nameRu}
-              </option>
-            ))}
-          </Select>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <Select
+              value={formData.supplierId}
+              onChange={(e) => handleChange("supplierId", e.target.value)}
+              style={{ flex: 1 }}
+            >
+              <option value="">{t("products.noSupplier")}</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {i18n.language === "uz" ? s.nameUz : s.nameRu}
+                </option>
+              ))}
+            </Select>
+            <Button
+              type="button"
+              variant="secondary"
+              size="small"
+              onClick={() => setShowSupplierModal(true)}
+              style={{ flexShrink: 0 }}
+            >
+              <Settings size={16} />
+            </Button>
+          </div>
         </FormGroup>
 
         <Row>
@@ -559,9 +700,63 @@ export function ProductForm() {
             </ProductInfoRow>
             <ProductInfoRow>
               <ProductInfoLabel>{t("products.price")}</ProductInfoLabel>
-              <ProductInfoValue>{existingProduct.price} {t("common.currency")}</ProductInfoValue>
+              <ProductInfoValue>
+                {formatCurrency(existingProduct.price)}
+              </ProductInfoValue>
+            </ProductInfoRow>
+            <ProductInfoRow>
+              <ProductInfoLabel>{t("products.cost")}</ProductInfoLabel>
+              <ProductInfoValue>
+                {existingProduct.costPrice
+                  ? formatCurrency(existingProduct.costPrice)
+                  : "—"}
+              </ProductInfoValue>
+            </ProductInfoRow>
+            <ProductInfoRow>
+              <ProductInfoLabel>{t("products.profitMargin")}</ProductInfoLabel>
+              <ProductInfoValue>
+                {existingProduct.costPrice ? (
+                  <ProfitBadge
+                    $negative={
+                      ((existingProduct.price - existingProduct.costPrice) /
+                        existingProduct.costPrice) *
+                        100 <
+                      0
+                    }
+                  >
+                    {(
+                      ((existingProduct.price - existingProduct.costPrice) /
+                        existingProduct.costPrice) *
+                      100
+                    ).toFixed(1)}
+                    %
+                  </ProfitBadge>
+                ) : (
+                  "—"
+                )}
+              </ProductInfoValue>
             </ProductInfoRow>
           </ProductInfo>
+
+          {existingProduct.pendingPrice != null && (
+            <ProductInfo>
+              <ProductInfoRow>
+                <ProductInfoLabel>
+                  {t("inventory.pendingPriceLabel")}
+                </ProductInfoLabel>
+                <ProductInfoValue>
+                  {formatCurrency(existingProduct.pendingPrice)}{" "}
+                  <span style={{ fontSize: 12, fontWeight: 400 }}>
+                    (
+                    {t("inventory.afterStockDrops", {
+                      threshold: `${existingProduct.pendingPriceThreshold} ${existingProduct.unit}`,
+                    })}
+                    )
+                  </span>
+                </ProductInfoValue>
+              </ProductInfoRow>
+            </ProductInfo>
+          )}
 
           <ArrivalForm>
             <Input
@@ -580,36 +775,146 @@ export function ProductForm() {
               required
             />
 
-            <Input
-              label={t("inventory.costPerUnit")}
-              type="number"
-              min="0"
-              step="0.01"
-              value={arrivalData.cost}
-              onChange={(e) =>
-                setArrivalData((prev) => ({ ...prev, cost: e.target.value }))
-              }
-              required
-            />
+            <div style={{ display: "flex", gap: "16px" }}>
+              <div style={{ flex: 1 }}>
+                <Input
+                  label={t("inventory.costPerUnit")}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={arrivalData.cost}
+                  onChange={(e) =>
+                    setArrivalData((prev) => ({
+                      ...prev,
+                      cost: e.target.value,
+                    }))
+                  }
+                  required
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <Input
+                  label={`${t("products.price")}${arrivalProfitMargin !== null ? ` (${arrivalProfitMargin}%)` : ""}`}
+                  type="number"
+                  value={arrivalData.newPrice}
+                  onChange={(e) =>
+                    setArrivalData((prev) => ({
+                      ...prev,
+                      newPrice: e.target.value,
+                    }))
+                  }
+                  disabled={arrivalData.priceMode === "none"}
+                />
+              </div>
+            </div>
+
+            {costChanged && (
+              <PriceChangeSection>
+                <PriceChangeTitle>
+                  {t("inventory.priceChanged")}
+                </PriceChangeTitle>
+
+                <RadioOption $active={arrivalData.priceMode === "none"}>
+                  <input
+                    type="radio"
+                    name="priceMode"
+                    checked={arrivalData.priceMode === "none"}
+                    onChange={() =>
+                      setArrivalData((prev) => ({
+                        ...prev,
+                        priceMode: "none",
+                        newPrice: String(existingProduct!.price),
+                      }))
+                    }
+                  />
+                  <RadioText>
+                    <RadioLabel>{t("inventory.keepCurrentPrice")}</RadioLabel>
+                    <RadioDescription>
+                      {formatCurrency(existingProduct!.price)}
+                    </RadioDescription>
+                  </RadioText>
+                </RadioOption>
+
+                <RadioOption $active={arrivalData.priceMode === "immediate"}>
+                  <input
+                    type="radio"
+                    name="priceMode"
+                    checked={arrivalData.priceMode === "immediate"}
+                    onChange={() =>
+                      setArrivalData((prev) => ({
+                        ...prev,
+                        priceMode: "immediate",
+                      }))
+                    }
+                  />
+                  <RadioText>
+                    <RadioLabel>
+                      {t("inventory.changePriceImmediately")}
+                    </RadioLabel>
+                    <RadioDescription>
+                      {t("inventory.changePriceImmediatelyDesc")}
+                    </RadioDescription>
+                  </RadioText>
+                </RadioOption>
+
+                <RadioOption $active={arrivalData.priceMode === "deferred"}>
+                  <input
+                    type="radio"
+                    name="priceMode"
+                    checked={arrivalData.priceMode === "deferred"}
+                    onChange={() =>
+                      setArrivalData((prev) => ({
+                        ...prev,
+                        priceMode: "deferred",
+                      }))
+                    }
+                  />
+                  <RadioText>
+                    <RadioLabel>
+                      {t("inventory.changePriceAfterOldStock")}
+                    </RadioLabel>
+                    <RadioDescription>
+                      {t("inventory.changePriceAfterOldStockDesc", {
+                        stock: `${existingProduct!.stock} ${existingProduct!.unit}`,
+                      })}
+                    </RadioDescription>
+                  </RadioText>
+                </RadioOption>
+              </PriceChangeSection>
+            )}
 
             <FormGroup>
               <Label>{t("products.supplier")}</Label>
-              <Select
-                value={arrivalData.supplierId}
-                onChange={(e) =>
-                  setArrivalData((prev) => ({
-                    ...prev,
-                    supplierId: e.target.value,
-                  }))
-                }
-              >
-                <option value="">{t("products.noSupplier")}</option>
-                {suppliers.map((supplier: Supplier) => (
-                  <option key={supplier.id} value={supplier.id}>
-                    {i18n.language === "uz" ? supplier.nameUz : supplier.nameRu}
-                  </option>
-                ))}
-              </Select>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <Select
+                  value={arrivalData.supplierId}
+                  onChange={(e) =>
+                    setArrivalData((prev) => ({
+                      ...prev,
+                      supplierId: e.target.value,
+                    }))
+                  }
+                  style={{ flex: 1 }}
+                >
+                  <option value="">{t("products.noSupplier")}</option>
+                  {suppliers.map((supplier: Supplier) => (
+                    <option key={supplier.id} value={supplier.id}>
+                      {i18n.language === "uz"
+                        ? supplier.nameUz
+                        : supplier.nameRu}
+                    </option>
+                  ))}
+                </Select>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="small"
+                  onClick={() => setShowSupplierModal(true)}
+                  style={{ flexShrink: 0 }}
+                >
+                  <Settings size={16} />
+                </Button>
+              </div>
             </FormGroup>
 
             {arrivalData.supplierId && (
@@ -665,6 +970,20 @@ export function ProductForm() {
             </ModalActions>
           </ArrivalForm>
         </Modal>
+      )}
+
+      {showSupplierModal && (
+        <SupplierManagementModal
+          onClose={() => setShowSupplierModal(false)}
+          onSupplierChanged={loadSuppliers}
+        />
+      )}
+
+      {showCategoryModal && (
+        <CategoryManagementModal
+          onClose={() => setShowCategoryModal(false)}
+          onCategoryChanged={loadCategories}
+        />
       )}
     </Container>
   );

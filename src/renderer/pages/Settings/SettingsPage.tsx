@@ -80,6 +80,12 @@ export function SettingsPage() {
       path: '/settings/sync',
     },
     {
+      icon: '🏷️',
+      title: t('priceTags.title'),
+      description: t('priceTags.settingsDescription'),
+      path: '/settings/price-tags',
+    },
+    {
       icon: '👥',
       title: t('settings.userManagement'),
       description: t('settings.userManagementDescription'),

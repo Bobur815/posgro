@@ -34,6 +34,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Sales
   sales: {
     create: (data: unknown) => ipcRenderer.invoke('sales:create', data),
+    update: (id: string, data: unknown) =>
+      ipcRenderer.invoke('sales:update', id, data),
+    delete: (id: string) => ipcRenderer.invoke('sales:delete', id),
     getAll: (filters?: { startDate?: string; endDate?: string }) =>
       ipcRenderer.invoke('sales:getAll', filters),
     getById: (id: string) => ipcRenderer.invoke('sales:getById', id),
@@ -55,6 +58,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     create: (data: unknown) => ipcRenderer.invoke('categories:create', data),
     update: (id: string, data: unknown) =>
       ipcRenderer.invoke('categories:update', id, data),
+    delete: (id: string) => ipcRenderer.invoke('categories:delete', id),
   },
 
   // Inventory
@@ -110,6 +114,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('printer:printReceipt', saleId),
     testPrint: () => ipcRenderer.invoke('printer:testPrint'),
     getAvailablePrinters: () => ipcRenderer.invoke('printer:getAvailable'),
+    printPriceTags: (html: string, widthMm: number, heightMm: number) =>
+      ipcRenderer.invoke('printer:printPriceTags', html, widthMm, heightMm),
   },
 
   // Settings
@@ -153,6 +159,8 @@ declare global {
       };
       sales: {
         create: (data: unknown) => Promise<unknown>;
+        update: (id: string, data: unknown) => Promise<unknown>;
+        delete: (id: string) => Promise<boolean>;
         getAll: (filters?: unknown) => Promise<unknown[]>;
         getById: (id: string) => Promise<unknown>;
         getTodaySummary: () => Promise<unknown>;
@@ -167,6 +175,7 @@ declare global {
         getAll: () => Promise<unknown[]>;
         create: (data: unknown) => Promise<unknown>;
         update: (id: string, data: unknown) => Promise<unknown>;
+        delete: (id: string) => Promise<boolean>;
       };
       inventory: {
         createArrival: (data: unknown) => Promise<unknown>;
@@ -196,6 +205,7 @@ declare global {
         printReceipt: (saleId: string) => Promise<boolean>;
         testPrint: () => Promise<boolean>;
         getAvailablePrinters: () => Promise<string[]>;
+        printPriceTags: (html: string, widthMm: number, heightMm: number) => Promise<boolean>;
       };
       settings: {
         get: (key: string) => Promise<string | null>;

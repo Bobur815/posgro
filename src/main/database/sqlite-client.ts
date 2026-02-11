@@ -137,6 +137,8 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
       expiry_date DATETIME,
       discount_percent REAL DEFAULT 0,
       is_on_promotion INTEGER DEFAULT 0,
+      pending_price REAL,
+      pending_price_threshold REAL,
       active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -263,6 +265,16 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN discount_percent REAL DEFAULT 0`;
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN is_on_promotion INTEGER DEFAULT 0`;
     console.log('Migration completed: New product fields added');
+  }
+
+  // Migration 3: Add pending price fields for deferred price changes
+  try {
+    await prisma.$queryRaw`SELECT pending_price FROM products LIMIT 1`;
+  } catch {
+    console.log('Running migration: Adding pending price fields...');
+    await prisma.$executeRaw`ALTER TABLE products ADD COLUMN pending_price REAL`;
+    await prisma.$executeRaw`ALTER TABLE products ADD COLUMN pending_price_threshold REAL`;
+    console.log('Migration completed: Pending price fields added');
   }
 }
 

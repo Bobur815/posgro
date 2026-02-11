@@ -64,7 +64,7 @@ export function setupSalesHandlers(): void {
       include: { items: true },
     });
 
-    // Update product stock
+    // Update product stock and check for pending price changes
     for (const item of items) {
       await prisma.product.update({
         where: { id: item.productId },
@@ -72,6 +72,27 @@ export function setupSalesHandlers(): void {
           stock: { decrement: item.quantity },
         },
       });
+
+      // Check if pending price should be applied
+      const updatedProduct = await prisma.product.findUnique({
+        where: { id: item.productId },
+        select: { stock: true, pendingPrice: true, pendingPriceThreshold: true },
+      });
+
+      if (
+        updatedProduct?.pendingPrice != null &&
+        updatedProduct?.pendingPriceThreshold != null &&
+        Number(updatedProduct.stock) <= Number(updatedProduct.pendingPriceThreshold)
+      ) {
+        await prisma.product.update({
+          where: { id: item.productId },
+          data: {
+            price: updatedProduct.pendingPrice,
+            pendingPrice: null,
+            pendingPriceThreshold: null,
+          },
+        });
+      }
     }
 
     // Log action
@@ -158,6 +179,175 @@ export function setupSalesHandlers(): void {
     }
 
     return ipcSafe(sale);
+  });
+
+  ipcMain.handle('sales:update', async (_event, saleId: string, data) => {
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+      throw new Error('Not authenticated');
+    }
+
+    const prisma = getPrismaClient();
+
+    const existingSale = await prisma.sale.findUnique({
+      where: { id: saleId },
+      include: { items: true },
+    });
+
+    if (!existingSale) {
+      throw new Error('Sale not found');
+    }
+
+    if (currentUser.role !== 'ADMIN' && existingSale.cashierId !== currentUser.id) {
+      throw new Error('Unauthorized');
+    }
+
+    // Restore stock from old items
+    for (const oldItem of existingSale.items) {
+      await prisma.product.update({
+        where: { id: oldItem.productId },
+        data: { stock: { increment: oldItem.quantity } },
+      });
+    }
+
+    // Calculate new totals
+    let totalAmount = 0;
+    const newItems = data.items.map((item: {
+      productId: number | string;
+      productName: string;
+      barcode: string;
+      quantity: number;
+      unitPrice: number;
+    }) => {
+      const subtotal = item.quantity * item.unitPrice;
+      totalAmount += subtotal;
+      return {
+        productId: Number(item.productId),
+        productName: item.productName,
+        barcode: item.barcode,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        subtotal,
+      };
+    });
+
+    const discountAmount = data.discountAmount || 0;
+    const finalAmount = totalAmount - discountAmount;
+
+    // Delete old items, update sale, create new items
+    await prisma.saleItem.deleteMany({ where: { saleId } });
+
+    const updatedSale = await prisma.sale.update({
+      where: { id: saleId },
+      data: {
+        totalAmount,
+        discountAmount,
+        finalAmount,
+        paymentMethod: data.paymentMethod,
+        synced: false,
+        items: {
+          create: newItems,
+        },
+      },
+      include: { items: true },
+    });
+
+    // Decrement stock for new items and check pending price
+    for (const item of newItems) {
+      await prisma.product.update({
+        where: { id: item.productId },
+        data: { stock: { decrement: item.quantity } },
+      });
+
+      const updatedProduct = await prisma.product.findUnique({
+        where: { id: item.productId },
+        select: { stock: true, pendingPrice: true, pendingPriceThreshold: true },
+      });
+
+      if (
+        updatedProduct?.pendingPrice != null &&
+        updatedProduct?.pendingPriceThreshold != null &&
+        Number(updatedProduct.stock) <= Number(updatedProduct.pendingPriceThreshold)
+      ) {
+        await prisma.product.update({
+          where: { id: item.productId },
+          data: {
+            price: updatedProduct.pendingPrice,
+            pendingPrice: null,
+            pendingPriceThreshold: null,
+          },
+        });
+      }
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        userId: currentUser.id,
+        phone: currentUser.phone,
+        action: 'update_sale',
+        entity: 'sale',
+        entityId: saleId,
+        details: JSON.stringify({
+          receiptNumber: existingSale.receiptNumber,
+          oldTotal: Number(existingSale.finalAmount),
+          newTotal: finalAmount,
+          itemCount: newItems.length,
+        }),
+      },
+    });
+
+    return ipcSafe(updatedSale);
+  });
+
+  ipcMain.handle('sales:delete', async (_event, saleId: string) => {
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+      throw new Error('Not authenticated');
+    }
+
+    const prisma = getPrismaClient();
+
+    const sale = await prisma.sale.findUnique({
+      where: { id: saleId },
+      include: { items: true },
+    });
+
+    if (!sale) {
+      throw new Error('Sale not found');
+    }
+
+    if (currentUser.role !== 'ADMIN' && sale.cashierId !== currentUser.id) {
+      throw new Error('Unauthorized');
+    }
+
+    // Restore stock for all items
+    for (const item of sale.items) {
+      await prisma.product.update({
+        where: { id: item.productId },
+        data: { stock: { increment: item.quantity } },
+      });
+    }
+
+    // Delete items then sale
+    await prisma.saleItem.deleteMany({ where: { saleId } });
+    await prisma.sale.delete({ where: { id: saleId } });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: currentUser.id,
+        phone: currentUser.phone,
+        action: 'delete_sale',
+        entity: 'sale',
+        entityId: saleId,
+        details: JSON.stringify({
+          receiptNumber: sale.receiptNumber,
+          totalAmount: Number(sale.finalAmount),
+          itemCount: sale.items.length,
+        }),
+      },
+    });
+
+    return true;
   });
 
   ipcMain.handle('sales:getTodaySummary', async () => {

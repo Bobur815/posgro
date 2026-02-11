@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import styled from 'styled-components';
-import { useCartStore } from '../../store/cart-store';
-import { useSales } from '../../hooks/useSales';
-import { Modal } from '../../components/common/Modal';
-import { Button } from '../../components/common/Button';
+import React, { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
+import styled from "styled-components";
+import { useCartStore } from "../../store/cart-store";
+import { useSales } from "../../hooks/useSales";
+import { useToast } from "../../context/ToastContext";
+import { Modal } from "../../components/common/Modal";
+import { Button } from "../../components/common/Button";
 
 const Content = styled.div`
   display: flex;
@@ -54,10 +55,11 @@ const PaymentMethods = styled.div`
 const PaymentButton = styled.button<{ $selected?: boolean }>`
   padding: ${({ theme }) => theme.spacing.xl};
   border: 2px solid
-    ${({ theme, $selected }) => ($selected ? theme.colors.primary : theme.colors.border)};
+    ${({ theme, $selected }) =>
+      $selected ? theme.colors.primary : theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
   background-color: ${({ theme, $selected }) =>
-    $selected ? theme.colors.primary + '15' : theme.colors.surface};
+    $selected ? theme.colors.primary + "15" : theme.colors.surface};
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
@@ -80,31 +82,36 @@ const PaymentLabel = styled.span`
   color: ${({ theme }) => theme.colors.text};
 `;
 
+const PrintCheckRow = styled.label`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.sm};
+  cursor: pointer;
+  font-size: 15px;
+  color: ${({ theme }) => theme.colors.text};
+  user-select: none;
+`;
+
+const Checkbox = styled.input`
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: ${({ theme }) => theme.colors.primary};
+`;
+
+const ShortcutHint = styled.span`
+  font-size: 12px;
+  opacity: 0.6;
+  font-weight: 500;
+  background-color: ${({ theme }) => theme.colors.background};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: 4px;
+  padding: 2px 6px;
+`;
+
 const Actions = styled.div`
   display: flex;
   gap: ${({ theme }) => theme.spacing.md};
-`;
-
-const SuccessMessage = styled.div`
-  text-align: center;
-  padding: ${({ theme }) => theme.spacing.xl};
-`;
-
-const SuccessIcon = styled.div`
-  font-size: 64px;
-  margin-bottom: ${({ theme }) => theme.spacing.md};
-  color: ${({ theme }) => theme.colors.success};
-`;
-
-const SuccessText = styled.div`
-  font-size: 18px;
-  color: ${({ theme }) => theme.colors.text};
-  margin-bottom: ${({ theme }) => theme.spacing.sm};
-`;
-
-const ReceiptNumber = styled.div`
-  font-size: 14px;
-  color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
 interface CheckoutProps {
@@ -114,19 +121,36 @@ interface CheckoutProps {
 
 export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   const { t, i18n } = useTranslation();
-  const { items, subtotal, tax, discount, total, clearCart } = useCartStore();
-  const { createSale, isLoading } = useSales();
+  const { items, subtotal, tax, discount, total, clearCart, editingSaleId } =
+    useCartStore();
+  const { createSale, updateSale, isLoading } = useSales();
+  const toast = useToast();
 
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
-  const [success, setSuccess] = useState(false);
-  const [receiptNumber, setReceiptNumber] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">("cash");
+  const [printCheck, setPrintCheck] = useState(total >= 10000);
 
   const formatCurrency = (amount: number) => {
-    const formatted = amount.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'uz-UZ');
-    return i18n.language === 'ru' ? `${formatted} сум` : `${formatted} so'm`;
+    const formatted = amount.toLocaleString(
+      i18n.language === "ru" ? "ru-RU" : "uz-UZ",
+    );
+    return i18n.language === "ru" ? `${formatted} сум` : `${formatted} so'm`;
   };
 
+  const handlePaymentRef = useRef<() => void>();
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "F10") {
+        e.preventDefault();
+        handlePaymentRef.current?.();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const handlePayment = async () => {
+    if (isLoading) return;
     try {
       const saleData = {
         items: items.map((item) => ({
@@ -140,94 +164,92 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
         discountAmount: discount,
       };
 
-      const sale = await createSale(saleData);
+      const sale = editingSaleId
+        ? await updateSale(editingSaleId, saleData)
+        : await createSale(saleData);
 
       if (sale) {
-        setReceiptNumber(sale.receiptNumber);
-        setSuccess(true);
         clearCart();
-
-        // Auto close after 3 seconds
-        setTimeout(() => {
-          onComplete();
-        }, 3000);
+        window.dispatchEvent(new Event("stock-updated"));
+        toast.success(
+          editingSaleId
+            ? t("pos.saleUpdated")
+            : `${t("pos.paymentComplete")} — ${t("pos.receiptNumber")}: ${sale.receiptNumber}`,
+        );
+        onComplete();
       }
     } catch (error) {
-      console.error('Payment failed:', error);
+      console.error("Payment failed:", error);
+      toast.error(t("common.error"));
     }
   };
 
-  if (success) {
-    return (
-      <Modal title={t('pos.paymentComplete')} onClose={onComplete}>
-        <SuccessMessage>
-          <SuccessIcon>✓</SuccessIcon>
-          <SuccessText>{t('pos.thankYou')}</SuccessText>
-          <ReceiptNumber>
-            {t('pos.receiptNumber')}: {receiptNumber}
-          </ReceiptNumber>
-        </SuccessMessage>
-        <Button fullWidth onClick={onComplete}>
-          {t('common.close')}
-        </Button>
-      </Modal>
-    );
-  }
+  handlePaymentRef.current = handlePayment;
 
   return (
-    <Modal title={t('pos.checkout')} onClose={onCancel}>
+    <Modal title={t("pos.checkout")} onClose={onCancel}>
       <Content>
         <TotalSection>
-          <TotalLabel>{t('pos.totalToPay')}</TotalLabel>
+          <TotalLabel>{t("pos.totalToPay")}</TotalLabel>
           <TotalAmount>{formatCurrency(total)}</TotalAmount>
         </TotalSection>
 
         <SummarySection>
           <SummaryRow>
-            <span>{t('pos.subtotal')}</span>
+            <span>{t("pos.subtotal")}</span>
             <span>{formatCurrency(subtotal)}</span>
           </SummaryRow>
           {tax > 0 && (
             <SummaryRow>
-              <span>{t('pos.tax')}</span>
+              <span>{t("pos.tax")}</span>
               <span>{formatCurrency(tax)}</span>
             </SummaryRow>
           )}
           {discount > 0 && (
             <SummaryRow>
-              <span>{t('pos.discount')}</span>
+              <span>{t("pos.discount")}</span>
               <span>-{formatCurrency(discount)}</span>
             </SummaryRow>
           )}
           <SummaryRow>
-            <span>{t('pos.itemsCount')}</span>
+            <span>{t("pos.itemsCount")}</span>
             <span>{items.length}</span>
           </SummaryRow>
         </SummarySection>
 
         <PaymentMethods>
           <PaymentButton
-            $selected={paymentMethod === 'cash'}
-            onClick={() => setPaymentMethod('cash')}
+            $selected={paymentMethod === "cash"}
+            onClick={() => setPaymentMethod("cash")}
           >
             <PaymentIcon>💵</PaymentIcon>
-            <PaymentLabel>{t('pos.cash')}</PaymentLabel>
+            <PaymentLabel>{t("pos.cash")}</PaymentLabel>
           </PaymentButton>
           <PaymentButton
-            $selected={paymentMethod === 'card'}
-            onClick={() => setPaymentMethod('card')}
+            $selected={paymentMethod === "card"}
+            onClick={() => setPaymentMethod("card")}
           >
             <PaymentIcon>💳</PaymentIcon>
-            <PaymentLabel>{t('pos.card')}</PaymentLabel>
+            <PaymentLabel>{t("pos.card")}</PaymentLabel>
           </PaymentButton>
         </PaymentMethods>
 
+        <PrintCheckRow>
+          <Checkbox
+            type="checkbox"
+            checked={printCheck}
+            onChange={(e) => setPrintCheck(e.target.checked)}
+          />
+          {t("pos.printReceipt")}
+        </PrintCheckRow>
+
         <Actions>
           <Button variant="secondary" onClick={onCancel} fullWidth>
-            {t('common.cancel')}
+            {t("common.cancel")}
           </Button>
           <Button onClick={handlePayment} disabled={isLoading} fullWidth>
-            {isLoading ? t('common.processing') : t('pos.confirmPayment')}
+            {isLoading ? t("common.processing") : t("pos.confirmPayment")}{" "}
+            <ShortcutHint>F10</ShortcutHint>
           </Button>
         </Actions>
       </Content>

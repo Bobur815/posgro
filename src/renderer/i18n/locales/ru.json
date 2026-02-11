@@ -52,6 +52,7 @@
     "expand": "Развернуть"
   },
   "pos": {
+    "clearCartConfirm": "Вы уверены, что хотите очистить корзину?",
     "id": "Код",
     "title": "Касса",
     "scanBarcode": "Сканируйте штрих-код или введите название",
@@ -65,6 +66,7 @@
     "discount": "Скидка",
     "total": "Итого",
     "pay": "Оплатить",
+    "save": "Сохранить",
     "cash": "Наличные",
     "card": "Карта",
     "checkout": "Оплата",
@@ -75,7 +77,18 @@
     "thankYou": "Спасибо за покупку!",
     "receiptNumber": "Номер чека",
     "searchProducts": "Введите название для поиска",
-    "newTab": "Новая вкладка"
+    "newTab": "Новая вкладка",
+    "salesHistory": "История продаж",
+    "noSales": "Продаж пока нет",
+    "receipt": "Чек",
+    "items": "товаров",
+    "today": "Сегодня",
+    "editingSale": "Редактирование продажи",
+    "printReceipt": "Печать чека",
+    "receiptPrinted": "Чек отправлен на печать",
+    "saleUpdated": "Продажа обновлена",
+    "saleDeleted": "Продажа удалена",
+    "deleteSaleConfirm": "Удалить эту продажу? Остатки товаров будут восстановлены."
   },
   "products": {
     "title": "Товары",
@@ -136,7 +149,15 @@
     "notes": "Примечание",
     "lowStockItems": "товаров с низким остатком",
     "productExists": "Товар уже существует",
-    "arrivalCreated": "Приход товара создан"
+    "arrivalCreated": "Приход товара создан",
+    "priceChanged": "Себестоимость изменилась — обновить цену продажи?",
+    "keepCurrentPrice": "Оставить текущую цену",
+    "changePriceImmediately": "Изменить цену сразу",
+    "changePriceImmediatelyDesc": "Новая цена применится ко всему остатку",
+    "changePriceAfterOldStock": "Изменить после продажи старого остатка",
+    "changePriceAfterOldStockDesc": "Цена изменится после продажи {{stock}}",
+    "pendingPriceLabel": "Ожидающая цена",
+    "afterStockDrops": "после снижения остатка до {{threshold}}"
   },
   "reports": {
     "title": "Отчеты",
@@ -266,6 +287,55 @@
     "syncing": "Синхронизация...",
     "lastSync": "Последняя синхронизация",
     "notSynced": "Не синхронизировано"
+  },
+  "categories": {
+    "title": "Категории",
+    "nameRu": "Название (RU)",
+    "nameUz": "Название (UZ)",
+    "categoryCreated": "Категория создана",
+    "categoryUpdated": "Категория обновлена",
+    "categoryDeleted": "Категория удалена",
+    "confirmDelete": "Вы уверены, что хотите удалить эту категорию?"
+  },
+  "units": {
+    "piece": "Штука",
+    "kg": "Килограмм",
+    "liter": "Литр",
+    "meter": "Метр"
+  },
+  "priceTags": {
+    "title": "Ценники",
+    "settingsDescription": "Шаблоны и печать ценников",
+    "createTemplate": "Создать шаблон",
+    "editTemplate": "Редактировать шаблон",
+    "templateName": "Название шаблона",
+    "width": "Ширина (мм)",
+    "height": "Высота (мм)",
+    "mm": "мм",
+    "dimensions": "Размеры",
+    "tagElements": "Элементы ценника",
+    "el_name": "Название",
+    "el_price": "Цена",
+    "el_barcode": "Штрих-код",
+    "el_articleId": "Артикул (ID)",
+    "el_productionDate": "Дата производства",
+    "el_expiryDate": "Срок годности",
+    "el_customText1": "Текст 1",
+    "el_customText2": "Текст 2",
+    "customTextPlaceholder": "Введите текст...",
+    "fontSettings": "Настройки шрифта",
+    "fontSize": "Размер шрифта",
+    "fontWeight": "Толщина шрифта",
+    "preview": "Предпросмотр",
+    "print": "Печать",
+    "printTags": "Печать ценников",
+    "selectProducts": "Выберите товары",
+    "quantity": "Количество",
+    "noTemplates": "Шаблоны не найдены. Создайте первый шаблон.",
+    "confirmDelete": "Вы уверены, что хотите удалить этот шаблон?",
+    "sampleName": "Товар",
+    "selectedCount": "Выбрано: {{count}} товаров, {{tags}} ценников",
+    "back": "Назад"
   },
   "suppliers": {
     "title": "Поставщики",

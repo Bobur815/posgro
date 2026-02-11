@@ -5,6 +5,7 @@ interface ModalProps {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  width?: string;
 }
 
 const Overlay = styled.div`
@@ -20,11 +21,11 @@ const Overlay = styled.div`
   z-index: 1000;
 `;
 
-const ModalContainer = styled.div`
+const ModalContainer = styled.div<{ $width?: string }>`
   background-color: ${({ theme }) => theme.colors.surface};
   border-radius: ${({ theme }) => theme.borderRadius};
   box-shadow: ${({ theme }) => theme.shadows.lg};
-  max-width: 500px;
+  max-width: ${({ $width }) => $width || '500px'};
   width: 90%;
   max-height: 90vh;
   overflow-y: auto;
@@ -62,7 +63,7 @@ const Content = styled.div`
   padding: ${({ theme }) => theme.spacing.lg};
 `;
 
-export function Modal({ title, onClose, children }: ModalProps) {
+export function Modal({ title, onClose, children, width }: ModalProps) {
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
       onClose();
@@ -71,7 +72,7 @@ export function Modal({ title, onClose, children }: ModalProps) {
 
   return (
     <Overlay onClick={handleOverlayClick}>
-      <ModalContainer>
+      <ModalContainer $width={width}>
         <Header>
           <Title>{title}</Title>
           <CloseButton onClick={onClose}>&times;</CloseButton>

@@ -75,9 +75,11 @@ model Product {
   supplier        Supplier? @relation(fields: [supplierId], references: [id])
   productionDate  DateTime? @map("production_date")
   expiryDate      DateTime? @map("expiry_date")
-  discountPercent Decimal?  @default(0) @map("discount_percent")
-  isOnPromotion   Boolean   @default(false) @map("is_on_promotion")
-  active          Boolean  @default(true)
+  discountPercent       Decimal?  @default(0) @map("discount_percent")
+  isOnPromotion         Boolean   @default(false) @map("is_on_promotion")
+  pendingPrice          Decimal?  @map("pending_price")
+  pendingPriceThreshold Decimal?  @map("pending_price_threshold")
+  active                Boolean   @default(true)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -187,30 +189,16 @@ model Supplier {
 }
 
 // ==================== SUPPLIER TRANSACTIONS ====================
-
-enum SupplierTransactionType {
-  PURCHASE    // We received goods (increases our debt)
-  PAYMENT     // We paid supplier (decreases our debt)
-  RETURN      // We returned goods (decreases our debt)
-  ADVANCE     // We paid in advance (supplier owes us)
-  ADJUSTMENT  // Manual balance correction
-}
-
-enum SupplierPaymentMethod {
-  CASH
-  CARD
-  BANK_TRANSFER
-  INSTALLMENT
-  ONE_TO_ONE    // Previous debt cleared against new purchase
-}
+// SupplierTransactionType: PURCHASE, PAYMENT, RETURN, ADVANCE, ADJUSTMENT
+// SupplierPaymentMethod: CASH, CARD, BANK_TRANSFER, INSTALLMENT, ONE_TO_ONE
 
 model SupplierTransaction {
   id         String   @id @default(cuid())
   supplierId String   @map("supplier_id")
   supplier   Supplier @relation(fields: [supplierId], references: [id])
 
-  type          SupplierTransactionType
-  paymentMethod SupplierPaymentMethod   @map("payment_method") // CASH, CARD, BANK_TRANSFER, INSTALLMENT, ONE_TO_ONE
+  type          String  // PURCHASE, PAYMENT, RETURN, ADVANCE, ADJUSTMENT
+  paymentMethod String  @map("payment_method") // CASH, CARD, BANK_TRANSFER, INSTALLMENT, ONE_TO_ONE
   amount        Decimal // Positive = reduces our debt, Negative = increases our debt
   description   String?
 
