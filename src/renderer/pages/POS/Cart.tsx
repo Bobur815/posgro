@@ -325,7 +325,7 @@ export function Cart({ onCheckout, onQuickPay, isQuickPayDisabled }: CartProps) 
             <History size={20} />
           </IconButton>
           {items.length > 0 && (
-            <ClearButton onClick={() => setShowClearConfirm(true)}>| {t('common.clear')}</ClearButton>
+            <ClearButton onClick={() => setShowClearConfirm(true)}> {t('common.clear')}</ClearButton>
           )}
         </HeaderActions>
       </Header>

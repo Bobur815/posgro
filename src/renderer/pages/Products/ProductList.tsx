@@ -11,6 +11,7 @@ import { Input } from "../../components/common/Input";
 import { ProductFilters } from "../../components/products/ProductFilters";
 import { Product, ProductFilterParams } from "@shared/types";
 import { ChevronDown, ChevronUp, Edit, ListIndentIncrease, Trash } from "lucide-react";
+import { formatDate } from "../../utils/formatters";
 
 const Container = styled.div`
   display: flex;
@@ -105,7 +106,7 @@ export function ProductList() {
       header: t("products.expiryDate"),
       render: (product: Product) =>
         product.expiryDate
-          ? new Date(product.expiryDate).toLocaleDateString(i18n.language)
+          ? formatDate(product.expiryDate)
           : "-",
     },
     {

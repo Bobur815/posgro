@@ -62,7 +62,7 @@ export function useSales() {
     }
   }, []);
 
-  const createSale = useCallback(async (data: CreateSaleData): Promise<Sale | null> => {
+  const createSale = useCallback(async (data: CreateSaleData): Promise<Sale> => {
     setIsLoading(true);
     setError(null);
 
@@ -70,8 +70,9 @@ export function useSales() {
       const sale = await window.electronAPI.sales.create(data);
       return sale as Sale;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create sale');
-      return null;
+      const message = err instanceof Error ? err.message : 'Failed to create sale';
+      setError(message);
+      throw err;
     } finally {
       setIsLoading(false);
     }
@@ -87,7 +88,7 @@ export function useSales() {
     }
   }, []);
 
-  const updateSale = useCallback(async (id: string, data: CreateSaleData): Promise<Sale | null> => {
+  const updateSale = useCallback(async (id: string, data: CreateSaleData): Promise<Sale> => {
     setIsLoading(true);
     setError(null);
 
@@ -95,8 +96,9 @@ export function useSales() {
       const sale = await window.electronAPI.sales.update(id, data);
       return sale as Sale;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update sale');
-      return null;
+      const message = err instanceof Error ? err.message : 'Failed to update sale';
+      setError(message);
+      throw err;
     } finally {
       setIsLoading(false);
     }

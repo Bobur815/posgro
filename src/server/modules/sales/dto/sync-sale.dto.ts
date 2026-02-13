@@ -88,7 +88,7 @@ export class SyncSaleDto {
   @IsNotEmpty()
   cashierName!: string;
 
-  @ApiProperty({ example: 'TERMINAL_01', description: 'POS terminal ID' })
+  @ApiProperty({ example: 'T1', description: 'POS terminal ID' })
   @IsString()
   @IsNotEmpty()
   terminalId!: string;

@@ -77,7 +77,7 @@
     "thankYou": "Xaridingiz uchun rahmat!",
     "receiptNumber": "Chek raqami",
     "searchProducts": "Qidirish uchun nomini kiriting",
-    "newTab": "Yangi varaq",
+    "newTab": "Yangi sahifa",
     "salesHistory": "Sotuvlar tarixi",
     "noSales": "Sotuvlar hali yo'q",
     "receipt": "Chek",
@@ -281,6 +281,11 @@
     "expiryDate": "Yaroqlilik muddati",
     "isOnPromotion": "Aksiyada ishtirok etadi"
   },
+  "errors": {
+    "productNotFound": "ID {{id}} bo'lgan mahsulot topilmadi",
+    "productInactive": "\"{{name}}\" mahsuloti nofaol",
+    "insufficientStock": "\"{{name}}\" mahsuloti yetarli emas. Mavjud: {{available}}, so'ralgan: {{requested}}"
+  },
   "sync": {
     "syncing": "Sinxronlanmoqda...",
     "lastSync": "Oxirgi sinxronizatsiya",
@@ -389,5 +394,27 @@
     "supplierDeleted": "Yetkazib beruvchi o'chirildi",
     "details": "Tafsilotlar",
     "viewDetails": "Batafsil"
+  },
+  "receipt": {
+    "title": "Chek sozlamalari",
+    "description": "Chek formati, tili va ko'rib chiqish",
+    "paperWidth": "Qog'oz kengligi",
+    "language": "Chek tili",
+    "header": "Chek sarlavhasi",
+    "footer": "Chek pastki qismi",
+    "width80": "80 mm (standart)",
+    "width58": "58 mm (tor)",
+    "preview": "Ko'rib chiqish",
+    "storeInfoHint": "Do'kon ma'lumotlarini Tizim sozlamalarida to'ldiring"
+  },
+  "printer": {
+    "availablePrinters": "Mavjud printerlar",
+    "noPrintersFound": "Printerlar topilmadi",
+    "selected": "Tanlangan",
+    "saved": "Printer saqlandi",
+    "testPrint": "Test chop etish",
+    "testing": "Chop etilmoqda...",
+    "testSent": "Test sahifa yuborildi",
+    "testFailed": "Test chop etishda xato"
   }
 }

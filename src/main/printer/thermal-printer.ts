@@ -1,5 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { getPrismaClient } from '../database/sqlite-client';
+import { buildReceiptHTML, buildTestReceiptHTML } from '../../shared/receipt-html';
+import type { ReceiptData, ReceiptSettings } from '../../shared/receipt-html';
 
 interface PrinterConfig {
   name: string;
@@ -41,10 +43,43 @@ async function getAvailablePrinters(): Promise<string[]> {
   return printers.map((p) => p.name);
 }
 
+async function loadReceiptSettings(): Promise<ReceiptSettings> {
+  const prisma = getPrismaClient();
+  const rows = await prisma.systemSetting.findMany({
+    where: {
+      key: {
+        in: [
+          'store_name',
+          'store_address',
+          'store_phone',
+          'receipt_header',
+          'receipt_footer',
+          'receipt_width',
+          'receipt_language',
+        ],
+      },
+    },
+  });
+
+  const map = rows.reduce(
+    (acc: Record<string, string>, s: { key: string; value: string }) => ({ ...acc, [s.key]: s.value }),
+    {} as Record<string, string>
+  );
+
+  return {
+    store_name: map.store_name || '',
+    store_address: map.store_address || '',
+    store_phone: map.store_phone || '',
+    receipt_header: map.receipt_header || '',
+    receipt_footer: map.receipt_footer || '',
+    receipt_width: (map.receipt_width as '80' | '58') || '80',
+    receipt_language: (map.receipt_language as 'ru' | 'uz') || 'ru',
+  };
+}
+
 async function printReceipt(saleId: string): Promise<boolean> {
   const prisma = getPrismaClient();
 
-  // Get sale with items
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
     include: { items: true },
@@ -54,177 +89,72 @@ async function printReceipt(saleId: string): Promise<boolean> {
     throw new Error('Sale not found');
   }
 
-  // Get store settings
-  const settings = await prisma.systemSetting.findMany({
-    where: {
-      key: {
-        in: ['store_name', 'store_address', 'store_phone', 'receipt_header', 'receipt_footer'],
-      },
-    },
-  });
+  const settings = await loadReceiptSettings();
 
-  const settingsMap = settings.reduce(
-    (acc, s) => ({ ...acc, [s.key]: s.value }),
-    {} as Record<string, string>
-  );
+  const receiptData: ReceiptData = {
+    receiptNumber: sale.receiptNumber,
+    createdAt: sale.createdAt.toISOString(),
+    cashierName: sale.cashierName,
+    items: sale.items.map((item: { productName: string; quantity: unknown; unitPrice: unknown; subtotal: unknown }) => ({
+      productName: item.productName,
+      quantity: Number(item.quantity),
+      unitPrice: Number(item.unitPrice),
+      subtotal: Number(item.subtotal),
+    })),
+    totalAmount: Number(sale.totalAmount),
+    discountAmount: Number(sale.discountAmount),
+    finalAmount: Number(sale.finalAmount),
+    paymentMethod: sale.paymentMethod,
+  };
 
-  // Generate receipt content
-  const receiptContent = generateReceiptContent(sale, settingsMap);
+  const html = buildReceiptHTML(receiptData, settings);
+  const widthMm = Number(settings.receipt_width) || 80;
 
-  // Print
-  return printContent(receiptContent);
+  return printHTML(html, widthMm);
 }
 
-function generateReceiptContent(
-  sale: {
-    receiptNumber: string;
-    createdAt: Date;
-    cashierName: string;
-    items: Array<{
-      productName: string;
-      quantity: unknown;
-      unitPrice: unknown;
-      subtotal: unknown;
-    }>;
-    totalAmount: unknown;
-    discountAmount: unknown;
-    finalAmount: unknown;
-    paymentMethod: string;
-  },
-  settings: Record<string, string>
-): string {
-  const { width } = printerConfig;
-  const lines: string[] = [];
-
-  // Helper functions
-  const center = (text: string) => {
-    const padding = Math.max(0, Math.floor((width - text.length) / 2));
-    return ' '.repeat(padding) + text;
-  };
-
-  const separator = () => '-'.repeat(width);
-
-  const formatLine = (left: string, right: string) => {
-    const space = width - left.length - right.length;
-    return left + ' '.repeat(Math.max(1, space)) + right;
-  };
-
-  const formatCurrency = (amount: unknown) => {
-    return Number(amount).toLocaleString('uz-UZ') + ' сум';
-  };
-
-  // Header
-  if (settings.store_name) {
-    lines.push(center(settings.store_name));
-  }
-  if (settings.store_address) {
-    lines.push(center(settings.store_address));
-  }
-  if (settings.store_phone) {
-    lines.push(center(settings.store_phone));
-  }
-  if (settings.receipt_header) {
-    lines.push(center(settings.receipt_header));
-  }
-
-  lines.push(separator());
-
-  // Receipt info
-  lines.push(`Чек №: ${sale.receiptNumber}`);
-  lines.push(`Дата: ${sale.createdAt.toLocaleString('ru-RU')}`);
-  lines.push(`Кассир: ${sale.cashierName}`);
-
-  lines.push(separator());
-
-  // Items
-  for (const item of sale.items) {
-    lines.push(item.productName);
-    lines.push(
-      formatLine(
-        `  ${Number(item.quantity)} x ${formatCurrency(item.unitPrice)}`,
-        formatCurrency(item.subtotal)
-      )
-    );
-  }
-
-  lines.push(separator());
-
-  // Totals
-  lines.push(formatLine('Подитог:', formatCurrency(sale.totalAmount)));
-
-  if (Number(sale.discountAmount) > 0) {
-    lines.push(formatLine('Скидка:', `-${formatCurrency(sale.discountAmount)}`));
-  }
-
-  lines.push(formatLine('ИТОГО:', formatCurrency(sale.finalAmount)));
-  lines.push('');
-  lines.push(
-    formatLine('Способ оплаты:', sale.paymentMethod === 'cash' ? 'Наличные' : 'Карта')
-  );
-
-  lines.push(separator());
-
-  // Footer
-  if (settings.receipt_footer) {
-    lines.push(center(settings.receipt_footer));
-  } else {
-    lines.push(center('Спасибо за покупку!'));
-  }
-
-  lines.push('');
-  lines.push('');
-  lines.push(''); // Feed for cutting
-
-  return lines.join('\n');
-}
-
-async function printContent(content: string): Promise<boolean> {
-  const window = BrowserWindow.getAllWindows()[0];
-  if (!window) {
-    throw new Error('No window available for printing');
-  }
-
+async function printHTML(html: string, widthMm: number): Promise<boolean> {
   if (!printerConfig.name) {
-    // No printer configured, return success anyway (for testing)
-    console.log('No printer configured. Receipt content:');
-    console.log(content);
+    console.log('No printer configured. Receipt HTML generated.');
     return true;
   }
 
-  return new Promise((resolve, reject) => {
-    // Create a hidden window for printing
-    const printWindow = new BrowserWindow({
-      show: false,
-      width: 300,
-      height: 600,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-      },
-    });
+  const widthMicrons = widthMm * 1000;
 
-    // Load the receipt content
-    printWindow.loadURL(
-      `data:text/html;charset=utf-8,<html><head><style>
-        body {
-          font-family: monospace;
-          font-size: 12px;
-          margin: 0;
-          padding: 5px;
-          white-space: pre;
-        }
-      </style></head><body>${content.replace(/\n/g, '<br>')}</body></html>`
+  // 1mm ≈ 3.78px at 96 DPI; add small buffer to avoid clipping
+  const printWindow = new BrowserWindow({
+    show: false,
+    width: Math.round(widthMm * 3.78) + 20,
+    height: 900,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+
+  try {
+    await printWindow.loadURL(
+      `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
     );
 
-    printWindow.webContents.on('did-finish-load', () => {
+    // Small delay for rendering
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    return await new Promise<boolean>((resolve, reject) => {
       printWindow.webContents.print(
         {
           silent: true,
-          printBackground: false,
+          printBackground: true,
           deviceName: printerConfig.name,
-        },
+          pageSize: {
+            width: widthMicrons,
+            height: 1000000, // auto-length roll paper
+          },
+          margins: {
+            marginType: 'none',
+          },
+        } as Electron.WebContentsPrintOptions,
         (success, errorType) => {
-          printWindow.close();
           if (success) {
             resolve(true);
           } else {
@@ -233,27 +163,16 @@ async function printContent(content: string): Promise<boolean> {
         }
       );
     });
-  });
+  } finally {
+    printWindow.destroy();
+  }
 }
 
 async function testPrint(): Promise<boolean> {
-  const testContent = [
-    '================================',
-    '        ТЕСТОВАЯ ПЕЧАТЬ         ',
-    '================================',
-    '',
-    'Если вы видите этот текст,',
-    'принтер работает корректно.',
-    '',
-    `Дата: ${new Date().toLocaleString('ru-RU')}`,
-    '',
-    '================================',
-    '',
-    '',
-    '',
-  ].join('\n');
-
-  return printContent(testContent);
+  const settings = await loadReceiptSettings();
+  const html = buildTestReceiptHTML(settings);
+  const widthMm = Number(settings.receipt_width) || 80;
+  return printHTML(html, widthMm);
 }
 
 async function printPriceTags(html: string, widthMm: number, heightMm: number): Promise<boolean> {

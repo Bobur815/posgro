@@ -7,6 +7,29 @@ import { useToast } from "../../context/ToastContext";
 import { Modal } from "../../components/common/Modal";
 import { Button } from "../../components/common/Button";
 
+function parseSaleError(err: unknown, t: (key: string, params?: Record<string, unknown>) => string): string {
+  const message = err instanceof Error ? err.message : String(err);
+  try {
+    const parsed = JSON.parse(message);
+    if (parsed.code === 'PRODUCT_NOT_FOUND') {
+      return t('errors.productNotFound', { id: parsed.productId });
+    }
+    if (parsed.code === 'PRODUCT_INACTIVE') {
+      return t('errors.productInactive', { name: parsed.name });
+    }
+    if (parsed.code === 'INSUFFICIENT_STOCK') {
+      return t('errors.insufficientStock', {
+        name: parsed.name,
+        available: parsed.available,
+        requested: parsed.requested,
+      });
+    }
+  } catch {
+    // not JSON, fall through
+  }
+  return t('common.error');
+}
+
 const Content = styled.div`
   display: flex;
   flex-direction: column;
@@ -180,7 +203,9 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
       }
     } catch (error) {
       console.error("Payment failed:", error);
-      toast.error(t("common.error"));
+      toast.error(parseSaleError(error, t));
+      clearCart();
+      onComplete();
     }
   };
 

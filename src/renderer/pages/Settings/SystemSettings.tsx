@@ -58,8 +58,6 @@ export function SystemSettings() {
     storeAddress: '',
     storePhone: '',
     taxRate: '0',
-    receiptHeader: '',
-    receiptFooter: '',
     syncInterval: '5',
   });
 
@@ -82,8 +80,6 @@ export function SystemSettings() {
         storeAddress: allSettings.store_address || '',
         storePhone: allSettings.store_phone || '',
         taxRate: allSettings.tax_rate || '0',
-        receiptHeader: allSettings.receipt_header || '',
-        receiptFooter: allSettings.receipt_footer || '',
         syncInterval: allSettings.sync_interval || '5',
       }));
     } catch (error) {
@@ -94,7 +90,7 @@ export function SystemSettings() {
   const loadSyncStatus = async () => {
     try {
       const status = await window.electronAPI.sync.getStatus();
-      setSyncStatus(status);
+      setSyncStatus(status as { isSyncing: boolean; lastSyncTime: string | null });
     } catch (error) {
       console.error('Failed to load sync status:', error);
     }
@@ -107,17 +103,6 @@ export function SystemSettings() {
       await window.electronAPI.settings.set('store_address', settings.storeAddress);
       await window.electronAPI.settings.set('store_phone', settings.storePhone);
       await window.electronAPI.settings.set('tax_rate', settings.taxRate);
-      alert(t('common.saved'));
-    } catch (error) {
-      console.error('Failed to save settings:', error);
-    }
-  };
-
-  const handleSaveReceipt = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await window.electronAPI.settings.set('receipt_header', settings.receiptHeader);
-      await window.electronAPI.settings.set('receipt_footer', settings.receiptFooter);
       alert(t('common.saved'));
     } catch (error) {
       console.error('Failed to save settings:', error);
@@ -168,29 +153,6 @@ export function SystemSettings() {
               onChange={(e) => setSettings((prev) => ({ ...prev, taxRate: e.target.value }))}
             />
           </Row>
-          <Actions>
-            <Button type="submit">{t('common.save')}</Button>
-          </Actions>
-        </Form>
-      </Section>
-
-      <Section>
-        <SectionTitle>{t('settings.receiptSettings')}</SectionTitle>
-        <Form onSubmit={handleSaveReceipt}>
-          <Input
-            label={t('settings.receiptHeader')}
-            value={settings.receiptHeader}
-            onChange={(e) =>
-              setSettings((prev) => ({ ...prev, receiptHeader: e.target.value }))
-            }
-          />
-          <Input
-            label={t('settings.receiptFooter')}
-            value={settings.receiptFooter}
-            onChange={(e) =>
-              setSettings((prev) => ({ ...prev, receiptFooter: e.target.value }))
-            }
-          />
           <Actions>
             <Button type="submit">{t('common.save')}</Button>
           </Actions>

@@ -129,7 +129,7 @@ model Sale {
 
   cashierId   String @map("cashier_id")
   cashierName String @map("cashier_name") // Denormalized for reports
-  terminalId  String @map("terminal_id") // TERMINAL_01, TERMINAL_02
+  terminalId  String @map("terminal_id") // T1, T2
 
   // Sync tracking
   synced   Boolean   @default(false)

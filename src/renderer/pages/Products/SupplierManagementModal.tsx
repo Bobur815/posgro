@@ -9,6 +9,8 @@ import { useSuppliers } from '../../hooks/useSuppliers';
 import { useToast } from '../../context/ToastContext';
 import { Supplier } from '@shared/types';
 import { convertUzbekText } from '@shared/utils/transliterator';
+import { UzbekPhoneInput } from '../../components/common/UzbekPhoneInput';
+import { digitsOnly, formatUzPhone } from '@shared/utils/phone';
 import { Pencil, Trash2, Plus, ArrowLeft } from 'lucide-react';
 
 const List = styled.div`
@@ -135,7 +137,7 @@ export function SupplierManagementModal({
   const [formData, setFormData] = useState({
     nameRu: '',
     nameUz: '',
-    phone: '',
+    phoneDigits: '',
     address: '',
   });
 
@@ -145,7 +147,7 @@ export function SupplierManagementModal({
 
   const openCreateForm = () => {
     setEditingSupplier(null);
-    setFormData({ nameRu: '', nameUz: '', phone: '', address: '' });
+    setFormData({ nameRu: '', nameUz: '', phoneDigits: '', address: '' });
     setView('form');
   };
 
@@ -154,7 +156,7 @@ export function SupplierManagementModal({
     setFormData({
       nameRu: supplier.nameRu,
       nameUz: supplier.nameUz,
-      phone: supplier.phone || '',
+      phoneDigits: supplier.phone ? digitsOnly(supplier.phone) : '',
       address: supplier.address || '',
     });
     setView('form');
@@ -194,7 +196,7 @@ export function SupplierManagementModal({
     const data = {
       nameRu: formData.nameRu,
       nameUz: formData.nameUz,
-      phone: formData.phone || undefined,
+      phone: formData.phoneDigits ? formatUzPhone(formData.phoneDigits) : undefined,
       address: formData.address || undefined,
     };
 
@@ -291,13 +293,12 @@ export function SupplierManagementModal({
                 onChange={(e) => handleNameRuChange(e.target.value)}
                 required
               />
-              <Input
+              <UzbekPhoneInput
                 label={t('suppliers.phone')}
-                value={formData.phone}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, phone: e.target.value }))
+                valueDigits={formData.phoneDigits}
+                onDigitsChange={(digits) =>
+                  setFormData((prev) => ({ ...prev, phoneDigits: digits }))
                 }
-                placeholder="+998 XX XXX XX XX"
               />
               <Input
                 label={t('suppliers.address')}

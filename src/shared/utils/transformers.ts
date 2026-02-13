@@ -39,22 +39,6 @@ export const formatDateTime = (
   return `${formatDate(date, locale)} ${formatTime(date)}`;
 };
 
-// Format quantity with unit
-export const formatQuantity = (
-  quantity: number,
-  unit: string,
-  locale: 'ru' | 'uz' = 'ru',
-): string => {
-  const unitLabels: Record<string, { ru: string; uz: string }> = {
-    PCS: { ru: 'шт', uz: 'dona' },
-    KG: { ru: 'кг', uz: 'kg' },
-    L: { ru: 'л', uz: 'l' },
-    M: { ru: 'м', uz: 'm' },
-  };
-  const label = unitLabels[unit]?.[locale] || unit;
-  return `${quantity} ${label}`;
-};
-
 // Generate receipt number
 export const generateReceiptNumber = (terminalId: string): string => {
   const timestamp = Date.now().toString(36).toUpperCase();
@@ -68,7 +52,7 @@ export const parseBarcode = (input: string): string => {
   return input.trim().replace(/[^\w-]/g, '');
 };
 
-// Calculate discount amount
+// Calculate discount amountj
 export const calculateDiscount = (
   subtotal: number,
   discount: number,

@@ -3,6 +3,7 @@ import { getPrismaClient } from '../database/sqlite-client';
 import { getCurrentUser } from './auth-handlers';
 import { getAppConfig } from '../config/app-config';
 import { format } from 'date-fns';
+import type { Sale, SaleItem as PrismaSaleItem } from '../../generated/prisma-sqlite';
 
 function ipcSafe<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
@@ -18,8 +19,30 @@ export function setupSalesHandlers(): void {
     const prisma = getPrismaClient();
     const config = getAppConfig();
 
-    // Generate receipt number
-    const receiptNumber = generateReceiptNumber(config.terminalId);
+    // Check stock availability for all items
+    for (const item of data.items as Array<{ productId: number | string; quantity: number }>) {
+      const product = await prisma.product.findUnique({
+        where: { id: Number(item.productId) },
+        select: { id: true, nameRu: true, stock: true, active: true },
+      });
+
+      if (!product) {
+        throw new Error(JSON.stringify({ code: 'PRODUCT_NOT_FOUND', productId: item.productId }));
+      }
+
+      if (!product.active) {
+        throw new Error(JSON.stringify({ code: 'PRODUCT_INACTIVE', name: product.nameRu }));
+      }
+
+      if (Number(product.stock) < item.quantity) {
+        throw new Error(JSON.stringify({
+          code: 'INSUFFICIENT_STOCK',
+          name: product.nameRu,
+          available: Number(product.stock),
+          requested: item.quantity,
+        }));
+      }
+    }
 
     // Calculate totals
     let totalAmount = 0;
@@ -44,6 +67,9 @@ export function setupSalesHandlers(): void {
 
     const discountAmount = data.discountAmount || 0;
     const finalAmount = totalAmount - discountAmount;
+
+    // Generate receipt number
+    const receiptNumber = await generateReceiptNumber(config.terminalId);
 
     // Create sale with items
     const sale = await prisma.sale.create({
@@ -104,7 +130,7 @@ export function setupSalesHandlers(): void {
         entity: 'sale',
         entityId: sale.id,
         details: JSON.stringify({
-          receiptNumber,
+          receiptNumber: sale.receiptNumber,
           totalAmount,
           itemCount: items.length,
         }),
@@ -208,6 +234,31 @@ export function setupSalesHandlers(): void {
         where: { id: oldItem.productId },
         data: { stock: { increment: oldItem.quantity } },
       });
+    }
+
+    // Check stock availability for new items (after restoring old stock)
+    for (const item of data.items as Array<{ productId: number | string; quantity: number }>) {
+      const product = await prisma.product.findUnique({
+        where: { id: Number(item.productId) },
+        select: { id: true, nameRu: true, stock: true, active: true },
+      });
+
+      if (!product) {
+        throw new Error(JSON.stringify({ code: 'PRODUCT_NOT_FOUND', productId: item.productId }));
+      }
+
+      if (!product.active) {
+        throw new Error(JSON.stringify({ code: 'PRODUCT_INACTIVE', name: product.nameRu }));
+      }
+
+      if (Number(product.stock) < item.quantity) {
+        throw new Error(JSON.stringify({
+          code: 'INSUFFICIENT_STOCK',
+          name: product.nameRu,
+          available: Number(product.stock),
+          requested: item.quantity,
+        }));
+      }
     }
 
     // Calculate new totals
@@ -383,15 +434,15 @@ export function setupSalesHandlers(): void {
 
     const totalSales = sales.length;
     const totalRevenue = sales.reduce(
-      (sum, sale) => sum + Number(sale.finalAmount),
+      (sum: number, sale: Sale & { items: PrismaSaleItem[] }) => sum + Number(sale.finalAmount),
       0
     );
     const totalItems = sales.reduce(
-      (sum, sale) => sum + sale.items.length,
+      (sum: number, sale: Sale & { items: PrismaSaleItem[] }) => sum + sale.items.length,
       0
     );
-    const cashSales = sales.filter((s) => s.paymentMethod === 'cash').length;
-    const cardSales = sales.filter((s) => s.paymentMethod === 'card').length;
+    const cashSales = sales.filter((s: Sale & { items: PrismaSaleItem[] }) => s.paymentMethod === 'cash').length;
+    const cardSales = sales.filter((s: Sale & { items: PrismaSaleItem[] }) => s.paymentMethod === 'card').length;
 
     return {
       date: format(today, 'yyyy-MM-dd'),
@@ -405,13 +456,28 @@ export function setupSalesHandlers(): void {
   });
 }
 
-function generateReceiptNumber(terminalId: string): string {
+async function generateReceiptNumber(terminalId: string): Promise<string> {
+  const prisma = getPrismaClient();
   const now = new Date();
-  const dateStr = format(now, 'yyyyMMdd');
-  const timeStr = format(now, 'HHmmss');
-  const random = Math.floor(Math.random() * 1000)
-    .toString()
-    .padStart(3, '0');
+  const dateStr = format(now, 'yyMMdd');
+  const prefix = `${terminalId}${dateStr}`;
 
-  return `${terminalId}-${dateStr}-${timeStr}-${random}`;
+  // Get ALL receipt numbers with this prefix to find the true max
+  const existing = await prisma.sale.findMany({
+    where: {
+      receiptNumber: { startsWith: prefix },
+    },
+    select: { receiptNumber: true },
+  });
+
+  let maxSeq = 0;
+  for (const row of existing) {
+    const seqStr = row.receiptNumber.slice(prefix.length);
+    const seq = parseInt(seqStr, 10);
+    if (!isNaN(seq) && seq > maxSeq) {
+      maxSeq = seq;
+    }
+  }
+
+  return `${prefix}${(maxSeq + 1).toString().padStart(4, '0')}`;
 }

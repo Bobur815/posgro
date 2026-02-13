@@ -17,6 +17,9 @@ import {
 import { useToast } from "../../context/ToastContext";
 import { ChevronDown, ChevronUp, SendHorizontal, Settings } from "lucide-react";
 import { SupplierManagementModal } from "./SupplierManagementModal";
+import { getExpireInDays } from "@renderer/utils/helpers";
+import { formatQuantity } from "../../utils/formatters";
+import { DateInput } from "../../components/common/DateInput";
 
 const Container = styled.div`
   display: flex;
@@ -267,7 +270,9 @@ export function StockManagement() {
     priceMode: "none" as "none" | "immediate" | "deferred",
     notes: "",
     supplierId: "",
-    paymentMethod: "INSTALLMENT" as SupplierPaymentMethod,
+    productionDate: "",
+    expirationDate: "",
+    paymentMethod: "CASH" as SupplierPaymentMethod,
   });
 
   useEffect(() => {
@@ -296,7 +301,13 @@ export function StockManagement() {
       priceMode: "none",
       notes: "",
       supplierId: product.supplierId || "",
-      paymentMethod: "INSTALLMENT",
+      productionDate: product.productionDate
+        ? product.productionDate.slice(0, 10)
+        : "",
+      expirationDate: product.expiryDate
+        ? product.expiryDate.slice(0, 10)
+        : "",
+      paymentMethod: "CASH",
     });
     setShowArrival(true);
   };
@@ -363,6 +374,8 @@ export function StockManagement() {
             : undefined,
         priceMode:
           arrivalData.priceMode !== "none" ? arrivalData.priceMode : undefined,
+        productionDate: arrivalData.productionDate || undefined,
+        expiryDate: arrivalData.expirationDate || undefined,
       });
 
       setShowArrival(false);
@@ -467,12 +480,17 @@ export function StockManagement() {
       </Header>
 
       <SearchRow>
-          <Input
+        <Input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder={t("common.search")}
-          style={{ padding: "8px 16px", fontSize: "18px", fontWeight: "bold", flex: 1 }}
+          style={{
+            padding: "8px 16px",
+            fontSize: "18px",
+            fontWeight: "bold",
+            flex: 1,
+          }}
         />
         <SearchField>
           <SearchLabel>{t("pos.barcode")}</SearchLabel>
@@ -489,7 +507,7 @@ export function StockManagement() {
             autoFocus
           />
         </SearchField>
-        
+
         <SearchField style={{ maxWidth: 150 }}>
           <SearchLabel>{t("pos.id")}</SearchLabel>
           <SearchInput
@@ -543,7 +561,7 @@ export function StockManagement() {
               <InfoItem>
                 <InfoLabel>{t("products.currentStock")}</InfoLabel>
                 <InfoValue>
-                  {selectedProduct.stock} {selectedProduct.unit}
+                  {formatQuantity(selectedProduct.stock, selectedProduct.unit || 'шт', i18n.language as 'ru' | 'uz')}
                 </InfoValue>
               </InfoItem>
             </InfoRow>
@@ -725,57 +743,95 @@ export function StockManagement() {
               </PriceChangeSection>
             )}
 
-            <FormGroup>
-              <Label>{t("products.supplier")}</Label>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <Select
-                  value={arrivalData.supplierId}
-                  onChange={(e) =>
-                    setArrivalData((prev) => ({
-                      ...prev,
-                      supplierId: e.target.value,
-                    }))
-                  }
-                  style={{ flex: 1 }}
-                >
-                  <option value="">{t("products.noSupplier")}</option>
-                  {suppliers.map((supplier: Supplier) => (
-                    <option key={supplier.id} value={supplier.id}>
-                      {i18n.language === "uz" ? supplier.nameUz : supplier.nameRu}
-                    </option>
-                  ))}
-                </Select>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="small"
-                  onClick={() => setShowSupplierModal(true)}
-                  style={{ flexShrink: 0 }}
-                >
-                  <Settings size={16} />
-                </Button>
-              </div>
-            </FormGroup>
-
-            {arrivalData.supplierId && (
+            <div style={{ display: "flex", gap: "16px" }}>
+              {arrivalData.supplierId && (
+                <FormGroup>
+                  <Label>{t("suppliers.paymentMethod")}</Label>
+                  <Select
+                    value={arrivalData.paymentMethod}
+                    onChange={(e) =>
+                      setArrivalData((prev) => ({
+                        ...prev,
+                        paymentMethod: e.target.value as SupplierPaymentMethod,
+                      }))
+                    }
+                  >
+                    {PAYMENT_METHODS.map((method) => (
+                      <option key={method} value={method}>
+                        {getPaymentMethodLabel(method)}
+                      </option>
+                    ))}
+                  </Select>
+                </FormGroup>
+              )}
               <FormGroup>
-                <Label>{t("suppliers.paymentMethod")}</Label>
-                <Select
-                  value={arrivalData.paymentMethod}
-                  onChange={(e) =>
+                <Label>{t("products.supplier")}</Label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <Select
+                    value={arrivalData.supplierId}
+                    onChange={(e) =>
+                      setArrivalData((prev) => ({
+                        ...prev,
+                        supplierId: e.target.value,
+                      }))
+                    }
+                    style={{ flex: 1 }}
+                  >
+                    <option value="">{t("products.noSupplier")}</option>
+                    {suppliers.map((supplier: Supplier) => (
+                      <option key={supplier.id} value={supplier.id}>
+                        {i18n.language === "uz"
+                          ? supplier.nameUz
+                          : supplier.nameRu}
+                      </option>
+                    ))}
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="small"
+                    onClick={() => setShowSupplierModal(true)}
+                    style={{ flexShrink: 0 }}
+                  >
+                    <Settings size={16} />
+                  </Button>
+                </div>
+              </FormGroup>
+            </div>
+            <div style={{ display: "flex", gap: "16px" }}>
+              <div style={{ flex: 1 }}>
+                <DateInput
+                  label={t("products.productionDate")}
+                  value={arrivalData.productionDate}
+                  onChange={(val) =>
                     setArrivalData((prev) => ({
                       ...prev,
-                      paymentMethod: e.target.value as SupplierPaymentMethod,
+                      productionDate: val,
                     }))
                   }
-                >
-                  {PAYMENT_METHODS.map((method) => (
-                    <option key={method} value={method}>
-                      {getPaymentMethodLabel(method)}
-                    </option>
-                  ))}
-                </Select>
-              </FormGroup>
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <DateInput
+                  label={t("products.expiryDate")}
+                  value={arrivalData.expirationDate}
+                  onChange={(val) =>
+                    setArrivalData((prev) => ({
+                      ...prev,
+                      expirationDate: val,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+            {arrivalData.expirationDate && (
+              <InfoItem>
+                {getExpireInDays(
+                  t,
+                  arrivalData.expirationDate,
+                  arrivalData.expirationDate,
+                )}
+              </InfoItem>
             )}
 
             <Input

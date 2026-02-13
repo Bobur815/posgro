@@ -18,6 +18,7 @@ import { convertUzbekText } from "@shared/utils/transliterator";
 import { Settings } from "lucide-react";
 import { SupplierManagementModal } from "./SupplierManagementModal";
 import { CategoryManagementModal } from "./CategoryManagementModal";
+import { DateInput } from "../../components/common/DateInput";
 
 const Container = styled.div`
   max-width: 600px;
@@ -615,17 +616,15 @@ export function ProductForm() {
         </FormGroup>
 
         <Row>
-          <Input
+          <DateInput
             label={t("products.productionDate")}
-            type="date"
             value={formData.productionDate}
-            onChange={(e) => handleChange("productionDate", e.target.value)}
+            onChange={(val) => handleChange("productionDate", val)}
           />
-          <Input
+          <DateInput
             label={t("products.expiryDate")}
-            type="date"
             value={formData.expiryDate}
-            onChange={(e) => handleChange("expiryDate", e.target.value)}
+            onChange={(val) => handleChange("expiryDate", val)}
           />
         </Row>
 

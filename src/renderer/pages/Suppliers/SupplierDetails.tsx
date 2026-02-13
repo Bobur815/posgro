@@ -14,7 +14,7 @@ import {
   SupplierTransactionType,
   SupplierPaymentMethod,
 } from '@shared/types';
-import { formatCurrency as formatCurrencyBase } from '../../utils/formatters';
+import { formatCurrency as formatCurrencyBase, formatDate } from '../../utils/formatters';
 
 const Container = styled.div`
   display: flex;
@@ -252,8 +252,7 @@ export function SupplierDetails() {
     {
       key: 'createdAt',
       header: t('common.createdAt'),
-      render: (tx: SupplierTransaction) =>
-        new Date(tx.createdAt).toLocaleDateString(),
+      render: (tx: SupplierTransaction) => formatDate(tx.createdAt),
     },
     {
       key: 'type',
@@ -326,7 +325,7 @@ export function SupplierDetails() {
         <InfoItem>
           <InfoLabel>{t('common.createdAt')}</InfoLabel>
           <InfoValue>
-            {new Date(selectedSupplier.createdAt).toLocaleDateString()}
+            {formatDate(selectedSupplier.createdAt)}
           </InfoValue>
         </InfoItem>
         <BalanceCard $positive={selectedSupplier.balance >= 0}>

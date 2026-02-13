@@ -283,6 +283,11 @@
     "expiryDate": "Срок годности",
     "isOnPromotion": "Участвует в акции"
   },
+  "errors": {
+    "productNotFound": "Товар с ID {{id}} не найден",
+    "productInactive": "Товар \"{{name}}\" неактивен",
+    "insufficientStock": "Недостаточно товара \"{{name}}\" на складе. Доступно: {{available}}, запрошено: {{requested}}"
+  },
   "sync": {
     "syncing": "Синхронизация...",
     "lastSync": "Последняя синхронизация",
@@ -391,5 +396,27 @@
     "supplierDeleted": "Поставщик удален",
     "details": "Детали",
     "viewDetails": "Подробнее"
+  },
+  "receipt": {
+    "title": "Настройки чека",
+    "description": "Формат, язык и предпросмотр чека",
+    "paperWidth": "Ширина бумаги",
+    "language": "Язык чека",
+    "header": "Заголовок чека",
+    "footer": "Подвал чека",
+    "width80": "80 мм (стандарт)",
+    "width58": "58 мм (узкий)",
+    "preview": "Предпросмотр",
+    "storeInfoHint": "Заполните данные магазина в Системных настройках"
+  },
+  "printer": {
+    "availablePrinters": "Доступные принтеры",
+    "noPrintersFound": "Принтеры не найдены",
+    "selected": "Выбран",
+    "saved": "Принтер сохранён",
+    "testPrint": "Тестовая печать",
+    "testing": "Печать...",
+    "testSent": "Тестовая страница отправлена",
+    "testFailed": "Ошибка тестовой печати"
   }
 }

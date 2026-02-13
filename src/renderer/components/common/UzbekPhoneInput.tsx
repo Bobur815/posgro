@@ -177,6 +177,7 @@ export function UzbekPhoneInput({
         placeholder="+998 (XX) XXX-XX-XX"
         ref={inputRef as React.RefObject<HTMLInputElement>}
         disabled={disabled}
+        autoFocus
       />
       {error && <ErrorText>{error}</ErrorText>}
     </Container>

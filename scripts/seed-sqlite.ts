@@ -33,7 +33,7 @@ async function main() {
         id: 'config',
         storeId: 'store-001',
         storeName: 'Grocery Store',
-        terminalId: 'TERMINAL_01',
+        terminalId: 'T1',
         apiUrl: 'http://localhost:3000',
         storePin: hashedStorePin,
       },

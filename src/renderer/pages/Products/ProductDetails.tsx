@@ -19,6 +19,8 @@ import {
   RefreshCcw,
 } from "lucide-react";
 import { getExpireInDays, getExpiryDays } from "@renderer/utils/helpers";
+import { formatDate as formatDateUtil } from "../../utils/formatters";
+import { DateInput } from "../../components/common/DateInput";
 
 const Container = styled.div`
   min-width: 1000px;
@@ -249,7 +251,7 @@ export function ProductDetails() {
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "-";
-    return new Date(dateString).toLocaleDateString(i18n.language);
+    return formatDateUtil(dateString);
   };
 
   const getProductName = () => {
@@ -481,19 +483,17 @@ export function ProductDetails() {
               </CardTitle>
 
               <DateRangeRow>
-                <Input
+                <DateInput
                   style={{ padding: "11px 12px", fontSize: "22px" }}
-                  type="date"
                   label={t("reports.startDate")}
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  onChange={(val) => setStartDate(val)}
                 />
-                <Input
+                <DateInput
                   style={{ padding: "11px 12px", fontSize: "22px" }}
-                  type="date"
                   label={t("reports.endDate")}
                   value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
+                  onChange={(val) => setEndDate(val)}
                 />
                 <Button onClick={loadAnalytics} disabled={analyticsLoading}>
                   <RefreshCcw size={24} /> {t("common.refresh")}

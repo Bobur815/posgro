@@ -19,6 +19,8 @@ import { SettingsPage } from "./pages/Settings/SettingsPage";
 import { UserSettings } from "./pages/Settings/UserSettings";
 import { SystemSettings } from "./pages/Settings/SystemSettings";
 import { PriceTags } from "./pages/Settings/PriceTags";
+import { PrinterSettings } from "./pages/Settings/PrinterSettings";
+import { ReceiptSettings } from "./pages/Settings/ReceiptSettings";
 import { UserList } from "./pages/Users/UserList";
 import { UserForm } from "./pages/Users/UserForm";
 import { SupplierList, SupplierForm, SupplierDetails } from "./pages/Suppliers";
@@ -123,10 +125,26 @@ function App() {
           }
         />
         <Route
+          path="settings/printer"
+          element={
+            <RoleGuard allowedRoles={["ADMIN"]}>
+              <PrinterSettings />
+            </RoleGuard>
+          }
+        />
+        <Route
           path="settings/price-tags"
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
               <PriceTags />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="settings/receipt"
+          element={
+            <RoleGuard allowedRoles={["ADMIN"]}>
+              <ReceiptSettings />
             </RoleGuard>
           }
         />

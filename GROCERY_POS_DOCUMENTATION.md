@@ -1660,7 +1660,7 @@ VPS_API_URL=https://your-domain.com/api
 # For local development: http://localhost:3000/api
 
 # Terminal Identity
-TERMINAL_ID=TERMINAL_01
+TERMINAL_ID=T1
 STORE_ID=your-store-cuid
 # Use different TERMINAL_ID for each machine in the same store
 
@@ -1746,7 +1746,7 @@ interface LocalConfig {
   id: "config";           // Singleton
   storeId: string;        // Assigned store CUID
   storeName: string;      // Store name for display
-  terminalId: string;     // TERMINAL_01, TERMINAL_02, etc.
+  terminalId: string;     // T1, T2, etc.
   apiUrl: string;         // VPS API URL
   lastSync: DateTime;     // Last successful sync
 }
@@ -2568,7 +2568,7 @@ export const darkTheme: Theme = {
 
 # Or manually in SQLite:
 INSERT INTO local_config (id, store_id, store_name, terminal_id, api_url)
-VALUES ('config', 'your-store-cuid', 'Store Name', 'TERMINAL_01', 'https://api.example.com');
+VALUES ('config', 'your-store-cuid', 'Store Name', 'T1', 'https://api.example.com');
 ```
 
 #### Issue: POS app won't connect to VPS

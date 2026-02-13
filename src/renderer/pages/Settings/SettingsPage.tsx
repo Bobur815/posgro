@@ -74,6 +74,12 @@ export function SettingsPage() {
       path: '/settings/printer',
     },
     {
+      icon: '🧾',
+      title: t('receipt.title'),
+      description: t('receipt.description'),
+      path: '/settings/receipt',
+    },
+    {
       icon: '🔄',
       title: t('settings.syncSettings'),
       description: t('settings.syncSettingsDescription'),

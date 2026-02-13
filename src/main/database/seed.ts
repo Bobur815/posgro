@@ -21,7 +21,7 @@ export async function seedLocalDatabase(): Promise<void> {
         id: 'config',
         storeId: process.env.STORE_ID || 'store-001',
         storeName: process.env.STORE_NAME || 'Grocery Store',
-        terminalId: process.env.TERMINAL_ID || 'TERMINAL_01',
+        terminalId: process.env.TERMINAL_ID || 'T1',
         apiUrl: process.env.VPS_API_URL || 'http://localhost:3000',
         storePin: hashedStorePin,
       },

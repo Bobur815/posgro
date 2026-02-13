@@ -4,6 +4,7 @@ import { setupProductsHandlers } from './products-handlers';
 import { setupSalesHandlers } from './sales-handlers';
 import { getAppConfig } from '../config/app-config';
 import { getPrismaClient } from '../database/sqlite-client';
+import { setPrinterConfig, setupPrinterHandlers } from '../printer/thermal-printer';
 
 export function setupIpcHandlers(): void {
   // Setup all IPC handlers
@@ -14,6 +15,7 @@ export function setupIpcHandlers(): void {
   setupInventoryHandlers();
   setupSuppliersHandlers();
   setupSettingsHandlers();
+  setupPrinterHandlers();
   setupAppHandlers();
 
   console.log('IPC handlers initialized');
@@ -440,6 +442,14 @@ function setupInventoryHandlers(): void {
       }
     }
 
+    // Update production/expiry dates if provided
+    if (data.productionDate !== undefined) {
+      productUpdate.productionDate = data.productionDate ? new Date(data.productionDate) : null;
+    }
+    if (data.expiryDate !== undefined) {
+      productUpdate.expiryDate = data.expiryDate ? new Date(data.expiryDate) : null;
+    }
+
     await prisma.product.update({
       where: { id: data.productId },
       data: productUpdate,
@@ -524,6 +534,9 @@ function setupSettingsHandlers(): void {
       update: { value },
       create: { key, value },
     });
+    if (key === 'printer_name') {
+      setPrinterConfig({ name: value });
+    }
   });
 
   ipcMain.handle('settings:getAll', async () => {
@@ -535,6 +548,16 @@ function setupSettingsHandlers(): void {
     }
     return result;
   });
+
+  // Load saved printer name on startup
+  getPrismaClient()
+    .systemSetting.findUnique({ where: { key: 'printer_name' } })
+    .then((setting: { value: string } | null) => {
+      if (setting?.value) {
+        setPrinterConfig({ name: setting.value });
+      }
+    })
+    .catch(() => {});
 }
 
 function setupAppHandlers(): void {

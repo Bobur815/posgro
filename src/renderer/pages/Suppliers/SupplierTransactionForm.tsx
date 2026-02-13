@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { DateInput } from '../../components/common/DateInput';
 import {
   SupplierTransaction,
   SupplierTransactionType,
@@ -255,11 +256,10 @@ export function SupplierTransactionForm({
           />
 
           {formData.paymentMethod === 'INSTALLMENT' && (
-            <Input
+            <DateInput
               label={t('suppliers.dueDate')}
-              type="date"
               value={formData.dueDate}
-              onChange={(e) => handleChange('dueDate', e.target.value)}
+              onChange={(val) => handleChange('dueDate', val)}
             />
           )}
 

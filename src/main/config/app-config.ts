@@ -40,7 +40,7 @@ function loadConfig(): AppConfig {
     storeName: process.env.STORE_NAME || 'Grocery Store',
 
     // Terminal identification
-    terminalId: process.env.TERMINAL_ID || 'TERMINAL_01',
+    terminalId: process.env.TERMINAL_ID || 'T1',
 
     // VPS API connection
     vpsApiUrl: process.env.VPS_API_URL || 'http://localhost:3000/api',

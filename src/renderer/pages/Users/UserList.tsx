@@ -5,6 +5,7 @@ import styled from 'styled-components';
 import { Table } from '../../components/common/Table';
 import { Button } from '../../components/common/Button';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+import { formatDate } from '../../utils/formatters';
 
 const Container = styled.div`
   display: flex;
@@ -112,7 +113,7 @@ export function UserList() {
     {
       key: 'createdAt',
       header: t('users.createdAt'),
-      render: (user: User) => new Date(user.createdAt).toLocaleDateString(),
+      render: (user: User) => formatDate(user.createdAt),
     },
     {
       key: 'actions',
