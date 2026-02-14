@@ -1,0 +1,224 @@
+import { useState } from "react";
+import styled from "styled-components";
+import { Delete, X } from "lucide-react";
+
+/* ── layout definitions ─────────────────────────────────── */
+
+type KeyDef = string | { key: string; label?: string; width?: number; active?: boolean };
+
+const QWERTY_NORMAL: KeyDef[][] = [
+  ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
+  ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
+  ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
+  [{ key: "SHIFT", label: "⇧", width: 2 }, "z", "x", "c", "v", "b", "n", "m", { key: "BACKSPACE", width: 2 }],
+  [{ key: "SPACE", label: " ", width: 6 }, { key: "ENTER", label: "⏎", width: 2 }],
+];
+
+const QWERTY_SHIFT: KeyDef[][] = [
+  ["!", "@", "#", "$", "%", "^", "&", "*", "(", ")"],
+  ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+  ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+  [{ key: "SHIFT", label: "⇧", width: 2, active: true }, "Z", "X", "C", "V", "B", "N", "M", { key: "BACKSPACE", width: 2 }],
+  [{ key: "SPACE", label: " ", width: 6 }],
+];
+
+/* ── types ──────────────────────────────────────────────── */
+
+interface VirtualKeyboardProps {
+  numbersOnly?: boolean;
+  onKeyPress: (key: string) => void;
+  onClose: () => void;
+}
+
+/* ── helpers ────────────────────────────────────────────── */
+
+function getKey(def: KeyDef) {
+  return typeof def === "string" ? def : def.key;
+}
+function getLabel(def: KeyDef, shifted: boolean) {
+  if (typeof def !== "string") return def.label ?? def.key;
+  if (shifted && /^[a-z]$/.test(def)) return def.toUpperCase();
+  return def;
+}
+function getWidth(def: KeyDef) {
+  return typeof def !== "string" && def.width ? def.width : 1;
+}
+function isActive(def: KeyDef) {
+  return typeof def !== "string" && def.active;
+}
+
+const SPECIAL_KEYS = new Set(["SHIFT", "BACKSPACE", "SPACE", "ENTER"]);
+
+function isLetterKey(key: string) {
+  if (SPECIAL_KEYS.has(key)) return false;
+  return /^[a-zA-Z]$/.test(key);
+}
+
+function isSymbolKey(key: string) {
+  if (SPECIAL_KEYS.has(key)) return false;
+  if (/^[0-9]$/.test(key)) return false;
+  if (/^[a-zA-Z]$/.test(key)) return false;
+  return true;
+}
+
+/* ── styled ─────────────────────────────────────────────── */
+
+const Overlay = styled.div`
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  animation: slideUp 0.2s ease;
+
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+`;
+
+const Wrapper = styled.div`
+  width: 100%;
+  border-top: 1px solid ${({ theme }) => theme.colors.border};
+  backdrop-filter: blur(10px);
+  padding: 8px 12px 14px;
+  user-select: none;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+`;
+
+const Header = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 2px;
+`;
+
+const CloseBtn = styled.button`
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.text};
+    background: ${({ theme }) => theme.colors.border}40;
+  }
+`;
+
+const Row = styled.div`
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  margin-bottom: 5px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+`;
+
+const Key = styled.button<{ $w: number; $active?: boolean; $special?: boolean; $disabled?: boolean }>`
+  flex: ${({ $w }) => $w};
+  height: 56px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  background: ${({ theme, $special, $active, $disabled }) =>
+    $disabled
+      ? theme.colors.border + "30"
+      : $active
+        ? theme.colors.primary + "30"
+        : $special
+          ? theme.colors.background
+          : theme.colors.surface};
+  color: ${({ theme, $disabled }) =>
+    $disabled ? theme.colors.textSecondary + "60" : theme.colors.text};
+  font-size: 20px;
+  font-weight: 500;
+  cursor: ${({ $disabled }) => ($disabled ? "default" : "pointer")};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s;
+
+  &:hover {
+    background: ${({ theme, $disabled }) =>
+      $disabled ? theme.colors.border + "30" : theme.colors.primary + "15"};
+    border-color: ${({ theme, $disabled }) =>
+      $disabled ? theme.colors.border : theme.colors.primary};
+  }
+
+  &:active {
+    transform: ${({ $disabled }) => ($disabled ? "none" : "scale(0.96)")};
+    background: ${({ theme, $disabled }) =>
+      $disabled ? theme.colors.border + "30" : theme.colors.primary + "30"};
+  }
+`;
+
+/* ── component ──────────────────────────────────────────── */
+
+export function VirtualKeyboard({ numbersOnly = false, onKeyPress, onClose }: VirtualKeyboardProps) {
+  const [shifted, setShifted] = useState(false);
+
+  const layout = shifted ? QWERTY_SHIFT : QWERTY_NORMAL;
+
+  const handleClick = (key: string, disabled: boolean) => {
+    if (disabled) return;
+
+    if (key === "SHIFT") {
+      setShifted((s) => !s);
+      return;
+    }
+
+    if (key === "SPACE") {
+      onKeyPress(" ");
+    } else {
+      onKeyPress(key);
+    }
+
+    if (shifted && key !== "BACKSPACE" && key !== "ENTER") {
+      setShifted(false);
+    }
+  };
+
+  return (
+    <Overlay onMouseDown={(e) => e.preventDefault()}>
+      <Wrapper>
+        <Header>
+          <CloseBtn type="button" tabIndex={-1} onClick={onClose}>
+            <X size={18} />
+          </CloseBtn>
+        </Header>
+        {layout.map((row, ri) => (
+          <Row key={ri}>
+            {row.map((def) => {
+              const key = getKey(def);
+              const label = getLabel(def, shifted);
+              const width = getWidth(def);
+              const active = isActive(def);
+              const special = SPECIAL_KEYS.has(key);
+              const disabled = numbersOnly && (isLetterKey(key) || isSymbolKey(key) || key === "SHIFT" || key === "SPACE");
+
+              return (
+                <Key
+                  key={key}
+                  $w={width}
+                  $active={active}
+                  $special={special}
+                  $disabled={disabled}
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => handleClick(key, disabled)}
+                >
+                  {key === "BACKSPACE" ? <Delete size={22} /> : label}
+                </Key>
+              );
+            })}
+          </Row>
+        ))}
+      </Wrapper>
+    </Overlay>
+  );
+}

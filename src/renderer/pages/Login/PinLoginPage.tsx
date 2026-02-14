@@ -3,10 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { useAuthStore } from "../../store/auth-store";
-import { Delete, Eraser } from "lucide-react";
+import { ChevronDown, ChevronUp, Delete, Eraser, Keyboard } from "lucide-react";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
 import { UzbekPhoneInput } from "@renderer/components/common/UzbekPhoneInput";
+import { VirtualKeyboard } from "@renderer/components/common/VirtualKeyboard";
 import { isUzPhoneComplete } from "@shared/utils/phone";
 
 type LoginMode = "pin" | "phone";
@@ -19,6 +20,8 @@ const Container = styled.div`
 
 const LeftPanel = styled.div`
   flex: 1;
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -41,10 +44,13 @@ const RightPanel = styled.div`
   }
 `;
 
-const LoginCard = styled.div`
+const LoginCard = styled.div<{ $kbOpen?: boolean }>`
   width: 100%;
   max-width: 400px;
   text-align: center;
+  margin-top: -100px;
+  transform: translateY(${({ $kbOpen }) => ($kbOpen ? "-80px" : "0")});
+  transition: transform 0.3s ease;
 `;
 
 const Logo = styled.h1`
@@ -57,6 +63,7 @@ const Logo = styled.h1`
 const Subtitle = styled.p`
   color: ${({ theme }) => theme.colors.textSecondary};
   margin-bottom: ${({ theme }) => theme.spacing.xl};
+  font-size: 26px;
 `;
 
 const PinDisplay = styled.div`
@@ -173,7 +180,6 @@ const KeyboardHint = styled.p`
 
 const ContentWrapper = styled.div`
   animation: fadeIn 0.3s ease;
-
   @keyframes fadeIn {
     from {
       opacity: 0;
@@ -193,6 +199,41 @@ const PhoneForm = styled.form`
   text-align: left;
 `;
 
+const PhoneRow = styled.div`
+  display: flex;
+  align-items: flex-end;
+  gap: ${({ theme }) => theme.spacing.sm};
+  text-align: left;
+
+  & > *:first-child {
+    flex: 1;
+    min-width: 0;
+  }
+`;
+
+const KbToggle = styled.button<{ $active?: boolean }>`
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid
+    ${({ theme, $active }) =>
+      $active ? theme.colors.primary : theme.colors.border};
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: ${({ theme, $active }) =>
+    $active ? theme.colors.primary : theme.colors.textSecondary};
+  border-radius: 6px;
+  transition: all 0.15s;
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.primary};
+    border-color: ${({ theme }) => theme.colors.primary};
+    background: ${({ theme }) => theme.colors.primary}10;
+  }
+`;
+
 export function PinLoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -204,6 +245,10 @@ export function PinLoginPage() {
   const [phoneDigits, setPhoneDigits] = useState("");
   const [password, setPassword] = useState("");
   const passwordRef = useRef<HTMLInputElement>(null);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [focusedField, setFocusedField] = useState<"phone" | "password">(
+    "phone",
+  );
 
   useEffect(() => {
     clearError();
@@ -214,6 +259,7 @@ export function PinLoginPage() {
     setPhoneDigits("");
     setPassword("");
     clearError();
+    setKeyboardOpen(false);
     setMode(newMode);
   };
 
@@ -302,10 +348,46 @@ export function PinLoginPage() {
     passwordRef.current?.focus();
   };
 
+  // --- Virtual keyboard handler ---
+  const handleVirtualKeyPress = (key: string) => {
+    if (key === "BACKSPACE") {
+      if (focusedField === "phone") {
+        setPhoneDigits((prev) => prev.slice(0, -1));
+      } else {
+        setPassword((prev) => prev.slice(0, -1));
+      }
+      return;
+    }
+
+    if (key === "ENTER") {
+      if (focusedField === "phone") {
+        setFocusedField("password");
+        passwordRef.current?.focus();
+      } else if (
+        focusedField === "password" &&
+        isUzPhoneComplete(phoneDigits)
+      ) {
+        const fullPhone = "998" + phoneDigits;
+        login(fullPhone, password).then((success) => {
+          if (success) navigate("/");
+        });
+      }
+      return;
+    }
+
+    if (focusedField === "phone") {
+      if (/^[0-9]$/.test(key)) {
+        setPhoneDigits((prev) => (prev.length < 9 ? prev + key : prev));
+      }
+    } else {
+      setPassword((prev) => prev + key);
+    }
+  };
+
   return (
     <Container>
       <LeftPanel>
-        <LoginCard>
+        <LoginCard $kbOpen={keyboardOpen}>
           <Logo>Grocery POS</Logo>
 
           {mode === "pin" ? (
@@ -363,21 +445,39 @@ export function PinLoginPage() {
               </SwitchLink>
             </ContentWrapper>
           ) : (
-            <ContentWrapper key="phone">
+            <ContentWrapper key="phone" style={{display: "flex", flexDirection: "column", gap: "18px"}}>
               <Subtitle>{t("auth.login")}</Subtitle>
 
-              <PhoneForm onSubmit={handlePhoneSubmit}>
+              <PhoneRow>
                 <UzbekPhoneInput
                   label={t("auth.phone")}
                   valueDigits={phoneDigits}
                   onDigitsChange={setPhoneDigits}
                   onEnter={handlePhoneEnter}
+                  onFocus={() => setFocusedField("phone")}
                 />
+                <KbToggle
+                  type="button"
+                  tabIndex={-1}
+                  $active={keyboardOpen}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setKeyboardOpen((prev) => !prev)}
+                >
+                  <Keyboard size={20} />
+                  {keyboardOpen ? (
+                    <ChevronUp size={16} />
+                  ) : (
+                    <ChevronDown size={16} />
+                  )}
+                </KbToggle>
+              </PhoneRow>
+              <PhoneForm onSubmit={handlePhoneSubmit}>
                 <Input
                   label={t("auth.password")}
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onFocus={() => setFocusedField("password")}
                   placeholder={t("auth.password")}
                   ref={passwordRef}
                   required
@@ -398,6 +498,13 @@ export function PinLoginPage() {
             </ContentWrapper>
           )}
         </LoginCard>
+        {keyboardOpen && (
+          <VirtualKeyboard
+            numbersOnly={focusedField === "phone"}
+            onKeyPress={handleVirtualKeyPress}
+            onClose={() => setKeyboardOpen(false)}
+          />
+        )}
       </LeftPanel>
 
       <RightPanel />

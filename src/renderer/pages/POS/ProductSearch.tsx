@@ -5,9 +5,10 @@ import { useProducts } from '../../hooks/useProducts';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { ProductFilters } from '../../components/products/ProductFilters';
-import { ProductFilterParams } from '@shared/types';
+import { Product, ProductFilterParams } from '@shared/types';
 import { formatQuantity } from '../../utils/formatters';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { formatCurrency as formatCurrencyBase } from '@shared/utils';
+import { ChevronDown, ChevronUp, X } from 'lucide-react';
 
 const Container = styled.div`
   flex: 1;
@@ -31,6 +32,31 @@ const SearchRow = styled.div`
   display: flex;
   gap: ${({ theme }) => theme.spacing.sm};
   align-items: center;
+`;
+
+const SearchInputWrapper = styled.div`
+  position: relative;
+  flex: 1;
+`;
+
+const ClearButton = styled.button`
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  border-radius: 50%;
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.text};
+    background-color: ${({ theme }) => theme.colors.border};
+  }
 `;
 
 const ProductsGrid = styled.div`
@@ -110,19 +136,6 @@ const NoResults = styled.div`
   grid-column: 1 / -1;
 `;
 
-interface Product {
-  id: number;
-  nameRu: string;
-  nameUz: string;
-  barcode: string;
-  price: number;
-  stock: number;
-  minStock: number;
-  unit?: string;
-  pendingPrice?: number | null;
-  pendingPriceThreshold?: number | null;
-}
-
 interface ProductSearchProps {
   onSelect: (product: Product) => void;
 }
@@ -181,10 +194,7 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
     return () => window.removeEventListener('stock-updated', refresh);
   }, [getTopSelling, searchQuery, hasActiveFilters, filters, loadProducts]);
 
-  const formatCurrency = (amount: number) => {
-    const formatted = amount.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'uz-UZ');
-    return i18n.language === 'ru' ? `${formatted} сум` : `${formatted} so'm`;
-  };
+  const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
 
   const getProductName = (product: Product) => {
     return i18n.language === 'uz' ? product.nameUz : product.nameRu;
@@ -198,13 +208,20 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
     <Container>
       <SearchHeader>
         <SearchRow>
-          <Input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('common.search')}
-            style={{ flex: 1 }}
-          />
+          <SearchInputWrapper>
+            <Input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('common.search')}
+              style={{ paddingRight: searchQuery ? '32px' : undefined }}
+            />
+            {searchQuery.length > 0 && (
+              <ClearButton onClick={() => setSearchQuery('')}>
+                <X size={16} />
+              </ClearButton>
+            )}
+          </SearchInputWrapper>
           <Button size="medium" onClick={() => setIsFilterOpen(!isFilterOpen)}>
             {t('filters.filters')} {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
           </Button>

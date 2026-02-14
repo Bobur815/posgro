@@ -4,37 +4,29 @@ export type DiscountType = 'PERCENTAGE' | 'FIXED';
 
 export interface Sale {
   id: string;
-  storeId: string;
   receiptNumber: string;
-  items: SaleItem[];
-  subtotal: number;
-  discount: number;
-  discountType: DiscountType;
+  totalAmount: number;
+  discountAmount: number;
   finalAmount: number;
-  paidAmount: number;
-  changeAmount: number;
-  paymentMethod: PaymentMethod;
-  cashAmount?: number;
-  cardAmount?: number;
+  paymentMethod: string;
   cashierId: string;
   cashierName: string;
   terminalId: string;
-  isSynced: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  synced: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  items: SaleItem[];
 }
 
 export interface SaleItem {
-  id: string;
-  saleId: string;
+  id?: string;
+  saleId?: string;
   productId: string;
   productName: string;
   barcode: string;
   quantity: number;
   unitPrice: number;
-  discount: number;
   subtotal: number;
-  createdAt: Date;
 }
 
 export interface CartItem {

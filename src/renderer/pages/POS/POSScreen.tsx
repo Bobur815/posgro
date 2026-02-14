@@ -10,6 +10,7 @@ import { useProducts } from "../../hooks/useProducts";
 import { useSales } from "../../hooks/useSales";
 import { useToast } from "../../context/ToastContext";
 import { Delete, SendHorizontal, Trash } from "lucide-react";
+import { Product } from "@shared/types";
 
 function parseSaleError(err: unknown, t: (key: string, params?: Record<string, unknown>) => string): string {
   const message = err instanceof Error ? err.message : String(err);
@@ -197,19 +198,6 @@ const ErrorMessage = styled.div`
   font-size: 14px;
   text-align: center;
 `;
-
-interface Product {
-  id: number;
-  nameRu: string;
-  nameUz: string;
-  barcode: string;
-  price: number;
-  stock: number;
-  minStock: number;
-  unit?: string;
-  pendingPrice?: number | null;
-  pendingPriceThreshold?: number | null;
-}
 
 type InputMode = "barcode" | "quantity" | "id";
 
@@ -407,6 +395,15 @@ export function POSScreen() {
           : await createSale(saleData);
 
         if (sale) {
+          // Auto-print receipt for quick pay
+          if (sale.id) {
+            try {
+              await window.electronAPI.printer.printReceipt(sale.id);
+            } catch (printErr) {
+              console.error('Receipt print failed:', printErr);
+            }
+          }
+
           clearCart();
           window.dispatchEvent(new Event("stock-updated"));
           toast.success(

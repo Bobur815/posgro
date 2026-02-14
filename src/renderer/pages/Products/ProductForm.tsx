@@ -8,6 +8,7 @@ import { useToast } from "../../context/ToastContext";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
 import { Modal } from "../../components/common/Modal";
+import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import {
   Product,
   ProductUnit,
@@ -226,6 +227,8 @@ export function ProductForm() {
     notes: "",
     supplierId: "",
     paymentMethod: "INSTALLMENT" as SupplierPaymentMethod,
+    productionDate: "",
+    expirationDate: "",
   });
   const [isSubmittingArrival, setIsSubmittingArrival] = useState(false);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
@@ -255,6 +258,12 @@ export function ProductForm() {
           newPrice: String(product.price),
           priceMode: "none",
           supplierId: product.supplierId || "",
+          productionDate: product.productionDate
+            ? product.productionDate.split("T")[0]
+            : "",
+          expirationDate: product.expiryDate
+            ? product.expiryDate.split("T")[0]
+            : "",
         }));
       }
     },
@@ -312,6 +321,8 @@ export function ProductForm() {
             : undefined,
         priceMode:
           arrivalData.priceMode !== "none" ? arrivalData.priceMode : undefined,
+        productionDate: arrivalData.productionDate || undefined,
+        expiryDate: arrivalData.expirationDate || undefined,
       });
 
       toast.success(t("inventory.arrivalCreated") || t("common.saved"));
@@ -326,6 +337,8 @@ export function ProductForm() {
         notes: "",
         supplierId: "",
         paymentMethod: "INSTALLMENT",
+        productionDate: "",
+        expirationDate: "",
       });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.error"));
@@ -353,20 +366,16 @@ export function ProductForm() {
 
   const getUnitLabel = (unit: ProductUnit) => {
     const labels: Record<ProductUnit, string> = {
-      "шт": t("units.piece"),
-      "кг": t("units.kg"),
-      "л": t("units.liter"),
-      "м": t("units.meter"),
+      шт: t("units.piece"),
+      кг: t("units.kg"),
+      л: t("units.liter"),
+      м: t("units.meter"),
     };
     return labels[unit];
   };
 
-  const formatCurrency = (amount: number) => {
-    const formatted = amount.toLocaleString(
-      i18n.language === "ru" ? "ru-RU" : "uz-UZ",
-    );
-    return `${formatted} ${t("common.currency")}`;
-  };
+  const formatCurrency = (amount: number) =>
+    formatCurrencyBase(amount, i18n.language as "ru" | "uz");
 
   // Compute profit margin for form
   const formProfitMargin =
@@ -936,6 +945,33 @@ export function ProductForm() {
                 </Select>
               </FormGroup>
             )}
+
+            <div style={{ display: "flex", gap: "16px" }}>
+              <div style={{ flex: 1 }}>
+                <DateInput
+                  label={t("products.productionDate")}
+                  value={arrivalData.productionDate}
+                  onChange={(val) =>
+                    setArrivalData((prev) => ({
+                      ...prev,
+                      productionDate: val,
+                    }))
+                  }
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <DateInput
+                  label={t("products.expiryDate")}
+                  value={arrivalData.expirationDate}
+                  onChange={(val) =>
+                    setArrivalData((prev) => ({
+                      ...prev,
+                      expirationDate: val,
+                    }))
+                  }
+                />
+              </div>
+            </div>
 
             <Input
               label={t("inventory.notes")}

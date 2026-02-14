@@ -1,5 +1,6 @@
 import React, { forwardRef, useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
+import { Calendar } from 'lucide-react';
 
 interface DateInputProps {
   label?: string;
@@ -24,8 +25,16 @@ const Label = styled.label`
   color: ${({ theme }) => theme.colors.text};
 `;
 
+const InputWrapper = styled.div`
+  position: relative;
+  display: flex;
+  align-items: center;
+`;
+
 const StyledInput = styled.input<{ $hasError: boolean }>`
+  width: 100%;
   padding: ${({ theme }) => theme.spacing.sm};
+  padding-right: 36px;
   border: 1px solid
     ${({ theme, $hasError }) => ($hasError ? theme.colors.error : theme.colors.border)};
   border-radius: ${({ theme }) => theme.borderRadius};
@@ -48,6 +57,38 @@ const StyledInput = styled.input<{ $hasError: boolean }>`
   &::placeholder {
     color: ${({ theme }) => theme.colors.textSecondary};
   }
+`;
+
+const CalendarButton = styled.button`
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  border-radius: 4px;
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.primary};
+    background-color: ${({ theme }) => theme.colors.primary}10;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const HiddenDateInput = styled.input`
+  position: absolute;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+  pointer-events: none;
 `;
 
 const ErrorText = styled.span`
@@ -77,7 +118,7 @@ function displayToIso(display: string): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function applyMask(raw: string, prevDisplay: string): string {
+function applyMask(raw: string): string {
   const digits = raw.replace(/\D/g, '').slice(0, 8);
   let result = '';
   for (let i = 0; i < digits.length; i++) {
@@ -88,16 +129,17 @@ function applyMask(raw: string, prevDisplay: string): string {
 }
 
 export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
-  ({ label, error, value = '', onChange, className, style, ...props }, ref) => {
+  ({ label, error, value = '', onChange, className, style, disabled, ...props }, ref) => {
     const [display, setDisplay] = useState(() => isoToDisplay(value));
     const inputRef = useRef<HTMLInputElement | null>(null);
+    const datePickerRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
       setDisplay(isoToDisplay(value));
     }, [value]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const masked = applyMask(e.target.value, display);
+      const masked = applyMask(e.target.value);
       setDisplay(masked);
 
       const iso = displayToIso(masked);
@@ -106,6 +148,19 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
       } else if (masked === '') {
         onChange?.('');
       }
+    };
+
+    const handlePickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const iso = e.target.value; // native picker returns YYYY-MM-DD
+      if (iso) {
+        onChange?.(iso);
+        setDisplay(isoToDisplay(iso));
+      }
+    };
+
+    const openPicker = () => {
+      if (disabled) return;
+      datePickerRef.current?.showPicker();
     };
 
     const handleRef = (el: HTMLInputElement | null) => {
@@ -117,15 +172,33 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
     return (
       <Container className={className}>
         {label && <Label>{label}</Label>}
-        <StyledInput
-          $hasError={Boolean(error)}
-          ref={handleRef}
-          value={display}
-          onChange={handleChange}
-          placeholder="dd/mm/yyyy"
-          style={style}
-          {...props}
-        />
+        <InputWrapper>
+          <StyledInput
+            $hasError={Boolean(error)}
+            ref={handleRef}
+            value={display}
+            onChange={handleChange}
+            placeholder="dd/mm/yyyy"
+            style={style}
+            disabled={disabled}
+            {...props}
+          />
+          <HiddenDateInput
+            ref={datePickerRef}
+            type="date"
+            value={value}
+            onChange={handlePickerChange}
+            tabIndex={-1}
+          />
+          <CalendarButton
+            type="button"
+            onClick={openPicker}
+            disabled={disabled}
+            tabIndex={-1}
+          >
+            <Calendar size={18} />
+          </CalendarButton>
+        </InputWrapper>
         {error && <ErrorText>{error}</ErrorText>}
       </Container>
     );

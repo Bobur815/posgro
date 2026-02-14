@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { EmptyPlaceholder } from '../../components/common/EmptyPlaceholder';
 import { Banknote, CreditCard, History, ShoppingCart, Trash, X } from 'lucide-react';
 import { SalesHistoryModal } from './SalesHistoryModal';
+import type { Sale } from '@shared/types/sale.types';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 import { formatQuantity } from '../../utils/formatters';
 
@@ -292,24 +293,14 @@ export function Cart({ onCheckout, onQuickPay, isQuickPayDisabled }: CartProps) 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
-  const handleEditSale = useCallback((sale: {
-    id: string;
-    receiptNumber: string;
-    items: Array<{
-      productId: string;
-      productName: string;
-      barcode: string;
-      quantity: number;
-      unitPrice: number;
-    }>;
-  }) => {
+  const handleEditSale = useCallback((sale: Sale) => {
     const cartItems = sale.items.map((item) => ({
       productId: Number(item.productId),
       productName: item.productName,
       barcode: item.barcode,
-      unitPrice: item.unitPrice,
-      quantity: item.quantity,
-      stock: item.quantity + 100,
+      unitPrice: Number(item.unitPrice),
+      quantity: Number(item.quantity),
+      stock: Number(item.quantity) + 100,
       unit: undefined,
     }));
     loadSaleForEdit(sale.id, sale.receiptNumber, cartItems);

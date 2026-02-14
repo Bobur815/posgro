@@ -10,8 +10,9 @@ import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
 import { ProductFilters } from "../../components/products/ProductFilters";
 import { Product, ProductFilterParams } from "@shared/types";
-import { ChevronDown, ChevronUp, Edit, ListIndentIncrease, Trash } from "lucide-react";
+import { ChevronDown, ChevronUp, Circle, CirclePlus, Edit, ListIndentIncrease, Trash } from "lucide-react";
 import { formatDate } from "../../utils/formatters";
+import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 
 const Container = styled.div`
   display: flex;
@@ -49,7 +50,7 @@ export function ProductList() {
   const [filters, setFilters] = useState<ProductFilterParams>({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const isAdmin = user?.role === "ADMIN";
-
+  
   useEffect(() => {
     loadProducts();
     loadCategories();
@@ -68,10 +69,7 @@ export function ProductList() {
     return () => clearTimeout(timer);
   }, [searchQuery, filters, loadProducts]);
 
-  const formatCurrency = (amount: number) => {
-    const formatted = amount.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'uz-UZ');
-    return i18n.language === 'ru' ? `${formatted} сум` : `${formatted} so'm`;
-  };
+  const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
 
   const columns = [
     {key: "index", header: "#", render: (_: Product, index: number) => index + 1},
@@ -173,8 +171,8 @@ export function ProductList() {
       <Header>
         <Title>{t("products.title")}</Title>
         {isAdmin && (
-          <Button style={{fontSize: "24px"}} onClick={() => navigate("/products/new")}>
-           {t("products.addProduct")}
+          <Button style={{fontSize: "26px"}} onClick={() => navigate("/products/new")}>
+           <CirclePlus size={24} /> {t("products.addProduct")}
           </Button>
         )}
       </Header>
@@ -183,6 +181,12 @@ export function ProductList() {
         <SearchInput
           type="text"
           placeholder={t("common.search")}
+          style={{
+            padding: "8px 16px",
+            fontSize: "18px",
+            fontWeight: "bold",
+            flex: 1,
+          }}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />

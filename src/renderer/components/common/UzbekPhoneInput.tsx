@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { digitsOnly, formatUzPhone, UZ_PREFIX } from '@shared/utils/phone';
 
@@ -55,6 +55,7 @@ interface UzbekPhoneInputProps {
   error?: string;
   inputRef?: React.Ref<HTMLInputElement>;
   onEnter?: () => void;
+  onFocus?: () => void;
   className?: string;
   disabled?: boolean;
 }
@@ -77,11 +78,22 @@ export function UzbekPhoneInput({
   error,
   inputRef,
   onEnter,
+  onFocus: onFocusProp,
   className,
   disabled,
 }: UzbekPhoneInputProps) {
   const [display, setDisplay] = useState(valueDigits ? formatUzPhone(valueDigits) : '');
   const prevLenRef = useRef(digitsOnly(valueDigits).length);
+
+  // Sync display when valueDigits changes externally (e.g. virtual keyboard)
+  useEffect(() => {
+    const currentDigits = digitsOnly(display);
+    const stripped = currentDigits.startsWith('998') ? currentDigits.slice(3) : currentDigits;
+    if (stripped !== valueDigits) {
+      setDisplay(valueDigits ? formatUzPhone(valueDigits) : '');
+      prevLenRef.current = valueDigits.length;
+    }
+  }, [valueDigits]);
 
   const ensureCaretAfterPrefix = (el: HTMLInputElement) => {
     const pos = Math.max(el.selectionStart ?? 0, UZ_PREFIX.length);
@@ -97,6 +109,7 @@ export function UzbekPhoneInput({
     } else {
       ensureCaretAfterPrefix(el);
     }
+    onFocusProp?.();
   };
 
   const handleBlur = () => {

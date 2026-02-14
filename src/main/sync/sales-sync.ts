@@ -50,7 +50,7 @@ export async function syncSales(): Promise<void> {
           cashierName: sale.cashierName,
           terminalId: config.terminalId,
           createdAt: sale.createdAt.toISOString(),
-          items: sale.items.map((item) => ({
+          items: sale.items.map((item: typeof sale.items[number]) => ({
             id: item.id,
             productId: item.productId,
             productName: item.productName,

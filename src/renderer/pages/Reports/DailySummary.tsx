@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
 import { useSales } from '../../hooks/useSales';
+import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 
 const Container = styled.div`
   display: flex;
@@ -69,10 +70,7 @@ export function DailySummary() {
     setSummary(data);
   };
 
-  const formatCurrency = (amount: number) => {
-    const formatted = amount.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'uz-UZ');
-    return i18n.language === 'ru' ? `${formatted} сум` : `${formatted} so'm`;
-  };
+  const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
 
   if (isLoading) {
     return <div>{t('common.loading')}</div>;

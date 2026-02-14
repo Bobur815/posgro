@@ -14,7 +14,8 @@ import {
   SupplierTransactionType,
   SupplierPaymentMethod,
 } from '@shared/types';
-import { formatCurrency as formatCurrencyBase, formatDate } from '../../utils/formatters';
+import { formatCurrency as formatCurrencyBase } from '@shared/utils';
+import { formatDate } from '../../utils/formatters';
 
 const Container = styled.div`
   display: flex;

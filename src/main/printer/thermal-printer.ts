@@ -151,7 +151,11 @@ async function printHTML(html: string, widthMm: number): Promise<boolean> {
             height: 1000000, // auto-length roll paper
           },
           margins: {
-            marginType: 'none',
+            marginType: 'custom',
+            top: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
           },
         } as Electron.WebContentsPrintOptions,
         (success, errorType) => {

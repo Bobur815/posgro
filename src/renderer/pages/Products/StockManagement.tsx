@@ -18,6 +18,7 @@ import { useToast } from "../../context/ToastContext";
 import { ChevronDown, ChevronUp, SendHorizontal, Settings } from "lucide-react";
 import { SupplierManagementModal } from "./SupplierManagementModal";
 import { getExpireInDays } from "@renderer/utils/helpers";
+import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { formatQuantity } from "../../utils/formatters";
 import { DateInput } from "../../components/common/DateInput";
 
@@ -274,6 +275,7 @@ export function StockManagement() {
     expirationDate: "",
     paymentMethod: "CASH" as SupplierPaymentMethod,
   });
+  console.log("Products:");
 
   useEffect(() => {
     loadProducts();
@@ -304,9 +306,7 @@ export function StockManagement() {
       productionDate: product.productionDate
         ? product.productionDate.slice(0, 10)
         : "",
-      expirationDate: product.expiryDate
-        ? product.expiryDate.slice(0, 10)
-        : "",
+      expirationDate: product.expiryDate ? product.expiryDate.slice(0, 10) : "",
       paymentMethod: "CASH",
     });
     setShowArrival(true);
@@ -401,14 +401,11 @@ export function StockManagement() {
   const getProductName = (product: Product) =>
     i18n.language === "uz" ? product.nameUz : product.nameRu;
 
-  const formatCurrency = (amount: number) => {
-    const formatted = amount.toLocaleString(
-      i18n.language === "ru" ? "ru-RU" : "uz-UZ",
-    );
-    return `${formatted} ${t("common.currency")}`;
-  };
+  const formatCurrency = (amount: number) =>
+    formatCurrencyBase(amount, i18n.language as "ru" | "uz");
 
   const columns = [
+    { key: "#", header: "#", render: (_: Product, index: number) => index + 1 },
     { key: "id", header: t("pos.id") },
     { key: "barcode", header: t("products.barcode") },
     {
@@ -473,10 +470,6 @@ export function StockManagement() {
             </LowStockBadge>
           )}
         </Title>
-        <Button onClick={() => setIsFilterOpen(!isFilterOpen)}>
-          {t("filters.filters")}{" "}
-          {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
-        </Button>
       </Header>
 
       <SearchRow>
@@ -492,6 +485,14 @@ export function StockManagement() {
             flex: 1,
           }}
         />
+        <Button
+          size="medium"
+          style={{ padding: "10px 12px" }}
+          onClick={() => setIsFilterOpen(!isFilterOpen)}
+        >
+          {t("filters.filters")}{" "}
+          {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
+        </Button>
         <SearchField>
           <SearchLabel>{t("pos.barcode")}</SearchLabel>
           <SearchInput
@@ -561,7 +562,11 @@ export function StockManagement() {
               <InfoItem>
                 <InfoLabel>{t("products.currentStock")}</InfoLabel>
                 <InfoValue>
-                  {formatQuantity(selectedProduct.stock, selectedProduct.unit || 'шт', i18n.language as 'ru' | 'uz')}
+                  {formatQuantity(
+                    selectedProduct.stock,
+                    selectedProduct.unit || "шт",
+                    i18n.language as "ru" | "uz",
+                  )}
                 </InfoValue>
               </InfoItem>
             </InfoRow>

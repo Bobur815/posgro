@@ -7,6 +7,7 @@ import { Input } from '../../components/common/Input';
 import { UzbekPhoneInput } from '../../components/common/UzbekPhoneInput';
 import { isUzPhoneComplete } from '@shared/utils/phone';
 import { convertUzbekText } from '@shared/utils/transliterator';
+import { USER_ROLES, UserRole} from '@shared/constants';
 
 const Container = styled.div`
   max-width: 500px;
@@ -61,12 +62,18 @@ export function UserForm() {
   const { id } = useParams();
   const isEdit = Boolean(id);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    phone: string;
+    password: string;
+    nameRu: string;
+    nameUz: string;
+    role: UserRole;
+  }>({
     phone: '',
     password: '',
     nameRu: '',
     nameUz: '',
-    role: 'USER',
+    role: USER_ROLES.USER,
   });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -85,7 +92,7 @@ export function UserForm() {
         phone: string;
         nameRu: string;
         nameUz: string;
-        role: string;
+        role: UserRole;
       }>).find((u) => u.id === id);
 
       if (user) {
@@ -95,7 +102,7 @@ export function UserForm() {
           password: '',
           nameRu: user.nameRu,
           nameUz: user.nameUz,
-          role: user.role,
+          role: user.role || USER_ROLES.USER,
         });
       }
     } catch (error) {

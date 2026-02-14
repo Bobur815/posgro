@@ -8,6 +8,7 @@ import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
 import { Product } from "@shared/types";
 import { products as productsApi } from "../../api/ipc-client";
+import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 import {
   Edit,
   Trash,
@@ -244,10 +245,7 @@ export function ProductDetails() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    const formatted = amount.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'uz-UZ');
-    return i18n.language === 'ru' ? `${formatted} сум` : `${formatted} so'm`;
-  };
+  const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "-";

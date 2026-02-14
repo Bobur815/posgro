@@ -84,20 +84,22 @@ function escapeHtml(str: string): string {
 
 function baseStyles(widthMm: number): string {
   return `
-    @page { size: ${widthMm - 5}mm auto; margin: 0; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    @page { size: ${widthMm}mm auto; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { margin: 0 !important; padding: 0 !important; }
     body {
       font-family: 'Courier New', Courier, monospace;
       font-size: ${widthMm === 58 ? '11px' : '13px'};
-      width: 100%;
-      padding: 2mm 2mm;
+      width: ${widthMm}mm;
+      max-width: 100%;
+      padding: 2mm 11mm 2mm 0 !important;
       color: #000;
       background: #fff;
       -webkit-print-color-adjust: exact;
     }
     .center { text-align: center; }
-    .brand { font-size: ${widthMm === 58 ? '15px' : '17px'}; margin-bottom: 2px; }
-    .sub { font-size: ${widthMm === 58 ? '11px' : '12px'}; color: #000; }
+    .brand { font-size: ${widthMm === 58 ? '15px' : '17px'}; font-weight: bold; margin-bottom: 2px; }
+    .sub { font-size: ${widthMm === 58 ? '11px' : '12px'}; font-weight: 500; color: #000; }
     hr {
       border: none;
       border-top: 1px dashed #000;
@@ -280,7 +282,7 @@ export function buildSampleReceiptHTML(settings: ReceiptSettings): string {
           { productName: 'Shakar 1kg', quantity: 1, unitPrice: 14000, subtotal: 14000 },
         ];
 
-  return buildReceiptHTML(
+  const html = buildReceiptHTML(
     {
       receiptNumber: '000123',
       createdAt: new Date().toISOString(),
@@ -292,5 +294,13 @@ export function buildSampleReceiptHTML(settings: ReceiptSettings): string {
       paymentMethod: 'cash',
     },
     settings
+  );
+
+  // Override print-specific padding for accurate preview display:
+  // Print uses 11mm right padding to compensate for ~5mm hardware left margin.
+  // Preview should show balanced padding instead.
+  return html.replace(
+    '</style>',
+    ' body { padding: 2mm 2mm 2mm 3mm !important; }\n</style>'
   );
 }

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
 import { Modal } from '../../components/common/Modal';
 import { useSales } from '../../hooks/useSales';
+import type { Sale } from '@shared/types/sale.types';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 import { ChevronDown, ChevronRight, Pencil, Printer, Trash2 } from 'lucide-react';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
@@ -178,25 +179,9 @@ const DeleteButton = styled.button`
   }
 `;
 
-interface SaleData {
-  id: string;
-  receiptNumber: string;
-  finalAmount: number;
-  paymentMethod: string;
-  createdAt: string;
-  items: Array<{
-    productId: string;
-    productName: string;
-    barcode: string;
-    quantity: number;
-    unitPrice: number;
-    subtotal: number;
-  }>;
-}
-
 interface SalesHistoryModalProps {
   onClose: () => void;
-  onEditSale: (sale: SaleData) => void;
+  onEditSale: (sale: Sale) => void;
 }
 
 export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProps) {
@@ -278,7 +263,7 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
                   <EditButton
                     onClick={(e) => {
                       e.stopPropagation();
-                      onEditSale(sale as SaleData);
+                      onEditSale(sale);
                     }}
                     title={t('common.edit')}
                   >

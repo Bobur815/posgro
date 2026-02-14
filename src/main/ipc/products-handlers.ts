@@ -234,17 +234,17 @@ export function setupProductsHandlers(): void {
       take: limit,
     });
 
-    const productIds = topProducts.map((p: any) => p.productId);
+    const productIds: number[] = topProducts.map((p: { productId: number }) => Number(p.productId));
 
     // Fetch full product details for these IDs
-    const products = await prisma.product.findMany({
+    const products: { id: number; [key: string]: unknown }[] = await prisma.product.findMany({
       where: { id: { in: productIds }, active: true },
       include: { category: true, supplier: true },
     });
 
     // Sort by sales rank
-    const orderMap = new Map(productIds.map((id: number, idx: number) => [id, idx]));
-    products.sort((a: any, b: any) => (orderMap.get(a.id) ?? 999) - (orderMap.get(b.id) ?? 999));
+    const orderMap = new Map(productIds.map((id, idx) => [id, idx]));
+    products.sort((a, b) => (orderMap.get(a.id) ?? 999) - (orderMap.get(b.id) ?? 999));
 
     return ipcSafe(products.map(serializeProduct));
   });

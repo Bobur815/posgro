@@ -6,6 +6,7 @@ import { Table } from '../../components/common/Table';
 import { Button } from '../../components/common/Button';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { formatDate } from '../../utils/formatters';
+import type { UserListItem } from '@shared/types';
 
 const Container = styled.div`
   display: flex;
@@ -44,22 +45,12 @@ const RoleBadge = styled.span<{ $role: string }>`
   color: white;
 `;
 
-interface User {
-  id: string;
-  phone: string;
-  nameRu: string;
-  nameUz: string;
-  role: 'ADMIN' | 'USER';
-  active: boolean;
-  createdAt: string;
-}
-
 export function UserList() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [userToToggle, setUserToToggle] = useState<User | null>(null);
+  const [userToToggle, setUserToToggle] = useState<UserListItem | null>(null);
 
   useEffect(() => {
     loadUsers();
@@ -68,7 +59,7 @@ export function UserList() {
   const loadUsers = async () => {
     try {
       const data = await window.electronAPI.users.getAll();
-      setUsers(data as User[]);
+      setUsers(data as UserListItem[]);
     } catch (error) {
       console.error('Failed to load users:', error);
     } finally {
@@ -76,7 +67,7 @@ export function UserList() {
     }
   };
 
-  const handleToggleActive = async (user: User) => {
+  const handleToggleActive = async (user: UserListItem) => {
     try {
       await window.electronAPI.users.update(user.id, { active: !user.active });
       loadUsers();
@@ -90,12 +81,12 @@ export function UserList() {
     {
       key: 'name',
       header: t('users.name'),
-      render: (user: User) => (i18n.language === 'uz' ? user.nameUz : user.nameRu),
+      render: (user: UserListItem) => (i18n.language === 'uz' ? user.nameUz : user.nameRu),
     },
     {
       key: 'role',
       header: t('users.role'),
-      render: (user: User) => (
+      render: (user: UserListItem) => (
         <RoleBadge $role={user.role}>
           {user.role === 'ADMIN' ? t('users.admin') : t('users.cashier')}
         </RoleBadge>
@@ -104,7 +95,7 @@ export function UserList() {
     {
       key: 'active',
       header: t('users.status'),
-      render: (user: User) => (
+      render: (user: UserListItem) => (
         <Badge $active={user.active}>
           {user.active ? t('users.active') : t('users.inactive')}
         </Badge>
@@ -113,12 +104,12 @@ export function UserList() {
     {
       key: 'createdAt',
       header: t('users.createdAt'),
-      render: (user: User) => formatDate(user.createdAt),
+      render: (user: UserListItem) => formatDate(user.createdAt),
     },
     {
       key: 'actions',
       header: '',
-      render: (user: User) => (
+      render: (user: UserListItem) => (
         <div style={{ display: 'flex', gap: '8px' }}>
           <Button
             size="small"

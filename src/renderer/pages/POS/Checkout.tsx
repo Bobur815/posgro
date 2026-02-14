@@ -6,6 +6,7 @@ import { useSales } from "../../hooks/useSales";
 import { useToast } from "../../context/ToastContext";
 import { Modal } from "../../components/common/Modal";
 import { Button } from "../../components/common/Button";
+import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 
 function parseSaleError(err: unknown, t: (key: string, params?: Record<string, unknown>) => string): string {
   const message = err instanceof Error ? err.message : String(err);
@@ -152,12 +153,7 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">("cash");
   const [printCheck, setPrintCheck] = useState(total >= 10000);
 
-  const formatCurrency = (amount: number) => {
-    const formatted = amount.toLocaleString(
-      i18n.language === "ru" ? "ru-RU" : "uz-UZ",
-    );
-    return i18n.language === "ru" ? `${formatted} сум` : `${formatted} so'm`;
-  };
+  const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
 
   const handlePaymentRef = useRef<() => void>();
 
@@ -192,6 +188,15 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
         : await createSale(saleData);
 
       if (sale) {
+        // Print receipt if checkbox is checked
+        if (printCheck && sale.id) {
+          try {
+            await window.electronAPI.printer.printReceipt(sale.id);
+          } catch (printErr) {
+            console.error('Receipt print failed:', printErr);
+          }
+        }
+
         clearCart();
         window.dispatchEvent(new Event("stock-updated"));
         toast.success(

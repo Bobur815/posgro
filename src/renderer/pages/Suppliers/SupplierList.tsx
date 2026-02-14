@@ -8,7 +8,8 @@ import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useSuppliers } from '../../hooks/useSuppliers';
 import { useToast } from '../../context/ToastContext';
 import { Supplier } from '@shared/types';
-import { formatCurrency as formatCurrencyBase } from '../../utils/formatters';
+import { formatCurrency as formatCurrencyBase } from '@shared/utils';
+import { CirclePlus } from 'lucide-react';
 
 const Container = styled.div`
   display: flex;
@@ -63,7 +64,12 @@ const CheckboxLabel = styled.label`
   font-size: 14px;
   cursor: pointer;
 `;
-
+const Checkbox = styled.input`
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: ${({ theme }) => theme.colors.primary};
+`;
 export function SupplierList() {
   const { t, i18n } = useTranslation();
   const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
@@ -159,15 +165,15 @@ export function SupplierList() {
         <Title>{t('suppliers.title')}</Title>
         <HeaderActions>
           <CheckboxLabel>
-            <input
+            <Checkbox
               type="checkbox"
               checked={showInactive}
               onChange={(e) => setShowInactive(e.target.checked)}
             />
             {t('suppliers.showInactive')}
           </CheckboxLabel>
-          <Button onClick={() => navigate('/suppliers/new')}>
-            {t('suppliers.addSupplier')}
+          <Button style={{fontSize: '26px'}} onClick={() => navigate('/suppliers/new')}>
+           <CirclePlus size={24} />  {t('suppliers.addSupplier')}
           </Button>
         </HeaderActions>
       </Header>

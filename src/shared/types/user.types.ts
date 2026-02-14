@@ -49,3 +49,23 @@ export interface CurrentUser {
   nameRu: string;
   role: UserRole;
 }
+
+/** User object returned by the local auth API (login/restoreSession) */
+export interface AuthUser {
+  id: string;
+  phone: string;
+  role: UserRole;
+  nameUz: string;
+  nameRu: string;
+}
+
+/** User object returned by users:getAll IPC (matches DB select) */
+export interface UserListItem {
+  id: string;
+  phone: string;
+  nameRu: string;
+  nameUz: string;
+  role: UserRole;
+  active: boolean;
+  createdAt: string;
+}

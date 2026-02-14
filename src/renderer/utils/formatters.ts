@@ -1,11 +1,8 @@
 import { format, formatDistance, parseISO } from 'date-fns';
 import { ru, uz } from 'date-fns/locale';
 
-// Currency formatter
-export function formatCurrency(amount: number, locale: 'ru' | 'uz' = 'ru'): string {
-  const formatted = amount.toLocaleString(locale === 'ru' ? 'ru-RU' : 'uz-UZ');
-  return locale === 'ru' ? `${formatted} сум` : `${formatted} so'm`;
-}
+// Re-export shared formatCurrency for convenience
+export { formatCurrency } from '@shared/utils';
 
 // Compact currency (for large numbers)
 export function formatCompactCurrency(amount: number, locale: 'ru' | 'uz' = 'ru'): string {

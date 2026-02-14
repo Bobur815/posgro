@@ -4,6 +4,7 @@ import * as jwt from 'jsonwebtoken';
 import { getPrismaClient } from '../database/sqlite-client';
 import { setAuthToken, clearAuthToken } from '../sync/queue-manager';
 import { getAppConfig } from '../config/app-config';
+import type { AuthUser } from '../../shared/types/user.types';
 
 interface JwtPayload {
   sub: string;
@@ -13,13 +14,7 @@ interface JwtPayload {
   exp: number;
 }
 
-let currentUser: {
-  id: string;
-  phone: string;
-  role: string;
-  nameUz: string;
-  nameRu: string;
-} | null = null;
+let currentUser: AuthUser | null = null;
 
 export function setupAuthHandlers(): void {
   ipcMain.handle('auth:login', async (_event, phone: string, password: string) => {

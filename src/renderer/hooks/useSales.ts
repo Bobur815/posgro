@@ -1,25 +1,5 @@
 import { useState, useCallback } from 'react';
-
-interface Sale {
-  id: string;
-  receiptNumber: string;
-  totalAmount: number;
-  discountAmount: number;
-  finalAmount: number;
-  paymentMethod: string;
-  cashierName: string;
-  createdAt: string;
-  items: SaleItem[];
-}
-
-interface SaleItem {
-  productId: string;
-  productName: string;
-  barcode: string;
-  quantity: number;
-  unitPrice: number;
-  subtotal: number;
-}
+import type { Sale } from '@shared/types/sale.types';
 
 interface CreateSaleData {
   items: Array<{

@@ -14,6 +14,8 @@ export type {
   UserLoginInput,
   AuthResponse,
   CurrentUser,
+  AuthUser,
+  UserListItem,
 } from './user.types';
 
 export type {

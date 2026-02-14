@@ -1,16 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-
-interface User {
-  id: string;
-  phone: string;
-  role: 'ADMIN' | 'USER';
-  nameUz: string;
-  nameRu: string;
-}
+import type { AuthUser } from '@shared/types';
 
 interface AuthState {
-  user: User | null;
+  user: AuthUser | null;
   token: string | null;
   isAuthenticated: boolean;
   isPinLogin: boolean;
@@ -43,7 +36,7 @@ export const useAuthStore = create<AuthState>()(
           console.log(`Attempting login with phone: ${phone}, password: ${password}`);
           
           const result = await window.electronAPI.auth.login(phone, password);          
-          const { token, user } = result as { token: string; user: User };
+          const { token, user } = result as { token: string; user: AuthUser };
 
           set({
             user,
@@ -69,7 +62,7 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           const result = await window.electronAPI.auth.loginWithPin(pin);
-          const { token, user } = result as { token: string; user: User };
+          const { token, user } = result as { token: string; user: AuthUser };
 
           set({
             user,
@@ -118,7 +111,7 @@ export const useAuthStore = create<AuthState>()(
           try {
             const user = await window.electronAPI.auth.restoreSession(token);
             if (user) {
-              set({ user: user as User });
+              set({ user: user as AuthUser });
             } else {
               // Token invalid, clear auth state
               set({
