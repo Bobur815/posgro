@@ -1,20 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
-import styled from 'styled-components';
-import { useProducts } from '../../hooks/useProducts';
-import { Input } from '../../components/common/Input';
-import { Button } from '../../components/common/Button';
-import { ProductFilters } from '../../components/products/ProductFilters';
-import { Product, ProductFilterParams } from '@shared/types';
-import { formatQuantity } from '../../utils/formatters';
-import { formatCurrency as formatCurrencyBase } from '@shared/utils';
-import { ChevronDown, ChevronUp, X } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import styled from "styled-components";
+import { useProducts } from "../../hooks/useProducts";
+import { Input } from "../../components/common/Input";
+import { Button } from "../../components/common/Button";
+import { ProductFilters } from "../../components/products/ProductFilters";
+import { Product, ProductFilterParams } from "@shared/types";
+import { formatQuantity } from "../../utils/formatters";
+import { formatCurrency as formatCurrencyBase } from "@shared/utils";
+import { ChevronDown, ChevronUp, Keyboard, X } from "lucide-react";
+import { VirtualKeyboard } from "../../components/common/VirtualKeyboard";
+import { SearchInputWrapper, InputControls, ClearButton, KbToggle } from "../../components/common/SearchControls";
+import { debounce } from "../../utils/helpers";
 
 const Container = styled.div`
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
   background-color: ${({ theme }) => theme.colors.surface};
   border-radius: ${({ theme }) => theme.borderRadius};
   box-shadow: ${({ theme }) => theme.shadows.md};
@@ -32,31 +36,6 @@ const SearchRow = styled.div`
   display: flex;
   gap: ${({ theme }) => theme.spacing.sm};
   align-items: center;
-`;
-
-const SearchInputWrapper = styled.div`
-  position: relative;
-  flex: 1;
-`;
-
-const ClearButton = styled.button`
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 2px;
-  display: flex;
-  align-items: center;
-  color: ${({ theme }) => theme.colors.textSecondary};
-  border-radius: 50%;
-
-  &:hover {
-    color: ${({ theme }) => theme.colors.text};
-    background-color: ${({ theme }) => theme.colors.border};
-  }
 `;
 
 const ProductsGrid = styled.div`
@@ -125,7 +104,8 @@ const ProductPrice = styled.span`
 
 const ProductStock = styled.span<{ $low?: boolean }>`
   font-size: 11px;
-  color: ${({ theme, $low }) => ($low ? theme.colors.warning : theme.colors.textSecondary)};
+  color: ${({ theme, $low }) =>
+    $low ? theme.colors.warning : theme.colors.textSecondary};
   margin-top: ${({ theme }) => theme.spacing.xs};
 `;
 
@@ -142,11 +122,22 @@ interface ProductSearchProps {
 
 export function ProductSearch({ onSelect }: ProductSearchProps) {
   const { t, i18n } = useTranslation();
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<ProductFilterParams>({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [topSelling, setTopSelling] = useState<Product[]>([]);
-  const { products, categories, suppliers, search, loadProducts, loadCategories, loadSuppliers, getTopSelling, isLoading } = useProducts();
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const {
+    products,
+    categories,
+    suppliers,
+    search,
+    loadProducts,
+    loadCategories,
+    loadSuppliers,
+    getTopSelling,
+    isLoading,
+  } = useProducts();
 
   useEffect(() => {
     loadCategories();
@@ -162,47 +153,65 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
     filters.categoryId ||
     filters.priceMin !== undefined ||
     filters.priceMax !== undefined ||
-    (filters.availability && filters.availability !== 'all') ||
-    (filters.unit && filters.unit !== 'all') ||
-    (filters.promotionStatus && filters.promotionStatus !== 'all');
+    (filters.availability && filters.availability !== "all") ||
+    (filters.unit && filters.unit !== "all") ||
+    (filters.promotionStatus && filters.promotionStatus !== "all");
 
-  useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      if (searchQuery.trim() || hasActiveFilters) {
-        const params: ProductFilterParams = { ...filters };
-        if (searchQuery.trim()) {
-          params.query = searchQuery;
+  const debouncedSearch = useMemo(
+    () => debounce((query: string, f: ProductFilterParams, active: boolean) => {
+      if (query.trim() || active) {
+        const params: ProductFilterParams = { ...f };
+        if (query.trim()) {
+          params.query = query;
         }
         loadProducts(params);
       }
-    }, 300);
+    }, 300),
+    [loadProducts],
+  );
 
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery, filters, loadProducts, hasActiveFilters]);
+  useEffect(() => {
+    debouncedSearch(searchQuery, filters, !!hasActiveFilters);
+  }, [searchQuery, filters, hasActiveFilters, debouncedSearch]);
 
   // Refresh products when stock changes (after sale/edit/delete)
   useEffect(() => {
     const refresh = () => {
-      getTopSelling().then((data) => setTopSelling(data as unknown as Product[]));
+      getTopSelling().then((data) =>
+        setTopSelling(data as unknown as Product[]),
+      );
       if (searchQuery.trim() || hasActiveFilters) {
         const params: ProductFilterParams = { ...filters };
         if (searchQuery.trim()) params.query = searchQuery;
         loadProducts(params);
       }
     };
-    window.addEventListener('stock-updated', refresh);
-    return () => window.removeEventListener('stock-updated', refresh);
+    window.addEventListener("stock-updated", refresh);
+    return () => window.removeEventListener("stock-updated", refresh);
   }, [getTopSelling, searchQuery, hasActiveFilters, filters, loadProducts]);
 
-  const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
+  const formatCurrency = (amount: number) =>
+    formatCurrencyBase(amount, i18n.language as "ru" | "uz");
 
   const getProductName = (product: Product) => {
-    return i18n.language === 'uz' ? product.nameUz : product.nameRu;
+    return i18n.language === "uz" ? product.nameUz : product.nameRu;
   };
 
-  const displayProducts = (searchQuery.trim() || hasActiveFilters)
-    ? (products as unknown as Product[])
-    : topSelling;
+  const handleVirtualKeyPress = (key: string) => {
+    if (key === "BACKSPACE") {
+      setSearchQuery((prev) => prev.slice(0, -1));
+      return;
+    }
+    if (key === "ENTER") {
+      return;
+    }
+    setSearchQuery((prev) => prev + key);
+  };
+
+  const displayProducts =
+    searchQuery.trim() || hasActiveFilters
+      ? (products as unknown as Product[])
+      : topSelling;
 
   return (
     <Container>
@@ -213,17 +222,30 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('common.search')}
-              style={{ paddingRight: searchQuery ? '32px' : undefined }}
+              placeholder={t("common.search")}
+              style={{ padding: "10px 16px", paddingRight: "60px" }}
             />
-            {searchQuery.length > 0 && (
-              <ClearButton onClick={() => setSearchQuery('')}>
-                <X size={16} />
-              </ClearButton>
-            )}
+            <InputControls>
+              {searchQuery.length > 0 && (
+                <ClearButton onClick={() => setSearchQuery("")} tabIndex={-1}>
+                  <X size={16} />
+                </ClearButton>
+              )}
+              <KbToggle
+                type="button"
+                tabIndex={-1}
+                $active={keyboardOpen}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setKeyboardOpen((prev) => !prev)}
+              >
+                <Keyboard size={18} />
+                {keyboardOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </KbToggle>
+            </InputControls>
           </SearchInputWrapper>
           <Button size="medium" onClick={() => setIsFilterOpen(!isFilterOpen)}>
-            {t('filters.filters')} {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
+            {t("filters.filters")}{" "}
+            {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
           </Button>
         </SearchRow>
         <ProductFilters
@@ -238,9 +260,9 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
 
       <ProductsGrid>
         {isLoading ? (
-          <NoResults>{t('common.loading')}</NoResults>
+          <NoResults>{t("common.loading")}</NoResults>
         ) : displayProducts.length === 0 ? (
-          <NoResults>{t('products.noResults')}</NoResults>
+          <NoResults>{t("products.noResults")}</NoResults>
         ) : (
           displayProducts.map((product) => (
             <ProductCard
@@ -253,13 +275,20 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
               <ProductPrice>{formatCurrency(product.price)}</ProductPrice>
               <ProductStock $low={product.stock <= product.minStock}>
                 {product.stock <= 0
-                  ? t('products.outOfStock')
-                  : `${t('products.stock')}: ${formatQuantity(product.stock, product.unit || 'шт', i18n.language as 'ru' | 'uz')}`}
+                  ? t("products.outOfStock")
+                  : `${t("products.stock")}: ${formatQuantity(product.stock, product.unit || "шт", i18n.language as "ru" | "uz")}`}
               </ProductStock>
             </ProductCard>
           ))
         )}
       </ProductsGrid>
+
+      {keyboardOpen && (
+        <VirtualKeyboard
+          onKeyPress={handleVirtualKeyPress}
+          onClose={() => setKeyboardOpen(false)}
+        />
+      )}
     </Container>
   );
 }

@@ -2,6 +2,16 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
+import {
+  UserCog,
+  Settings,
+  Printer,
+  Receipt,
+  RefreshCw,
+  Tag,
+  Users,
+  Package,
+} from 'lucide-react';
 
 const Container = styled.div`
   display: flex;
@@ -35,8 +45,8 @@ const SettingsCard = styled.div`
 `;
 
 const CardIcon = styled.div`
-  font-size: 32px;
   margin-bottom: ${({ theme }) => theme.spacing.md};
+  color: ${({ theme }) => theme.colors.primary};
 `;
 
 const CardTitle = styled.h3`
@@ -56,49 +66,49 @@ export function SettingsPage() {
 
   const settingsSections = [
     {
-      icon: '👤',
+      icon: <UserCog size={32} />,
       title: t('settings.userSettings'),
       description: t('settings.userSettingsDescription'),
       path: '/settings/user',
     },
     {
-      icon: '⚙️',
+      icon: <Settings size={32} />,
       title: t('settings.systemSettings'),
       description: t('settings.systemSettingsDescription'),
       path: '/settings/system',
     },
     {
-      icon: '🖨️',
+      icon: <Printer size={32} />,
       title: t('settings.printerSettings'),
       description: t('settings.printerSettingsDescription'),
       path: '/settings/printer',
     },
     {
-      icon: '🧾',
+      icon: <Receipt size={32} />,
       title: t('receipt.title'),
       description: t('receipt.description'),
       path: '/settings/receipt',
     },
     {
-      icon: '🔄',
+      icon: <RefreshCw size={32} />,
       title: t('settings.syncSettings'),
       description: t('settings.syncSettingsDescription'),
       path: '/settings/sync',
     },
     {
-      icon: '🏷️',
+      icon: <Tag size={32} />,
       title: t('priceTags.title'),
       description: t('priceTags.settingsDescription'),
       path: '/settings/price-tags',
     },
     {
-      icon: '👥',
+      icon: <Users size={32} />,
       title: t('settings.userManagement'),
       description: t('settings.userManagementDescription'),
       path: '/users',
     },
     {
-      icon: '📦',
+      icon: <Package size={32} />,
       title: t('settings.inventorySettings'),
       description: t('settings.inventorySettingsDescription'),
       path: '/products/stock',

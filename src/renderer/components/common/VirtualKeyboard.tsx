@@ -26,6 +26,7 @@ const QWERTY_SHIFT: KeyDef[][] = [
 
 interface VirtualKeyboardProps {
   numbersOnly?: boolean;
+  fixed?: boolean;
   onKeyPress: (key: string) => void;
   onClose: () => void;
 }
@@ -63,8 +64,8 @@ function isSymbolKey(key: string) {
 
 /* ── styled ─────────────────────────────────────────────── */
 
-const Overlay = styled.div`
-  position: absolute;
+const Overlay = styled.div<{ $fixed?: boolean }>`
+  position: ${({ $fixed }) => ($fixed ? "fixed" : "absolute")};
   bottom: 0;
   left: 0;
   right: 0;
@@ -159,7 +160,7 @@ const Key = styled.button<{ $w: number; $active?: boolean; $special?: boolean; $
 
 /* ── component ──────────────────────────────────────────── */
 
-export function VirtualKeyboard({ numbersOnly = false, onKeyPress, onClose }: VirtualKeyboardProps) {
+export function VirtualKeyboard({ numbersOnly = false, fixed = false, onKeyPress, onClose }: VirtualKeyboardProps) {
   const [shifted, setShifted] = useState(false);
 
   const layout = shifted ? QWERTY_SHIFT : QWERTY_NORMAL;
@@ -184,7 +185,7 @@ export function VirtualKeyboard({ numbersOnly = false, onKeyPress, onClose }: Vi
   };
 
   return (
-    <Overlay onMouseDown={(e) => e.preventDefault()}>
+    <Overlay $fixed={fixed} onMouseDown={(e) => e.preventDefault()}>
       <Wrapper>
         <Header>
           <CloseBtn type="button" tabIndex={-1} onClick={onClose}>

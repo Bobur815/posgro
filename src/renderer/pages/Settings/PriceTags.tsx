@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
 import { PrintTagsModal } from './PrintTagsModal';
+import { generateId } from '../../utils/helpers';
 
 export interface PriceTagTemplate {
   id: string;
@@ -25,10 +26,6 @@ export interface PriceTagTemplate {
 }
 
 const STORAGE_KEY = 'price_tag_templates';
-
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
-}
 
 function createDefaultTemplate(): PriceTagTemplate {
   return {

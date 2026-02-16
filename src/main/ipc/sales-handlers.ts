@@ -479,5 +479,5 @@ async function generateReceiptNumber(terminalId: string): Promise<string> {
     }
   }
 
-  return `${prefix}${(maxSeq + 1).toString().padStart(4, '0')}`;
+  return `${prefix}${(maxSeq + 1).toString().padStart(3, '0')}`;
 }

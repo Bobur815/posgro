@@ -17,7 +17,7 @@ import {
 } from "@shared/types";
 import { convertUzbekText } from "@shared/utils/transliterator";
 import { Settings } from "lucide-react";
-import { SupplierManagementModal } from "./SupplierManagementModal";
+import { SupplierManagementModal } from "../Suppliers/SupplierManagementModal";
 import { CategoryManagementModal } from "./CategoryManagementModal";
 import { DateInput } from "../../components/common/DateInput";
 

@@ -1,15 +1,20 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import styled from 'styled-components';
-import { Table } from '../../components/common/Table';
-import { Button } from '../../components/common/Button';
-import { ConfirmDialog } from '../../components/common/ConfirmDialog';
-import { useSuppliers } from '../../hooks/useSuppliers';
-import { useToast } from '../../context/ToastContext';
-import { Supplier } from '@shared/types';
-import { formatCurrency as formatCurrencyBase } from '@shared/utils';
-import { CirclePlus } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import styled from "styled-components";
+import { Table } from "../../components/common/Table";
+import { Button } from "../../components/common/Button";
+import { ConfirmDialog } from "../../components/common/ConfirmDialog";
+import {
+  SupplierFilters,
+  SupplierFilterParams,
+} from "../../components/suppliers/SupplierFilters";
+import { useSuppliers } from "../../hooks/useSuppliers";
+import { useProducts } from "../../hooks/useProducts";
+import { useToast } from "../../context/ToastContext";
+import { Supplier } from "@shared/types";
+import { formatCurrency as formatCurrencyBase } from "@shared/utils";
+import { ChevronDown, ChevronUp, CirclePlus } from "lucide-react";
 
 const Container = styled.div`
   display: flex;
@@ -20,7 +25,6 @@ const Container = styled.div`
 const Header = styled.div`
   display: flex;
   justify-content: space-between;
-  align-items: center;
 `;
 
 const Title = styled.h1`
@@ -32,6 +36,12 @@ const HeaderActions = styled.div`
   display: flex;
   gap: ${({ theme }) => theme.spacing.md};
   align-items: center;
+`;
+
+const Filters = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.md};
+  margin-bottom: ${({ theme }) => theme.spacing.md};
 `;
 
 const Badge = styled.span<{ $active?: boolean }>`
@@ -51,42 +61,78 @@ const BalanceBadge = styled.span<{ $positive?: boolean }>`
   font-size: 12px;
   font-weight: 500;
   background-color: ${({ theme, $positive }) =>
-    $positive ? theme.colors.success + '20' : theme.colors.error + '20'};
+    $positive ? theme.colors.success + "20" : theme.colors.error + "20"};
   color: ${({ theme, $positive }) =>
     $positive ? theme.colors.success : theme.colors.error};
 `;
 
-const CheckboxLabel = styled.label`
-  display: flex;
-  align-items: center;
-  gap: ${({ theme }) => theme.spacing.xs};
-  color: ${({ theme }) => theme.colors.textSecondary};
-  font-size: 14px;
-  cursor: pointer;
-`;
-const Checkbox = styled.input`
-  width: 20px;
-  height: 20px;
-  cursor: pointer;
-  accent-color: ${({ theme }) => theme.colors.primary};
-`;
 export function SupplierList() {
   const { t, i18n } = useTranslation();
-  const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
+  const formatCurrency = (amount: number) =>
+    formatCurrencyBase(amount, i18n.language as "ru" | "uz");
   const navigate = useNavigate();
   const toast = useToast();
-  const { suppliers, isLoading, loadSuppliers, deleteSupplier, error } = useSuppliers();
-  const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
-  const [showInactive, setShowInactive] = useState(false);
+  const { suppliers, isLoading, loadSuppliers, deleteSupplier, error } =
+    useSuppliers();
+  const { products, categories, loadProducts, loadCategories } = useProducts();
+  const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(
+    null,
+  );
+  const [filters, setFilters] = useState<SupplierFilterParams>({});
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   useEffect(() => {
-    loadSuppliers(showInactive);
-  }, [showInactive, loadSuppliers]);
+    loadSuppliers(true); // Always load all, filter client-side
+    loadProducts();
+    loadCategories();
+  }, [loadSuppliers, loadProducts, loadCategories]);
+
+  // Build set of supplier IDs per category from products
+  const supplierIdsByCategory = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const product of products) {
+      if (product.supplierId && product.categoryId) {
+        const catKey = String(product.categoryId);
+        if (!map.has(catKey)) {
+          map.set(catKey, new Set());
+        }
+        map.get(catKey)!.add(product.supplierId);
+      }
+    }
+    return map;
+  }, [products]);
+
+  // Categories that have at least one supplier
+  const availableCategories = useMemo(() => {
+    return categories.filter((c) => supplierIdsByCategory.has(String(c.id)));
+  }, [categories, supplierIdsByCategory]);
+
+  const filteredSuppliers = useMemo(() => {
+    return suppliers.filter((supplier) => {
+      // Status filter
+      if (filters.status === "active" && !supplier.active) return false;
+      if (filters.status === "inactive" && supplier.active) return false;
+
+      // Balance filter
+      if (filters.balance === "we_owe" && supplier.balance >= 0) return false;
+      if (filters.balance === "they_owe" && supplier.balance <= 0) return false;
+
+      // Category filter
+      if (filters.categoryId) {
+        const supplierIds = supplierIdsByCategory.get(
+          String(filters.categoryId),
+        );
+        if (!supplierIds || !supplierIds.has(supplier.id)) return false;
+      }
+
+      return true;
+    });
+  }, [suppliers, filters, supplierIdsByCategory]);
 
   const handleDelete = async (supplier: Supplier) => {
     const success = await deleteSupplier(supplier.id);
     if (success) {
-      toast.success(t('suppliers.supplierDeleted'));
+      toast.success(t("suppliers.supplierDeleted"));
       setSupplierToDelete(null);
     } else if (error) {
       toast.error(error);
@@ -94,65 +140,69 @@ export function SupplierList() {
   };
 
   const columns = [
-    { key: '#', header: '#', render: (_: Supplier, index: number) => index + 1 },
     {
-      key: 'name',
-      header: t('suppliers.supplier'),
+      key: "#",
+      header: "#",
+      render: (_: Supplier, index: number) => index + 1,
+    },
+    {
+      key: "name",
+      header: t("suppliers.supplier"),
       render: (supplier: Supplier) =>
-        i18n.language === 'uz' ? supplier.nameUz : supplier.nameRu,
+        i18n.language === "uz" ? supplier.nameUz : supplier.nameRu,
     },
     {
-      key: 'phone',
-      header: t('suppliers.phone'),
-      render: (supplier: Supplier) => supplier.phone || '-',
+      key: "phone",
+      header: t("suppliers.phone"),
+      render: (supplier: Supplier) => supplier.phone || "-",
     },
     {
-      key: 'balance',
-      header: t('suppliers.balance'),
+      key: "balance",
+      header: t("suppliers.balance"),
       render: (supplier: Supplier) => (
         <BalanceBadge $positive={supplier.balance >= 0}>
           {supplier.balance < 0
-            ? `${t('suppliers.weOwe')}: ${formatCurrency(Math.abs(supplier.balance))}`
+            ? `${t("suppliers.weOwe")}: ${formatCurrency(Math.abs(supplier.balance))}`
             : supplier.balance > 0
-            ? `${t('suppliers.theyOwe')}: ${formatCurrency(supplier.balance)}`
-            : formatCurrency(0)}
+              ? `${t("suppliers.theyOwe")}: ${formatCurrency(supplier.balance)}`
+              : formatCurrency(0)}
         </BalanceBadge>
       ),
     },
     {
-      key: 'active',
-      header: t('users.status'),
+      key: "active",
+      header: t("users.status"),
       render: (supplier: Supplier) => (
         <Badge $active={supplier.active}>
-          {supplier.active ? t('suppliers.active') : t('suppliers.inactive')}
+          {supplier.active ? t("suppliers.active") : t("suppliers.inactive")}
         </Badge>
       ),
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       render: (supplier: Supplier) => (
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: "flex", gap: "8px" }}>
           <Button
             size="small"
             variant="secondary"
             onClick={() => navigate(`/suppliers/${supplier.id}`)}
           >
-            {t('suppliers.viewDetails')}
+            {t("suppliers.viewDetails")}
           </Button>
           <Button
             size="small"
             variant="secondary"
             onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}
           >
-            {t('common.edit')}
+            {t("common.edit")}
           </Button>
           <Button
             size="small"
             variant="danger"
             onClick={() => setSupplierToDelete(supplier)}
           >
-            {t('common.delete')}
+            {t("common.delete")}
           </Button>
         </div>
       ),
@@ -162,35 +212,47 @@ export function SupplierList() {
   return (
     <Container>
       <Header>
-        <Title>{t('suppliers.title')}</Title>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <Title>{t("suppliers.title")}</Title>
+          <Button
+            style={{ padding: "8px 12px" }}
+            size="small"
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+          >
+            {t("filters.filters")}{" "}
+            {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
+          </Button>
+        </div>
         <HeaderActions>
-          <CheckboxLabel>
-            <Checkbox
-              type="checkbox"
-              checked={showInactive}
-              onChange={(e) => setShowInactive(e.target.checked)}
-            />
-            {t('suppliers.showInactive')}
-          </CheckboxLabel>
-          <Button style={{fontSize: '26px'}} onClick={() => navigate('/suppliers/new')}>
-           <CirclePlus size={24} />  {t('suppliers.addSupplier')}
+          <Button
+            style={{ fontSize: "26px" }}
+            onClick={() => navigate("/suppliers/new")}
+          >
+            <CirclePlus size={24} /> {t("suppliers.addSupplier")}
           </Button>
         </HeaderActions>
       </Header>
 
+      <SupplierFilters
+        filters={filters}
+        onChange={setFilters}
+        categories={availableCategories as any}
+        isOpen={isFilterOpen}
+      />
+
       <Table
         columns={columns}
-        data={suppliers}
+        data={filteredSuppliers}
         loading={isLoading}
-        emptyMessage={t('suppliers.noSuppliers')}
+        emptyMessage={t("suppliers.noSuppliers")}
       />
 
       {supplierToDelete && (
         <ConfirmDialog
-          title={t('common.delete')}
-          message={t('suppliers.confirmDelete')}
-          confirmLabel={t('common.delete')}
-          cancelLabel={t('common.cancel')}
+          title={t("common.delete")}
+          message={t("suppliers.confirmDelete")}
+          confirmLabel={t("common.delete")}
+          cancelLabel={t("common.cancel")}
           variant="danger"
           onConfirm={() => handleDelete(supplierToDelete)}
           onCancel={() => setSupplierToDelete(null)}

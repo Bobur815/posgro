@@ -279,7 +279,13 @@
     "supplier": "Yetkazib beruvchi",
     "discount": "Chegirma (%)",
     "expiryDate": "Yaroqlilik muddati",
-    "isOnPromotion": "Aksiyada ishtirok etadi"
+    "isOnPromotion": "Aksiyada ishtirok etadi",
+    "status": "Holati",
+    "active": "Faol",
+    "inactive": "Nofaol",
+    "balance": "Balans",
+    "weOwe": "Biz qarzdormiz",
+    "theyOwe": "Ular qarzdor"
   },
   "errors": {
     "productNotFound": "ID {{id}} bo'lgan mahsulot topilmadi",

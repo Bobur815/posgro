@@ -96,15 +96,16 @@ const SectionTitle = styled.div<{ $collapsed: boolean }>`
   font-size: 12px;
   color: ${({ theme }) => theme.colors.textSecondary};
   text-transform: uppercase;
-  margin-bottom: ${({ theme }) => theme.spacing.sm};
+  margin-bottom: ${({ $collapsed }) => ($collapsed ? "0" : "8px")};
   padding: 0 ${({ theme }) => theme.spacing.sm};
   white-space: nowrap;
   overflow: hidden;
   opacity: ${({ $collapsed }) => ($collapsed ? 0 : 1)};
-  height: ${({ $collapsed }) => ($collapsed ? "0" : "auto")};
+  max-height: ${({ $collapsed }) => ($collapsed ? "0" : "20px")};
   transition:
     opacity 0.2s ease,
-    height 0.2s ease;
+    max-height 0.3s ease,
+    margin-bottom 0.3s ease;
 `;
 
 const StyledNavLink = styled(NavLink)<{ $collapsed: boolean }>`
@@ -142,10 +143,10 @@ const NavText = styled.span<{ $collapsed: boolean }>`
   overflow: hidden;
   font-size: 18px;
   opacity: ${({ $collapsed }) => ($collapsed ? 0 : 1)};
-  width: ${({ $collapsed }) => ($collapsed ? 0 : "auto")};
+  max-width: ${({ $collapsed }) => ($collapsed ? "0" : "180px")};
   transition:
     opacity 0.2s ease,
-    width 0.2s ease;
+    max-width 0.3s ease;
 `;
 
 const BottomSection = styled.div<{ $collapsed: boolean }>`
@@ -172,8 +173,8 @@ const SyncText = styled.span<{ $collapsed: boolean }>`
   overflow: hidden;
   text-overflow: ellipsis;
   opacity: ${({ $collapsed }) => ($collapsed ? 0 : 1)};
-  width: ${({ $collapsed }) => ($collapsed ? 0 : "auto")};
-  transition: opacity 0.2s ease, width 0.2s ease;
+  max-width: ${({ $collapsed }) => ($collapsed ? "0" : "180px")};
+  transition: opacity 0.2s ease, max-width 0.3s ease;
 `;
 
 const UserSection = styled.div<{ $collapsed: boolean }>`
@@ -208,8 +209,8 @@ const UserDetails = styled.div<{ $collapsed: boolean }>`
   gap: 2px;
   overflow: hidden;
   opacity: ${({ $collapsed }) => ($collapsed ? 0 : 1)};
-  width: ${({ $collapsed }) => ($collapsed ? 0 : "auto")};
-  transition: opacity 0.2s ease, width 0.2s ease;
+  max-width: ${({ $collapsed }) => ($collapsed ? "0" : "180px")};
+  transition: opacity 0.2s ease, max-width 0.3s ease;
 `;
 
 const LoginButton = styled.button<{ $collapsed: boolean }>`
@@ -254,6 +255,8 @@ const LogoutButton = styled.button<{ $collapsed: boolean }>`
 const Tooltip = styled.span`
   position: absolute;
   left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
   margin-left: 8px;
   padding: 4px 8px;
   background-color: ${({ theme }) => theme.colors.text};

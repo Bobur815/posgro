@@ -1,5 +1,5 @@
 // src/renderer/pages/Products/ProductList.tsx
-import React, { useEffect, useState,  } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
@@ -10,14 +10,18 @@ import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
 import { ProductFilters } from "../../components/products/ProductFilters";
 import { Product, ProductFilterParams } from "@shared/types";
-import { ChevronDown, ChevronUp, Circle, CirclePlus, Edit, ListIndentIncrease, Trash } from "lucide-react";
+import { ChevronDown, ChevronUp, Circle, CirclePlus, Edit, Keyboard, ListIndentIncrease, Trash, X } from "lucide-react";
 import { formatDate } from "../../utils/formatters";
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
+import { debounce } from "../../utils/helpers";
+import { VirtualKeyboard } from "../../components/common/VirtualKeyboard";
+import { SearchInputWrapper, InputControls, ClearButton, KbToggle } from "../../components/common/SearchControls";
 
 const Container = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${({ theme }) => theme.spacing.md};
+  position: relative;
 `;
 
 const Header = styled.div`
@@ -37,10 +41,6 @@ const Filters = styled.div`
   margin-bottom: ${({ theme }) => theme.spacing.md};
 `;
 
-const SearchInput = styled(Input)`
-  max-width: 300px;
-`;
-
 export function ProductList() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -49,6 +49,7 @@ export function ProductList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<ProductFilterParams>({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
   const isAdmin = user?.role === "ADMIN";
   
   useEffect(() => {
@@ -57,19 +58,31 @@ export function ProductList() {
     loadSuppliers();
   }, [loadProducts, loadCategories, loadSuppliers]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const params: ProductFilterParams = { ...filters };
-      if (searchQuery) {
-        params.query = searchQuery;
+  const debouncedSearch = useMemo(
+    () => debounce((query: string, f: ProductFilterParams) => {
+      const params: ProductFilterParams = { ...f };
+      if (query) {
+        params.query = query;
       }
       loadProducts(params);
-    }, 300);
+    }, 300),
+    [loadProducts],
+  );
 
-    return () => clearTimeout(timer);
-  }, [searchQuery, filters, loadProducts]);
+  useEffect(() => {
+    debouncedSearch(searchQuery, filters);
+  }, [searchQuery, filters, debouncedSearch]);
 
   const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
+
+  const handleVirtualKeyPress = (key: string) => {
+    if (key === "BACKSPACE") {
+      setSearchQuery((prev) => prev.slice(0, -1));
+      return;
+    }
+    if (key === "ENTER") return;
+    setSearchQuery((prev) => prev + key);
+  };
 
   const columns = [
     {key: "index", header: "#", render: (_: Product, index: number) => index + 1},
@@ -178,18 +191,37 @@ export function ProductList() {
       </Header>
 
       <Filters>
-        <SearchInput
-          type="text"
-          placeholder={t("common.search")}
-          style={{
-            padding: "8px 16px",
-            fontSize: "18px",
-            fontWeight: "bold",
-            flex: 1,
-          }}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+        <SearchInputWrapper>
+          <Input
+            type="text"
+            placeholder={t("common.search")}
+            style={{
+              padding: "8px 16px",
+              fontSize: "18px",
+              fontWeight: "bold",
+              paddingRight: "60px",
+            }}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <InputControls>
+            {searchQuery.length > 0 && (
+              <ClearButton onClick={() => setSearchQuery("")} tabIndex={-1}>
+                <X size={16} />
+              </ClearButton>
+            )}
+            <KbToggle
+              type="button"
+              tabIndex={-1}
+              $active={keyboardOpen}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setKeyboardOpen((prev) => !prev)}
+            >
+              <Keyboard size={18} />
+              {keyboardOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </KbToggle>
+          </InputControls>
+        </SearchInputWrapper>
 
         <Button style={{ padding: "0px 12px" }} size="small" onClick={() => setIsFilterOpen(!isFilterOpen)}>
           {t("filters.filters")} {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
@@ -210,6 +242,14 @@ export function ProductList() {
         loading={isLoading}
         emptyMessage={t("products.noProducts")}
       />
+
+      {keyboardOpen && (
+        <VirtualKeyboard
+          fixed
+          onKeyPress={handleVirtualKeyPress}
+          onClose={() => setKeyboardOpen(false)}
+        />
+      )}
     </Container>
   );
 }

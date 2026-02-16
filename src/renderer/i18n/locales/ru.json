@@ -281,7 +281,13 @@
     "supplier": "Поставщик",
     "discount": "Скидка (%)",
     "expiryDate": "Срок годности",
-    "isOnPromotion": "Участвует в акции"
+    "isOnPromotion": "Участвует в акции",
+    "status": "Статус",
+    "active": "Активные",
+    "inactive": "Неактивные",
+    "balance": "Баланс",
+    "weOwe": "Мы должны",
+    "theyOwe": "Они должны нам"
   },
   "errors": {
     "productNotFound": "Товар с ID {{id}} не найден",
