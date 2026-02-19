@@ -126,6 +126,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAll: () => ipcRenderer.invoke('settings:getAll'),
   },
 
+  // Receipt scanning
+  receipt: {
+    scan: (imageBase64: string, mimeType: string) =>
+      ipcRenderer.invoke('receipt:scan', imageBase64, mimeType),
+    matchProducts: (items: { name: string; mxik?: string | null }[]) =>
+      ipcRenderer.invoke('receipt:matchProducts', items),
+  },
+
   // App info
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
@@ -211,6 +219,10 @@ declare global {
         get: (key: string) => Promise<string | null>;
         set: (key: string, value: string) => Promise<void>;
         getAll: () => Promise<Record<string, string>>;
+      };
+      receipt: {
+        scan: (imageBase64: string, mimeType: string) => Promise<unknown>;
+        matchProducts: (items: { name: string; mxik?: string | null }[]) => Promise<unknown[]>;
       };
       app: {
         getVersion: () => Promise<string>;

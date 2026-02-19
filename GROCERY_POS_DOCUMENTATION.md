@@ -181,21 +181,22 @@ A modern, offline-first Point of Sale (POS) system designed for grocery stores w
 - **SSL:** Let's Encrypt (Certbot)
 
 ### Frontend/Desktop (POS Terminals)
-- **Framework:** Electron 28+
+- **Framework:** Electron 40+
 - **UI Library:** React 18+
 - **Language:** TypeScript 5+
-- **State Management:** Zustand (or Redux Toolkit)
+- **State Management:** Zustand
 - **Styling:** Styled Components
-- **UI Components:** Ant Design or Material-UI
-- **Local Database:** SQLite (better-sqlite3)
+- **Icons:** Lucide React
+- **Local Database:** SQLite (via Prisma)
 - **i18n:** react-i18next
-- **Build Tool:** Electron Builder
+- **Build Tool:** electron-vite + Electron Builder
 
 ### Shared
 - **ORM:** Prisma Client (works with both PostgreSQL and SQLite)
 - **Validation:** Zod
 - **Date Handling:** date-fns
-- **HTTP Client:** Fetch API / Axios
+- **HTTP Client:** Fetch API
+- **Receipt Generation:** HTML-based receipt builder (shared module)
 
 ### Development Tools
 - **Monorepo:** Single repository with conditional builds
@@ -327,18 +328,24 @@ model User {
 ### Authentication Flow
 
 ```
-1. Login Screen -> Phone + Password
-2. VPS validation with store context
-3. JWT token generated (expires 8 hours)
-   - Token includes: userId, storeId, role
-4. Token stored in localStorage
-5. Every API call includes token in header
-6. Middleware checks:
-   - Valid JWT
-   - Role permissions
-   - Store access (storeId match)
-7. UI conditionally renders based on role
-8. Local auth (offline): Cached credentials for previously logged-in users
+Login Methods:
+  A) PIN Login (Primary - PinLoginPage):
+     1. PIN keypad displayed with virtual keyboard
+     2. User enters 4-digit store PIN
+     3. PIN verified against bcrypt hash in LocalConfig.storePin
+     4. On success, user selects their profile from local user list
+     5. Session restored locally (offline-capable)
+
+  B) Phone + Password Login:
+     1. Login Screen -> Phone + Password
+     2. Local validation against cached users in SQLite
+     3. Auth token stored in Zustand auth-store
+     4. Session can be restored on app restart (auth:restoreSession)
+
+  Common:
+  - UI conditionally renders based on role (ProtectedRoute + RoleGuard)
+  - Local auth works fully offline
+  - Sync service uses separate auth token for VPS communication
 ```
 
 ---
@@ -353,8 +360,15 @@ grocery-pos/
 +-- GROCERY_POS_DOCUMENTATION.md
 +-- package.json
 +-- tsconfig.json
++-- tsconfig.server.json
++-- electron.vite.config.ts          # electron-vite config (main, preload, renderer)
++-- electron-builder.config.js       # Electron build config
++-- nest-cli.json
 +-- .env.example
 +-- .gitignore
++-- docker-compose.yml               # VPS deployment
++-- Dockerfile                       # NestJS container
++-- nginx.conf                       # Nginx configuration
 |
 +-- prisma/                          # Database schemas
 |   +-- schema.prisma                # PostgreSQL schema (VPS) - Multi-tenant
@@ -364,30 +378,32 @@ grocery-pos/
 |
 +-- src/
 |   +-- main/                        # Electron Main Process (POS)
-|   |   +-- index.ts                 # Entry point
+|   |   +-- index.ts                 # Entry point: init DB, seed, create window, IPC, SyncService
 |   |   +-- window.ts                # Window management
-|   |   +-- preload.ts               # Context bridge
+|   |   +-- preload.ts               # Context bridge (electronAPI)
 |   |   |
 |   |   +-- database/
-|   |   |   +-- sqlite-client.ts     # SQLite Prisma client
-|   |   |   +-- migrations.ts        # Run migrations
-|   |   |   +-- seed-local.ts        # Local seed data
+|   |   |   +-- sqlite-client.ts     # getPrismaClient(), initializeDatabase(), runMigrations()
+|   |   |   +-- migrations.ts        # Migration helpers
+|   |   |   +-- seed.ts              # seedLocalDatabase()
 |   |   |
 |   |   +-- sync/
-|   |   |   +-- sync-service.ts      # Main sync logic
+|   |   |   +-- sync-service.ts      # Main sync logic (start, stop, sync, triggerSync)
 |   |   |   +-- sales-sync.ts        # Upload sales
 |   |   |   +-- products-sync.ts     # Download products
-|   |   |   +-- queue-manager.ts     # SyncQueue management
+|   |   |   +-- queue-manager.ts     # Auth token management for sync
 |   |   |
 |   |   +-- ipc/
-|   |   |   +-- handlers.ts          # IPC event handlers
-|   |   |   +-- sales-handlers.ts
-|   |   |   +-- products-handlers.ts
-|   |   |   +-- auth-handlers.ts
+|   |   |   +-- handlers.ts          # Main IPC orchestrator + inline handlers for:
+|   |   |   |                        #   categories, inventory, suppliers (full CRUD + transactions),
+|   |   |   |                        #   settings, app
+|   |   |   +-- auth-handlers.ts     # Auth + users IPC handlers
+|   |   |   +-- products-handlers.ts # Products CRUD + analytics + search
+|   |   |   +-- sales-handlers.ts    # Sales CRUD + receipt number generation
 |   |   |
 |   |   +-- printer/
-|   |   |   +-- thermal-printer.ts   # Receipt printing
-|   |   |   +-- templates.ts         # Receipt templates
+|   |   |   +-- thermal-printer.ts   # Receipt printing, test print, price tag printing
+|   |   |                            # Uses BrowserWindow.webContents.print() + shared receipt-html
 |   |   |
 |   |   +-- config/
 |   |       +-- app-config.ts        # App configuration
@@ -395,42 +411,68 @@ grocery-pos/
 |   +-- renderer/                    # React Frontend (POS)
 |   |   +-- index.html
 |   |   +-- main.tsx                 # React entry
-|   |   +-- App.tsx                  # Root component
+|   |   +-- App.tsx                  # Root component + routing
 |   |   |
 |   |   +-- pages/
 |   |   |   +-- Login/
-|   |   |   |   +-- LoginPage.tsx
+|   |   |   |   +-- PinLoginPage.tsx         # PIN keypad login
 |   |   |   +-- POS/
-|   |   |   |   +-- POSScreen.tsx    # Main POS interface
+|   |   |   |   +-- POSScreen.tsx            # Main POS interface
 |   |   |   |   +-- Cart.tsx
 |   |   |   |   +-- ProductSearch.tsx
 |   |   |   |   +-- Checkout.tsx
+|   |   |   |   +-- PosTabBar.tsx            # Multi-tab POS
+|   |   |   |   +-- SalesHistoryModal.tsx    # Today's sales with edit/delete
 |   |   |   +-- Products/
 |   |   |   |   +-- ProductList.tsx
-|   |   |   |   +-- ProductForm.tsx  # Admin only
-|   |   |   |   +-- StockManagement.tsx # Admin only
+|   |   |   |   +-- ProductForm.tsx          # Admin only
+|   |   |   |   +-- ProductDetails.tsx       # Product detail + analytics
+|   |   |   |   +-- StockManagement.tsx      # Admin only
+|   |   |   |   +-- CategoryManagementModal.tsx  # CRUD categories
+|   |   |   |   +-- NewArrivalModal.tsx      # New arrival with deferred price logic
 |   |   |   +-- Reports/
 |   |   |   |   +-- DailySummary.tsx
-|   |   |   |   +-- MonthlyReport.tsx # Admin only
-|   |   |   |   +-- Analytics.tsx    # Admin only
+|   |   |   |   +-- MonthlyReport.tsx        # Admin only
+|   |   |   |   +-- Analytics.tsx            # Admin only
 |   |   |   +-- Settings/
-|   |   |   |   +-- SettingsPage.tsx # Admin only
-|   |   |   |   +-- UserSettings.tsx
-|   |   |   |   +-- SystemSettings.tsx # Admin only
+|   |   |   |   +-- SettingsPage.tsx         # Settings hub (Admin)
+|   |   |   |   +-- UserSettings.tsx         # Language, theme, password
+|   |   |   |   +-- SystemSettings.tsx       # Store info, tax, sync (Admin)
+|   |   |   |   +-- PrinterSettings.tsx      # Printer selection + test (Admin)
+|   |   |   |   +-- PriceTags.tsx            # Price tag template builder (Admin)
+|   |   |   |   +-- PrintTagsModal.tsx       # Product selector for printing tags
+|   |   |   |   +-- ReceiptSettings.tsx      # Receipt format + live preview (Admin)
 |   |   |   +-- Users/
-|   |   |       +-- UserList.tsx     # Admin only
-|   |   |       +-- UserForm.tsx     # Admin only
+|   |   |   |   +-- UserList.tsx             # Admin only
+|   |   |   |   +-- UserForm.tsx             # Admin only
+|   |   |   +-- Suppliers/
+|   |   |       +-- SupplierList.tsx          # Supplier list with balance filter
+|   |   |       +-- SupplierForm.tsx          # Create/Edit supplier
+|   |   |       +-- SupplierDetails.tsx       # Detail + transaction history
+|   |   |       +-- SupplierManagementModal.tsx
+|   |   |       +-- SupplierTransactionForm.tsx
+|   |   |       +-- index.ts
 |   |   |
 |   |   +-- components/
 |   |   |   +-- common/
 |   |   |   |   +-- Button.tsx
+|   |   |   |   +-- ConfirmDialog.tsx
+|   |   |   |   +-- DateInput.tsx
+|   |   |   |   +-- EmptyPlaceholder.tsx
 |   |   |   |   +-- Input.tsx
 |   |   |   |   +-- Modal.tsx
+|   |   |   |   +-- SearchControls.tsx
+|   |   |   |   +-- Select.tsx
 |   |   |   |   +-- Table.tsx
+|   |   |   |   +-- UzbekPhoneInput.tsx
+|   |   |   |   +-- VirtualKeyboard.tsx
 |   |   |   +-- layout/
-|   |   |   |   +-- Header.tsx
-|   |   |   |   +-- Sidebar.tsx
 |   |   |   |   +-- Layout.tsx
+|   |   |   |   +-- Sidebar.tsx
+|   |   |   +-- products/
+|   |   |   |   +-- ProductFilters.tsx
+|   |   |   +-- suppliers/
+|   |   |   |   +-- SupplierFilters.tsx
 |   |   |   +-- protected/
 |   |   |       +-- ProtectedRoute.tsx
 |   |   |       +-- RoleGuard.tsx
@@ -439,19 +481,25 @@ grocery-pos/
 |   |   |   +-- useAuth.ts
 |   |   |   +-- useProducts.ts
 |   |   |   +-- useSales.ts
+|   |   |   +-- useSuppliers.ts      # Supplier + transaction operations
 |   |   |   +-- useSync.ts
 |   |   |
 |   |   +-- store/
-|   |   |   +-- index.ts
+|   |   |   +-- index.ts             # Re-exports: auth, cart, products, settings stores
 |   |   |   +-- auth-store.ts
 |   |   |   +-- cart-store.ts
 |   |   |   +-- products-store.ts
-|   |   |   +-- settings-store.ts
+|   |   |   +-- settings-store.ts    # Language + theme with persist
+|   |   |   +-- suppliers-store.ts   # Suppliers state
 |   |   |
 |   |   +-- api/
-|   |   |   +-- client.ts            # API client factory
+|   |   |   +-- client.ts            # HTTP client (for server API)
 |   |   |   +-- ipc-client.ts        # Electron IPC wrapper
 |   |   |   +-- endpoints.ts         # API endpoints
+|   |   |
+|   |   +-- context/
+|   |   |   +-- SidebarContext.tsx
+|   |   |   +-- ToastContext.tsx
 |   |   |
 |   |   +-- i18n/
 |   |   |   +-- index.ts             # i18next config
@@ -463,128 +511,51 @@ grocery-pos/
 |   |   |   +-- ThemeProvider.tsx
 |   |   |   +-- themes.ts            # Dark/Light themes
 |   |   |   +-- GlobalStyles.tsx
+|   |   |   +-- styled.d.ts          # styled-components type augmentation
 |   |   |
 |   |   +-- utils/
-|   |       +-- formatters.ts        # Currency, date formatters
-|   |       +-- validators.ts
-|   |       +-- helpers.ts
+|   |   |   +-- formatters.ts        # Currency, date formatters
+|   |   |   +-- validators.ts
+|   |   |   +-- helpers.ts
+|   |   |
+|   |   +-- images/                  # Static images
 |   |
-|   +-- server/                      # NestJS Backend (VPS)
-|   |   +-- main.ts                  # NestJS entry
-|   |   |
-|   |   +-- common/
-|   |   |   +-- guards/
-|   |   |   |   +-- jwt-auth.guard.ts
-|   |   |   |   +-- roles.guard.ts
-|   |   |   |   +-- store.guard.ts   # Store access validation
-|   |   |   +-- decorators/
-|   |   |   |   +-- roles.decorator.ts
-|   |   |   |   +-- current-user.decorator.ts
-|   |   |   |   +-- current-store.decorator.ts
-|   |   |   +-- filters/
-|   |   |   |   +-- http-exception.filter.ts
-|   |   |   +-- interceptors/
-|   |   |       +-- logging.interceptor.ts
-|   |   |
-|   |   +-- modules/
-|   |   |   +-- auth/
-|   |   |   |   +-- auth.module.ts
-|   |   |   |   +-- auth.controller.ts
-|   |   |   |   +-- auth.service.ts
-|   |   |   |   +-- jwt.strategy.ts
-|   |   |   |   +-- dto/
-|   |   |   |       +-- login.dto.ts
-|   |   |   |
-|   |   |   +-- stores/              # Store management (Super Admin)
-|   |   |   |   +-- stores.module.ts
-|   |   |   |   +-- stores.controller.ts
-|   |   |   |   +-- stores.service.ts
-|   |   |   |   +-- dto/
-|   |   |   |       +-- create-store.dto.ts
-|   |   |   |       +-- update-store.dto.ts
-|   |   |   |
-|   |   |   +-- users/
-|   |   |   |   +-- users.module.ts
-|   |   |   |   +-- users.controller.ts
-|   |   |   |   +-- users.service.ts
-|   |   |   |   +-- dto/
-|   |   |   |       +-- create-user.dto.ts
-|   |   |   |       +-- update-user.dto.ts
-|   |   |   |
-|   |   |   +-- products/
-|   |   |   |   +-- products.module.ts
-|   |   |   |   +-- products.controller.ts
-|   |   |   |   +-- products.service.ts
-|   |   |   |   +-- dto/
-|   |   |   |       +-- create-product.dto.ts
-|   |   |   |       +-- update-product.dto.ts
-|   |   |   |
-|   |   |   +-- sales/
-|   |   |   |   +-- sales.module.ts
-|   |   |   |   +-- sales.controller.ts
-|   |   |   |   +-- sales.service.ts
-|   |   |   |   +-- dto/
-|   |   |   |       +-- sync-sale.dto.ts
-|   |   |   |
-|   |   |   +-- inventory/
-|   |   |   |   +-- inventory.module.ts
-|   |   |   |   +-- inventory.controller.ts
-|   |   |   |   +-- inventory.service.ts
-|   |   |   |   +-- dto/
-|   |   |   |       +-- create-arrival.dto.ts
-|   |   |   |
-|   |   |   +-- suppliers/
-|   |   |   |   +-- suppliers.module.ts
-|   |   |   |   +-- suppliers.controller.ts
-|   |   |   |   +-- suppliers.service.ts
-|   |   |   |
-|   |   |   +-- analytics/
-|   |   |   |   +-- analytics.module.ts
-|   |   |   |   +-- analytics.controller.ts
-|   |   |   |   +-- analytics.service.ts
-|   |   |   |
-|   |   |   +-- telegram/
-|   |   |       +-- telegram.module.ts
-|   |   |       +-- telegram.service.ts
-|   |   |       +-- bot-commands.ts
-|   |   |
-|   |   +-- prisma/
-|   |   |   +-- prisma.module.ts
-|   |   |   +-- prisma.service.ts
-|   |   |
-|   |   +-- config/
-|   |       +-- database.config.ts
-|   |       +-- jwt.config.ts
+|   +-- server/                      # NestJS Backend (VPS) - planned
 |   |
 |   +-- shared/                      # Shared code (both POS & VPS)
+|   |   +-- index.ts                 # Re-exports from constants/ and utils/
+|   |   +-- receipt-html.ts          # HTML receipt builder (buildReceiptHTML, buildTestReceiptHTML, buildSampleReceiptHTML)
+|   |   |
 |   |   +-- types/
+|   |   |   +-- index.ts             # Re-exports all types
 |   |   |   +-- user.types.ts
-|   |   |   +-- product.types.ts
-|   |   |   +-- sale.types.ts
-|   |   |   +-- store.types.ts       # Store types
-|   |   |   +-- api.types.ts
+|   |   |   +-- product.types.ts     # Product, Category, ProductUnit, FilterParams, etc.
+|   |   |   +-- sale.types.ts        # Sale, SaleItem, CartItem, DailySummary, etc.
+|   |   |   +-- supplier.types.ts    # Supplier, SupplierTransaction, payment methods, etc.
+|   |   |   +-- store.types.ts       # Store, StoreSettings
+|   |   |   +-- api.types.ts         # ApiResponse, PaginatedResponse, SyncRequest, etc.
 |   |   |
 |   |   +-- constants/
-|   |   |   +-- roles.ts
-|   |   |   +-- payment-methods.ts
+|   |   |   +-- index.ts
+|   |   |   +-- roles.ts             # USER_ROLES, ROLE_PERMISSIONS, helper functions
+|   |   |   +-- payment-methods.ts   # CASH, CARD, MIXED with bilingual labels
 |   |   |   +-- sync-intervals.ts
 |   |   |
 |   |   +-- utils/
-|   |       +-- validators.ts
-|   |       +-- transformers.ts
+|   |       +-- index.ts
+|   |       +-- phone.ts             # Phone number utilities
+|   |       +-- transformers.ts      # formatCurrency (ru/uz locale)
+|   |       +-- transliterator.ts    # Uzbek Latin <-> Cyrillic conversion
+|   |       +-- validators.ts        # Comprehensive validators
 |   |
 |   +-- generated/                   # Prisma generated clients
 |       +-- prisma-sqlite/           # SQLite client for POS
 |
 +-- scripts/
-|   +-- build-pos.js                 # Build POS .exe
-|   +-- build-server.js              # Build VPS backend
-|   +-- deploy-vps.sh                # Deploy to Contabo
-|
-+-- electron-builder.config.js       # Electron build config
-+-- docker-compose.yml               # VPS deployment
-+-- Dockerfile                       # NestJS container
-+-- nginx.conf                       # Nginx configuration
+    +-- build-pos.js                 # Build POS .exe
+    +-- build-server.js              # Build VPS backend
+    +-- deploy-vps.sh                # Deploy to Contabo
+    +-- seed-sqlite.ts               # SQLite seed script
 ```
 
 ### Key Files Explained
@@ -593,13 +564,59 @@ grocery-pos/
 |-------------|---------|---------|
 | `src/main/` | Electron main process, runs Node.js | POS Terminal |
 | `src/renderer/` | React UI, runs in browser context | POS Terminal |
-| `src/server/` | NestJS backend API | VPS Only |
-| `src/shared/` | TypeScript types, utilities | Both |
+| `src/server/` | NestJS backend API (planned) | VPS Only |
+| `src/shared/` | TypeScript types, utilities, receipt HTML builder | Both |
+| `src/shared/receipt-html.ts` | HTML receipt generation (shared between printer & preview) | Both |
 | `prisma/schema.prisma` | PostgreSQL schema with multi-tenancy | VPS |
 | `prisma/schema.sqlite.prisma` | SQLite schema for offline POS | POS Terminal |
 | `src/generated/prisma-sqlite/` | Generated SQLite Prisma client | POS Terminal |
+| `electron.vite.config.ts` | Build config for main, preload, and renderer | Build Process |
 | `electron-builder.config.js` | Creates Windows .exe installer | Build Process |
 | `docker-compose.yml` | Deploys backend to VPS | VPS Only |
+
+### IPC Channels (Preload → Main Process)
+
+| Namespace | Channels |
+|-----------|----------|
+| `auth` | login, loginWithPin, logout, getProfile, restoreSession |
+| `products` | getAll, getById, getByBarcode, create, update, delete, search, getTopSelling, getAnalytics |
+| `sales` | create, update, delete, getAll, getById, getTodaySummary |
+| `users` | getAll, create, update, delete |
+| `categories` | getAll, create, update, delete |
+| `inventory` | createArrival, getArrivals, getLowStock |
+| `suppliers` | getAll, getById, create, update, delete, getTransactions, createTransaction, updateTransaction, deleteTransaction, getBalance, recordPayment |
+| `sync` | trigger, getStatus, onCompleted (listener), onFailed (listener) |
+| `printer` | printReceipt, testPrint, getAvailablePrinters, printPriceTags |
+| `settings` | get, set, getAll |
+| `app` | getVersion, getTerminalId, getStoreInfo, quit |
+
+### Frontend Routes (App.tsx)
+
+| Route | Component | Access |
+|-------|-----------|--------|
+| `/login` | PinLoginPage | Public |
+| `/` | POSScreen | All authenticated |
+| `/products` | ProductList | All authenticated |
+| `/products/new` | ProductForm | ADMIN |
+| `/products/:id` | ProductDetails | All authenticated |
+| `/products/:id/edit` | ProductForm | ADMIN |
+| `/products/stock` | StockManagement | ADMIN |
+| `/reports/daily` | DailySummary | All authenticated |
+| `/reports/monthly` | MonthlyReport | ADMIN |
+| `/reports/analytics` | Analytics | ADMIN |
+| `/settings` | SettingsPage | ADMIN |
+| `/settings/user` | UserSettings | All authenticated |
+| `/settings/system` | SystemSettings | ADMIN |
+| `/settings/printer` | PrinterSettings | ADMIN |
+| `/settings/price-tags` | PriceTags | ADMIN |
+| `/settings/receipt` | ReceiptSettings | ADMIN |
+| `/users` | UserList | ADMIN |
+| `/users/new` | UserForm | ADMIN |
+| `/users/:id/edit` | UserForm | ADMIN |
+| `/suppliers` | SupplierList | ADMIN |
+| `/suppliers/new` | SupplierForm | ADMIN |
+| `/suppliers/:id` | SupplierDetails | ADMIN |
+| `/suppliers/:id/edit` | SupplierForm | ADMIN |
 
 ---
 
@@ -861,11 +878,10 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
+  url      = env("SQLITE_DATABASE_URL")
 }
 
 // ==================== LOCAL STORE CONFIG ====================
-// Terminal is assigned to ONE store - stored in local config
 
 model LocalConfig {
   id         String   @id @default("config")
@@ -873,6 +889,7 @@ model LocalConfig {
   storeName  String   @map("store_name")
   terminalId String   @map("terminal_id")
   apiUrl     String   @map("api_url")
+  storePin   String?  @map("store_pin") // 4-digit PIN (bcrypt hashed) for quick cashier login
   lastSync   DateTime @default(now()) @map("last_sync")
 
   @@map("local_config")
@@ -881,13 +898,13 @@ model LocalConfig {
 // ==================== USER MANAGEMENT ====================
 
 model User {
-  id       String  @id @default(cuid())
-  phone    String  @unique
-  password String
-  role     String  @default("USER") // ADMIN, USER
-  nameUz   String  @map("name_uz")
-  nameRu   String  @map("name_ru")
-  active   Boolean @default(true)
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  password  String
+  role      String   @default("USER") // ADMIN, USER
+  nameUz    String   @map("name_uz")
+  nameRu    String   @map("name_ru")
+  active    Boolean  @default(true)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -898,36 +915,45 @@ model User {
 // ==================== PRODUCTS & INVENTORY ====================
 
 model Category {
-  id       Int       @id @default(autoincrement())
-  nameUz   String    @map("name_uz")
-  nameRu   String    @map("name_ru")
-  active   Boolean   @default(true)
-  products Product[]
+  id        Int       @id @default(autoincrement())
+  nameUz    String    @map("name_uz")
+  nameRu    String    @map("name_ru")
+  active    Boolean   @default(true)
+  products  Product[]
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
 
   @@map("categories")
 }
 
 model Product {
-  id         Int      @id @default(autoincrement())
-  barcode    String   @unique
-  nameUz     String   @map("name_uz")
-  nameRu     String   @map("name_ru")
-  price      Decimal
-  cost       Decimal?
-  stock      Decimal  @default(0)
-  minStock   Decimal  @default(0) @map("min_stock")
-  unit       String   @default("sht")
-  categoryId Int      @map("category_id")
-  category   Category @relation(fields: [categoryId], references: [id])
-  active     Boolean  @default(true)
+  id              Int      @id @default(autoincrement())
+  barcode         String   @unique
+  nameUz          String   @map("name_uz")
+  nameRu          String   @map("name_ru")
+  price           Decimal
+  cost            Decimal?
+  stock           Decimal  @default(0)
+  minStock        Decimal  @default(0) @map("min_stock")
+  unit            String   @default("шт")
+  categoryId      Int      @map("category_id")
+  category        Category @relation(fields: [categoryId], references: [id])
+  supplierId      String?  @map("supplier_id")
+  supplier        Supplier? @relation(fields: [supplierId], references: [id])
+  productionDate  DateTime? @map("production_date")
+  expiryDate      DateTime? @map("expiry_date")
+  discountPercent       Decimal?  @default(0) @map("discount_percent")
+  isOnPromotion         Boolean   @default(false) @map("is_on_promotion")
+  pendingPrice          Decimal?  @map("pending_price")
+  pendingPriceThreshold Decimal?  @map("pending_price_threshold")
+  active                Boolean   @default(true)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  sales SaleItem[]
+  sales              SaleItem[]
+  inventoryMovements InventoryArrival[]
 
   @@map("products")
 }
@@ -935,18 +961,17 @@ model Product {
 // ==================== SALES ====================
 
 model Sale {
-  id             String  @id @default(cuid())
-  receiptNumber  String  @unique @map("receipt_number")
-  totalAmount    Decimal @map("total_amount")
-  discountAmount Decimal @default(0) @map("discount_amount")
-  finalAmount    Decimal @map("final_amount")
-  paymentMethod  String  @map("payment_method")
+  id             String   @id @default(cuid())
+  receiptNumber  String   @unique @map("receipt_number")
+  totalAmount    Decimal  @map("total_amount")
+  discountAmount Decimal  @default(0) @map("discount_amount")
+  finalAmount    Decimal  @map("final_amount")
+  paymentMethod  String   @map("payment_method")
 
   cashierId   String @map("cashier_id")
   cashierName String @map("cashier_name")
   terminalId  String @map("terminal_id")
 
-  // Sync tracking
   synced   Boolean   @default(false)
   syncedAt DateTime? @map("synced_at")
 
@@ -960,12 +985,12 @@ model Sale {
 }
 
 model SaleItem {
-  id     String @id @default(cuid())
-  saleId String @map("sale_id")
-  sale   Sale   @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  id          String  @id @default(cuid())
+  saleId      String  @map("sale_id")
+  sale        Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
-  productId Int     @map("product_id")
-  product   Product @relation(fields: [productId], references: [id])
+  productId   Int     @map("product_id")
+  product     Product @relation(fields: [productId], references: [id])
 
   productName String  @map("product_name")
   barcode     String
@@ -979,24 +1004,112 @@ model SaleItem {
 // ==================== SYSTEM SETTINGS ====================
 
 model SystemSetting {
-  id    String @id @default(cuid())
-  key   String @unique
-  value String
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
 
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("system_settings")
 }
 
+// ==================== INVENTORY MANAGEMENT ====================
+
+model InventoryArrival {
+  id        String   @id @default(cuid())
+  productId Int      @map("product_id")
+  product   Product  @relation(fields: [productId], references: [id])
+
+  quantity  Decimal
+  cost      Decimal
+  totalCost Decimal  @map("total_cost")
+
+  supplierId String?   @map("supplier_id")
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+
+  notes String?
+
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([productId])
+  @@index([createdAt])
+  @@map("inventory_arrivals")
+}
+
+model Supplier {
+  id      String  @id @default(cuid())
+  nameUz  String  @map("name_uz")
+  nameRu  String  @map("name_ru")
+  phone   String?
+  address String?
+  active  Boolean @default(true)
+  balance Decimal @default(0) // Negative = we owe them, Positive = they owe us
+
+  arrivals     InventoryArrival[]
+  products     Product[]
+  transactions SupplierTransaction[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("suppliers")
+}
+
+// ==================== SUPPLIER TRANSACTIONS ====================
+
+model SupplierTransaction {
+  id         String   @id @default(cuid())
+  supplierId String   @map("supplier_id")
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  type          String  // PURCHASE, PAYMENT, RETURN, ADVANCE, ADJUSTMENT
+  paymentMethod String  @map("payment_method") // CASH, CARD, BANK_TRANSFER, INSTALLMENT, ONE_TO_ONE
+  amount        Decimal
+  description   String?
+
+  referenceId   String? @map("reference_id")
+  referenceType String? @map("reference_type")
+
+  dueDate   DateTime? @map("due_date")
+  paidAt    DateTime? @map("paid_at")
+
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([supplierId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("supplier_transactions")
+}
+
+// ==================== AUDIT LOG ====================
+
+model AuditLog {
+  id       String  @id @default(cuid())
+  userId   String  @map("user_id")
+  phone    String
+  action   String
+  entity   String
+  entityId String  @map("entity_id")
+  details  String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
 // ==================== SYNC QUEUE ====================
-// Track what needs to be synced to server
 
 model SyncQueue {
   id        String   @id @default(cuid())
-  entity    String   // "sale", "product_stock_update"
+  entity    String
   entityId  String   @map("entity_id")
-  action    String   // "create", "update", "delete"
-  payload   String   // JSON data
+  action    String
+  payload   String
   attempts  Int      @default(0)
   lastError String?  @map("last_error")
 
@@ -1013,28 +1126,30 @@ model SyncQueue {
 |---------|-------------|------------------|
 | **Purpose** | Local cache, offline work | Master database, multi-tenant |
 | **Multi-tenancy** | Single store via LocalConfig | Full multi-tenant with Store model |
-| **Data Scope** | Products, sales for one store | All stores' data |
+| **Data Scope** | Products, sales, suppliers, inventory for one store | All stores' data |
 | **Size** | ~10-50 MB | Grows over time |
 | **Sync** | Every 5 min via SyncQueue | Real-time updates |
 | **Backup** | Auto-created daily | Automated + manual |
-| **Inventory/Suppliers** | Not stored locally | Full history per store |
-| **Audit Logs** | Not stored locally | Full audit trail per store |
+| **Inventory/Suppliers** | Stored locally (arrivals, suppliers, transactions) | Full history per store |
+| **Audit Logs** | Stored locally | Full audit trail per store |
+| **PIN Login** | storePin in LocalConfig (bcrypt hashed) | N/A |
 
 ### Key Schema Changes Summary
 
 | Model | Change | Description |
 |-------|--------|-------------|
-| **Store** | New | Central entity for multi-tenancy |
+| **Store** | New (PostgreSQL) | Central entity for multi-tenancy |
 | **UserRole** | Updated | Added SUPER_ADMIN role |
 | **User** | Updated | storeId nullable (null for SUPER_ADMIN), phone unique per store |
 | **Category** | Updated | Added storeId, suppliers relation |
-| **Product** | Updated | Added storeId, barcode unique per store |
+| **Product** | Updated | Added storeId, supplierId, productionDate, expiryDate, discountPercent, isOnPromotion, pendingPrice, pendingPriceThreshold. Barcode unique per store. Unit default "шт" |
 | **Sale** | Updated | Added storeId, receiptNumber unique per store |
-| **InventoryArrival** | Updated | Added storeId |
-| **Supplier** | Updated | Added storeId, categories relation |
+| **InventoryArrival** | Updated | Added storeId (PostgreSQL). Now stored locally in SQLite too |
+| **Supplier** | Updated | Added storeId (PostgreSQL), balance field, transactions relation. Now stored locally in SQLite too |
+| **SupplierTransaction** | New | Full supplier transaction tracking (PURCHASE, PAYMENT, RETURN, ADVANCE, ADJUSTMENT) with payment methods. Stored in both SQLite and PostgreSQL |
 | **SystemSetting** | Updated | Added storeId, key unique per store |
-| **AuditLog** | Updated | Added storeId, changed userName to phone |
-| **LocalConfig** | New (SQLite) | Stores terminal's store assignment |
+| **AuditLog** | Updated | Added storeId, changed userName to phone. Now stored locally in SQLite too |
+| **LocalConfig** | New (SQLite) | Stores terminal's store assignment + storePin for PIN login |
 | **SyncQueue** | New (SQLite) | Tracks pending sync operations |
 
 ---
@@ -1396,16 +1511,18 @@ npm run prisma:studio     # Open Prisma Studio GUI
 {
   "scripts": {
     "dev:pos": "cross-env APP_MODE=pos electron-vite dev",
-    "dev:server": "cross-env APP_MODE=server nest start --watch",
+    "dev:server": "nest start --watch",
 
     "build:pos": "cross-env APP_MODE=pos electron-vite build && electron-builder",
-    "build:server": "cross-env APP_MODE=server nest build",
+    "build:server": "nest build",
 
     "prisma:generate": "prisma generate",
     "prisma:generate:sqlite": "prisma generate --schema=prisma/schema.sqlite.prisma",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:push:sqlite": "prisma db push --schema=prisma/schema.sqlite.prisma",
     "prisma:studio": "prisma studio",
+    "prisma:studio:sqlite": "prisma studio --schema=prisma/schema.sqlite.prisma",
     "prisma:seed": "tsx prisma/seed.ts",
 
     "lint": "eslint src --ext .ts,.tsx",
@@ -1653,7 +1770,7 @@ APP_MODE=pos
 
 # Database
 DATABASE_PROVIDER=sqlite
-DATABASE_URL=file:./pos-local.db
+SQLITE_DATABASE_URL=file:./pos-local.db
 
 # VPS Connection
 VPS_API_URL=https://your-domain.com/api
@@ -1748,6 +1865,7 @@ interface LocalConfig {
   storeName: string;      // Store name for display
   terminalId: string;     // T1, T2, etc.
   apiUrl: string;         // VPS API URL
+  storePin?: string;      // 4-digit PIN (bcrypt hashed) for quick cashier login
   lastSync: DateTime;     // Last successful sync
 }
 ```
@@ -2219,115 +2337,30 @@ i18n
 export default i18n;
 ```
 
-### Translation Files
+### Translation Namespaces
 
-```json
-// src/renderer/i18n/locales/ru.json
-{
-  "common": {
-    "save": "Сохранить",
-    "cancel": "Отмена",
-    "delete": "Удалить",
-    "edit": "Редактировать",
-    "search": "Поиск",
-    "loading": "Загрузка..."
-  },
-  "auth": {
-    "login": "Войти",
-    "phone": "Телефон",
-    "password": "Пароль",
-    "logout": "Выйти",
-    "selectStore": "Выберите магазин"
-  },
-  "pos": {
-    "title": "Касса",
-    "scanBarcode": "Сканируйте штрих-код",
-    "addToCart": "Добавить в корзину",
-    "cart": "Корзина",
-    "total": "Итого",
-    "pay": "Оплатить",
-    "cash": "Наличные",
-    "card": "Карта",
-    "printReceipt": "Печать чека"
-  },
-  "products": {
-    "title": "Товары",
-    "name": "Название",
-    "price": "Цена",
-    "stock": "Остаток",
-    "category": "Категория",
-    "barcode": "Штрих-код",
-    "addProduct": "Добавить товар"
-  },
-  "stores": {
-    "title": "Магазины",
-    "name": "Название",
-    "address": "Адрес",
-    "addStore": "Добавить магазин"
-  },
-  "reports": {
-    "title": "Отчеты",
-    "daily": "Дневной отчет",
-    "monthly": "Месячный отчет",
-    "salesCount": "Количество продаж",
-    "revenue": "Выручка"
-  }
-}
-```
+Both `ru.json` and `uz.json` contain the following 18 namespaces:
 
-```json
-// src/renderer/i18n/locales/uz.json
-{
-  "common": {
-    "save": "Saqlash",
-    "cancel": "Bekor qilish",
-    "delete": "O'chirish",
-    "edit": "Tahrirlash",
-    "search": "Qidirish",
-    "loading": "Yuklanmoqda..."
-  },
-  "auth": {
-    "login": "Kirish",
-    "phone": "Telefon",
-    "password": "Parol",
-    "logout": "Chiqish",
-    "selectStore": "Do'konni tanlang"
-  },
-  "pos": {
-    "title": "Kassa",
-    "scanBarcode": "Shtrix-kodni skanerlang",
-    "addToCart": "Savatga qo'shish",
-    "cart": "Savat",
-    "total": "Jami",
-    "pay": "To'lash",
-    "cash": "Naqd",
-    "card": "Karta",
-    "printReceipt": "Chek chiqarish"
-  },
-  "products": {
-    "title": "Mahsulotlar",
-    "name": "Nomi",
-    "price": "Narxi",
-    "stock": "Qoldiq",
-    "category": "Kategoriya",
-    "barcode": "Shtrix-kod",
-    "addProduct": "Mahsulot qo'shish"
-  },
-  "stores": {
-    "title": "Do'konlar",
-    "name": "Nomi",
-    "address": "Manzil",
-    "addStore": "Do'kon qo'shish"
-  },
-  "reports": {
-    "title": "Hisobotlar",
-    "daily": "Kunlik hisobot",
-    "monthly": "Oylik hisobot",
-    "salesCount": "Sotuvlar soni",
-    "revenue": "Daromad"
-  }
-}
-```
+| Namespace | Description |
+|-----------|-------------|
+| `common` | save, cancel, delete, edit, search, loading, error, success, close, clear, remove, currency, confirmDelete, etc. |
+| `auth` | login, logout, phone, password, enterPin, usePhoneLogin, switchUser, keyboardHint |
+| `nav` | pos, products, reports, dailySummary, monthlyReport, analytics, inventory, users, settings, collapse/expand |
+| `pos` | scanBarcode, cart, checkout, payment, receipt, salesHistory, multi-tab, editingSale, printReceipt, etc. |
+| `products` | name, price, stock, category, barcode, productionDate, expiryDate, discountPercent, isOnPromotion, pendingPrice, etc. |
+| `inventory` | stockManagement, addArrival, newArrival, costPerUnit, deferred price logic messages |
+| `reports` | daily/monthly reports, revenue, profit, analytics |
+| `users` | user management fields including address |
+| `settings` | store info, tax rate, sync settings, receiptSettings |
+| `filters` | supplier, balance, weOwe, theyOwe, stock status, category, date range |
+| `errors` | productNotFound, productInactive, insufficientStock |
+| `sync` | syncing, lastSync, notSynced |
+| `categories` | title, nameRu, nameUz, CRUD confirmations |
+| `units` | piece (шт), kg (кг), liter (л), meter (м) |
+| `priceTags` | price tag template builder UI keys |
+| `suppliers` | supplier list, form, details, transactions, balance, payment methods |
+| `receipt` | receipt format settings, paper width (80mm/58mm), language, header/footer, preview |
+| `printer` | availablePrinters, selected, testPrint, testing |
 
 ### Usage in Components
 
@@ -2524,30 +2557,37 @@ export const darkTheme: Theme = {
 ## Future Enhancements
 
 ### Phase 1 (Core - Completed)
-- Basic POS operations
-- Product management
+- Basic POS operations with multi-tab support
+- Product management (full CRUD + analytics + filters)
 - User roles (Super Admin/Admin/User)
 - **Multi-tenant architecture**
 - VPS sync with store isolation
-- i18n (RU/UZ)
+- i18n (RU/UZ) with 18 namespaces
 - Dark/Light theme
-- Receipt printing
+- Receipt printing (HTML-based with customizable templates)
 - SyncQueue for reliable offline sync
+- PIN-based quick login
+- Virtual keyboard for touch screens
 
-### Phase 2 (In Progress)
+### Phase 2 (Partially Completed)
+- [x] Supplier management (full CRUD + balance tracking + transactions)
+- [x] Discount/promotion engine (discountPercent, isOnPromotion, pendingPrice with threshold)
+- [x] Price tag printing (customizable templates)
+- [x] Receipt settings (format, language, header/footer, live preview, 80mm/58mm support)
+- [x] Product analytics (top selling, performance metrics)
+- [x] Sales history with edit/delete capability
+- [x] Category management modal
+- [x] Inventory arrival with deferred price logic
+- [x] Uzbek Latin ↔ Cyrillic transliteration
 - [ ] Telegram bot for inventory management (per store)
 - [ ] Advanced analytics dashboard
 - [ ] Customer loyalty program
-- [ ] Discount/promotion engine
 - [ ] Shift management
 - [ ] Auto-updater for desktop app
-- [ ] Supplier-Category associations
 
 ### Phase 3 (Future)
 - [ ] Mobile app for managers (React Native)
-- [ ] Supplier management portal
 - [ ] Accounting integration
-- [ ] Barcode label printing
 - [ ] Kitchen display system (for restaurants)
 - [ ] Cross-store inventory transfers
 
@@ -2675,9 +2715,9 @@ This project is proprietary software. All rights reserved.
 
 ---
 
-**Last Updated:** February 3, 2026
-**Version:** 2.0.0
-**Status:** Development (Multi-Tenant)
+**Last Updated:** February 18, 2026
+**Version:** 2.1.0
+**Status:** Development (Multi-Tenant, Feature-Rich POS)
 
 ---
 

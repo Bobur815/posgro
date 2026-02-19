@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
+import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 
@@ -50,6 +51,30 @@ const InfoText = styled.p`
   margin: 0;
 `;
 
+const ApiKeyRow = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.sm};
+  align-items: flex-end;
+`;
+
+const ToggleButton = styled.button`
+  height: 38px;
+  width: 38px;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  background: ${({ theme }) => theme.colors.surface};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.text};
+  }
+`;
+
 export function SystemSettings() {
   const { t } = useTranslation();
 
@@ -66,9 +91,13 @@ export function SystemSettings() {
     lastSyncTime: string | null;
   }>({ isSyncing: false, lastSyncTime: null });
 
+  const [apiKey, setApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+
   useEffect(() => {
     loadSettings();
     loadSyncStatus();
+    loadApiKey();
   }, []);
 
   const loadSettings = async () => {
@@ -106,6 +135,24 @@ export function SystemSettings() {
       alert(t('common.saved'));
     } catch (error) {
       console.error('Failed to save settings:', error);
+    }
+  };
+
+  const loadApiKey = async () => {
+    try {
+      const key = await window.electronAPI.settings.get('anthropic_api_key');
+      if (key) setApiKey(key);
+    } catch (error) {
+      console.error('Failed to load API key:', error);
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    try {
+      await window.electronAPI.settings.set('anthropic_api_key', apiKey);
+      alert(t('aiSettings.apiKeySaved'));
+    } catch (error) {
+      console.error('Failed to save API key:', error);
     }
   };
 
@@ -174,6 +221,28 @@ export function SystemSettings() {
           <Button onClick={handleTriggerSync} disabled={syncStatus.isSyncing}>
             {syncStatus.isSyncing ? t('settings.syncing') : t('settings.syncNow')}
           </Button>
+        </Actions>
+      </Section>
+
+      <Section>
+        <SectionTitle>{t('aiSettings.title')}</SectionTitle>
+        <InfoText style={{ marginBottom: '12px' }}>{t('aiSettings.description')}</InfoText>
+        <ApiKeyRow>
+          <div style={{ flex: 1 }}>
+            <Input
+              label={t('aiSettings.anthropicApiKey')}
+              type={showApiKey ? 'text' : 'password'}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={t('aiSettings.apiKeyPlaceholder')}
+            />
+          </div>
+          <ToggleButton type="button" onClick={() => setShowApiKey(!showApiKey)}>
+            {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+          </ToggleButton>
+        </ApiKeyRow>
+        <Actions>
+          <Button onClick={handleSaveApiKey}>{t('common.save')}</Button>
         </Actions>
       </Section>
     </Container>

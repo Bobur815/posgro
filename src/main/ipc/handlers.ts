@@ -5,6 +5,7 @@ import { setupSalesHandlers } from './sales-handlers';
 import { getAppConfig } from '../config/app-config';
 import { getPrismaClient } from '../database/sqlite-client';
 import { setPrinterConfig, setupPrinterHandlers } from '../printer/thermal-printer';
+import { convertUzbekText } from '../../shared/utils/transliterator';
 
 export function setupIpcHandlers(): void {
   // Setup all IPC handlers
@@ -17,6 +18,7 @@ export function setupIpcHandlers(): void {
   setupSettingsHandlers();
   setupPrinterHandlers();
   setupAppHandlers();
+  setupReceiptHandlers();
 
   console.log('IPC handlers initialized');
 }
@@ -580,5 +582,218 @@ function setupAppHandlers(): void {
 
   ipcMain.handle('app:quit', () => {
     app.quit();
+  });
+}
+
+function setupReceiptHandlers(): void {
+  ipcMain.handle('receipt:scan', async (_event, imageBase64: string, mimeType: string) => {
+    const prisma = getPrismaClient();
+
+    const apiKeySetting = await prisma.systemSetting.findUnique({
+      where: { key: 'anthropic_api_key' },
+    });
+
+    if (!apiKeySetting?.value) {
+      throw new Error('ANTHROPIC_API_KEY_NOT_SET');
+    }
+
+    const prompt = `You are analyzing a supplier receipt/invoice from a grocery store. The document may be in Russian, Uzbek, or both.
+
+Extract all line items. For each item extract:
+- scannedName: the product name as written
+- mxik: the MXIK code (Товар (хизмат) лар Ягона электрон миллий каталоги бўйича идентификация коди) — a numeric code, often 17 digits, found in the product table column. Return null if not present.
+- quantity: quantity purchased (number)
+- unitCost: cost per unit (number)
+- totalCost: total cost for this line item (number)
+
+Also extract:
+- supplierName: supplier/vendor name if visible, else null
+- receiptDate: date on the receipt in YYYY-MM-DD format if visible, else null
+
+Return ONLY valid JSON, no markdown, no explanations:
+{
+  "supplierName": "string or null",
+  "receiptDate": "string or null",
+  "items": [
+    {
+      "scannedName": "product name",
+      "mxik": "17-digit code or null",
+      "quantity": 1,
+      "unitCost": 1000,
+      "totalCost": 1000
+    }
+  ]
+}
+
+If you cannot determine a numeric value, use 0. Always return the items array even if empty.`;
+
+    const isPDF = mimeType === 'application/pdf';
+
+    const fileContent = isPDF
+      ? {
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf' as const,
+            data: imageBase64,
+          },
+        }
+      : {
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: mimeType,
+            data: imageBase64,
+          },
+        };
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKeySetting.value,
+        'anthropic-version': '2023-06-01',
+        ...(isPDF && { 'anthropic-beta': 'pdfs-2024-09-25' }),
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5-20250929',
+        max_tokens: 4096,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              fileContent,
+              {
+                type: 'text',
+                text: prompt,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error('Anthropic API error:', response.status, errorBody);
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const result = await response.json();
+    const textContent = result.content?.find((c: { type: string }) => c.type === 'text');
+    if (!textContent) {
+      throw new Error('No text response from API');
+    }
+
+    let jsonText = textContent.text.trim();
+    // Strip markdown code fences if present
+    if (jsonText.startsWith('```')) {
+      jsonText = jsonText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    }
+
+    const parsed = JSON.parse(jsonText);
+    return ipcSafe(parsed);
+  });
+
+  ipcMain.handle('receipt:matchProducts', async (
+    _event,
+    items: { name: string; mxik?: string | null }[],
+  ) => {
+    const prisma = getPrismaClient();
+    const matches = [];
+
+    for (const item of items) {
+      const name = item.name;
+      const mxik = item.mxik?.trim() || null;
+      const nameLower = name.toLowerCase().trim();
+      const transliterated = convertUzbekText(nameLower);
+
+      type ProductRow = { id: string; name_ru: string; name_uz: string };
+
+      // ── 1. MXIK exact match (highest confidence) ─────────────────────────
+      if (mxik) {
+        const byMxik = await prisma.$queryRawUnsafe(
+          `SELECT id, name_ru, name_uz FROM products WHERE active = 1 AND mxik = ? LIMIT 1`,
+          mxik,
+        ) as ProductRow[];
+
+        if (byMxik.length > 0) {
+          matches.push({
+            scannedName: name,
+            matchedProductId: String(byMxik[0].id),
+            matchedProductNameRu: byMxik[0].name_ru,
+            matchedProductNameUz: byMxik[0].name_uz,
+            confidence: 'exact' as const,
+          });
+          continue;
+        }
+      }
+
+      // ── 2. Name exact match ───────────────────────────────────────────────
+      let products = await prisma.$queryRawUnsafe(
+        `SELECT id, name_ru, name_uz FROM products WHERE active = 1 AND (LOWER(name_ru) = ? OR LOWER(name_uz) = ? OR LOWER(name_ru) = ? OR LOWER(name_uz) = ?) LIMIT 1`,
+        nameLower, nameLower, transliterated, transliterated,
+      ) as ProductRow[];
+
+      if (products.length > 0) {
+        matches.push({
+          scannedName: name,
+          matchedProductId: String(products[0].id),
+          matchedProductNameRu: products[0].name_ru,
+          matchedProductNameUz: products[0].name_uz,
+          confidence: 'high' as const,
+        });
+        continue;
+      }
+
+      // ── 3. Name substring match ───────────────────────────────────────────
+      products = await prisma.$queryRawUnsafe(
+        `SELECT id, name_ru, name_uz FROM products WHERE active = 1 AND (LOWER(name_ru) LIKE ? OR LOWER(name_uz) LIKE ? OR LOWER(name_ru) LIKE ? OR LOWER(name_uz) LIKE ?) LIMIT 1`,
+        `%${nameLower}%`, `%${nameLower}%`, `%${transliterated}%`, `%${transliterated}%`,
+      ) as ProductRow[];
+
+      if (products.length > 0) {
+        matches.push({
+          scannedName: name,
+          matchedProductId: String(products[0].id),
+          matchedProductNameRu: products[0].name_ru,
+          matchedProductNameUz: products[0].name_uz,
+          confidence: 'medium' as const,
+        });
+        continue;
+      }
+
+      // ── 4. First-word partial match ───────────────────────────────────────
+      const firstWord = nameLower.split(/\s+/)[0];
+      const firstWordTranslit = convertUzbekText(firstWord);
+      if (firstWord.length >= 3) {
+        products = await prisma.$queryRawUnsafe(
+          `SELECT id, name_ru, name_uz FROM products WHERE active = 1 AND (LOWER(name_ru) LIKE ? OR LOWER(name_uz) LIKE ? OR LOWER(name_ru) LIKE ? OR LOWER(name_uz) LIKE ?) LIMIT 1`,
+          `%${firstWord}%`, `%${firstWord}%`, `%${firstWordTranslit}%`, `%${firstWordTranslit}%`,
+        ) as ProductRow[];
+
+        if (products.length > 0) {
+          matches.push({
+            scannedName: name,
+            matchedProductId: String(products[0].id),
+            matchedProductNameRu: products[0].name_ru,
+            matchedProductNameUz: products[0].name_uz,
+            confidence: 'low' as const,
+          });
+          continue;
+        }
+      }
+
+      // ── 5. No match ───────────────────────────────────────────────────────
+      matches.push({
+        scannedName: name,
+        matchedProductId: null,
+        matchedProductNameRu: null,
+        matchedProductNameUz: null,
+        confidence: 'none' as const,
+      });
+    }
+
+    return ipcSafe(matches);
   });
 }

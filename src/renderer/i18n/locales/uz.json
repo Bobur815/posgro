@@ -102,6 +102,7 @@
     "category": "Kategoriya",
     "selectCategory": "Kategoriyani tanlang",
     "barcode": "Shtrix-kod",
+    "mxik": "MXIK kodi",
     "unit": "Birlik",
     "addProduct": "Mahsulot qo'shish",
     "editProduct": "Mahsulotni tahrirlash",
@@ -254,6 +255,12 @@
     "never": "Hech qachon",
     "syncNow": "Hozir sinxronlash",
     "syncing": "Sinxronlanmoqda..."
+  },
+  "pagination": {
+    "showing": "{{from}}–{{to}} / {{total}} ta",
+    "rowsPerPage": "Qatorlar:",
+    "prev": "Orqaga",
+    "next": "Keyingi"
   },
   "filters": {
     "allCategories": "Barcha kategoriyalar",
@@ -422,5 +429,51 @@
     "testing": "Chop etilmoqda...",
     "testSent": "Test sahifa yuborildi",
     "testFailed": "Test chop etishda xato"
+  },
+  "receiptScan": {
+    "scanReceipt": "Chekni skanerlash",
+    "uploadImage": "Faylni yuklash",
+    "uploadDescription": "Yetkazib beruvchi cheki rasmini yoki PDF-fakturasini tanlang, yoki buferdan joylashtiring (Ctrl+V)",
+    "scanning": "Chek aniqlanmoqda...",
+    "scanningDescription": "Sun'iy intellekt chek rasmini tahlil qilmoqda",
+    "matching": "Mahsulotlar moslanmoqda...",
+    "matchingDescription": "Ma'lumotlar bazasida mahsulotlar qidirilmoqda",
+    "reviewTitle": "Natijalarni tekshirish",
+    "reviewDescription": "Aniqlangan pozitsiyalarni tekshiring va tahrirlang",
+    "creating": "Kirimlar yaratilmoqda...",
+    "creatingDescription": "Mahsulot kirim yozuvlari yaratilmoqda",
+    "done": "Tayyor!",
+    "doneDescription": "Kirimlar muvaffaqiyatli yaratildi",
+    "scannedName": "Chekdagi nomi",
+    "matchedProduct": "Bazadagi mahsulot",
+    "quantity": "Miqdori",
+    "unitCost": "Birlik narxi",
+    "totalCost": "Summasi",
+    "confidence": "Aniqlik",
+    "confidenceExact": "MXIK mos",
+    "confidenceHigh": "Aniq mos",
+    "confidenceMedium": "O'xshash",
+    "confidenceLow": "Ehtimoliy mos",
+    "confidenceNone": "Topilmadi",
+    "selectProduct": "Mahsulotni tanlang...",
+    "skipItem": "O'tkazib yuborish",
+    "createArrivals": "Kirimlarni yaratish",
+    "progress": "{{current}} / {{total}}",
+    "noItemsDetected": "Chekdan pozitsiyalarni aniqlab bo'lmadi",
+    "scanError": "Chekni aniqlashda xato",
+    "apiKeyNotSet": "Anthropic API kaliti sozlanmagan. Tizim sozlamalari → AI Sozlamalarida sozlang",
+    "fileTooLarge": "Fayl juda katta. Maksimum 20 MB",
+    "invalidFileType": "Qo'llab-quvvatlanmaydigan fayl turi. JPG, PNG, WebP yoki PDF ishlating",
+    "maxSize": "maks. 20 MB",
+    "pasteImage": "yoki rasmni joylashtiring (Ctrl+V)",
+    "detectedSupplier": "Aniqlangan yetkazib beruvchi",
+    "arrivalsFailed": "Ba'zi kirimlarni yaratib bo'lmadi"
+  },
+  "aiSettings": {
+    "title": "AI Sozlamalar",
+    "description": "Chekni sun'iy intellekt yordamida aniqlash sozlamalari",
+    "anthropicApiKey": "Anthropic API kaliti",
+    "apiKeyPlaceholder": "sk-ant-...",
+    "apiKeySaved": "API kaliti saqlandi"
   }
 }

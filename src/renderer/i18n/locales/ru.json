@@ -102,6 +102,7 @@
     "category": "Категория",
     "selectCategory": "Выберите категорию",
     "barcode": "Штрих-код",
+    "mxik": "MXIK код",
     "unit": "Единица",
     "addProduct": "Добавить товар",
     "editProduct": "Редактировать товар",
@@ -254,6 +255,12 @@
     "never": "Никогда",
     "syncNow": "Синхронизировать сейчас",
     "syncing": "Синхронизация..."
+  },
+  "pagination": {
+    "showing": "Показано {{from}}–{{to}} из {{total}}",
+    "rowsPerPage": "Строк:",
+    "prev": "Назад",
+    "next": "Вперёд"
   },
   "filters": {
     "filters": "Фильтры",
@@ -424,5 +431,51 @@
     "testing": "Печать...",
     "testSent": "Тестовая страница отправлена",
     "testFailed": "Ошибка тестовой печати"
+  },
+  "receiptScan": {
+    "scanReceipt": "Сканировать чек",
+    "uploadImage": "Загрузить файл",
+    "uploadDescription": "Выберите фото чека или PDF-накладную от поставщика, либо вставьте из буфера (Ctrl+V)",
+    "scanning": "Распознавание чека...",
+    "scanningDescription": "ИИ анализирует изображение чека",
+    "matching": "Сопоставление товаров...",
+    "matchingDescription": "Поиск товаров в базе данных",
+    "reviewTitle": "Проверка результатов",
+    "reviewDescription": "Проверьте и отредактируйте распознанные позиции",
+    "creating": "Создание приходов...",
+    "creatingDescription": "Создание записей прихода товаров",
+    "done": "Готово!",
+    "doneDescription": "Приходы успешно созданы",
+    "scannedName": "Название из чека",
+    "matchedProduct": "Товар в базе",
+    "quantity": "Кол-во",
+    "unitCost": "Цена за ед.",
+    "totalCost": "Сумма",
+    "confidence": "Точность",
+    "confidenceExact": "MXIK совпадение",
+    "confidenceHigh": "Точное совпадение",
+    "confidenceMedium": "Похоже",
+    "confidenceLow": "Возможное совпадение",
+    "confidenceNone": "Не найдено",
+    "selectProduct": "Выберите товар...",
+    "skipItem": "Пропустить",
+    "createArrivals": "Создать приходы",
+    "progress": "{{current}} из {{total}}",
+    "noItemsDetected": "Не удалось распознать позиции на чеке",
+    "scanError": "Ошибка при распознавании чека",
+    "apiKeyNotSet": "API ключ Anthropic не настроен. Настройте в Системных настройках → ИИ Настройки",
+    "fileTooLarge": "Файл слишком большой. Максимум 20 МБ",
+    "invalidFileType": "Неподдерживаемый тип файла. Используйте JPG, PNG, WebP или PDF",
+    "maxSize": "макс. 20 МБ",
+    "pasteImage": "или вставьте изображение (Ctrl+V)",
+    "detectedSupplier": "Обнаружен поставщик",
+    "arrivalsFailed": "Не удалось создать некоторые приходы"
+  },
+  "aiSettings": {
+    "title": "ИИ Настройки",
+    "description": "Настройки для распознавания чеков с помощью ИИ",
+    "anthropicApiKey": "API ключ Anthropic",
+    "apiKeyPlaceholder": "sk-ant-...",
+    "apiKeySaved": "API ключ сохранён"
   }
 }

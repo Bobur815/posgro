@@ -4,6 +4,8 @@ import styled from "styled-components";
 import { useProducts } from "../../hooks/useProducts";
 import { useAuthStore } from "../../store/auth-store";
 import { Table } from "../../components/common/Table";
+import { Pagination } from "../../components/common/Pagination";
+import { usePagination } from "../../hooks/usePagination";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
 import { ProductFilters } from "../../components/products/ProductFilters";
@@ -13,11 +15,13 @@ import {
   ChevronDown,
   ChevronUp,
   Keyboard,
+  ScanLine,
   SendHorizontal,
   X,
 } from "lucide-react";
 import { SupplierManagementModal } from "../Suppliers/SupplierManagementModal";
 import { NewArrivalModal } from "./NewArrivalModal";
+import { ReceiptScanModal } from "./ReceiptScanModal";
 import { VirtualKeyboard } from "../../components/common/VirtualKeyboard";
 import {
   SearchInputWrapper,
@@ -149,6 +153,7 @@ export function StockManagement() {
   const [barcodeInput, setBarcodeInput] = useState("");
   const [idInput, setIdInput] = useState("");
   const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [showReceiptScan, setShowReceiptScan] = useState(false);
 
   useEffect(() => {
     loadProducts();
@@ -212,11 +217,23 @@ export function StockManagement() {
     setSearchQuery((prev) => prev + key);
   };
 
+  const {
+    pageData,
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    pageSizeOptions,
+    pageOffset,
+    goToPage,
+    setPageSize,
+  } = usePagination(products);
+
   const formatCurrency = (amount: number) =>
     formatCurrencyBase(amount, i18n.language as "ru" | "uz");
 
   const columns = [
-    { key: "#", header: "#", render: (_: Product, index: number) => index + 1 },
+    { key: "#", header: "#", render: (_: Product, index: number) => pageOffset + index + 1 },
     { key: "id", header: t("pos.id") },
     { key: "barcode", header: t("products.barcode") },
     {
@@ -282,6 +299,12 @@ export function StockManagement() {
             </LowStockBadge>
           )}
         </Title>
+        {user?.role === "ADMIN" && (
+          <Button size="medium" onClick={() => setShowReceiptScan(true)}>
+            <ScanLine size={18} />
+            {t("receiptScan.scanReceipt")}
+          </Button>
+        )}
       </Header>
 
       <SearchRow>
@@ -378,9 +401,20 @@ export function StockManagement() {
 
       <Table
         columns={columns}
-        data={products}
+        data={pageData}
         loading={isLoading}
         emptyMessage={t("products.noProducts")}
+        footer={
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            pageSizeOptions={pageSizeOptions}
+            onPageChange={goToPage}
+            onPageSizeChange={setPageSize}
+          />
+        }
       />
 
       {showArrival && selectedProduct && (
@@ -401,6 +435,19 @@ export function StockManagement() {
         <SupplierManagementModal
           onClose={() => setShowSupplierModal(false)}
           onSupplierChanged={loadSuppliers}
+        />
+      )}
+      {showReceiptScan && (
+        <ReceiptScanModal
+          suppliers={suppliers}
+          products={products}
+          userId={user?.id}
+          onClose={() => setShowReceiptScan(false)}
+          onSuccess={() => {
+            setShowReceiptScan(false);
+            loadProducts();
+            toast.success(t("inventory.arrivalCreated"));
+          }}
         />
       )}
 

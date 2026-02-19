@@ -79,6 +79,7 @@ model Product {
   isOnPromotion         Boolean   @default(false) @map("is_on_promotion")
   pendingPrice          Decimal?  @map("pending_price")
   pendingPriceThreshold Decimal?  @map("pending_price_threshold")
+  mxik                  String?   @map("mxik")
   active                Boolean   @default(true)
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -87,6 +88,7 @@ model Product {
   sales              SaleItem[]
   inventoryMovements InventoryArrival[]
 
+  @@index([mxik]) // Fast MXIK lookup
   @@map("products")
 }
 

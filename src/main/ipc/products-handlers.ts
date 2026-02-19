@@ -49,6 +49,7 @@ function serializeProduct(product: any): Product | null {
     isOnPromotion: Boolean(product.isOnPromotion ?? false),
     pendingPrice: product.pendingPrice != null ? toNumber(product.pendingPrice) : null,
     pendingPriceThreshold: product.pendingPriceThreshold != null ? toNumber(product.pendingPriceThreshold) : null,
+    mxik: product.mxik || undefined,
     isActive: Boolean(product.active ?? true),
     createdAt: toISOString(product.createdAt),
     updatedAt: toISOString(product.updatedAt),
@@ -282,6 +283,7 @@ export function setupProductsHandlers(): void {
         expiryDate: data.expiryDate ? new Date(data.expiryDate) : null,
         discountPercent: data.discountPercent ?? 0,
         isOnPromotion: data.isOnPromotion ?? false,
+        mxik: data.mxik || null,
         active: true,
       },
       include: { category: true, supplier: true },
@@ -354,6 +356,9 @@ export function setupProductsHandlers(): void {
     }
     if (data.isOnPromotion !== undefined) {
       updateData.isOnPromotion = data.isOnPromotion;
+    }
+    if (data.mxik !== undefined) {
+      updateData.mxik = data.mxik || null;
     }
 
     const product = await prisma.product.update({

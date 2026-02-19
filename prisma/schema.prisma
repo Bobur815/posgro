@@ -102,6 +102,7 @@ model Product {
   expiryDate      DateTime? @map("expiry_date")
   discountPercent Decimal?  @default(0) @db.Decimal(5, 2) @map("discount_percent")
   isOnPromotion   Boolean   @default(false) @map("is_on_promotion")
+  mxik            String?   @map("mxik") // Uzbekistan national catalog code (nullable, non-unique — multiple products can share one MXIK)
   active          Boolean  @default(true)
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -112,6 +113,7 @@ model Product {
 
   @@unique([storeId, barcode]) // Same barcode can exist in different stores
   @@index([storeId])
+  @@index([storeId, mxik]) // Fast MXIK lookup per store
   @@map("products")
 }
 

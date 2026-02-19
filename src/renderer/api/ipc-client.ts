@@ -91,6 +91,13 @@ export const settings = {
   getAll: () => ipc?.settings.getAll(),
 };
 
+export const receipt = {
+  scan: (imageBase64: string, mimeType: string) =>
+    ipc?.receipt.scan(imageBase64, mimeType),
+  matchProducts: (items: { name: string; mxik?: string | null }[]) =>
+    ipc?.receipt.matchProducts(items),
+};
+
 export const app = {
   getVersion: () => ipc?.app.getVersion(),
   getTerminalId: () => ipc?.app.getTerminalId(),

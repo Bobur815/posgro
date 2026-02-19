@@ -214,6 +214,7 @@ export function ProductForm() {
     discountPercent: "",
     isOnPromotion: false,
     active: true,
+    mxik: "",
   });
 
   // Existing product found by barcode
@@ -413,6 +414,7 @@ export function ProductForm() {
             : "",
         isOnPromotion: product.isOnPromotion ?? false,
         active: product.isActive,
+        mxik: product.mxik || "",
       });
     }
   };
@@ -438,6 +440,7 @@ export function ProductForm() {
         : 0,
       isOnPromotion: formData.isOnPromotion,
       active: formData.active,
+      mxik: formData.mxik || undefined,
     };
 
     let success = false;
@@ -499,14 +502,22 @@ export function ProductForm() {
       </Title>
 
       <Form onSubmit={handleSubmit}>
-        <Input
-          label={t("products.barcode")}
-          value={formData.barcode}
-          autoFocus
-          onChange={(e) => handleBarcodeChange(e.target.value)}
-          disabled={isEdit}
-          required
-        />
+        <Row>
+          <Input
+            label={t("products.barcode")}
+            value={formData.barcode}
+            autoFocus
+            onChange={(e) => handleBarcodeChange(e.target.value)}
+            disabled={isEdit}
+            required
+          />
+          <Input
+            label={t("products.mxik")}
+            value={formData.mxik}
+            placeholder="00000000000000000"
+            onChange={(e) => handleChange("mxik", e.target.value)}
+          />
+        </Row>
 
         <Row>
           <Input

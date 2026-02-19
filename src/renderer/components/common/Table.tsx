@@ -13,6 +13,7 @@ interface TableProps<T> {
   data: T[];
   loading?: boolean;
   emptyMessage?: string;
+  footer?: React.ReactNode;
 }
 
 const Container = styled.div`
@@ -74,6 +75,7 @@ export function Table<T>({
   data,
   loading = false,
   emptyMessage = "No data",
+  footer,
 }: TableProps<T>) {
   const { t } = useTranslation();
 
@@ -115,6 +117,7 @@ export function Table<T>({
           )}
         </Tbody>
       </StyledTable>
+      {footer}
     </Container>
   );
 }

@@ -64,3 +64,10 @@ export type {
   SyncResponse,
   HealthCheckResponse,
 } from './api.types';
+
+export type {
+  ScannedReceiptItem,
+  ScannedReceiptData,
+  ProductMatch,
+  ReceiptLineItem,
+} from './receipt.types';

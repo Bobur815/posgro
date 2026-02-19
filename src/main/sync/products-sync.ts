@@ -56,6 +56,7 @@ export async function syncProducts(): Promise<void> {
           unit: product.unit,
           categoryId: product.categoryId,
           active: product.active,
+          mxik: product.mxik ?? null,
           updatedAt: new Date(product.updatedAt),
         },
         create: {
@@ -70,6 +71,7 @@ export async function syncProducts(): Promise<void> {
           unit: product.unit,
           categoryId: product.categoryId,
           active: product.active,
+          mxik: product.mxik ?? null,
           createdAt: new Date(product.createdAt),
           updatedAt: new Date(product.updatedAt),
         },

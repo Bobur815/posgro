@@ -6,6 +6,8 @@ import styled from "styled-components";
 import { useProducts } from "../../hooks/useProducts";
 import { useAuthStore } from "../../store/auth-store";
 import { Table } from "../../components/common/Table";
+import { Pagination } from "../../components/common/Pagination";
+import { usePagination } from "../../hooks/usePagination";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
 import { ProductFilters } from "../../components/products/ProductFilters";
@@ -73,6 +75,18 @@ export function ProductList() {
     debouncedSearch(searchQuery, filters);
   }, [searchQuery, filters, debouncedSearch]);
 
+  const {
+    pageData,
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    pageSizeOptions,
+    pageOffset,
+    goToPage,
+    setPageSize,
+  } = usePagination(products);
+
   const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
 
   const handleVirtualKeyPress = (key: string) => {
@@ -85,7 +99,7 @@ export function ProductList() {
   };
 
   const columns = [
-    {key: "index", header: "#", render: (_: Product, index: number) => index + 1},
+    {key: "index", header: "#", render: (_: Product, index: number) => pageOffset + index + 1},
     {key: "id", header: t("pos.id")},
     { key: "barcode", header: t("products.barcode") },
     {
@@ -238,9 +252,20 @@ export function ProductList() {
 
       <Table<Product>
         columns={columns}
-        data={products}
+        data={pageData}
         loading={isLoading}
         emptyMessage={t("products.noProducts")}
+        footer={
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            pageSizeOptions={pageSizeOptions}
+            onPageChange={goToPage}
+            onPageSizeChange={setPageSize}
+          />
+        }
       />
 
       {keyboardOpen && (

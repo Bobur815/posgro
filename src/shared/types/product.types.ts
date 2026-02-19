@@ -28,6 +28,7 @@ export interface Product {
   isOnPromotion: boolean;
   pendingPrice?: number | null;
   pendingPriceThreshold?: number | null;
+  mxik?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -80,6 +81,7 @@ export interface ProductCreateInput {
   expiryDate?: string;
   discountPercent?: number;
   isOnPromotion?: boolean;
+  mxik?: string;
 }
 
 export interface ProductUpdateInput {
@@ -100,6 +102,7 @@ export interface ProductUpdateInput {
   expiryDate?: string;
   discountPercent?: number;
   isOnPromotion?: boolean;
+  mxik?: string;
 }
 
 export interface ProductSearchQuery {
