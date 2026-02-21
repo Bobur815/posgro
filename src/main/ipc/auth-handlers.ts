@@ -27,17 +27,17 @@ export function setupAuthHandlers(): void {
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new Error('auth.errors.user_not_found');
     }
 
     if (!user.active) {
-      throw new Error('User account is deactivated');
+      throw new Error('auth.errors.user_deactivated');
     }
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
-      throw new Error('Invalid password');
+      throw new Error('auth.errors.invalid_password');
     }
 
     // Generate JWT token (for local use and sync)
@@ -93,13 +93,13 @@ export function setupAuthHandlers(): void {
     });
 
     if (!localConfig || !localConfig.storePin) {
-      throw new Error('Store PIN not configured');
+      throw new Error('auth.errors.pin_not_configured');
     }
 
     // Verify PIN
     const isPinValid = await bcrypt.compare(pin, localConfig.storePin);
     if (!isPinValid) {
-      throw new Error('Invalid PIN');
+      throw new Error('auth.errors.invalid_pin');
     }
 
     // Find default cashier (first active USER)
@@ -112,7 +112,7 @@ export function setupAuthHandlers(): void {
     });
 
     if (!cashier) {
-      throw new Error('No cashier account found');
+      throw new Error('auth.errors.no_cashier_found');
     }
 
     // Generate JWT token

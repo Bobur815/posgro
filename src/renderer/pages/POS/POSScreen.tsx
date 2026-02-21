@@ -5,12 +5,14 @@ import { Cart } from "./Cart";
 import { ProductSearch } from "./ProductSearch";
 import { Checkout } from "./Checkout";
 import { PosTabBar } from "./PosTabBar";
+import { BulkWeighModal } from "../../components/BulkWeighModal";
 import { useCartStore } from "../../store/cart-store";
 import { useProducts } from "../../hooks/useProducts";
 import { useSales } from "../../hooks/useSales";
 import { useToast } from "../../context/ToastContext";
 import { Delete, SendHorizontal, Trash } from "lucide-react";
 import { Product } from "@shared/types";
+import { parseBarcode } from "../../../shared/utils/barcode-parser";
 
 function parseSaleError(err: unknown, t: (key: string, params?: Record<string, unknown>) => string): string {
   const message = err instanceof Error ? err.message : String(err);
@@ -209,8 +211,10 @@ export function POSScreen() {
   const [inputMode, setInputMode] = useState<InputMode>("barcode");
   const [showCheckout, setShowCheckout] = useState(false);
   const [error, setError] = useState("");
+  const [bulkWeighProduct, setBulkWeighProduct] = useState<Product | null>(null);
 
   const { addItem, items, discount, clearCart, activeTabId, editingSaleId } = useCartStore();
+  // addItem is also used directly for pre-weighed items in handleBarcodeSubmit
   const { searchByBarcode, getById } = useProducts();
   const { createSale, updateSale, isLoading: isPayingLoading } = useSales();
   const toast = useToast();
@@ -315,14 +319,19 @@ export function POSScreen() {
     try {
       const product = (await getById(id.trim())) as Product | null;
       if (product) {
-        const qty = parseFloat(quantity) || 1;
-        addProductToCart(product, qty);
-
         setId("");
         setBarcode("");
         setQuantity("1");
         setInputMode("barcode");
         setError("");
+
+        if (product.productType === 'BULK_WEIGHTED') {
+          setBulkWeighProduct(product);
+          return;
+        }
+
+        const qty = parseFloat(quantity) || 1;
+        addProductToCart(product, qty);
       } else {
         setError(t("products.noResults"));
         setId("");
@@ -339,22 +348,89 @@ export function POSScreen() {
       return handleIdSubmit();
     }
 
-    if (!barcode.trim()) {
+    const barcodeValue = barcode.trim();
+    if (!barcodeValue) {
       setError(t("pos.enterBarcode"));
       return;
     }
 
-    try {
-      const product = (await searchByBarcode(barcode.trim())) as Product | null;
-      if (product) {
-        const qty = parseFloat(quantity) || 1;
-        addProductToCart(product, qty);
+    const resetInputs = () => {
+      setBarcode("");
+      setQuantity("1");
+      setInputMode("barcode");
+      setError("");
+    };
 
-        // Reset inputs
-        setBarcode("");
-        setQuantity("1");
-        setInputMode("barcode");
-        setError("");
+    try {
+      const parsed = parseBarcode(barcodeValue);
+
+      if (parsed.isWeighted && parsed.productCode && parsed.weightKg !== null) {
+        // --- Weighted barcode flow ---
+        // Check if a pre-weighed item exists with this barcode
+        const weighedItem = await window.electronAPI.weighedItems.findByBarcode(barcodeValue) as {
+          id: string;
+          productId: number;
+          weight: number;
+          pricePerKg: number;
+          totalPrice: number;
+          barcode: string;
+          product?: { nameRu: string; nameUz: string; barcode: string };
+        } | null;
+
+        if (weighedItem) {
+          // Found a pre-weighed item — add to cart
+          const productNameForCart =
+            i18n.language === "uz"
+              ? (weighedItem.product?.nameUz || weighedItem.product?.nameRu || '')
+              : (weighedItem.product?.nameRu || '');
+
+          addItem({
+            productId: weighedItem.productId,
+            productName: productNameForCart,
+            barcode: weighedItem.barcode,
+            unitPrice: weighedItem.pricePerKg,
+            quantity: weighedItem.weight,
+            stock: 99999, // pre-weighed items don't have stock limit
+            unit: 'кг',
+            preWeighedItemId: weighedItem.id,
+          });
+
+          resetInputs();
+          toast.success(
+            `${productNameForCart} — ${weighedItem.weight.toFixed(3)} кг — ${Math.round(weighedItem.totalPrice).toLocaleString('ru-RU')} сум`
+          );
+        } else {
+          // No pre-weighed item — look up the product and open BulkWeighModal
+          const product = await window.electronAPI.products.findByInternalCode(parsed.productCode) as Product | null;
+          if (product) {
+            if (product.productType === 'BULK_WEIGHTED') {
+              resetInputs();
+              setBulkWeighProduct(product);
+            } else {
+              // Regular product that happens to have an internalCode — add normally
+              const qty = parseFloat(quantity) || 1;
+              addProductToCart(product, qty);
+              resetInputs();
+            }
+          } else {
+            setError(t("products.noResults"));
+          }
+        }
+        return;
+      }
+
+      // --- Regular barcode flow ---
+      const product = (await searchByBarcode(barcodeValue)) as Product | null;
+      if (product) {
+        if (product.productType === 'BULK_WEIGHTED') {
+          // Scanned the product barcode directly — open modal
+          resetInputs();
+          setBulkWeighProduct(product);
+        } else {
+          const qty = parseFloat(quantity) || 1;
+          addProductToCart(product, qty);
+          resetInputs();
+        }
       } else {
         setError(t("products.noResults"));
       }
@@ -368,8 +444,11 @@ export function POSScreen() {
     quantity,
     searchByBarcode,
     addProductToCart,
+    addItem,
     t,
     handleIdSubmit,
+    i18n.language,
+    toast,
   ]);
 
   const handleQuickPay = useCallback(
@@ -385,6 +464,7 @@ export function POSScreen() {
             barcode: item.barcode,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
+            preWeighedItemId: item.preWeighedItemId,
           })),
           paymentMethod: method,
           discountAmount: discount,
@@ -539,6 +619,11 @@ export function POSScreen() {
   };
 
   const handleProductSelect = (product: Product) => {
+    if (product.productType === 'BULK_WEIGHTED') {
+      setBulkWeighProduct(product);
+      setError("");
+      return;
+    }
     const qty = parseFloat(quantity) || 1;
     addProductToCart(product, qty);
     setQuantity("1");
@@ -548,6 +633,24 @@ export function POSScreen() {
   const handleCheckoutComplete = () => {
     setShowCheckout(false);
   };
+
+  // BulkWeighModal handlers
+  const handleBulkWeighAddNow = useCallback(
+    (weight: number) => {
+      if (!bulkWeighProduct) return;
+      addProductToCart(bulkWeighProduct, weight);
+      setBulkWeighProduct(null);
+    },
+    [bulkWeighProduct, addProductToCart],
+  );
+
+  const handleBulkWeighPrintAndScan = useCallback(
+    (_weighedItemId: string, _barcode: string) => {
+      setBulkWeighProduct(null);
+      toast.info(t('bulkWeigh.scanLabel'));
+    },
+    [toast, t],
+  );
 
   return (
     <PageWrapper>
@@ -663,6 +766,15 @@ export function POSScreen() {
           <Checkout
             onComplete={handleCheckoutComplete}
             onCancel={() => setShowCheckout(false)}
+          />
+        )}
+
+        {bulkWeighProduct && (
+          <BulkWeighModal
+            product={bulkWeighProduct}
+            onAddToCart={handleBulkWeighAddNow}
+            onPrintAndScan={handleBulkWeighPrintAndScan}
+            onCancel={() => setBulkWeighProduct(null)}
           />
         )}
       </Container>

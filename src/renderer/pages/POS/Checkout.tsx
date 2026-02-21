@@ -178,6 +178,7 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
           barcode: item.barcode,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
+          preWeighedItemId: item.preWeighedItemId,
         })),
         paymentMethod,
         discountAmount: discount,

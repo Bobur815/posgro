@@ -33,7 +33,16 @@
     "enterPin": "Введите PIN-код",
     "usePhoneLogin": "Войти с телефоном и паролем",
     "switchUser": "Сменить пользователя",
-    "keyboardHint": "Введите цифры с клавиатуры"
+    "keyboardHint": "Введите цифры с клавиатуры",
+    "errors": {
+      "user_not_found": "Пользователь не найден",
+      "user_deactivated": "Аккаунт пользователя деактивирован",
+      "invalid_password": "Неверный пароль",
+      "invalid_pin": "Неверный PIN-код",
+      "pin_not_configured": "PIN-код магазина не настроен",
+      "no_cashier_found": "Не найден активный аккаунт кассира",
+      "login_failed": "Ошибка входа"
+    }
   },
   "nav": {
     "main": "Главное",
@@ -158,7 +167,39 @@
     "changePriceAfterOldStock": "Изменить после продажи старого остатка",
     "changePriceAfterOldStockDesc": "Цена изменится после продажи {{stock}}",
     "pendingPriceLabel": "Ожидающая цена",
-    "afterStockDrops": "после снижения остатка до {{threshold}}"
+    "afterStockDrops": "после снижения остатка до {{threshold}}",
+    "preWeighed": "Предварительно взвешенные",
+    "available": "Доступно",
+    "sold": "Продано"
+  },
+  "bulkWeigh": {
+    "title": "Взвешивание товара",
+    "placeOnScale": "Положите товар на весы",
+    "printLabel": "Напечатать ярлык и сканировать",
+    "addNow": "Добавить в корзину",
+    "minWeight": "Минимальный вес",
+    "maxWeight": "Максимальный вес",
+    "scanLabel": "Отсканируйте напечатанный ярлык",
+    "enterWeight": "Введите вес",
+    "preWeighedInventory": "Предварительно взвешенные",
+    "allProducts": "Все товары",
+    "filterByProduct": "Фильтр по товару",
+    "filterByStatus": "Фильтр по статусу",
+    "allStatuses": "Все статусы",
+    "voidItem": "Аннулировать",
+    "confirmVoid": "Аннулировать этот взвешенный товар?",
+    "itemVoided": "Товар аннулирован",
+    "totalAvailable": "Доступно единиц",
+    "totalValue": "Общая стоимость",
+    "soldToday": "Продано сегодня"
+  },
+  "scaleSettings": {
+    "title": "Весы и ярлыки",
+    "description": "Настройки весов и принтера ярлыков",
+    "labelPrinterName": "Принтер ярлыков",
+    "labelWidthMm": "Ширина ярлыка (мм)",
+    "testPrint": "Тестовая печать",
+    "saved": "Настройки сохранены"
   },
   "reports": {
     "title": "Отчеты",

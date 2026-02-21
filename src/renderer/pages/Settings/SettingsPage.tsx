@@ -11,6 +11,7 @@ import {
   Tag,
   Users,
   Package,
+  Scale,
 } from 'lucide-react';
 
 const Container = styled.div`
@@ -112,6 +113,12 @@ export function SettingsPage() {
       title: t('settings.inventorySettings'),
       description: t('settings.inventorySettingsDescription'),
       path: '/products/stock',
+    },
+    {
+      icon: <Scale size={32} />,
+      title: t('scaleSettings.title'),
+      description: t('scaleSettings.description'),
+      path: '/settings/scale',
     },
   ];
 

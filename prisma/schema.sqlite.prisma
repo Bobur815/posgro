@@ -82,14 +82,46 @@ model Product {
   mxik                  String?   @map("mxik")
   active                Boolean   @default(true)
 
+  // Weighted product fields
+  // productType: REGULAR | BULK_WEIGHTED | PREPACKAGED
+  productType   String  @default("REGULAR") @map("product_type")
+  internalCode  String? @unique @map("internal_code") // 5-digit code for weighted products
+  canPrintLabel Boolean @default(false) @map("can_print_label")
+  bulkQuantity  Decimal @default(0) @map("bulk_quantity")
+  minSaleQty    Decimal @default(0) @map("min_sale_qty")
+  maxSaleQty    Decimal @default(0) @map("max_sale_qty")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   sales              SaleItem[]
   inventoryMovements InventoryArrival[]
+  preWeighedItems    PreWeighedItem[]
 
   @@index([mxik]) // Fast MXIK lookup
   @@map("products")
+}
+
+// ==================== PRE-WEIGHED ITEMS ====================
+
+model PreWeighedItem {
+  id           String   @id @default(cuid())
+  productId    Int      @map("product_id")
+  product      Product  @relation(fields: [productId], references: [id])
+  internalCode String   @map("internal_code")
+  weight       Decimal  // in kg
+  barcode      String   @unique
+  pricePerKg   Decimal  @map("price_per_kg")
+  totalPrice   Decimal  @map("total_price")
+  // status: AVAILABLE | SOLD
+  status       String   @default("AVAILABLE")
+  createdAt    DateTime @default(now()) @map("created_at")
+  soldAt       DateTime? @map("sold_at")
+  saleId       String?  @map("sale_id")
+
+  @@index([barcode])
+  @@index([status])
+  @@map("pre_weighed_items")
 }
 
 // ==================== SALES ====================

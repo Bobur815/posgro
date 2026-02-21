@@ -33,7 +33,16 @@
     "enterPin": "PIN-kodni kiriting",
     "usePhoneLogin": "Telefon va parol bilan kirish",
     "switchUser": "Foydalanuvchini almashtirish",
-    "keyboardHint": "Klaviaturadan raqamlarni kiriting"
+    "keyboardHint": "Klaviaturadan raqamlarni kiriting",
+    "errors": {
+      "user_not_found": "Foydalanuvchi topilmadi",
+      "user_deactivated": "Foydalanuvchi hisobi o'chirilgan",
+      "invalid_password": "Noto'g'ri parol",
+      "invalid_pin": "Noto'g'ri PIN-kod",
+      "pin_not_configured": "Do'kon PIN-kodi sozlanmagan",
+      "no_cashier_found": "Faol kassir hisobi topilmadi",
+      "login_failed": "Kirish xatosi"
+    }
   },
   "nav": {
     "main": "Asosiy",
@@ -158,7 +167,39 @@
     "changePriceAfterOldStock": "Eski qoldiq sotilgandan keyin o'zgartirish",
     "changePriceAfterOldStockDesc": "{{stock}} sotilgandan keyin narx o'zgaradi",
     "pendingPriceLabel": "Kutilayotgan narx",
-    "afterStockDrops": "qoldiq {{threshold}} ga tushgandan keyin"
+    "afterStockDrops": "qoldiq {{threshold}} ga tushgandan keyin",
+    "preWeighed": "Oldindan tortilgan",
+    "available": "Mavjud",
+    "sold": "Sotilgan"
+  },
+  "bulkWeigh": {
+    "title": "Mahsulotni tortish",
+    "placeOnScale": "Mahsulotni taroziga qo'ying",
+    "printLabel": "Yorliq chop etish va skanerlash",
+    "addNow": "Savatga qo'shish",
+    "minWeight": "Minimal og'irlik",
+    "maxWeight": "Maksimal og'irlik",
+    "scanLabel": "Chop etilgan yorliqni skanerlang",
+    "enterWeight": "Og'irlikni kiriting",
+    "preWeighedInventory": "Oldindan tortilgan",
+    "allProducts": "Barcha mahsulotlar",
+    "filterByProduct": "Mahsulot bo'yicha filter",
+    "filterByStatus": "Holat bo'yicha filter",
+    "allStatuses": "Barcha holatlar",
+    "voidItem": "Bekor qilish",
+    "confirmVoid": "Bu tortilgan mahsulotni bekor qilasizmi?",
+    "itemVoided": "Mahsulot bekor qilindi",
+    "totalAvailable": "Mavjud birliklar",
+    "totalValue": "Jami qiymati",
+    "soldToday": "Bugun sotilgan"
+  },
+  "scaleSettings": {
+    "title": "Tarozilar va yorliqlar",
+    "description": "Tarozi va yorliq printeri sozlamalari",
+    "labelPrinterName": "Yorliq printeri",
+    "labelWidthMm": "Yorliq kengligi (mm)",
+    "testPrint": "Test chop etish",
+    "saved": "Sozlamalar saqlandi"
   },
   "reports": {
     "title": "Hisobotlar",

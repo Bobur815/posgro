@@ -8,6 +8,7 @@ export interface CartItem {
   quantity: number;
   stock: number;
   unit?: string;
+  preWeighedItemId?: string; // Set when item came from pre-weighed inventory; never merge
 }
 
 interface TabCart {
@@ -135,9 +136,14 @@ export const useCartStore = create<CartState>((set, get) => ({
   addItem: (item) => {
     const state = get();
     const cart = activeCart(state);
-    const existingIndex = cart.items.findIndex(
-      (i) => i.productId === item.productId && i.unitPrice === item.unitPrice
-    );
+
+    // Pre-weighed items are never merged — each is a unique scan
+    const canMerge = !item.preWeighedItemId;
+    const existingIndex = canMerge
+      ? cart.items.findIndex(
+          (i) => i.productId === item.productId && i.unitPrice === item.unitPrice && !i.preWeighedItemId
+        )
+      : -1;
 
     let newItems: CartItem[];
 

@@ -17,6 +17,8 @@ export const products = {
     ipc?.products.getAll(filters),
   getById: (id: string) => ipc?.products.getById(id),
   getByBarcode: (barcode: string) => ipc?.products.getByBarcode(barcode),
+  findByInternalCode: (internalCode: string) =>
+    ipc?.products.findByInternalCode(internalCode),
   create: (data: unknown) => ipc?.products.create(data),
   update: (id: string, data: unknown) => ipc?.products.update(id, data),
   delete: (id: string) => ipc?.products.delete(id),
@@ -83,6 +85,17 @@ export const printer = {
   printReceipt: (saleId: string) => ipc?.printer.printReceipt(saleId),
   testPrint: () => ipc?.printer.testPrint(),
   getAvailablePrinters: () => ipc?.printer.getAvailablePrinters(),
+  printWeightedLabel: (data: unknown) => ipc?.printer.printWeightedLabel(data),
+};
+
+export const weighedItems = {
+  create: (data: unknown) => ipc?.weighedItems.create(data),
+  findByBarcode: (barcode: string) => ipc?.weighedItems.findByBarcode(barcode),
+  markAsSold: (id: string, saleId?: string) =>
+    ipc?.weighedItems.markAsSold(id, saleId),
+  getAvailable: (productId: number) => ipc?.weighedItems.getAvailable(productId),
+  getAll: (filters?: unknown) => ipc?.weighedItems.getAll(filters),
+  delete: (id: string) => ipc?.weighedItems.delete(id),
 };
 
 export const settings = {

@@ -1,6 +1,7 @@
 import { Supplier } from './supplier.types';
 
 export type ProductUnit = 'шт' | 'кг' | 'л' | 'м';
+export type ProductType = 'REGULAR' | 'BULK_WEIGHTED' | 'PREPACKAGED';
 
 // Re-export Supplier for backwards compatibility
 export type { Supplier } from './supplier.types';
@@ -32,6 +33,28 @@ export interface Product {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  // Weighted product fields
+  productType?: ProductType;
+  internalCode?: string;
+  canPrintLabel?: boolean;
+  bulkQuantity?: number;
+  minSaleQty?: number;
+  maxSaleQty?: number;
+}
+
+export interface PreWeighedItem {
+  id: string;
+  productId: number;
+  product?: Product;
+  internalCode: string;
+  weight: number;  // kg
+  barcode: string;
+  pricePerKg: number;
+  totalPrice: number;
+  status: 'AVAILABLE' | 'SOLD';
+  createdAt: string;
+  soldAt?: string | null;
+  saleId?: string | null;
 }
 
 export interface Category {

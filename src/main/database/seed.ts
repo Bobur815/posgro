@@ -182,7 +182,97 @@ export async function seedLocalDatabase(): Promise<void> {
         await prisma.product.create({ data: product });
       }
       console.log(`${products.length} products created`);
+
+      // ==================== BULK WEIGHTED PRODUCTS ====================
+      const weightedProducts = [
+        {
+          barcode: '2000001000000', // placeholder barcode (will be overridden by direct scan)
+          nameUz: 'Shakar (og\'irlik)',
+          nameRu: 'Сахар (на вес)',
+          price: 4667, // per kg
+          stock: 50,
+          minStock: 5,
+          unit: 'кг',
+          categoryId: categoryMap.get('Бакалея')!,
+          discountPercent: 0,
+          isOnPromotion: false,
+          productType: 'BULK_WEIGHTED',
+          internalCode: '00001',
+          canPrintLabel: true,
+          bulkQuantity: 50,
+          minSaleQty: 0.1,
+          maxSaleQty: 25,
+        },
+        {
+          barcode: '2000002000000',
+          nameUz: 'Guruch (og\'irlik)',
+          nameRu: 'Рис (на вес)',
+          price: 12000,
+          stock: 100,
+          minStock: 10,
+          unit: 'кг',
+          categoryId: categoryMap.get('Бакалея')!,
+          discountPercent: 0,
+          isOnPromotion: false,
+          productType: 'BULK_WEIGHTED',
+          internalCode: '00002',
+          canPrintLabel: true,
+          bulkQuantity: 100,
+          minSaleQty: 0.1,
+          maxSaleQty: 50,
+        },
+        {
+          barcode: '2000003000000',
+          nameUz: 'Un (og\'irlik)',
+          nameRu: 'Мука (на вес)',
+          price: 3500,
+          stock: 200,
+          minStock: 20,
+          unit: 'кг',
+          categoryId: categoryMap.get('Бакалея')!,
+          discountPercent: 0,
+          isOnPromotion: false,
+          productType: 'BULK_WEIGHTED',
+          internalCode: '00003',
+          canPrintLabel: true,
+          bulkQuantity: 200,
+          minSaleQty: 0.1,
+          maxSaleQty: 100,
+        },
+      ];
+
+      for (const product of weightedProducts) {
+        const existing = await prisma.product.findUnique({ where: { internalCode: product.internalCode } });
+        if (!existing) {
+          await prisma.product.create({ data: product });
+        }
+      }
+      console.log(`${weightedProducts.length} bulk weighted products created`);
     }
+
+  // ==================== BULK WEIGHTED PRODUCTS (always check) ====================
+  // Run outside of productCount === 0 block so they're added to existing DBs too
+  {
+    const categories: Category[] = await prisma.category.findMany();
+    const categoryMap = new Map(categories.map((c) => [c.nameRu, c.id]));
+    const bakaleaId = categoryMap.get('Бакалея');
+    if (bakaleaId) {
+      const weightedDefs = [
+        { barcode: '2000001000000', nameUz: "Shakar (og'irlik)", nameRu: 'Сахар (на вес)', price: 4667, stock: 50, minStock: 5, unit: 'кг', internalCode: '00001', canPrintLabel: true, bulkQuantity: 50, minSaleQty: 0.1, maxSaleQty: 25 },
+        { barcode: '2000002000000', nameUz: "Guruch (og'irlik)", nameRu: 'Рис (на вес)', price: 12000, stock: 100, minStock: 10, unit: 'кг', internalCode: '00002', canPrintLabel: true, bulkQuantity: 100, minSaleQty: 0.1, maxSaleQty: 50 },
+        { barcode: '2000003000000', nameUz: "Un (og'irlik)", nameRu: 'Мука (на вес)', price: 3500, stock: 200, minStock: 20, unit: 'кг', internalCode: '00003', canPrintLabel: true, bulkQuantity: 200, minSaleQty: 0.1, maxSaleQty: 100 },
+      ];
+      for (const def of weightedDefs) {
+        const existing = await prisma.product.findUnique({ where: { internalCode: def.internalCode } });
+        if (!existing) {
+          await prisma.product.create({
+            data: { ...def, categoryId: bakaleaId, discountPercent: 0, isOnPromotion: false, productType: 'BULK_WEIGHTED' },
+          });
+        }
+      }
+      console.log('Bulk weighted products ensured');
+    }
+  }
 
   // ==================== SYSTEM SETTINGS ====================
   const defaultSettings = [

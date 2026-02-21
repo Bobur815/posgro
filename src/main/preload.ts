@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getById: (id: string) => ipcRenderer.invoke('products:getById', id),
     getByBarcode: (barcode: string) =>
       ipcRenderer.invoke('products:getByBarcode', barcode),
+    findByInternalCode: (internalCode: string) =>
+      ipcRenderer.invoke('products:findByInternalCode', internalCode),
     create: (data: unknown) => ipcRenderer.invoke('products:create', data),
     update: (id: string, data: unknown) =>
       ipcRenderer.invoke('products:update', id, data),
@@ -116,6 +118,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAvailablePrinters: () => ipcRenderer.invoke('printer:getAvailable'),
     printPriceTags: (html: string, widthMm: number, heightMm: number) =>
       ipcRenderer.invoke('printer:printPriceTags', html, widthMm, heightMm),
+    printWeightedLabel: (data: unknown) =>
+      ipcRenderer.invoke('printer:printWeightedLabel', data),
+  },
+
+  // Pre-weighed items
+  weighedItems: {
+    create: (data: unknown) => ipcRenderer.invoke('weighedItems:create', data),
+    findByBarcode: (barcode: string) =>
+      ipcRenderer.invoke('weighedItems:findByBarcode', barcode),
+    markAsSold: (id: string, saleId?: string) =>
+      ipcRenderer.invoke('weighedItems:markAsSold', id, saleId),
+    getAvailable: (productId: number) =>
+      ipcRenderer.invoke('weighedItems:getAvailable', productId),
+    getAll: (filters?: unknown) =>
+      ipcRenderer.invoke('weighedItems:getAll', filters),
+    delete: (id: string) => ipcRenderer.invoke('weighedItems:delete', id),
   },
 
   // Settings
@@ -158,6 +176,7 @@ declare global {
         getAll: (filters?: unknown) => Promise<unknown[]>;
         getById: (id: string) => Promise<unknown>;
         getByBarcode: (barcode: string) => Promise<unknown>;
+        findByInternalCode: (internalCode: string) => Promise<unknown>;
         create: (data: unknown) => Promise<unknown>;
         update: (id: string, data: unknown) => Promise<unknown>;
         delete: (id: string) => Promise<boolean>;
@@ -214,6 +233,15 @@ declare global {
         testPrint: () => Promise<boolean>;
         getAvailablePrinters: () => Promise<string[]>;
         printPriceTags: (html: string, widthMm: number, heightMm: number) => Promise<boolean>;
+        printWeightedLabel: (data: unknown) => Promise<boolean>;
+      };
+      weighedItems: {
+        create: (data: unknown) => Promise<unknown>;
+        findByBarcode: (barcode: string) => Promise<unknown>;
+        markAsSold: (id: string, saleId?: string) => Promise<unknown>;
+        getAvailable: (productId: number) => Promise<unknown[]>;
+        getAll: (filters?: unknown) => Promise<unknown>;
+        delete: (id: string) => Promise<boolean>;
       };
       settings: {
         get: (key: string) => Promise<string | null>;

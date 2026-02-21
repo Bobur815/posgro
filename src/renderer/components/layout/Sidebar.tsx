@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Truck,
+  Scale,
   type LucideIcon,
 } from "lucide-react";
 import { useAuthStore } from "../../store/auth-store";
@@ -369,6 +370,7 @@ export function Sidebar() {
               ClipboardList,
               t("nav.inventory"),
             )}
+            {renderNavItem("/inventory/weighed", Scale, t("inventory.preWeighed"))}
             {renderNavItem("/suppliers", Truck, t("suppliers.title"))}
             {renderNavItem("/users", Users, t("nav.users"))}
             {renderNavItem("/settings", Settings, t("nav.settings"))}

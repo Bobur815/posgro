@@ -24,6 +24,8 @@ export type {
   ProductUpdateInput,
   Category,
   ProductUnit,
+  ProductType,
+  PreWeighedItem,
   ProductSearchQuery,
   LowStockProduct,
   StockAvailability,

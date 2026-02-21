@@ -15,6 +15,17 @@ let printerConfig: PrinterConfig = {
   width: 42, // Standard thermal printer width
 };
 
+export interface WeightedLabelData {
+  productNameRu: string;
+  productNameUz: string;
+  internalCode: string;
+  barcode: string;
+  weightKg: number;
+  pricePerKg: number;
+  totalPrice: number;
+  date: string;
+}
+
 export function setupPrinterHandlers(): void {
   ipcMain.handle('printer:printReceipt', async (_event, saleId: string) => {
     return printReceipt(saleId);
@@ -30,6 +41,10 @@ export function setupPrinterHandlers(): void {
 
   ipcMain.handle('printer:printPriceTags', async (_event, html: string, widthMm: number, heightMm: number) => {
     return printPriceTags(html, widthMm, heightMm);
+  });
+
+  ipcMain.handle('printer:printWeightedLabel', async (_event, data: WeightedLabelData) => {
+    return printWeightedLabel(data);
   });
 }
 
@@ -226,6 +241,75 @@ async function printPriceTags(html: string, widthMm: number, heightMm: number): 
       );
     });
   });
+}
+
+async function printWeightedLabel(data: WeightedLabelData): Promise<boolean> {
+  const prisma = getPrismaClient();
+  const rows = await prisma.systemSetting.findMany({
+    where: { key: { in: ['label_printer_name', 'label_width_mm'] } },
+  });
+  const map = rows.reduce(
+    (acc: Record<string, string>, s: { key: string; value: string }) => ({ ...acc, [s.key]: s.value }),
+    {} as Record<string, string>,
+  );
+
+  const labelPrinterName = map.label_printer_name || printerConfig.name;
+  const widthMm = parseInt(map.label_width_mm || '58', 10) || 58;
+  const heightMm = 40;
+
+  const formattedWeight = data.weightKg.toFixed(3);
+  const formattedPrice = Math.round(data.pricePerKg).toLocaleString('ru-RU');
+  const formattedTotal = Math.round(data.totalPrice).toLocaleString('ru-RU');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: ${widthMm}mm;
+    height: ${heightMm}mm;
+    font-family: Arial, sans-serif;
+    padding: 2mm;
+    overflow: hidden;
+  }
+  .label { display: flex; flex-direction: column; height: 100%; }
+  .name { font-size: 9pt; font-weight: bold; line-height: 1.1; margin-bottom: 1mm; }
+  .row { display: flex; justify-content: space-between; font-size: 8pt; margin-bottom: 0.5mm; }
+  .total { font-size: 14pt; font-weight: bold; text-align: center; margin: 1mm 0; }
+  .barcode-text { font-size: 6pt; text-align: center; font-family: monospace; letter-spacing: 1px; }
+  .barcode-bars { text-align: center; font-size: 28pt; font-family: 'Libre Barcode 128', monospace; line-height: 1; }
+  .date { font-size: 6pt; color: #666; text-align: right; margin-top: auto; }
+  hr { border: none; border-top: 1px solid #ccc; margin: 1mm 0; }
+</style>
+</head>
+<body>
+<div class="label">
+  <div class="name">${data.productNameRu}</div>
+  <hr/>
+  <div class="row">
+    <span>Вес: <b>${formattedWeight} кг</b></span>
+    <span>Цена/кг: <b>${formattedPrice}</b></span>
+  </div>
+  <div class="total">${formattedTotal} сум</div>
+  <hr/>
+  <div class="barcode-text">${data.barcode}</div>
+  <div class="date">${data.date} | ${data.internalCode}</div>
+</div>
+</body>
+</html>`;
+
+  // Use label-specific printer if configured, otherwise fall back to default
+  const origName = printerConfig.name;
+  if (labelPrinterName && labelPrinterName !== origName) {
+    printerConfig = { ...printerConfig, name: labelPrinterName };
+    const result = await printHTML(html, widthMm);
+    printerConfig = { ...printerConfig, name: origName };
+    return result;
+  }
+
+  return printHTML(html, widthMm);
 }
 
 export function setPrinterConfig(config: Partial<PrinterConfig>): void {

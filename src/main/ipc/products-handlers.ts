@@ -53,6 +53,13 @@ function serializeProduct(product: any): Product | null {
     isActive: Boolean(product.active ?? true),
     createdAt: toISOString(product.createdAt),
     updatedAt: toISOString(product.updatedAt),
+    // Weighted fields
+    productType: (product.productType || 'REGULAR') as Product['productType'],
+    internalCode: product.internalCode || undefined,
+    canPrintLabel: Boolean(product.canPrintLabel ?? false),
+    bulkQuantity: toNumber(product.bulkQuantity),
+    minSaleQty: toNumber(product.minSaleQty),
+    maxSaleQty: toNumber(product.maxSaleQty),
   };
 
   if (product.category) {
@@ -412,6 +419,15 @@ export function setupProductsHandlers(): void {
     });
 
     return true;
+  });
+
+  ipcMain.handle('products:findByInternalCode', async (_event, internalCode: string) => {
+    const prisma = getPrismaClient();
+    const product = await prisma.product.findUnique({
+      where: { internalCode },
+      include: { category: true, supplier: true },
+    });
+    return ipcSafe(serializeProduct(product));
   });
 
   // Product analytics API

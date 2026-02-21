@@ -2,6 +2,7 @@ import { ipcMain, app } from 'electron';
 import { setupAuthHandlers } from './auth-handlers';
 import { setupProductsHandlers } from './products-handlers';
 import { setupSalesHandlers } from './sales-handlers';
+import { setupWeighedItemsHandlers } from './weighed-items-handlers';
 import { getAppConfig } from '../config/app-config';
 import { getPrismaClient } from '../database/sqlite-client';
 import { setPrinterConfig, setupPrinterHandlers } from '../printer/thermal-printer';
@@ -12,6 +13,7 @@ export function setupIpcHandlers(): void {
   setupAuthHandlers();
   setupProductsHandlers();
   setupSalesHandlers();
+  setupWeighedItemsHandlers();
   setupCategoriesHandlers();
   setupInventoryHandlers();
   setupSuppliersHandlers();

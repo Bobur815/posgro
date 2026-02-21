@@ -139,6 +139,13 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
       is_on_promotion INTEGER DEFAULT 0,
       pending_price REAL,
       pending_price_threshold REAL,
+      mxik TEXT,
+      product_type TEXT DEFAULT 'REGULAR',
+      internal_code TEXT UNIQUE,
+      can_print_label INTEGER DEFAULT 0,
+      bulk_quantity REAL DEFAULT 0,
+      min_sale_qty REAL DEFAULT 0,
+      max_sale_qty REAL DEFAULT 0,
       active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -230,12 +237,33 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
     )
   `;
 
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS pre_weighed_items (
+      id TEXT PRIMARY KEY,
+      product_id INTEGER NOT NULL,
+      internal_code TEXT NOT NULL,
+      weight REAL NOT NULL,
+      barcode TEXT UNIQUE NOT NULL,
+      price_per_kg REAL NOT NULL,
+      total_price REAL NOT NULL,
+      status TEXT DEFAULT 'AVAILABLE',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      sold_at DATETIME,
+      sale_id TEXT,
+      FOREIGN KEY (product_id) REFERENCES products(id)
+    )
+  `;
+
   // Create indexes
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_products_supplier ON products(supplier_id)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_products_expiry ON products(expiry_date)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_products_promotion ON products(is_on_promotion)`;
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_products_mxik ON products(mxik)`;
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_products_internal_code ON products(internal_code)`;
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_pre_weighed_barcode ON pre_weighed_items(barcode)`;
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_pre_weighed_status ON pre_weighed_items(status)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_sales_synced ON sales(synced)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id)`;
@@ -275,6 +303,57 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN pending_price REAL`;
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN pending_price_threshold REAL`;
     console.log('Migration completed: Pending price fields added');
+  }
+
+  // Migration 4: Add mxik column for tax classification code
+  try {
+    await prisma.$queryRaw`SELECT mxik FROM products LIMIT 1`;
+  } catch {
+    console.log('Running migration: Adding mxik column to products...');
+    await prisma.$executeRaw`ALTER TABLE products ADD COLUMN mxik TEXT`;
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_products_mxik ON products(mxik)`;
+    console.log('Migration completed: mxik column added');
+  }
+
+  // Migration 5: Add weighted product fields
+  try {
+    await prisma.$queryRaw`SELECT product_type FROM products LIMIT 1`;
+  } catch {
+    console.log('Running migration: Adding weighted product fields...');
+    await prisma.$executeRaw`ALTER TABLE products ADD COLUMN product_type TEXT DEFAULT 'REGULAR'`;
+    await prisma.$executeRaw`ALTER TABLE products ADD COLUMN internal_code TEXT`;
+    await prisma.$executeRaw`ALTER TABLE products ADD COLUMN can_print_label INTEGER DEFAULT 0`;
+    await prisma.$executeRaw`ALTER TABLE products ADD COLUMN bulk_quantity REAL DEFAULT 0`;
+    await prisma.$executeRaw`ALTER TABLE products ADD COLUMN min_sale_qty REAL DEFAULT 0`;
+    await prisma.$executeRaw`ALTER TABLE products ADD COLUMN max_sale_qty REAL DEFAULT 0`;
+    await prisma.$executeRaw`CREATE UNIQUE INDEX IF NOT EXISTS idx_products_internal_code ON products(internal_code)`;
+    console.log('Migration completed: weighted product fields added');
+  }
+
+  // Migration 6: Create pre_weighed_items table
+  try {
+    await prisma.$queryRaw`SELECT 1 FROM pre_weighed_items LIMIT 1`;
+  } catch {
+    console.log('Running migration: Creating pre_weighed_items table...');
+    await prisma.$executeRaw`
+      CREATE TABLE IF NOT EXISTS pre_weighed_items (
+        id TEXT PRIMARY KEY,
+        product_id INTEGER NOT NULL,
+        internal_code TEXT NOT NULL,
+        weight REAL NOT NULL,
+        barcode TEXT UNIQUE NOT NULL,
+        price_per_kg REAL NOT NULL,
+        total_price REAL NOT NULL,
+        status TEXT DEFAULT 'AVAILABLE',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        sold_at DATETIME,
+        sale_id TEXT,
+        FOREIGN KEY (product_id) REFERENCES products(id)
+      )
+    `;
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_pre_weighed_barcode ON pre_weighed_items(barcode)`;
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_pre_weighed_status ON pre_weighed_items(status)`;
+    console.log('Migration completed: pre_weighed_items table created');
   }
 }
 

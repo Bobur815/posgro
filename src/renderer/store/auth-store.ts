@@ -49,9 +49,11 @@ export const useAuthStore = create<AuthState>()(
 
           return true;
         } catch (err) {
+          const raw = err instanceof Error ? err.message : '';
+          const match = raw.match(/Error:\s*(auth\.errors\.\S+)/);
           set({
             isLoading: false,
-            error: err instanceof Error ? err.message : 'Login failed',
+            error: match ? match[1] : 'auth.errors.login_failed',
           });
           return false;
         }
@@ -75,9 +77,11 @@ export const useAuthStore = create<AuthState>()(
 
           return true;
         } catch (err) {
+          const raw = err instanceof Error ? err.message : '';
+          const match = raw.match(/Error:\s*(auth\.errors\.\S+)/);
           set({
             isLoading: false,
-            error: err instanceof Error ? err.message : 'Invalid PIN',
+            error: match ? match[1] : 'auth.errors.invalid_pin',
           });
           return false;
         }

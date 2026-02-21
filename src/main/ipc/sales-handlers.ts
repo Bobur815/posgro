@@ -52,6 +52,7 @@ export function setupSalesHandlers(): void {
       barcode: string;
       quantity: number;
       unitPrice: number;
+      preWeighedItemId?: string;
     }) => {
       const subtotal = item.quantity * item.unitPrice;
       totalAmount += subtotal;
@@ -62,6 +63,8 @@ export function setupSalesHandlers(): void {
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         subtotal,
+        // Keep preWeighedItemId for post-sale update (not stored in DB SaleItem)
+        preWeighedItemId: item.preWeighedItemId,
       };
     });
 
@@ -117,6 +120,22 @@ export function setupSalesHandlers(): void {
             pendingPrice: null,
             pendingPriceThreshold: null,
           },
+        });
+      }
+    }
+
+    // Mark any pre-weighed items as SOLD
+    for (const item of data.items as Array<{
+      productId: number | string;
+      quantity: number;
+      preWeighedItemId?: string;
+    }>) {
+      if (item.preWeighedItemId) {
+        await prisma.preWeighedItem.update({
+          where: { id: item.preWeighedItemId },
+          data: { status: 'SOLD', soldAt: new Date(), saleId: sale.id },
+        }).catch(() => {
+          // Item may have already been marked sold or not exist — not fatal
         });
       }
     }

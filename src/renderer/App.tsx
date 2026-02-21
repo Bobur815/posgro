@@ -24,6 +24,8 @@ import { ReceiptSettings } from "./pages/Settings/ReceiptSettings";
 import { UserList } from "./pages/Users/UserList";
 import { UserForm } from "./pages/Users/UserForm";
 import { SupplierList, SupplierForm, SupplierDetails } from "./pages/Suppliers";
+import { WeighedInventoryPage } from "./pages/Inventory/WeighedInventoryPage";
+import { ScaleSettings } from "./pages/Settings/ScaleSettings";
 
 function App() {
   const { isAuthenticated } = useAuthStore();
@@ -148,6 +150,14 @@ function App() {
             </RoleGuard>
           }
         />
+        <Route
+          path="settings/scale"
+          element={
+            <RoleGuard allowedRoles={["ADMIN"]}>
+              <ScaleSettings />
+            </RoleGuard>
+          }
+        />
 
         {/* User Management (Admin only) */}
         <Route
@@ -205,6 +215,16 @@ function App() {
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
               <SupplierForm />
+            </RoleGuard>
+          }
+        />
+
+        {/* Weighed Inventory (Admin only) */}
+        <Route
+          path="inventory/weighed"
+          element={
+            <RoleGuard allowedRoles={["ADMIN"]}>
+              <WeighedInventoryPage />
             </RoleGuard>
           }
         />

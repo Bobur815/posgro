@@ -436,7 +436,7 @@ export function PinLoginPage() {
                 </PinButton>
               </PinPad>
 
-              <ErrorMessage>{error || ""}</ErrorMessage>
+              <ErrorMessage>{error ? t(error, { defaultValue: error }) : ""}</ErrorMessage>
 
               <KeyboardHint>{t("auth.keyboardHint")}</KeyboardHint>
 
@@ -482,7 +482,7 @@ export function PinLoginPage() {
                   ref={passwordRef}
                   required
                 />
-                {error && <ErrorMessage>{error}</ErrorMessage>}
+                {error && <ErrorMessage>{t(error, { defaultValue: error })}</ErrorMessage>}
                 <Button
                   type="submit"
                   disabled={isLoading || !isUzPhoneComplete(phoneDigits)}
