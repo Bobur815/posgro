@@ -1,0 +1,439 @@
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import styled from "styled-components";
+import { useProducts } from "../../hooks/useProducts";
+import { useAuthStore } from "../../store/auth-store";
+import { Table } from "@components/common/Table";
+import { Pagination } from "@components/common/Pagination";
+import { usePagination } from "../../hooks/usePagination";
+import { Button } from "@components/common/Button";
+import { Input } from "@components/common/Input";
+import { ProductFilters } from "@components/products/ProductFilters";
+import { Product, ProductFilterParams } from "@shared/types";
+import { useToast } from "@context/ToastContext";
+import {
+  ChevronDown,
+  ChevronUp,
+  ScanLine,
+  SendHorizontal,
+  X,
+} from "lucide-react";
+import { SupplierManagementModal } from "../Suppliers/SupplierManagementModal";
+import { NewArrivalModal } from "./NewArrivalModal";
+import { ReceiptScanModal } from "./ReceiptScanModal";
+import { debounce } from "../../utils/helpers";
+import { formatCurrency as formatCurrencyBase } from "@shared/utils";
+
+const Container = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.spacing.md};
+  position: relative;
+`;
+
+const Header = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+`;
+
+const SearchRow = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.md};
+  align-items: flex-end;
+  flex-wrap: wrap;
+`;
+
+const SearchField = styled.div`
+  flex: 1;
+  min-width: 120px;
+`;
+
+const SearchLabel = styled.div`
+  font-size: 12px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  margin-bottom: ${({ theme }) => theme.spacing.xs};
+  text-transform: uppercase;
+  font-weight: 500;
+`;
+
+const SearchInput = styled.input`
+  width: 100%;
+  padding: ${({ theme }) => theme.spacing.sm} ${({ theme }) => theme.spacing.md};
+  font-size: 16px;
+  font-weight: bold;
+  border: 2px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  background-color: ${({ theme }) => theme.colors.background};
+  color: ${({ theme }) => theme.colors.text};
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+
+  &:focus {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.primary};
+  }
+`;
+
+const SubmitButton = styled.button`
+  height: 46px;
+  width: 46px;
+  border-radius: ${({ theme }) => theme.borderRadius};
+  border: none;
+  background-color: ${({ theme }) => theme.colors.success};
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  &:hover {
+    opacity: 0.9;
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+`;
+
+const Title = styled.h1`
+  margin: 0;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const LowStockBadge = styled.span`
+  background-color: ${({ theme }) => theme.colors.warning};
+  color: white;
+  padding: 6px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  margin-left: ${({ theme }) => theme.spacing.sm};
+`;
+
+const OutOfStockBadge = styled.span`
+  background-color: ${({ theme }) => theme.colors.error};
+  color: white;
+  padding: 6px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  margin-left: ${({ theme }) => theme.spacing.sm};
+`;
+
+const SearchWrapper = styled.div`
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+`;
+
+const ClearBtn = styled.button`
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  display: flex;
+  align-items: center;
+  padding: 4px;
+`;
+
+export function StockManagement() {
+  const { t, i18n } = useTranslation();
+  const {
+    products,
+    categories,
+    suppliers,
+    loadProducts,
+    loadCategories,
+    loadSuppliers,
+    searchByBarcode,
+    getById,
+    isLoading,
+  } = useProducts();
+  const { user } = useAuthStore();
+  const toast = useToast();
+
+  const [showArrival, setShowArrival] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [filters, setFilters] = useState<ProductFilterParams>({});
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const [idInput, setIdInput] = useState("");
+  const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [showReceiptScan, setShowReceiptScan] = useState(false);
+
+  useEffect(() => {
+    loadProducts();
+    loadCategories();
+    loadSuppliers();
+  }, [loadProducts, loadCategories, loadSuppliers]);
+
+  const debouncedSearch = useMemo(
+    () =>
+      debounce((query: string, f: ProductFilterParams) => {
+        const params: ProductFilterParams = { ...f };
+        if (query.trim()) {
+          params.query = query;
+        }
+        loadProducts(params);
+      }, 300),
+    [loadProducts],
+  );
+
+  useEffect(() => {
+    debouncedSearch(searchQuery, filters);
+  }, [filters, searchQuery, debouncedSearch]);
+
+  const handleAddArrival = (product: Product) => {
+    setSelectedProduct(product);
+    setShowArrival(true);
+  };
+
+  const handleBarcodeSubmit = useCallback(async () => {
+    if (!barcodeInput.trim()) return;
+    const product = (await searchByBarcode(
+      barcodeInput.trim(),
+    )) as Product | null;
+    if (product) {
+      handleAddArrival(product);
+      setBarcodeInput("");
+    } else {
+      toast.error(t("products.noResults"));
+      setBarcodeInput("");
+    }
+  }, [barcodeInput, searchByBarcode, t]);
+
+  const handleIdSubmit = useCallback(async () => {
+    if (!idInput.trim()) return;
+    const product = (await getById(idInput.trim())) as Product | null;
+    if (product) {
+      handleAddArrival(product);
+      setIdInput("");
+    } else {
+      toast.error(t("products.noResults"));
+      setIdInput("");
+    }
+  }, [idInput, getById, t]);
+
+  const {
+    pageData,
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    pageSizeOptions,
+    pageOffset,
+    goToPage,
+    setPageSize,
+  } = usePagination(products);
+
+  const formatCurrency = (amount: number) =>
+    formatCurrencyBase(amount, i18n.language as "ru" | "uz");
+
+  const columns = [
+    { key: "#", header: "#", render: (_: Product, index: number) => pageOffset + index + 1 },
+    { key: "id", header: t("pos.id") },
+    { key: "barcode", header: t("products.barcode") },
+    {
+      key: "name",
+      header: t("products.name"),
+      render: (product: Product) =>
+        i18n.language === "uz" ? product.nameUz : product.nameRu,
+    },
+    {
+      key: "costPrice",
+      header: t("products.cost"),
+      render: (product: Product) =>
+        product.costPrice ? formatCurrency(product.costPrice) : "—",
+    },
+    {
+      key: "price",
+      header: t("products.price"),
+      render: (product: Product) => formatCurrency(product.price),
+    },
+    {
+      key: "stock",
+      header: t("products.stock"),
+      render: (product: Product) => (
+        <span
+          style={{
+            color: product.stock <= product.minStock ? "#f44336" : "inherit",
+          }}
+        >
+          {product.stock} {product.unit}
+          {product.stock <= 0 ? (
+            <OutOfStockBadge>{t("products.outOfStock")}</OutOfStockBadge>
+          ) : product.stock <= product.minStock ? (
+            <LowStockBadge>{t("products.lowStock")}</LowStockBadge>
+          ) : null}
+        </span>
+      ),
+    },
+    {
+      key: "minStock",
+      header: t("products.minStock"),
+      render: (product: Product) => `${product.minStock} ${product.unit}`,
+    },
+    {
+      key: "actions",
+      header: "",
+      render: (product: Product) => (
+        <Button size="medium" onClick={() => handleAddArrival(product)}>
+          {t("inventory.addArrival")}
+        </Button>
+      ),
+    },
+  ];
+
+  return (
+    <Container>
+      <Header>
+        <Title>
+          {t("inventory.stockManagement")}
+          {products.filter((p) => p.stock <= p.minStock).length > 0 && (
+            <LowStockBadge>
+              {products.filter((p) => p.stock <= p.minStock).length}{" "}
+              {t("inventory.lowStockItems")}
+            </LowStockBadge>
+          )}
+        </Title>
+        {user?.role === "ADMIN" && (
+          <Button size="medium" onClick={() => setShowReceiptScan(true)}>
+            <ScanLine size={18} />
+            {t("receiptScan.scanReceipt")}
+          </Button>
+        )}
+      </Header>
+
+      <SearchRow>
+        <SearchWrapper>
+          <Input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t("common.search")}
+            style={{ paddingRight: "32px" }}
+          />
+          {searchQuery.length > 0 && (
+            <ClearBtn onClick={() => setSearchQuery("")} tabIndex={-1}>
+              <X size={16} />
+            </ClearBtn>
+          )}
+        </SearchWrapper>
+
+        <Button
+          size="medium"
+          style={{ padding: "10px 12px" }}
+          onClick={() => setIsFilterOpen(!isFilterOpen)}
+        >
+          {t("filters.filters")}{" "}
+          {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
+        </Button>
+
+        <SearchField>
+          <SearchLabel>{t("pos.barcode")}</SearchLabel>
+          <SearchInput
+            value={barcodeInput}
+            onChange={(e) => setBarcodeInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleBarcodeSubmit();
+              }
+            }}
+            placeholder={t("pos.enterBarcode")}
+            autoFocus
+          />
+        </SearchField>
+
+        <SearchField style={{ maxWidth: 150 }}>
+          <SearchLabel>{t("pos.id")}</SearchLabel>
+          <SearchInput
+            value={idInput}
+            onChange={(e) => setIdInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleIdSubmit();
+              }
+            }}
+            placeholder={t("pos.id")}
+          />
+        </SearchField>
+
+        <SubmitButton
+          onClick={() => {
+            if (barcodeInput.trim()) handleBarcodeSubmit();
+            else if (idInput.trim()) handleIdSubmit();
+          }}
+        >
+          <SendHorizontal size={22} />
+        </SubmitButton>
+      </SearchRow>
+
+      <ProductFilters
+        filters={filters}
+        onChange={setFilters}
+        categories={categories as any}
+        suppliers={suppliers}
+        isOpen={isFilterOpen}
+      />
+
+      <Table
+        columns={columns}
+        data={pageData}
+        loading={isLoading}
+        emptyMessage={t("products.noProducts")}
+        footer={
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            pageSizeOptions={pageSizeOptions}
+            onPageChange={goToPage}
+            onPageSizeChange={setPageSize}
+          />
+        }
+      />
+
+      {showArrival && selectedProduct && (
+        <NewArrivalModal
+          product={selectedProduct}
+          suppliers={suppliers}
+          userId={user?.id}
+          onClose={() => setShowArrival(false)}
+          onSuccess={() => {
+            setShowArrival(false);
+            loadProducts();
+            toast.success(t("inventory.arrivalCreated"));
+          }}
+          onOpenSupplierModal={() => setShowSupplierModal(true)}
+        />
+      )}
+      {showSupplierModal && (
+        <SupplierManagementModal
+          onClose={() => setShowSupplierModal(false)}
+          onSupplierChanged={loadSuppliers}
+        />
+      )}
+      {showReceiptScan && (
+        <ReceiptScanModal
+          suppliers={suppliers}
+          products={products}
+          userId={user?.id}
+          onClose={() => setShowReceiptScan(false)}
+          onSuccess={() => {
+            setShowReceiptScan(false);
+            loadProducts();
+            toast.success(t("inventory.arrivalCreated"));
+          }}
+        />
+      )}
+    </Container>
+  );
+}

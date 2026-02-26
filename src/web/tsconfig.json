@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../../src/shared/*"],
+      "@renderer/*": ["../../src/renderer/*"],
+      "@components/common/*": ["../../src/renderer/components/common/*"],
+      "@components/products/*": ["../../src/renderer/components/products/*"],
+      "@components/suppliers/*": ["../../src/renderer/components/suppliers/*"],
+      "@theme/*": ["../../src/renderer/theme/*"],
+      "@context/*": ["../../src/renderer/context/*"],
+      "@i18n/*": ["../../src/renderer/i18n/*"]
+    }
+  },
+  "include": [
+    "src/**/*",
+    "../../src/renderer/components/common/**/*",
+    "../../src/renderer/components/products/**/*",
+    "../../src/renderer/components/suppliers/**/*",
+    "../../src/renderer/theme/**/*",
+    "../../src/renderer/context/**/*",
+    "../../src/renderer/i18n/**/*",
+    "../../src/shared/**/*"
+  ]
+}
