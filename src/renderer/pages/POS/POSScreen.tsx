@@ -10,22 +10,33 @@ import { useCartStore } from "../../store/cart-store";
 import { useProducts } from "../../hooks/useProducts";
 import { useSales } from "../../hooks/useSales";
 import { useToast } from "../../context/ToastContext";
-import { Delete, SendHorizontal, Trash } from "lucide-react";
+import {
+  Banknote,
+  CreditCard,
+  Delete,
+  SendHorizontal,
+  Trash,
+} from "lucide-react";
+import { Button } from "../../components/common/Button";
+import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { Product } from "@shared/types";
 import { parseBarcode } from "../../../shared/utils/barcode-parser";
 
-function parseSaleError(err: unknown, t: (key: string, params?: Record<string, unknown>) => string): string {
+function parseSaleError(
+  err: unknown,
+  t: (key: string, params?: Record<string, unknown>) => string,
+): string {
   const message = err instanceof Error ? err.message : String(err);
   try {
     const parsed = JSON.parse(message);
-    if (parsed.code === 'PRODUCT_NOT_FOUND') {
-      return t('errors.productNotFound', { id: parsed.productId });
+    if (parsed.code === "PRODUCT_NOT_FOUND") {
+      return t("errors.productNotFound", { id: parsed.productId });
     }
-    if (parsed.code === 'PRODUCT_INACTIVE') {
-      return t('errors.productInactive', { name: parsed.name });
+    if (parsed.code === "PRODUCT_INACTIVE") {
+      return t("errors.productInactive", { name: parsed.name });
     }
-    if (parsed.code === 'INSUFFICIENT_STOCK') {
-      return t('errors.insufficientStock', {
+    if (parsed.code === "INSUFFICIENT_STOCK") {
+      return t("errors.insufficientStock", {
         name: parsed.name,
         available: parsed.available,
         requested: parsed.requested,
@@ -34,7 +45,7 @@ function parseSaleError(err: unknown, t: (key: string, params?: Record<string, u
   } catch {
     // not JSON, fall through
   }
-  return t('common.error');
+  return t("common.error");
 }
 
 const PageWrapper = styled.div`
@@ -46,7 +57,7 @@ const PageWrapper = styled.div`
 
 const Container = styled.div`
   display: grid;
-  grid-template-columns: 1fr 450px;
+  grid-template-columns: auto 1fr;
   grid-template-rows: 1fr;
   gap: ${({ theme }) => theme.spacing.md};
   flex: 1;
@@ -201,6 +212,52 @@ const ErrorMessage = styled.div`
   text-align: center;
 `;
 
+const QuickPayRow = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: ${({ theme }) => theme.spacing.sm};
+  margin-top: ${({ theme }) => theme.spacing.sm};
+`;
+
+const QuickPayButton = styled.button<{ $variant: "cash" | "card" }>`
+  height: 56px;
+  border-radius: ${({ theme }) => theme.borderRadius};
+  border: 1px solid
+    ${({ theme, $variant }) =>
+      $variant === "cash" ? theme.colors.success : theme.colors.primary};
+  background-color: ${({ theme, $variant }) =>
+    $variant === "cash" ? theme.colors.success : theme.colors.primary};
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: ${({ theme }) => theme.spacing.sm};
+
+  &:hover {
+    opacity: 0.9;
+  }
+
+  &:active {
+    transform: scale(0.97);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+`;
+
+const ShortcutHint = styled.span`
+  font-size: 14px;
+  opacity: 0.7;
+  font-weight: 500;
+`;
+
 type InputMode = "barcode" | "quantity" | "id";
 
 export function POSScreen() {
@@ -211,10 +268,26 @@ export function POSScreen() {
   const [inputMode, setInputMode] = useState<InputMode>("barcode");
   const [showCheckout, setShowCheckout] = useState(false);
   const [error, setError] = useState("");
-  const [bulkWeighProduct, setBulkWeighProduct] = useState<Product | null>(null);
+  const [bulkWeighProduct, setBulkWeighProduct] = useState<Product | null>(
+    null,
+  );
 
-  const { addItem, items, discount, clearCart, activeTabId, editingSaleId } = useCartStore();
+  const {
+    addItem,
+    items,
+    discount,
+    total,
+    clearCart,
+    activeTabId,
+    editingSaleId,
+  } = useCartStore();
   // addItem is also used directly for pre-weighed items in handleBarcodeSubmit
+  const formatCurrency = useCallback(
+    (amount: number) =>
+      formatCurrencyBase(amount, i18n.language as "ru" | "uz"),
+    [i18n.language],
+  );
+
   const { searchByBarcode, getById } = useProducts();
   const { createSale, updateSale, isLoading: isPayingLoading } = useSales();
   const toast = useToast();
@@ -319,18 +392,34 @@ export function POSScreen() {
     try {
       const product = (await getById(id.trim())) as Product | null;
       if (product) {
-        setId("");
-        setBarcode("");
-        setQuantity("1");
-        setInputMode("barcode");
-        setError("");
-
-        if (product.productType === 'BULK_WEIGHTED') {
+        if (product.productType === "BULK_WEIGHTED") {
+          setId("");
+          setBarcode("");
+          setQuantity("1");
+          setInputMode("barcode");
+          setError("");
           setBulkWeighProduct(product);
           return;
         }
 
         const qty = parseFloat(quantity) || 1;
+        if (qty > product.stock) {
+          setError(
+            t("errors.insufficientStock", {
+              name: i18n.language === "uz" ? product.nameUz : product.nameRu,
+              available: product.stock,
+              requested: qty,
+            }),
+          );
+          setId("");
+          return;
+        }
+
+        setId("");
+        setBarcode("");
+        setQuantity("1");
+        setInputMode("barcode");
+        setError("");
         addProductToCart(product, qty);
       } else {
         setError(t("products.noResults"));
@@ -341,7 +430,7 @@ export function POSScreen() {
       setError(t("products.noResults"));
       setId("");
     }
-  }, [id, quantity, getById, addProductToCart, t]);
+  }, [id, quantity, getById, addProductToCart, t, i18n.language]);
 
   const handleBarcodeSubmit = useCallback(async () => {
     if (inputMode === "id") {
@@ -367,22 +456,25 @@ export function POSScreen() {
       if (parsed.isWeighted && parsed.productCode && parsed.weightKg !== null) {
         // --- Weighted barcode flow ---
         // Check if a pre-weighed item exists with this barcode
-        const weighedItem = await window.electronAPI.weighedItems.findByBarcode(barcodeValue) as {
-          id: string;
-          productId: number;
-          weight: number;
-          pricePerKg: number;
-          totalPrice: number;
-          barcode: string;
-          product?: { nameRu: string; nameUz: string; barcode: string };
-        } | null;
+        const weighedItem =
+          (await window.electronAPI.weighedItems.findByBarcode(
+            barcodeValue,
+          )) as {
+            id: string;
+            productId: number;
+            weight: number;
+            pricePerKg: number;
+            totalPrice: number;
+            barcode: string;
+            product?: { nameRu: string; nameUz: string; barcode: string };
+          } | null;
 
         if (weighedItem) {
           // Found a pre-weighed item — add to cart
           const productNameForCart =
             i18n.language === "uz"
-              ? (weighedItem.product?.nameUz || weighedItem.product?.nameRu || '')
-              : (weighedItem.product?.nameRu || '');
+              ? weighedItem.product?.nameUz || weighedItem.product?.nameRu || ""
+              : weighedItem.product?.nameRu || "";
 
           addItem({
             productId: weighedItem.productId,
@@ -391,24 +483,37 @@ export function POSScreen() {
             unitPrice: weighedItem.pricePerKg,
             quantity: weighedItem.weight,
             stock: 99999, // pre-weighed items don't have stock limit
-            unit: 'кг',
+            unit: "кг",
             preWeighedItemId: weighedItem.id,
           });
 
           resetInputs();
           toast.success(
-            `${productNameForCart} — ${weighedItem.weight.toFixed(3)} кг — ${Math.round(weighedItem.totalPrice).toLocaleString('ru-RU')} сум`
+            `${productNameForCart} — ${weighedItem.weight.toFixed(3)} кг — ${Math.round(weighedItem.totalPrice).toLocaleString("ru-RU")} сум`,
           );
         } else {
           // No pre-weighed item — look up the product and open BulkWeighModal
-          const product = await window.electronAPI.products.findByInternalCode(parsed.productCode) as Product | null;
+          const product = (await window.electronAPI.products.findByInternalCode(
+            parsed.productCode,
+          )) as Product | null;
           if (product) {
-            if (product.productType === 'BULK_WEIGHTED') {
+            if (product.productType === "BULK_WEIGHTED") {
               resetInputs();
               setBulkWeighProduct(product);
             } else {
               // Regular product that happens to have an internalCode — add normally
               const qty = parseFloat(quantity) || 1;
+              if (qty > product.stock) {
+                setError(
+                  t("errors.insufficientStock", {
+                    name:
+                      i18n.language === "uz" ? product.nameUz : product.nameRu,
+                    available: product.stock,
+                    requested: qty,
+                  }),
+                );
+                return;
+              }
               addProductToCart(product, qty);
               resetInputs();
             }
@@ -422,12 +527,22 @@ export function POSScreen() {
       // --- Regular barcode flow ---
       const product = (await searchByBarcode(barcodeValue)) as Product | null;
       if (product) {
-        if (product.productType === 'BULK_WEIGHTED') {
+        if (product.productType === "BULK_WEIGHTED") {
           // Scanned the product barcode directly — open modal
           resetInputs();
           setBulkWeighProduct(product);
         } else {
           const qty = parseFloat(quantity) || 1;
+          if (qty > product.stock) {
+            setError(
+              t("errors.insufficientStock", {
+                name: i18n.language === "uz" ? product.nameUz : product.nameRu,
+                available: product.stock,
+                requested: qty,
+              }),
+            );
+            return;
+          }
           addProductToCart(product, qty);
           resetInputs();
         }
@@ -480,7 +595,7 @@ export function POSScreen() {
             try {
               await window.electronAPI.printer.printReceipt(sale.id);
             } catch (printErr) {
-              console.error('Receipt print failed:', printErr);
+              console.error("Receipt print failed:", printErr);
             }
           }
 
@@ -500,7 +615,16 @@ export function POSScreen() {
         payingRef.current = false;
       }
     },
-    [items, discount, editingSaleId, createSale, updateSale, clearCart, toast, t],
+    [
+      items,
+      discount,
+      editingSaleId,
+      createSale,
+      updateSale,
+      clearCart,
+      toast,
+      t,
+    ],
   );
 
   // Handle keyboard input
@@ -584,7 +708,14 @@ export function POSScreen() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [inputMode, barcode, quantity, showCheckout, handleBarcodeSubmit, handleQuickPay]);
+  }, [
+    inputMode,
+    barcode,
+    quantity,
+    showCheckout,
+    handleBarcodeSubmit,
+    handleQuickPay,
+  ]);
 
   const handleNumberClick = (num: string) => {
     if (inputMode === "barcode") {
@@ -619,12 +750,22 @@ export function POSScreen() {
   };
 
   const handleProductSelect = (product: Product) => {
-    if (product.productType === 'BULK_WEIGHTED') {
+    if (product.productType === "BULK_WEIGHTED") {
       setBulkWeighProduct(product);
       setError("");
       return;
     }
     const qty = parseFloat(quantity) || 1;
+    if (qty > product.stock) {
+      setError(
+        t("errors.insufficientStock", {
+          name: i18n.language === "uz" ? product.nameUz : product.nameRu,
+          available: product.stock,
+          requested: qty,
+        }),
+      );
+      return;
+    }
     addProductToCart(product, qty);
     setQuantity("1");
     setError("");
@@ -647,7 +788,7 @@ export function POSScreen() {
   const handleBulkWeighPrintAndScan = useCallback(
     (_weighedItemId: string, _barcode: string) => {
       setBulkWeighProduct(null);
-      toast.info(t('bulkWeigh.scanLabel'));
+      toast.info(t("bulkWeigh.scanLabel"));
     },
     [toast, t],
   );
@@ -680,7 +821,7 @@ export function POSScreen() {
                 </InputDisplay>
               </InputPanel>
 
-              <div style={{ display: "flex", gap: "16px", flex: 1 }}>
+              <div style={{ display: "flex", gap: "8px", flex: 1 }}>
                 <InputPanel>
                   <InputLabel>{t("pos.id")}</InputLabel>
                   <InputDisplay
@@ -749,17 +890,43 @@ export function POSScreen() {
                   <SendHorizontal size={30} />
                 </NumButton>
               </NumberPad>
-              
             </NumberPadSection>
+            <Button
+              fullWidth
+              onClick={() => setShowCheckout(true)}
+              disabled={items.length === 0}
+              style={{ marginTop: "8px" }}
+            >
+              {editingSaleId
+                ? t("pos.save")
+                : t("pos.pay") + " - " + formatCurrency(total)}{" "}
+              <ShortcutHint>(F10)</ShortcutHint>
+            </Button>
+            <QuickPayRow>
+              <QuickPayButton
+                $variant="cash"
+                onClick={() => handleQuickPay("cash")}
+                disabled={items.length === 0 || isPayingLoading}
+              >
+                <Banknote size={24} />
+                {t("pos.cash")}
+                <ShortcutHint>(F11)</ShortcutHint>
+              </QuickPayButton>
+              <QuickPayButton
+                $variant="card"
+                onClick={() => handleQuickPay("card")}
+                disabled={items.length === 0 || isPayingLoading}
+              >
+                <CreditCard size={24} />
+                {t("pos.card")}
+                <ShortcutHint>(F12)</ShortcutHint>
+              </QuickPayButton>
+            </QuickPayRow>
           </div>
         </LeftSection>
 
         <CartSection>
-          <Cart
-            onCheckout={() => setShowCheckout(true)}
-            onQuickPay={handleQuickPay}
-            isQuickPayDisabled={isPayingLoading}
-          />
+          <Cart />
         </CartSection>
 
         {showCheckout && (

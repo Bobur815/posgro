@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
+import JsBarcode from 'jsbarcode';
 import { Modal } from '../../components/common/Modal';
 import type { PriceTagTemplate } from './PriceTags';
 
@@ -15,13 +16,15 @@ interface ProductItem {
   nameUz: string;
   price: number;
   barcode?: string;
+  unit?: string;
   productionDate?: string;
   expiryDate?: string;
 }
 
 interface SelectedProduct {
   product: ProductItem;
-  quantity: number;
+  quantity: number; // number of label copies to print
+  amount: number;   // physical quantity on the label (e.g. 1.5 for 1.5 kg)
 }
 
 const SearchInput = styled.input`
@@ -74,8 +77,27 @@ const ProductMeta = styled.div`
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
+const InputsGroup = styled.div`
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+`;
+
+const LabeledInput = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+`;
+
+const InputLabel = styled.span`
+  font-size: 10px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  white-space: nowrap;
+`;
+
 const QtyInput = styled.input`
-  width: 50px;
+  width: 54px;
   padding: 4px;
   border: 1px solid ${({ theme }) => theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
@@ -154,7 +176,7 @@ export function PrintTagsModal({ template, onClose }: PrintTagsModalProps) {
       if (next.has(product.id)) {
         next.delete(product.id);
       } else {
-        next.set(product.id, { product, quantity: 1 });
+        next.set(product.id, { product, quantity: 1, amount: 1 });
       }
       return next;
     });
@@ -166,6 +188,17 @@ export function PrintTagsModal({ template, onClose }: PrintTagsModalProps) {
       const entry = next.get(id);
       if (entry) {
         next.set(id, { ...entry, quantity: Math.max(1, qty) });
+      }
+      return next;
+    });
+  };
+
+  const updateAmount = (id: string, amount: number) => {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      const entry = next.get(id);
+      if (entry) {
+        next.set(id, { ...entry, amount: Math.max(0.001, amount) });
       }
       return next;
     });
@@ -212,16 +245,31 @@ export function PrintTagsModal({ template, onClose }: PrintTagsModalProps) {
                 <ProductMeta>
                   {p.barcode && `${p.barcode} | `}
                   {p.price?.toLocaleString()} {t('common.currency')}
+                  {p.unit && ` | ${p.unit}`}
                 </ProductMeta>
               </ProductInfo>
               {isSelected && (
-                <QtyInput
-                  type="number"
-                  min={1}
-                  value={entry!.quantity}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => updateQuantity(p.id, parseInt(e.target.value) || 1)}
-                />
+                <InputsGroup onClick={(e) => e.stopPropagation()}>
+                  <LabeledInput>
+                    <InputLabel>{i18n.language === 'uz' ? 'Miqdor' : 'Кол-во'}</InputLabel>
+                    <QtyInput
+                      type="number"
+                      min={0.001}
+                      step={0.001}
+                      value={entry!.amount}
+                      onChange={(e) => updateAmount(p.id, parseFloat(e.target.value) || 1)}
+                    />
+                  </LabeledInput>
+                  <LabeledInput>
+                    <InputLabel>{i18n.language === 'uz' ? 'Nusxa' : 'Копий'}</InputLabel>
+                    <QtyInput
+                      type="number"
+                      min={1}
+                      value={entry!.quantity}
+                      onChange={(e) => updateQuantity(p.id, parseInt(e.target.value) || 1)}
+                    />
+                  </LabeledInput>
+                </InputsGroup>
               )}
             </ProductRow>
           );
@@ -240,6 +288,33 @@ export function PrintTagsModal({ template, onClose }: PrintTagsModalProps) {
   );
 }
 
+function generateBarcodeSvg(barcode: string): string {
+  try {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const format = /^\d{13}$/.test(barcode) ? 'EAN13' : 'CODE128';
+    JsBarcode(svg as unknown as HTMLElement, barcode, {
+      format,
+      width: 2,
+      height: 50,
+      fontSize: 11,
+      margin: 2,
+      displayValue: true,
+    });
+    const serializer = new XMLSerializer();
+    return serializer.serializeToString(svg);
+  } catch {
+    return '';
+  }
+}
+
+function formatAmount(amount: number, unit: string): string {
+  const formatted =
+    amount % 1 === 0
+      ? String(Math.round(amount))
+      : amount.toFixed(3).replace(/\.?0+$/, '');
+  return `${formatted} ${unit}`;
+}
+
 function generatePrintHtml(
   template: PriceTagTemplate,
   items: SelectedProduct[],
@@ -248,37 +323,85 @@ function generatePrintHtml(
 ): string {
   const el = template.elements;
   const { widthMm, heightMm, fontSize, fontWeight } = template;
+  const currency = t('common.currency');
+  const totalLabel = lang === 'uz' ? 'Jami' : 'Итого';
+
+  // Always print in portrait: rotate content when template is landscape
+  const needsRotation = widthMm > heightMm;
+  const pageW = needsRotation ? heightMm : widthMm;
+  const pageH = needsRotation ? widthMm : heightMm;
 
   let tagsHtml = '';
-  for (const { product, quantity } of items) {
+  for (const { product, quantity, amount } of items) {
     const name = lang === 'uz' ? product.nameUz || product.nameRu : product.nameRu || product.nameUz;
+    const rawUnit = product.unit || 'шт';
+    const unitDisplay = lang === 'uz' && rawUnit === 'шт' ? 'dona' : rawUnit;
+    const formattedAmount = formatAmount(amount, unitDisplay);
+    const pricePerUnit = `${Number(product.price).toLocaleString('ru-RU')} ${currency}/${unitDisplay}`;
+    const total = amount * Number(product.price);
+    const totalStr = `${totalLabel}: ${Math.round(total).toLocaleString('ru-RU')} ${currency}`;
+    const barcodeSvg = el.barcode && product.barcode ? generateBarcodeSvg(product.barcode) : '';
+
     for (let i = 0; i < quantity; i++) {
-      tagsHtml += `<div class="tag">`;
+      let tagHtml = `<div class="tag">`;
+
       if (el.customText1 && template.customText1Value) {
-        tagsHtml += `<div class="line small">${escapeHtml(template.customText1Value)}</div>`;
+        tagHtml += `<div class="line small">${escapeHtml(template.customText1Value)}</div>`;
       }
+
+      // Article ID before name
+      if (el.articleId) {
+        tagHtml += `<div class="line small">ID: ${escapeHtml(product.id)}</div>`;
+      }
+
+      // Row 1: Product name
       if (el.name) {
-        tagsHtml += `<div class="line bold">${escapeHtml(name)}</div>`;
+        tagHtml += `<div class="name">${escapeHtml(name)}</div>`;
+      }
+
+      // Row 2: quantity | price per unit
+      if (el.price) {
+        tagHtml += `<div class="info-row">`;
+        tagHtml += `<div class="qty-cell">${escapeHtml(formattedAmount)}</div>`;
+        tagHtml += `<div class="price-cell">${escapeHtml(pricePerUnit)}</div>`;
+        tagHtml += `</div>`;
+      }
+
+      // Row 3: barcode | total
+      tagHtml += `<div class="bottom-row">`;
+      if (barcodeSvg) {
+        tagHtml += `<div class="barcode-cell">${barcodeSvg}</div>`;
+      } else if (el.barcode && product.barcode) {
+        tagHtml += `<div class="barcode-cell"><span class="barcode-text">${escapeHtml(product.barcode)}</span></div>`;
+      } else {
+        tagHtml += `<div class="barcode-cell"></div>`;
       }
       if (el.price) {
-        tagsHtml += `<div class="line bold">${Number(product.price).toLocaleString()} ${t('common.currency')}</div>`;
+        tagHtml += `<div class="total-cell">${escapeHtml(totalStr)}</div>`;
       }
-      if (el.barcode && product.barcode) {
-        tagsHtml += `<div class="barcode">${escapeHtml(product.barcode)}</div>`;
+      tagHtml += `</div>`;
+
+      // Production/expiry dates side by side
+      if ((el.productionDate && product.productionDate) || (el.expiryDate && product.expiryDate)) {
+        tagHtml += `<div class="dates-row">`;
+        if (el.productionDate && product.productionDate) {
+          tagHtml += `<div class="line small">${formatDate(product.productionDate)}</div>`;
+        }
+        if (el.expiryDate && product.expiryDate) {
+          tagHtml += `<div class="line small">${formatDate(product.expiryDate)}</div>`;
+        }
+        tagHtml += `</div>`;
       }
-      if (el.articleId) {
-        tagsHtml += `<div class="line small">ID: ${escapeHtml(product.id)}</div>`;
-      }
-      if (el.productionDate && product.productionDate) {
-        tagsHtml += `<div class="line small">${formatDate(product.productionDate)}</div>`;
-      }
-      if (el.expiryDate && product.expiryDate) {
-        tagsHtml += `<div class="line small">${formatDate(product.expiryDate)}</div>`;
-      }
+
       if (el.customText2 && template.customText2Value) {
-        tagsHtml += `<div class="line small">${escapeHtml(template.customText2Value)}</div>`;
+        tagHtml += `<div class="line small">${escapeHtml(template.customText2Value)}</div>`;
       }
-      tagsHtml += `</div>`;
+
+      tagHtml += `</div>`;
+
+      tagsHtml += needsRotation
+        ? `<div class="page-wrapper">${tagHtml}</div>`
+        : tagHtml;
     }
   }
 
@@ -288,7 +411,7 @@ function generatePrintHtml(
 <meta charset="utf-8">
 <style>
   @page {
-    size: ${widthMm}mm ${heightMm}mm;
+    size: ${pageW}mm ${pageH}mm;
     margin: 0;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -297,40 +420,99 @@ function generatePrintHtml(
     font-size: ${fontSize}px;
     font-weight: ${fontWeight};
   }
+  ${needsRotation ? `
+  .page-wrapper {
+    width: ${pageW}mm;
+    height: ${pageH}mm;
+    position: relative;
+    overflow: hidden;
+    page-break-after: always;
+  }
+  .page-wrapper:last-child { page-break-after: auto; }
+  .tag {
+    position: absolute;
+    top: ${widthMm}mm;
+    left: 0;
+    transform: rotate(-90deg);
+    transform-origin: top left;
+  }
+  ` : `
+  .tag { page-break-after: always; }
+  .tag:last-child { page-break-after: auto; }
+  `}
   .tag {
     width: ${widthMm}mm;
     height: ${heightMm}mm;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 1px;
+    justify-content: space-between;
     padding: 2mm;
-    page-break-after: always;
-    text-align: center;
     overflow: hidden;
   }
-  .tag:last-child { page-break-after: auto; }
-  .line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .name {
+    font-weight: 700;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85em;
+  }
+  .price-cell { text-align: right; }
+  .bottom-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 2mm;
+  }
+  .barcode-cell {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .barcode-cell svg {
+    max-height: ${Math.max(12, Math.round(heightMm * 0.45))}mm;
+    width: 100%;
+    display: block;
+  }
+  .barcode-text {
+    font-family: monospace;
+    font-size: 0.7em;
+    letter-spacing: 1px;
+  }
+  .total-cell {
+    font-weight: 700;
+    font-size: 0.85em;
+    text-align: right;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .dates-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 2mm;
+  }
+  .line {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    text-align: center;
+  }
   .bold { font-weight: 700; }
   .small { font-size: 0.75em; }
-  .barcode {
-    font-family: monospace;
-    letter-spacing: 2px;
-    font-size: 0.7em;
-    border-top: 1px solid #000;
-    border-bottom: 1px solid #000;
-    padding: 1px 4px;
-    margin: 1px 0;
-  }
 </style>
 </head>
 <body>${tagsHtml}</body>
 </html>`;
 }
 
-function escapeHtml(str: string): string {
-  return str
+function escapeHtml(str: unknown): string {
+  return String(str)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')

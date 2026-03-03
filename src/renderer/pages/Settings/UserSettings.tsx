@@ -5,6 +5,8 @@ import { useSettingsStore } from '../../store/settings-store';
 import { useTheme } from '../../theme/ThemeProvider';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { auth } from '../../api/ipc-client';
+import { useToast } from '../../context/ToastContext';
 
 const Container = styled.div`
   max-width: 600px;
@@ -62,13 +64,13 @@ export function UserSettings() {
   const { t, i18n } = useTranslation();
   const { mode, toggleTheme } = useTheme();
   const { language, setLanguage } = useSettingsStore();
+  const toast = useToast();
 
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
-  const [passwordError, setPasswordError] = useState('');
 
   const handleLanguageChange = (lang: string) => {
     setLanguage(lang);
@@ -77,24 +79,28 @@ export function UserSettings() {
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPasswordError('');
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setPasswordError(t('settings.passwordMismatch'));
+      toast.error(t('settings.passwordMismatch'));
       return;
     }
 
     if (passwordData.newPassword.length < 6) {
-      setPasswordError(t('settings.passwordTooShort'));
+      toast.error(t('settings.passwordTooShort'));
       return;
     }
 
     try {
-      // TODO: Implement password change
-      console.log('Changing password');
+      await auth.changePassword(passwordData.currentPassword, passwordData.newPassword);
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    } catch (error) {
-      setPasswordError(t('settings.passwordChangeFailed'));
+      toast.success(t('settings.passwordChanged'));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '';
+      if (message.includes('invalid_password')) {
+        toast.error(t('settings.passwordWrong'));
+      } else {
+        toast.error(t('settings.passwordChangeFailed'));
+      }
     }
   };
 
@@ -158,10 +164,6 @@ export function UserSettings() {
             }
             required
           />
-
-          {passwordError && (
-            <div style={{ color: 'red', fontSize: '14px' }}>{passwordError}</div>
-          )}
 
           <Button type="submit">{t('settings.updatePassword')}</Button>
         </Form>

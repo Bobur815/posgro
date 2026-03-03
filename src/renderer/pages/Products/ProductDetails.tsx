@@ -9,6 +9,7 @@ import { Input } from "../../components/common/Input";
 import { Product } from "@shared/types";
 import { products as productsApi } from "../../api/ipc-client";
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
+import { ProductForm } from "./ProductForm";
 import {
   Edit,
   Trash,
@@ -39,7 +40,6 @@ const BackButton = styled(Button)`
 `;
 
 const HeaderLeft = styled.div`
-  display: flex;
   align-items: center;
 `;
 
@@ -189,6 +189,7 @@ export function ProductDetails() {
   const { getById, deleteProduct, isLoading } = useProducts();
 
   const [product, setProduct] = useState<Product | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [analytics, setAnalytics] = useState<ProductAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [startDate, setStartDate] = useState(() => {
@@ -302,7 +303,7 @@ export function ProductDetails() {
             <Button
               style={{ fontSize: "22px" }}
               variant="secondary"
-              onClick={() => navigate(`/products/${id}/edit`)}
+              onClick={() => setShowEditModal(true)}
             >
               <Edit size={22} /> {t("common.edit")}
             </Button>
@@ -552,6 +553,17 @@ export function ProductDetails() {
           </AnalyticsSection>
         )}
       </Grid>
+
+      {showEditModal && id && (
+        <ProductForm
+          productId={id}
+          onClose={() => setShowEditModal(false)}
+          onSuccess={() => {
+            setShowEditModal(false);
+            loadProduct();
+          }}
+        />
+      )}
     </Container>
   );
 }

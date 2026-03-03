@@ -195,20 +195,29 @@ async function testPrint(): Promise<boolean> {
 }
 
 async function printPriceTags(html: string, widthMm: number, heightMm: number): Promise<boolean> {
-  const window = BrowserWindow.getAllWindows()[0];
-  if (!window) {
-    throw new Error('No window available for printing');
-  }
+  // Load printer name from settings (same setting as weighted labels)
+  const prisma = getPrismaClient();
+  const rows = await prisma.systemSetting.findMany({
+    where: { key: { in: ['label_printer_name'] } },
+  });
+  const map = rows.reduce(
+    (acc: Record<string, string>, s: { key: string; value: string }) => ({ ...acc, [s.key]: s.value }),
+    {} as Record<string, string>
+  );
+  const printerName = map.label_printer_name || printerConfig.name;
 
-  // Convert mm to microns (1mm = 1000 microns)
-  const widthMicrons = widthMm * 1000;
-  const heightMicrons = heightMm * 1000;
+  // Always use portrait: swap page dimensions when template is landscape (widthMm > heightMm)
+  const isLandscape = widthMm > heightMm;
+  const pageSizeWidth  = (isLandscape ? heightMm : widthMm) * 1000;
+  const pageSizeHeight = (isLandscape ? widthMm  : heightMm) * 1000;
+
+  const maxSide = Math.max(widthMm, heightMm);
 
   return new Promise((resolve, reject) => {
     const printWindow = new BrowserWindow({
       show: false,
-      width: Math.round(widthMm * 3.78), // approximate px
-      height: Math.round(heightMm * 3.78),
+      width: Math.round(maxSide * 3.78) + 20,
+      height: Math.round(maxSide * 3.78) + 20,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -218,27 +227,30 @@ async function printPriceTags(html: string, widthMm: number, heightMm: number): 
     printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
     printWindow.webContents.on('did-finish-load', () => {
-      printWindow.webContents.print(
-        {
-          silent: false,
-          printBackground: true,
-          pageSize: {
-            width: widthMicrons,
-            height: heightMicrons,
-          },
-          margins: {
-            marginType: 'none',
-          },
-        } as Electron.WebContentsPrintOptions,
-        (success, errorType) => {
-          printWindow.close();
-          if (success) {
-            resolve(true);
-          } else {
-            reject(new Error(`Price tag print failed: ${errorType}`));
+      setTimeout(() => {
+        printWindow.webContents.print(
+          {
+            silent: !!printerName,
+            printBackground: true,
+            ...(printerName && { deviceName: printerName }),
+            pageSize: {
+              width: pageSizeWidth,
+              height: pageSizeHeight,
+            },
+            margins: {
+              marginType: 'none',
+            },
+          } as Electron.WebContentsPrintOptions,
+          (success, errorType) => {
+            printWindow.destroy();
+            if (success) {
+              resolve(true);
+            } else {
+              reject(new Error(`Price tag print failed: ${errorType}`));
+            }
           }
-        }
-      );
+        );
+      }, 200);
     });
   });
 }

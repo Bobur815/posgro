@@ -19,12 +19,13 @@ import {
   Truck,
   Scale,
   type LucideIcon,
+  ReceiptText,
 } from "lucide-react";
 import { useAuthStore } from "../../store/auth-store";
 import { useSidebar } from "../../context/SidebarContext";
 import { useSync } from "../../hooks/useSync";
 
-const SIDEBAR_WIDTH = 220;
+const SIDEBAR_WIDTH = 260;
 const MINI_SIDEBAR_WIDTH = 70;
 
 const Container = styled.aside<{ $collapsed: boolean }>`
@@ -343,7 +344,7 @@ export function Sidebar() {
           <SectionTitle $collapsed={isCollapsed}>
             {t("nav.reports")}
           </SectionTitle>
-          {renderNavItem("/reports/daily", BarChart3, t("nav.dailySummary"))}
+          {renderNavItem("/reports/daily", ReceiptText, t("nav.receipts"))}
           {isAdmin && (
             <>
               {renderNavItem(

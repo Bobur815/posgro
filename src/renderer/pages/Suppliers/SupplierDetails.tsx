@@ -6,6 +6,7 @@ import { Button } from '../../components/common/Button';
 import { Table } from '../../components/common/Table';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { SupplierTransactionForm } from './SupplierTransactionForm';
+import { SupplierManagementModal } from './SupplierManagementModal';
 import { useSuppliers } from '../../hooks/useSuppliers';
 import { useAuthStore } from '../../store/auth-store';
 import { useToast } from '../../context/ToastContext';
@@ -16,6 +17,7 @@ import {
 } from '@shared/types';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 import { formatDate } from '../../utils/formatters';
+import { ArrowLeft } from 'lucide-react';
 
 const Container = styled.div`
   display: flex;
@@ -27,22 +29,11 @@ const Header = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  padding-top: 5px;
 `;
 
-const BackButton = styled.button`
-  background: none;
-  border: none;
-  color: ${({ theme }) => theme.colors.primary};
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: ${({ theme }) => theme.spacing.xs};
-  padding: 0;
-  font-size: 14px;
-
-  &:hover {
-    text-decoration: underline;
-  }
+const BackButton = styled(Button)`
+  margin-right: ${({ theme }) => theme.spacing.md};
 `;
 
 const Title = styled.h1`
@@ -181,6 +172,7 @@ export function SupplierDetails() {
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [transactionToDelete, setTransactionToDelete] =
     useState<SupplierTransaction | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -304,12 +296,16 @@ export function SupplierDetails() {
     <Container>
       <Header>
         <div>
-          <BackButton onClick={() => navigate('/suppliers')}>
-            &larr; {t('suppliers.title')}
+          <BackButton
+            variant="secondary"
+            size="small"
+            onClick={() => navigate("/suppliers")}
+          >
+            <ArrowLeft size={20} />
           </BackButton>
           <Title>{supplierName}</Title>
         </div>
-        <Button onClick={() => navigate(`/suppliers/${id}/edit`)}>
+        <Button onClick={() => setShowEditModal(true)}>
           {t('common.edit')}
         </Button>
       </Header>
@@ -375,6 +371,15 @@ export function SupplierDetails() {
           variant="danger"
           onConfirm={handleDeleteTransaction}
           onCancel={() => setTransactionToDelete(null)}
+        />
+      )}
+
+      {showEditModal && selectedSupplier && (
+        <SupplierManagementModal
+          initialView="form"
+          initialEditSupplier={selectedSupplier}
+          onClose={() => setShowEditModal(false)}
+          onSupplierChanged={() => id && getById(id)}
         />
       )}
     </Container>

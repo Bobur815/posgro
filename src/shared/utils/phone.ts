@@ -30,3 +30,9 @@ export function formatUzPhone(digits: string | number): string {
 export function isUzPhoneComplete(digits: string | number): boolean {
   return digitsOnly(digits).length === MAX_DIGITS;
 }
+
+/** Extract 9-digit subscriber number from a stored phone string (strips +998 prefix if present). */
+export function phoneToDigits(phone: string): string {
+  const d = digitsOnly(phone);
+  return d.startsWith('998') ? d.slice(3) : d;
+}

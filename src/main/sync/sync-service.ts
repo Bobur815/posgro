@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron';
 import { syncSales } from './sales-sync';
 import { syncProducts } from './products-sync';
 import { getAppConfig } from '../config/app-config';
+import { getPrismaClient } from '../database/sqlite-client';
 
 export class SyncService {
   private syncInterval: NodeJS.Timeout | null = null;
@@ -57,6 +58,9 @@ export class SyncService {
       // Sync products (download updated products from VPS)
       await syncProducts();
 
+      // Pull store config (AI token limit, etc.) from VPS
+      await this.syncStoreConfig();
+
       this.lastSyncTime = new Date();
       console.log('Sync completed successfully');
 
@@ -71,6 +75,35 @@ export class SyncService {
       this.notifyRenderer('sync:failed', { message: errorMessage });
     } finally {
       this.isSyncing = false;
+    }
+  }
+
+  // Fetches server-controlled config keys (e.g. AI token limit) from VPS.
+  // The VPS should expose GET /store-config returning { ai_token_limit_daily: number }.
+  // Silently skips if the endpoint is unavailable.
+  private async syncStoreConfig(): Promise<void> {
+    const config = getAppConfig();
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch(`${config.vpsApiUrl}/store-config`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!response.ok) return;
+
+      const data = await response.json() as Record<string, unknown>;
+      const prisma = getPrismaClient();
+
+      if (typeof data.ai_token_limit_daily === 'number') {
+        await prisma.systemSetting.upsert({
+          where: { key: 'ai_token_limit_daily' },
+          update: { value: String(data.ai_token_limit_daily) },
+          create: { key: 'ai_token_limit_daily', value: String(data.ai_token_limit_daily) },
+        });
+      }
+    } catch {
+      // Offline or endpoint not yet implemented — use cached limit
     }
   }
 

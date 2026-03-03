@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
+import { RefreshCw } from 'lucide-react';
 import { PrintTagsModal } from './PrintTagsModal';
 import { generateId } from '../../utils/helpers';
+import { useToast } from '../../context/ToastContext';
 
 export interface PriceTagTemplate {
   id: string;
@@ -100,6 +102,25 @@ const Button = styled.button<{ $variant?: 'primary' | 'danger' | 'secondary' }>`
 const ButtonGroup = styled.div`
   display: flex;
   gap: ${({ theme }) => theme.spacing.sm};
+`;
+
+const PrinterRow = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.sm};
+  align-items: center;
+`;
+
+const IconButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: ${({ theme }) => theme.spacing.sm};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  background: ${({ theme }) => theme.colors.surface};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  cursor: pointer;
+  &:hover { color: ${({ theme }) => theme.colors.primary}; border-color: ${({ theme }) => theme.colors.primary}; }
 `;
 
 // --- List View ---
@@ -236,11 +257,8 @@ const PreviewTag = styled.div<{ $width: number; $height: number; $fontSize: numb
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
+  justify-content: space-between;
   padding: 4px;
-  text-align: center;
   font-size: ${({ $fontSize }) => $fontSize}px;
   font-weight: ${({ $fontWeight }) => $fontWeight};
   /* Scale: 1mm ≈ 3px for preview */
@@ -257,15 +275,6 @@ const PreviewLine = styled.div<{ $bold?: boolean; $small?: boolean }>`
   font-size: ${({ $small }) => ($small ? '0.75em' : 'inherit')};
 `;
 
-const BarcodePreview = styled.div`
-  font-family: monospace;
-  letter-spacing: 2px;
-  font-size: 0.7em;
-  border-top: 1px solid #000;
-  border-bottom: 1px solid #000;
-  padding: 1px 4px;
-  margin: 1px 0;
-`;
 
 const SmallThumbnail = styled.div`
   display: inline-flex;
@@ -287,12 +296,27 @@ const SmallThumbnail = styled.div`
 
 export function PriceTags() {
   const { t } = useTranslation();
+  const toast = useToast();
   const [templates, setTemplates] = useState<PriceTagTemplate[]>([]);
   const [editing, setEditing] = useState<PriceTagTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [printTemplateId, setPrintTemplateId] = useState<string | null>(null);
 
-  // Load templates
+  // Printer settings
+  const [printerName, setPrinterName] = useState('');
+  const [availablePrinters, setAvailablePrinters] = useState<string[]>([]);
+  const [printerSaving, setPrinterSaving] = useState(false);
+
+  const loadAvailablePrinters = useCallback(async () => {
+    try {
+      const list = await window.electronAPI.printer.getAvailablePrinters();
+      setAvailablePrinters(list);
+    } catch {
+      // silently ignore
+    }
+  }, []);
+
+  // Load templates + printer settings
   useEffect(() => {
     (async () => {
       try {
@@ -306,7 +330,25 @@ export function PriceTags() {
         setLoading(false);
       }
     })();
-  }, []);
+
+    window.electronAPI.settings.get('label_printer_name').then((v) => {
+      if (v) setPrinterName(v);
+    }).catch(() => {});
+
+    loadAvailablePrinters();
+  }, [loadAvailablePrinters]);
+
+  const handleSavePrinter = async () => {
+    setPrinterSaving(true);
+    try {
+      await window.electronAPI.settings.set('label_printer_name', printerName);
+      toast.success(t('common.saved'));
+    } catch {
+      toast.error(t('common.error'));
+    } finally {
+      setPrinterSaving(false);
+    }
+  };
 
   const saveTemplates = useCallback(async (updated: PriceTagTemplate[]) => {
     setTemplates(updated);
@@ -496,6 +538,29 @@ export function PriceTags() {
         <Button onClick={handleCreate}>{t('priceTags.createTemplate')}</Button>
       </TopBar>
 
+      {/* Printer selector */}
+      <Panel>
+        <PanelTitle>{t('scaleSettings.labelPrinterName')}</PanelTitle>
+        <PrinterRow>
+          <FieldSelect
+            style={{ flex: 1 }}
+            value={printerName}
+            onChange={(e) => setPrinterName(e.target.value)}
+          >
+            <option value="">{t('printer.availablePrinters')}</option>
+            {availablePrinters.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </FieldSelect>
+          <IconButton type="button" onClick={loadAvailablePrinters} title={t('common.refresh')}>
+            <RefreshCw size={16} />
+          </IconButton>
+          <Button onClick={handleSavePrinter} disabled={printerSaving}>
+            {printerSaving ? t('common.saving') : t('common.save')}
+          </Button>
+        </PrinterRow>
+      </Panel>
+
       {templates.length === 0 ? (
         <EmptyState>{t('priceTags.noTemplates')}</EmptyState>
       ) : (
@@ -566,16 +631,45 @@ function TagPreview({ template }: { template: PriceTagTemplate }) {
       $fontWeight={template.fontWeight}
     >
       {el.customText1 && template.customText1Value && (
-        <PreviewLine $small>{template.customText1Value}</PreviewLine>
+        <PreviewLine $small style={{ textAlign: 'center' }}>{template.customText1Value}</PreviewLine>
       )}
-      {el.name && <PreviewLine $bold>{t('priceTags.sampleName')}</PreviewLine>}
-      {el.price && <PreviewLine $bold>12 500 {t('common.currency')}</PreviewLine>}
-      {el.barcode && <BarcodePreview>4901234567890</BarcodePreview>}
-      {el.articleId && <PreviewLine $small>ID: 00123</PreviewLine>}
-      {el.productionDate && <PreviewLine $small>{t('priceTags.el_productionDate')}: 01.01.2025</PreviewLine>}
-      {el.expiryDate && <PreviewLine $small>{t('priceTags.el_expiryDate')}: 01.06.2025</PreviewLine>}
+
+      {/* Row 1: name */}
+      {el.name && (
+        <PreviewLine $bold style={{ textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {t('priceTags.sampleName')}
+        </PreviewLine>
+      )}
+
+      {/* Row 2: qty | price/unit */}
+      {el.price && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: '0.85em' }}>
+          <span>1 шт</span>
+          <span>12 500 {t('common.currency')}/шт</span>
+        </div>
+      )}
+
+      {/* Row 3: barcode placeholder | total */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', width: '100%', gap: 4 }}>
+        {el.barcode ? (
+          <div style={{ flex: 1, background: '#e8e8e8', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2px 0' }}>
+            <span style={{ fontSize: '0.6em', color: '#555', letterSpacing: 1 }}>||| ||| |||</span>
+          </div>
+        ) : (
+          <div style={{ flex: 1 }} />
+        )}
+        {el.price && (
+          <span style={{ fontWeight: 700, fontSize: '0.85em', whiteSpace: 'nowrap' }}>
+            12 500 {t('common.currency')}
+          </span>
+        )}
+      </div>
+
+      {el.articleId && <PreviewLine $small style={{ textAlign: 'center' }}>ID: 00123</PreviewLine>}
+      {el.productionDate && <PreviewLine $small style={{ textAlign: 'center' }}>01.01.2025</PreviewLine>}
+      {el.expiryDate && <PreviewLine $small style={{ textAlign: 'center' }}>01.06.2025</PreviewLine>}
       {el.customText2 && template.customText2Value && (
-        <PreviewLine $small>{template.customText2Value}</PreviewLine>
+        <PreviewLine $small style={{ textAlign: 'center' }}>{template.customText2Value}</PreviewLine>
       )}
     </PreviewTag>
   );

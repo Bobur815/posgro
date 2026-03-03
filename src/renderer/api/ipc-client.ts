@@ -10,6 +10,8 @@ export const auth = {
     ipc?.auth.login(phone, password),
   logout: () => ipc?.auth.logout(),
   getProfile: () => ipc?.auth.getProfile(),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    ipc?.auth.changePassword(currentPassword, newPassword),
 };
 
 export const products = {
@@ -109,6 +111,13 @@ export const receipt = {
     ipc?.receipt.scan(imageBase64, mimeType),
   matchProducts: (items: { name: string; mxik?: string | null }[]) =>
     ipc?.receipt.matchProducts(items),
+  getTokenUsage: () =>
+    ipc?.receipt.getTokenUsage(),
+};
+
+export const analytics = {
+  getData: (filters: { startDate: string; endDate: string }) =>
+    ipc?.analytics.getData(filters),
 };
 
 export const app = {

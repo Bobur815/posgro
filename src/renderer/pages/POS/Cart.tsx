@@ -1,15 +1,14 @@
-import React, { useState, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
-import styled from 'styled-components';
-import { useCartStore } from '../../store/cart-store';
-import { Button } from '../../components/common/Button';
-import { ConfirmDialog } from '../../components/common/ConfirmDialog';
-import { EmptyPlaceholder } from '../../components/common/EmptyPlaceholder';
-import { Banknote, CreditCard, History, ShoppingCart, Trash, X } from 'lucide-react';
-import { SalesHistoryModal } from './SalesHistoryModal';
-import type { Sale } from '@shared/types/sale.types';
-import { formatCurrency as formatCurrencyBase } from '@shared/utils';
-import { formatQuantity } from '../../utils/formatters';
+import React, { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
+import styled from "styled-components";
+import { useCartStore } from "../../store/cart-store";
+import { ConfirmDialog } from "../../components/common/ConfirmDialog";
+import { EmptyPlaceholder } from "../../components/common/EmptyPlaceholder";
+import { History, ShoppingCart, Trash, X } from "lucide-react";
+import { SalesHistoryModal } from "./SalesHistoryModal";
+import type { Sale } from "@shared/types/sale.types";
+import { formatCurrency as formatCurrencyBase } from "@shared/utils";
+import { formatQuantity } from "../../utils/formatters";
 
 const Container = styled.div`
   display: flex;
@@ -27,7 +26,7 @@ const Header = styled.div`
 
 const Title = styled.h2`
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
   color: ${({ theme }) => theme.colors.text};
 `;
 
@@ -58,7 +57,7 @@ const ClearButton = styled.button`
   border: none;
   color: ${({ theme }) => theme.colors.error};
   cursor: pointer;
-  font-size: 14px;
+  font-size: 24px;
 
   &:hover {
     text-decoration: underline;
@@ -72,7 +71,7 @@ const EditBanner = styled.div`
   padding: ${({ theme }) => theme.spacing.sm} ${({ theme }) => theme.spacing.md};
   background-color: ${({ theme }) => theme.colors.warning}15;
   border-bottom: 1px solid ${({ theme }) => theme.colors.warning}40;
-  font-size: 13px;
+  font-size: 15px;
   color: ${({ theme }) => theme.colors.text};
 `;
 
@@ -85,12 +84,12 @@ const EditBannerInfo = styled.div`
 const EditBannerLabel = styled.span`
   font-weight: 600;
   color: ${({ theme }) => theme.colors.warning};
-  font-size: 12px;
+  font-size: 14px;
   text-transform: uppercase;
 `;
 
 const EditBannerReceipt = styled.span`
-  font-size: 12px;
+  font-size: 14px;
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
@@ -104,7 +103,7 @@ const CancelEditButton = styled.button`
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: 14px;
 
   &:hover {
     color: ${({ theme }) => theme.colors.error};
@@ -138,13 +137,13 @@ const ItemRow = styled.div`
 const ItemName = styled.span`
   font-weight: 500;
   color: ${({ theme }) => theme.colors.text};
-  font-size: 16px;
+  font-size: 18px;
 `;
 
 const ItemPrice = styled.span`
   color: ${({ theme }) => theme.colors.primary};
   font-weight: bold;
-  font-size: 16px;
+  font-size: 18px;
 `;
 
 const QuantityControls = styled.div`
@@ -155,8 +154,8 @@ const QuantityControls = styled.div`
 `;
 
 const QuantityButton = styled.button`
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   border-radius: 4px;
   border: 1px solid ${({ theme }) => theme.colors.border};
   background-color: ${({ theme }) => theme.colors.surface};
@@ -165,11 +164,23 @@ const QuantityButton = styled.button`
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-
+  font-size: 18px;
+  font-weight: 600;
+  transition:
+    transform 0.1s ease,
+    background-color 0.1s ease,
+    color 0.1s ease,
+    box-shadow 0.1s ease;
   &:hover {
     background-color: ${({ theme }) => theme.colors.primary};
     color: white;
+  }
+
+  &:active {
+    transform: scale(0.88);
+    background-color: ${({ theme }) => theme.colors.primary};
+    color: white;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25);
   }
 
   &:disabled {
@@ -179,10 +190,10 @@ const QuantityButton = styled.button`
 `;
 
 const Quantity = styled.span`
-  min-width: 40px;
+  width: 80px;
   text-align: center;
   font-weight: 500;
-  font-size: 16px;
+  font-size: 18px;
 `;
 
 const RemoveButton = styled.button`
@@ -190,11 +201,20 @@ const RemoveButton = styled.button`
   border: none;
   color: ${({ theme }) => theme.colors.error};
   cursor: pointer;
-  font-size: 12px;
+  font-size: 18px;
   margin-left: auto;
+  transition:
+    transform 0.1s ease,
+    opacity 0.1s ease;
 
   &:hover {
     text-decoration: underline;
+    opacity: 0.75;
+  }
+
+  &:active {
+    transform: scale(0.85);
+    opacity: 0.6;
   }
 `;
 
@@ -215,8 +235,10 @@ const TotalRow = styled.div<{ $bold?: boolean; $large?: boolean }>`
   padding: ${({ theme }) => theme.spacing.xs} 0;
 
   ${({ $bold }) => $bold && `font-weight: bold;`}
-  ${({ $large }) => $large && `
-    font-size: 22px;
+  ${({ $large }) =>
+    $large &&
+    `
+    font-size: 34px;
     padding-top: 8px;
     margin-top: 8px;
     border-top: 2px solid currentColor;
@@ -224,99 +246,77 @@ const TotalRow = styled.div<{ $bold?: boolean; $large?: boolean }>`
 `;
 
 const TotalLabel = styled.span<{ $muted?: boolean }>`
-  color: ${({ theme, $muted }) => $muted ? theme.colors.textSecondary : theme.colors.text};
+  color: ${({ theme, $muted }) =>
+    $muted ? theme.colors.textSecondary : theme.colors.text};
 `;
 
 const TotalAmount = styled.span<{ $primary?: boolean; $negative?: boolean }>`
   color: ${({ theme, $primary, $negative }) =>
-    $negative ? theme.colors.error :
-    $primary ? theme.colors.primary :
-    theme.colors.text};
+    $negative
+      ? theme.colors.error
+      : $primary
+        ? theme.colors.primary
+        : theme.colors.text};
 `;
 
-const QuickPayRow = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: ${({ theme }) => theme.spacing.sm};
-  margin-top: ${({ theme }) => theme.spacing.sm};
-`;
-
-const QuickPayButton = styled.button<{ $variant: 'cash' | 'card' }>`
-  height: 56px;
-  border-radius: ${({ theme }) => theme.borderRadius};
-  border: 1px solid
-    ${({ theme, $variant }) =>
-      $variant === 'cash' ? theme.colors.success : theme.colors.primary};
-  background-color: ${({ theme, $variant }) =>
-    $variant === 'cash' ? theme.colors.success : theme.colors.primary};
-  color: white;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: ${({ theme }) => theme.spacing.sm};
-
-  &:hover {
-    opacity: 0.9;
-  }
-
-  &:active {
-    transform: scale(0.97);
-  }
-
-  &:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    transform: none;
-  }
-`;
-
-const ShortcutHint = styled.span`
-  font-size: 14px;
-  opacity: 0.7;
-  font-weight: 500;
-`;
-
-interface CartProps {
-  onCheckout: () => void;
-  onQuickPay: (method: 'cash' | 'card') => void;
-  isQuickPayDisabled: boolean;
-}
-
-export function Cart({ onCheckout, onQuickPay, isQuickPayDisabled }: CartProps) {
+export function Cart() {
   const { t, i18n } = useTranslation();
-  const { items, subtotal, tax, discount, total, updateQuantity, removeItem, clearCart, loadSaleForEdit, editingSaleId, editingSaleReceipt } = useCartStore();
-  const formatCurrency = useCallback((amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz'), [i18n.language]);
+  const {
+    items,
+    subtotal,
+    tax,
+    discount,
+    total,
+    updateQuantity,
+    removeItem,
+    clearCart,
+    loadSaleForEdit,
+    editingSaleId,
+    editingSaleReceipt,
+  } = useCartStore();
+  const formatCurrency = useCallback(
+    (amount: number) =>
+      formatCurrencyBase(amount, i18n.language as "ru" | "uz"),
+    [i18n.language],
+  );
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
-  const handleEditSale = useCallback((sale: Sale) => {
-    const cartItems = sale.items.map((item) => ({
-      productId: Number(item.productId),
-      productName: item.productName,
-      barcode: item.barcode,
-      unitPrice: Number(item.unitPrice),
-      quantity: Number(item.quantity),
-      stock: Number(item.quantity) + 100,
-      unit: undefined,
-    }));
-    loadSaleForEdit(sale.id, sale.receiptNumber, cartItems);
-    setShowHistory(false);
-  }, [loadSaleForEdit]);
+  const handleEditSale = useCallback(
+    (sale: Sale) => {
+      const cartItems = sale.items.map((item) => ({
+        productId: Number(item.productId),
+        productName: item.productName,
+        barcode: item.barcode,
+        unitPrice: Number(item.unitPrice),
+        quantity: Number(item.quantity),
+        stock: Number(item.quantity) + 100,
+        unit: undefined,
+      }));
+      loadSaleForEdit(sale.id, sale.receiptNumber, cartItems);
+      setShowHistory(false);
+    },
+    [loadSaleForEdit],
+  );
 
   return (
     <Container>
       <Header>
-        <Title>{t('pos.cart')} ({items.length})</Title>
+        <Title>
+          {t("pos.cart")} ({items.length})
+        </Title>
         <HeaderActions>
-          <IconButton onClick={() => setShowHistory(true)} title={t('pos.salesHistory')}>
-            <History size={20} />
+          <IconButton
+            onClick={() => setShowHistory(true)}
+            title={t("pos.salesHistory")}
+          >
+            <History size={30} />
           </IconButton>
           {items.length > 0 && (
-            <ClearButton onClick={() => setShowClearConfirm(true)}> {t('common.clear')}</ClearButton>
+            <ClearButton onClick={() => setShowClearConfirm(true)}>
+              {" "}
+              {t("common.clear")}
+            </ClearButton>
           )}
         </HeaderActions>
       </Header>
@@ -324,49 +324,79 @@ export function Cart({ onCheckout, onQuickPay, isQuickPayDisabled }: CartProps) 
       {editingSaleId && (
         <EditBanner>
           <EditBannerInfo>
-            <EditBannerLabel>{t('pos.editingSale')}</EditBannerLabel>
+            <EditBannerLabel>{t("pos.editingSale")}</EditBannerLabel>
             <EditBannerReceipt>#{editingSaleReceipt}</EditBannerReceipt>
           </EditBannerInfo>
           <CancelEditButton onClick={clearCart}>
             <X size={14} />
-            {t('common.cancel')}
+            {t("common.cancel")}
           </CancelEditButton>
         </EditBanner>
       )}
 
       {items.length === 0 ? (
-        <EmptyPlaceholder icon={<ShoppingCart size={48} />} title={t('pos.emptyCart')} />
+        <EmptyPlaceholder
+          icon={<ShoppingCart size={48} />}
+          title={t("pos.emptyCart")}
+        />
       ) : (
         <ItemsList>
           {items.map((item, index) => {
-            const isWeighed = item.unit === 'кг' || item.unit === 'л';
+            const isWeighed = item.unit === "кг" || item.unit === "л";
             const step = isWeighed ? 0.1 : 1;
 
             return (
               <CartItem key={`${item.productId}-${item.unitPrice}`}>
                 <ItemRow>
                   <ItemName>{item.productName}</ItemName>
-                  <ItemPrice>{formatCurrency(item.unitPrice * item.quantity)}</ItemPrice>
+                  <ItemPrice>
+                    {formatCurrency(item.unitPrice * item.quantity)}
+                  </ItemPrice>
                 </ItemRow>
                 <QuantityControls>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
                     <QuantityButton
-                      onClick={() => updateQuantity(item.productId, Math.round((item.quantity - step) * 100) / 100, item.unitPrice)}
+                      onClick={() =>
+                        updateQuantity(
+                          item.productId,
+                          Math.round((item.quantity - step) * 100) / 100,
+                          item.unitPrice,
+                        )
+                      }
                     >
                       -
                     </QuantityButton>
-                    <Quantity>{formatQuantity(item.quantity, item.unit || 'шт', i18n.language as 'ru' | 'uz')}</Quantity>
+                    <Quantity>
+                      {formatQuantity(
+                        item.quantity,
+                        item.unit || "шт",
+                        i18n.language as "ru" | "uz",
+                      )}
+                    </Quantity>
                     <QuantityButton
-                      onClick={() => updateQuantity(item.productId, Math.round((item.quantity + step) * 100) / 100, item.unitPrice)}
+                      onClick={() =>
+                        updateQuantity(
+                          item.productId,
+                          Math.round((item.quantity + step) * 100) / 100,
+                          item.unitPrice,
+                        )
+                      }
                       disabled={item.quantity >= item.stock}
                     >
                       +
                     </QuantityButton>
-                    x
-                    <ItemPrice>{formatCurrency(item.unitPrice)}</ItemPrice>
+                    x<ItemPrice>{formatCurrency(item.unitPrice)}</ItemPrice>
                   </div>
-                  <RemoveButton onClick={() => removeItem(item.productId, item.unitPrice)}>
-                    <Trash size={22} />
+                  <RemoveButton
+                    onClick={() => removeItem(item.productId, item.unitPrice)}
+                  >
+                    <Trash size={26} />
                   </RemoveButton>
                 </QuantityControls>
               </CartItem>
@@ -378,66 +408,44 @@ export function Cart({ onCheckout, onQuickPay, isQuickPayDisabled }: CartProps) 
       <Footer>
         <TotalsSection>
           <TotalRow>
-            <TotalLabel $muted>{t('pos.subtotal')}:</TotalLabel>
+            <TotalLabel $muted>{t("pos.subtotal")}:</TotalLabel>
             <TotalAmount>{formatCurrency(subtotal)}</TotalAmount>
           </TotalRow>
           {tax > 0 && (
             <TotalRow>
-              <TotalLabel $muted>{t('pos.tax')}:</TotalLabel>
+              <TotalLabel $muted>{t("pos.tax")}:</TotalLabel>
               <TotalAmount>{formatCurrency(tax)}</TotalAmount>
             </TotalRow>
           )}
           {discount > 0 && (
             <TotalRow>
-              <TotalLabel $muted>{t('pos.discount')}:</TotalLabel>
+              <TotalLabel $muted>{t("pos.discount")}:</TotalLabel>
               <TotalAmount $negative>-{formatCurrency(discount)}</TotalAmount>
             </TotalRow>
           )}
           <TotalRow $bold $large>
-            <TotalLabel>{t('pos.total')}:</TotalLabel>
+            <TotalLabel>{t("pos.total")}:</TotalLabel>
             <TotalAmount $primary>{formatCurrency(total)}</TotalAmount>
           </TotalRow>
         </TotalsSection>
-        <Button
-          fullWidth
-          onClick={onCheckout}
-          disabled={items.length === 0}
-        >
-          {editingSaleId ? t('pos.save') : t('pos.pay') + ' - ' + formatCurrency(total)}
-          {' '}<ShortcutHint>(F10)</ShortcutHint>
-        </Button>
-        <QuickPayRow>
-          <QuickPayButton
-            $variant="cash"
-            onClick={() => onQuickPay('cash')}
-            disabled={items.length === 0 || isQuickPayDisabled}
-          >
-            <Banknote size={24} />
-            {t('pos.cash')}
-            <ShortcutHint>(F11)</ShortcutHint>
-          </QuickPayButton>
-          <QuickPayButton
-            $variant="card"
-            onClick={() => onQuickPay('card')}
-            disabled={items.length === 0 || isQuickPayDisabled}
-          >
-            <CreditCard size={24} />
-            {t('pos.card')}
-            <ShortcutHint>(F12)</ShortcutHint>
-          </QuickPayButton>
-        </QuickPayRow>
       </Footer>
 
       {showHistory && (
-        <SalesHistoryModal onClose={() => setShowHistory(false)} onEditSale={handleEditSale} />
+        <SalesHistoryModal
+          onClose={() => setShowHistory(false)}
+          onEditSale={handleEditSale}
+        />
       )}
 
       {showClearConfirm && (
         <ConfirmDialog
-          title={t('common.clear')}
-          message={t('pos.clearCartConfirm', 'Are you sure you want to clear the cart?')}
-          confirmLabel={t('common.clear')}
-          cancelLabel={t('common.cancel')}
+          title={t("common.clear")}
+          message={t(
+            "pos.clearCartConfirm",
+            "Are you sure you want to clear the cart?",
+          )}
+          confirmLabel={t("common.clear")}
+          cancelLabel={t("common.cancel")}
           variant="danger"
           onConfirm={() => {
             clearCart();

@@ -10,7 +10,7 @@ import { useToast } from "../../context/ToastContext";
 import { Supplier } from "@shared/types";
 import { convertUzbekText } from "@shared/utils/transliterator";
 import { UzbekPhoneInput } from "../../components/common/UzbekPhoneInput";
-import { digitsOnly, formatUzPhone } from "@shared/utils/phone";
+import { phoneToDigits, formatUzPhone } from "@shared/utils/phone";
 import { Pencil, Trash2, Plus, ArrowLeft, CirclePlus } from "lucide-react";
 
 const List = styled.div`
@@ -114,6 +114,8 @@ const EmptyMessage = styled.div`
 interface SupplierManagementModalProps {
   onClose: () => void;
   onSupplierChanged: () => void;
+  initialView?: "list" | "form";
+  initialEditSupplier?: Supplier;
 }
 
 type View = "list" | "form";
@@ -121,6 +123,8 @@ type View = "list" | "form";
 export function SupplierManagementModal({
   onClose,
   onSupplierChanged,
+  initialView,
+  initialEditSupplier,
 }: SupplierManagementModalProps) {
   const { t, i18n } = useTranslation();
   const toast = useToast();
@@ -133,16 +137,17 @@ export function SupplierManagementModal({
     isLoading,
   } = useSuppliers();
 
-  const [view, setView] = useState<View>("list");
-  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [view, setView] = useState<View>(initialView ?? "list");
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(initialEditSupplier ?? null);
   const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(
     null,
   );
   const [formData, setFormData] = useState({
-    nameRu: "",
-    nameUz: "",
-    phoneDigits: "",
-    address: "",
+    nameRu: initialEditSupplier?.nameRu ?? "",
+    nameUz: initialEditSupplier?.nameUz ?? "",
+    phoneDigits: initialEditSupplier?.phone ? phoneToDigits(initialEditSupplier.phone) : "",
+    balance: initialEditSupplier?.balance ?? 0,
+    address: initialEditSupplier?.address ?? "",
   });
 
   useEffect(() => {
@@ -151,7 +156,7 @@ export function SupplierManagementModal({
 
   const openCreateForm = () => {
     setEditingSupplier(null);
-    setFormData({ nameRu: "", nameUz: "", phoneDigits: "", address: "" });
+    setFormData({ nameRu: "", nameUz: "", phoneDigits: "", balance: 0, address: "" });
     setView("form");
   };
 
@@ -160,7 +165,8 @@ export function SupplierManagementModal({
     setFormData({
       nameRu: supplier.nameRu,
       nameUz: supplier.nameUz,
-      phoneDigits: supplier.phone ? digitsOnly(supplier.phone) : "",
+      phoneDigits: supplier.phone ? phoneToDigits(supplier.phone) : "",
+      balance: supplier.balance || 0,
       address: supplier.address || "",
     });
     setView("form");
@@ -194,24 +200,34 @@ export function SupplierManagementModal({
     });
   };
 
+  const handleChange = (field: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const data = {
-      nameRu: formData.nameRu,
-      nameUz: formData.nameUz,
-      phone: formData.phoneDigits
-        ? formatUzPhone(formData.phoneDigits)
-        : undefined,
-      address: formData.address || undefined,
-    };
+    const phone = formData.phoneDigits ? formatUzPhone(formData.phoneDigits) : undefined;
+    const address = formData.address || undefined;
 
     let success;
     if (editingSupplier) {
-      success = await updateSupplier(editingSupplier.id, data);
+      success = await updateSupplier(editingSupplier.id, {
+        nameRu: formData.nameRu,
+        nameUz: formData.nameUz,
+        phone,
+        address,
+        balance: formData.balance ? Number(formData.balance) : 0,
+      });
       if (success) toast.success(t("suppliers.supplierUpdated"));
     } else {
-      success = await createSupplier(data);
+      success = await createSupplier({
+        nameRu: formData.nameRu,
+        nameUz: formData.nameUz,
+        phone,
+        address,
+        balance: formData.balance ? Number(formData.balance) : 0,
+      });
       if (success) toast.success(t("suppliers.supplierCreated"));
     }
 
@@ -305,6 +321,12 @@ export function SupplierManagementModal({
                 onDigitsChange={(digits) =>
                   setFormData((prev) => ({ ...prev, phoneDigits: digits }))
                 }
+              />
+              <Input
+                label={t("suppliers.balance")}
+                value={formData.balance}
+                onChange={(e) => handleChange('balance', e.target.value)}
+                placeholder="0.00"
               />
               <Input
                 label={t("suppliers.address")}

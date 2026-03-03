@@ -8,9 +8,11 @@ import {
   AlertCircle,
   X,
   FileText,
+  PlusCircle,
 } from "lucide-react";
 import { Modal } from "../../components/common/Modal";
 import { Button } from "../../components/common/Button";
+import { ProductForm } from "./ProductForm";
 import {
   Supplier,
   SupplierPaymentMethod,
@@ -263,6 +265,7 @@ const PAYMENT_METHODS: SupplierPaymentMethod[] = [
 
 interface ReviewItem {
   scannedName: string;
+  mxik: string | null;
   productId: string;
   quantity: number;
   unitCost: number;
@@ -294,8 +297,49 @@ export function ReceiptScanModal({
   const [paymentMethod, setPaymentMethod] =
     useState<SupplierPaymentMethod>("CASH");
 
+  // Local product list — starts from prop, updated after new product creation
+  const [localProducts, setLocalProducts] = useState<Product[]>(products);
+  // Index of the review row for which we're creating a new product
+  const [addingForRowIdx, setAddingForRowIdx] = useState<number | null>(null);
+
   const [createProgress, setCreateProgress] = useState(0);
   const [createTotal, setCreateTotal] = useState(0);
+
+  const handleProductCreated = async () => {
+    // Reload the full product list from IPC
+    const updated = (await window.electronAPI.products.getAll()) as Product[];
+    setLocalProducts(updated);
+
+    // Try to auto-assign the newly created product to the row
+    if (addingForRowIdx !== null) {
+      const row = reviewItems[addingForRowIdx];
+
+      // Match by MXIK first, then by name
+      let matched: Product | undefined;
+      if (row.mxik) {
+        matched = updated.find((p) => p.mxik === row.mxik);
+      }
+      if (!matched) {
+        const nameLower = row.scannedName.toLowerCase();
+        matched = updated.find(
+          (p) =>
+            p.nameRu.toLowerCase().includes(nameLower) ||
+            p.nameUz.toLowerCase().includes(nameLower) ||
+            nameLower.includes(p.nameRu.toLowerCase()) ||
+            nameLower.includes(p.nameUz.toLowerCase()),
+        );
+      }
+
+      if (matched) {
+        updateReviewItem(addingForRowIdx, {
+          productId: String(matched.id),
+          confidence: "high",
+        });
+      }
+    }
+
+    setAddingForRowIdx(null);
+  };
 
   const getProductName = (p: Product) =>
     i18n.language === "uz" ? p.nameUz : p.nameRu;
@@ -449,6 +493,7 @@ export function ReceiptScanModal({
         const match = matches[idx];
         return {
           scannedName: item.scannedName,
+          mxik: item.mxik ?? null,
           productId: match?.matchedProductId || "",
           quantity: item.quantity,
           unitCost: item.unitCost,
@@ -463,6 +508,8 @@ export function ReceiptScanModal({
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("ANTHROPIC_API_KEY_NOT_SET")) {
         setError(t("receiptScan.apiKeyNotSet"));
+      } else if (message.includes("AI_TOKEN_LIMIT_EXCEEDED")) {
+        setError(t("receiptScan.tokenLimitExceeded"));
       } else {
         setError(t("receiptScan.scanError") + ": " + message);
       }
@@ -492,13 +539,13 @@ export function ReceiptScanModal({
       const item = itemsToCreate[i];
       try {
         await window.electronAPI.inventory.createArrival({
-          productId: item.productId,
+          productId: parseInt(item.productId, 10),
           quantity: item.quantity,
           cost: item.unitCost,
           supplierId: supplierId || undefined,
           paymentMethod: supplierId ? paymentMethod : undefined,
           createdBy: userId,
-          notes: `Receipt scan: ${item.scannedName}`,
+          notes: `Receipt scan: ${item.scannedName}${item.mxik ? ` [MXIK: ${item.mxik}]` : ""}`,
         });
       } catch (err) {
         console.error("Failed to create arrival for", item.scannedName, err);
@@ -537,6 +584,7 @@ export function ReceiptScanModal({
   };
 
   return (
+    <>
     <Modal title={getStepTitle()} onClose={onClose} width="900px">
       {/* UPLOAD STEP */}
       {step === "upload" && (
@@ -655,6 +703,7 @@ export function ReceiptScanModal({
                 <tr>
                   <Th style={{ width: 30 }}></Th>
                   <Th>{t("receiptScan.scannedName")}</Th>
+                  <Th style={{ width: 130 }}>MXIK</Th>
                   <Th>{t("receiptScan.matchedProduct")}</Th>
                   <Th style={{ width: 80 }}>{t("receiptScan.confidence")}</Th>
                   <Th style={{ width: 90 }}>{t("receiptScan.quantity")}</Th>
@@ -676,26 +725,44 @@ export function ReceiptScanModal({
                       />
                     </Td>
                     <Td>{item.scannedName}</Td>
+                    <Td style={{ fontSize: 11, opacity: 0.6, fontFamily: "monospace" }}>
+                      {item.mxik || "—"}
+                    </Td>
                     <Td>
-                      <ProductSelect
-                        value={item.productId}
-                        onChange={(e) =>
-                          updateReviewItem(idx, {
-                            productId: e.target.value,
-                            confidence: e.target.value ? "high" : "none",
-                          })
-                        }
-                        disabled={item.skip}
-                      >
-                        <option value="">
-                          {t("receiptScan.selectProduct")}
-                        </option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {getProductName(p)}
+                      <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                        <ProductSelect
+                          value={item.productId}
+                          onChange={(e) =>
+                            updateReviewItem(idx, {
+                              productId: e.target.value,
+                              confidence: e.target.value ? "high" : "none",
+                            })
+                          }
+                          disabled={item.skip}
+                          style={{ flex: 1 }}
+                        >
+                          <option value="">
+                            {t("receiptScan.selectProduct")}
                           </option>
-                        ))}
-                      </ProductSelect>
+                          {localProducts.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {getProductName(p)}
+                            </option>
+                          ))}
+                        </ProductSelect>
+                        {!item.productId && !item.skip && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="small"
+                            title={t("products.addProduct")}
+                            style={{ flexShrink: 0, padding: "4px 6px" }}
+                            onClick={() => setAddingForRowIdx(idx)}
+                          >
+                            <PlusCircle size={15} />
+                          </Button>
+                        )}
+                      </div>
                     </Td>
                     <Td>
                       <ConfidenceBadge $level={item.confidence}>
@@ -792,5 +859,22 @@ export function ReceiptScanModal({
         </>
       )}
     </Modal>
+
+    {addingForRowIdx !== null && (() => {
+      const row = reviewItems[addingForRowIdx];
+      return (
+        <ProductForm
+          initialData={{
+            nameRu: row.scannedName,
+            nameUz: row.scannedName,
+            mxik: row.mxik || undefined,
+            cost: row.unitCost || undefined,
+          }}
+          onClose={() => setAddingForRowIdx(null)}
+          onSuccess={handleProductCreated}
+        />
+      );
+    })()}
+    </>
   );
 }

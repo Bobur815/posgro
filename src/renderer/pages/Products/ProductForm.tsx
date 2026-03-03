@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
+import { generateProductBarcode } from "@shared/utils/barcode-parser";
 import { useProducts } from "../../hooks/useProducts";
 import { useAuthStore } from "../../store/auth-store";
 import { useToast } from "../../context/ToastContext";
@@ -16,19 +16,10 @@ import {
   SupplierPaymentMethod,
 } from "@shared/types";
 import { convertUzbekText } from "@shared/utils/transliterator";
-import { Settings } from "lucide-react";
+import { RefreshCw, Settings } from "lucide-react";
 import { SupplierManagementModal } from "../Suppliers/SupplierManagementModal";
 import { CategoryManagementModal } from "./CategoryManagementModal";
 import { DateInput } from "../../components/common/DateInput";
-
-const Container = styled.div`
-  max-width: 600px;
-`;
-
-const Title = styled.h1`
-  margin: 0 0 ${({ theme }) => theme.spacing.lg};
-  color: ${({ theme }) => theme.colors.text};
-`;
 
 const Form = styled.form`
   display: flex;
@@ -176,10 +167,25 @@ const PAYMENT_METHODS: SupplierPaymentMethod[] = [
 
 const UNIT_OPTIONS: ProductUnit[] = ["шт", "кг", "л", "м"];
 
-export function ProductForm() {
+interface ProductFormProps {
+  productId?: string;
+  initialData?: {
+    nameRu?: string;
+    nameUz?: string;
+    mxik?: string;
+    cost?: number;
+  };
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+export function ProductForm({
+  productId,
+  initialData,
+  onClose,
+  onSuccess,
+}: ProductFormProps) {
   const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
-  const { id } = useParams();
   const toast = useToast();
   const { user } = useAuthStore();
   const {
@@ -195,15 +201,15 @@ export function ProductForm() {
     error,
   } = useProducts();
 
-  const isEdit = Boolean(id);
+  const isEdit = Boolean(productId);
   const barcodeCheckTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const [formData, setFormData] = useState({
     barcode: "",
-    nameRu: "",
-    nameUz: "",
+    nameRu: initialData?.nameRu || "",
+    nameUz: initialData?.nameUz || "",
     price: "",
-    cost: "",
+    cost: initialData?.cost ? String(initialData.cost) : "",
     stock: "0",
     minStock: "0",
     unit: "шт" as ProductUnit,
@@ -214,10 +220,9 @@ export function ProductForm() {
     discountPercent: "",
     isOnPromotion: false,
     active: true,
-    mxik: "",
+    mxik: initialData?.mxik || "",
   });
 
-  // Existing product found by barcode
   const [existingProduct, setExistingProduct] = useState<Product | null>(null);
   const [showArrivalModal, setShowArrivalModal] = useState(false);
   const [arrivalData, setArrivalData] = useState({
@@ -239,12 +244,11 @@ export function ProductForm() {
     loadCategories();
     loadSuppliers();
 
-    if (isEdit && id) {
+    if (isEdit && productId) {
       loadProduct();
     }
-  }, [id, isEdit]);
+  }, [productId, isEdit]);
 
-  // Debounced barcode check
   const checkBarcode = useCallback(
     async (barcode: string) => {
       if (!barcode || barcode.length < 3 || isEdit) return;
@@ -270,6 +274,11 @@ export function ProductForm() {
     },
     [searchByBarcode, isEdit],
   );
+
+  const handleGenerateBarcode = () => {
+    const code = generateProductBarcode();
+    setFormData((prev) => ({ ...prev, barcode: code }));
+  };
 
   const handleBarcodeChange = (value: string) => {
     setFormData((prev) => ({ ...prev, barcode: value }));
@@ -341,6 +350,7 @@ export function ProductForm() {
         productionDate: "",
         expirationDate: "",
       });
+      onSuccess();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.error"));
     } finally {
@@ -378,7 +388,6 @@ export function ProductForm() {
   const formatCurrency = (amount: number) =>
     formatCurrencyBase(amount, i18n.language as "ru" | "uz");
 
-  // Compute profit margin for form
   const formProfitMargin =
     formData.price && formData.cost
       ? (
@@ -389,9 +398,9 @@ export function ProductForm() {
       : null;
 
   const loadProduct = async () => {
-    if (!id) return;
+    if (!productId) return;
 
-    const product = await getById(id);
+    const product = await getById(productId);
     if (product) {
       setFormData({
         barcode: product.barcode,
@@ -444,20 +453,16 @@ export function ProductForm() {
     };
 
     let success = false;
-    if (isEdit && id) {
-      success = await updateProduct(id, data);
-      if (success) {
-        toast.success(t("common.saved"));
-      }
+    if (isEdit && productId) {
+      success = await updateProduct(productId, data);
+      if (success) toast.success(t("common.saved"));
     } else {
       success = await createProduct(data);
-      if (success) {
-        toast.success(t("common.saved"));
-      }
+      if (success) toast.success(t("common.saved"));
     }
 
     if (success) {
-      navigate("/products");
+      onSuccess();
     } else if (error) {
       toast.error(error);
     }
@@ -495,103 +500,149 @@ export function ProductForm() {
     });
   };
 
+  const title = isEdit ? t("products.editProduct") : t("products.addProduct");
+
   return (
-    <Container>
-      <Title>
-        {isEdit ? t("products.editProduct") : t("products.addProduct")}
-      </Title>
+    <>
+      <Modal title={title} onClose={onClose} width="750px">
+        <Form onSubmit={handleSubmit}>
+          <Row>
+            <Input
+              label={t("products.mxik")}
+              value={formData.mxik}
+              placeholder="00000000000000000"
+              onChange={(e) => handleChange("mxik", e.target.value)}
+            />
+            <FormGroup>
+              <Label>{t("products.barcode")}</Label>
+              <div
+                style={{ display: "flex", flexDirection: "row", gap: "8px" }}
+              >
+                <Input
+                  value={formData.barcode}
+                  autoFocus
+                  onChange={(e) => handleBarcodeChange(e.target.value)}
+                  disabled={isEdit}
+                  required
+                  style={{ flex: 1 }}
+                />
+                {!isEdit && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="small"
+                    onClick={handleGenerateBarcode}
+                    title={t("products.generateBarcode")}
+                    style={{ flexShrink: 0 }}
+                  >
+                    <RefreshCw size={16} />
+                  </Button>
+                )}
+              </div>
+            </FormGroup>
+          </Row>
 
-      <Form onSubmit={handleSubmit}>
-        <Row>
-          <Input
-            label={t("products.barcode")}
-            value={formData.barcode}
-            autoFocus
-            onChange={(e) => handleBarcodeChange(e.target.value)}
-            disabled={isEdit}
-            required
-          />
-          <Input
-            label={t("products.mxik")}
-            value={formData.mxik}
-            placeholder="00000000000000000"
-            onChange={(e) => handleChange("mxik", e.target.value)}
-          />
-        </Row>
+          <Row>
+            <Input
+              label={t("products.nameUz")}
+              value={formData.nameUz}
+              onChange={(e) => handleNameUzChange(e.target.value)}
+              required
+            />
+            <Input
+              label={t("products.nameRu")}
+              value={formData.nameRu}
+              onChange={(e) => handleNameRuChange(e.target.value)}
+              required
+            />
+          </Row>
 
-        <Row>
-          <Input
-            label={t("products.nameUz")}
-            value={formData.nameUz}
-            onChange={(e) => handleNameUzChange(e.target.value)}
-            required
-          />
-          <Input
-            label={t("products.nameRu")}
-            value={formData.nameRu}
-            onChange={(e) => handleNameRuChange(e.target.value)}
-            required
-          />
-        </Row>
+          <Row>
+            <Input
+              label={`${t("products.price")}${formProfitMargin !== null ? ` (${formProfitMargin}%)` : ""}`}
+              type="number"
+              value={formData.price}
+              onChange={(e) => handleChange("price", e.target.value)}
+              required
+            />
+            <Input
+              label={t("products.cost")}
+              type="number"
+              value={formData.cost}
+              onChange={(e) => handleChange("cost", e.target.value)}
+            />
+          </Row>
 
-        <Row>
-          <Input
-            label={`${t("products.price")}${formProfitMargin !== null ? ` (${formProfitMargin}%)` : ""}`}
-            type="number"
-            value={formData.price}
-            onChange={(e) => handleChange("price", e.target.value)}
-            required
-          />
-          <Input
-            label={t("products.cost")}
-            type="number"
-            value={formData.cost}
-            onChange={(e) => handleChange("cost", e.target.value)}
-          />
-        </Row>
+          <Row>
+            <Input
+              label={t("products.stock")}
+              type="number"
+              value={formData.stock}
+              onChange={(e) => handleChange("stock", e.target.value)}
+            />
+            <Input
+              label={t("products.minStock")}
+              type="number"
+              value={formData.minStock}
+              onChange={(e) => handleChange("minStock", e.target.value)}
+            />
+          </Row>
 
-        <Row>
-          <Input
-            label={t("products.stock")}
-            type="number"
-            value={formData.stock}
-            onChange={(e) => handleChange("stock", e.target.value)}
-          />
-          <Input
-            label={t("products.minStock")}
-            type="number"
-            value={formData.minStock}
-            onChange={(e) => handleChange("minStock", e.target.value)}
-          />
-        </Row>
+          <Row>
+            <FormGroup>
+              <Label>{t("products.unit")}</Label>
+              <Select
+                value={formData.unit}
+                onChange={(e) => handleChange("unit", e.target.value)}
+              >
+                {UNIT_OPTIONS.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {getUnitLabel(unit)}
+                  </option>
+                ))}
+              </Select>
+            </FormGroup>
+            <FormGroup>
+              <Label>{t("products.category")}</Label>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <Select
+                  value={formData.categoryId}
+                  onChange={(e) => handleChange("categoryId", e.target.value)}
+                  required
+                  style={{ flex: 1 }}
+                >
+                  <option value="">{t("products.selectCategory")}</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {i18n.language === "uz" ? cat.nameUz : cat.nameRu}
+                    </option>
+                  ))}
+                </Select>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="small"
+                  onClick={() => setShowCategoryModal(true)}
+                  style={{ flexShrink: 0 }}
+                >
+                  <Settings size={16} />
+                </Button>
+              </div>
+            </FormGroup>
+          </Row>
 
-        <Row>
           <FormGroup>
-            <Label>{t("products.unit")}</Label>
-            <Select
-              value={formData.unit}
-              onChange={(e) => handleChange("unit", e.target.value)}
-            >
-              {UNIT_OPTIONS.map((unit) => (
-                <option key={unit} value={unit}>
-                  {getUnitLabel(unit)}
-                </option>
-              ))}
-            </Select>
-          </FormGroup>
-          <FormGroup>
-            <Label>{t("products.category")}</Label>
+            <Label>{t("filters.supplier")}</Label>
             <div style={{ display: "flex", gap: "8px" }}>
               <Select
-                value={formData.categoryId}
-                onChange={(e) => handleChange("categoryId", e.target.value)}
-                required
+                value={formData.supplierId}
+                onChange={(e) => handleChange("supplierId", e.target.value)}
                 style={{ flex: 1 }}
               >
-                <option value="">{t("products.selectCategory")}</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {i18n.language === "uz" ? cat.nameUz : cat.nameRu}
+                <option value="">{t("products.noSupplier")}</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {i18n.language === "uz" ? s.nameUz : s.nameRu}
                   </option>
                 ))}
               </Select>
@@ -599,99 +650,68 @@ export function ProductForm() {
                 type="button"
                 variant="secondary"
                 size="small"
-                onClick={() => setShowCategoryModal(true)}
+                onClick={() => setShowSupplierModal(true)}
                 style={{ flexShrink: 0 }}
               >
                 <Settings size={16} />
               </Button>
             </div>
           </FormGroup>
-        </Row>
 
-        <FormGroup>
-          <Label>{t("filters.supplier")}</Label>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <Select
-              value={formData.supplierId}
-              onChange={(e) => handleChange("supplierId", e.target.value)}
-              style={{ flex: 1 }}
-            >
-              <option value="">{t("products.noSupplier")}</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {i18n.language === "uz" ? s.nameUz : s.nameRu}
-                </option>
-              ))}
-            </Select>
-            <Button
-              type="button"
-              variant="secondary"
-              size="small"
-              onClick={() => setShowSupplierModal(true)}
-              style={{ flexShrink: 0 }}
-            >
-              <Settings size={16} />
+          <Row>
+            <DateInput
+              label={t("products.productionDate")}
+              value={formData.productionDate}
+              onChange={(val) => handleChange("productionDate", val)}
+            />
+            <DateInput
+              label={t("products.expiryDate")}
+              value={formData.expiryDate}
+              onChange={(val) => handleChange("expiryDate", val)}
+            />
+          </Row>
+
+          <Row>
+            <Input
+              label={t("filters.discount")}
+              type="number"
+              min="0"
+              max="100"
+              value={formData.discountPercent}
+              onChange={(e) => handleChange("discountPercent", e.target.value)}
+            />
+            <FormGroup>
+              <Label>{t("filters.isOnPromotion")}</Label>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  marginTop: "4px",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={formData.isOnPromotion}
+                  onChange={(e) =>
+                    handleChange("isOnPromotion", e.target.checked)
+                  }
+                />
+                {t("filters.onPromotion")}
+              </label>
+            </FormGroup>
+          </Row>
+
+          <Actions>
+            <Button type="button" variant="secondary" onClick={onClose}>
+              {t("common.cancel")}
             </Button>
-          </div>
-        </FormGroup>
-
-        <Row>
-          <DateInput
-            label={t("products.productionDate")}
-            value={formData.productionDate}
-            onChange={(val) => handleChange("productionDate", val)}
-          />
-          <DateInput
-            label={t("products.expiryDate")}
-            value={formData.expiryDate}
-            onChange={(val) => handleChange("expiryDate", val)}
-          />
-        </Row>
-
-        <Row>
-          <Input
-            label={t("filters.discount")}
-            type="number"
-            min="0"
-            max="100"
-            value={formData.discountPercent}
-            onChange={(e) => handleChange("discountPercent", e.target.value)}
-          />
-          <FormGroup>
-            <Label>{t("filters.isOnPromotion")}</Label>
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                marginTop: "4px",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={formData.isOnPromotion}
-                onChange={(e) =>
-                  handleChange("isOnPromotion", e.target.checked)
-                }
-              />
-              {t("filters.onPromotion")}
-            </label>
-          </FormGroup>
-        </Row>
-
-        <Actions>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => navigate("/products")}
-          >
-            {t("common.cancel")}
-          </Button>
-          <Button type="submit" disabled={isLoading}>
-            {isLoading ? t("common.saving") : t("common.save")}
-          </Button>
-        </Actions>
-      </Form>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? t("common.saving") : t("common.save")}
+            </Button>
+          </Actions>
+        </Form>
+      </Modal>
 
       {showArrivalModal && existingProduct && (
         <Modal
@@ -1031,6 +1051,6 @@ export function ProductForm() {
           onCategoryChanged={loadCategories}
         />
       )}
-    </Container>
+    </>
   );
 }

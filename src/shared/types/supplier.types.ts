@@ -47,6 +47,7 @@ export interface SupplierCreateInput {
   nameUz: string;
   phone?: string;
   address?: string;
+  balance?: number;
 }
 
 export interface SupplierUpdateInput {
@@ -55,6 +56,7 @@ export interface SupplierUpdateInput {
   phone?: string;
   address?: string;
   active?: boolean;
+  balance?: number;
 }
 
 export interface SupplierTransactionCreateInput {

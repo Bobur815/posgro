@@ -34,12 +34,12 @@ function parseSaleError(err: unknown, t: (key: string, params?: Record<string, u
 const Content = styled.div`
   display: flex;
   flex-direction: column;
-  gap: ${({ theme }) => theme.spacing.lg};
+  gap: ${({ theme }) => theme.spacing.md};
 `;
 
 const TotalSection = styled.div`
   text-align: center;
-  padding: ${({ theme }) => theme.spacing.lg};
+  padding: ${({ theme }) => theme.spacing.md};
   background-color: ${({ theme }) => theme.colors.background};
   border-radius: ${({ theme }) => theme.borderRadius};
 `;
@@ -59,7 +59,7 @@ const TotalAmount = styled.div`
 const SummarySection = styled.div`
   background-color: ${({ theme }) => theme.colors.background};
   border-radius: ${({ theme }) => theme.borderRadius};
-  padding: ${({ theme }) => theme.spacing.md};
+  padding: ${({ theme }) => theme.spacing.sm};
 `;
 
 const SummaryRow = styled.div`
@@ -77,7 +77,7 @@ const PaymentMethods = styled.div`
 `;
 
 const PaymentButton = styled.button<{ $selected?: boolean }>`
-  padding: ${({ theme }) => theme.spacing.xl};
+  padding: ${({ theme }) => theme.spacing.lg};
   border: 2px solid
     ${({ theme, $selected }) =>
       $selected ? theme.colors.primary : theme.colors.border};
@@ -124,19 +124,109 @@ const Checkbox = styled.input`
 `;
 
 const ShortcutHint = styled.span`
-  font-size: 12px;
-  opacity: 0.6;
+  font-size: 14px;
+  opacity: 0.7;
   font-weight: 500;
-  background-color: ${({ theme }) => theme.colors.background};
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  border-radius: 4px;
-  padding: 2px 6px;
 `;
 
 const Actions = styled.div`
   display: flex;
   gap: ${({ theme }) => theme.spacing.md};
 `;
+
+const CashHelper = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.spacing.sm};
+`;
+
+const CashHelperLabel = styled.div`
+  font-size: 13px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-weight: 500;
+`;
+
+const DenominationRow = styled.div`
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: ${({ theme }) => theme.spacing.sm};
+`;
+
+const DenomButton = styled.button`
+  padding: ${({ theme }) => `${theme.spacing.sm} ${theme.spacing.xs}`};
+  border: 1.5px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  background-color: ${({ theme }) => theme.colors.surface};
+  color: ${({ theme }) => theme.colors.text};
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.primary};
+    background-color: ${({ theme }) => theme.colors.primary + "12"};
+    color: ${({ theme }) => theme.colors.primary};
+  }
+
+  &:active {
+    transform: scale(0.96);
+  }
+`;
+
+const ChangeDisplay = styled.div`
+  display: flex;
+  align-items: stretch;
+  gap: ${({ theme }) => theme.spacing.sm};
+  background-color: ${({ theme }) => theme.colors.background};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  padding: ${({ theme }) => theme.spacing.md};
+`;
+
+const ChangeCol = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+`;
+
+const ChangeColLabel = styled.div`
+  font-size: 12px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
+const ChangeColValue = styled.div<{ $positive?: boolean; $negative?: boolean }>`
+  font-size: 20px;
+  font-weight: 700;
+  color: ${({ theme, $positive, $negative }) =>
+    $positive ? theme.colors.success : $negative ? theme.colors.error : theme.colors.text};
+`;
+
+const ChangeDivider = styled.div`
+  width: 1px;
+  background-color: ${({ theme }) => theme.colors.border};
+  align-self: stretch;
+`;
+
+const ClearButton = styled.button`
+  align-self: flex-end;
+  padding: 3px 10px;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: 4px;
+  background: none;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.error};
+    color: ${({ theme }) => theme.colors.error};
+  }
+`;
+
+const DENOMINATIONS = [20000, 50000, 100000, 200000];
 
 interface CheckoutProps {
   onComplete: () => void;
@@ -152,6 +242,10 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
 
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">("cash");
   const [printCheck, setPrintCheck] = useState(total >= 10000);
+  const [givenAmount, setGivenAmount] = useState(0);
+
+  const change = givenAmount - total;
+  const isInsufficient = givenAmount > 0 && change < 0;
 
   const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
 
@@ -258,12 +352,58 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
           </PaymentButton>
           <PaymentButton
             $selected={paymentMethod === "card"}
-            onClick={() => setPaymentMethod("card")}
+            onClick={() => { setPaymentMethod("card"); setGivenAmount(0); }}
           >
             <PaymentIcon>💳</PaymentIcon>
             <PaymentLabel>{t("pos.card")}</PaymentLabel>
           </PaymentButton>
         </PaymentMethods>
+
+        {paymentMethod === "cash" && (
+          <CashHelper>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <CashHelperLabel>{t("pos.cashReceived")}</CashHelperLabel>
+            {givenAmount > 0 && (
+              <ClearButton onClick={() => setGivenAmount(0)}>
+                  {t("pos.clearAmount")} ×
+                </ClearButton>
+            )}
+            </div>
+            <DenominationRow>
+              {DENOMINATIONS.map((denom) => (
+                <DenomButton
+                  key={denom}
+                  onClick={() => setGivenAmount((prev) => prev + denom)}
+                >
+                  {(denom / 1000).toLocaleString()}K
+                </DenomButton>
+              ))}
+            </DenominationRow>
+            {givenAmount > 0 && (
+              <>
+                <ChangeDisplay>
+                  <ChangeCol>
+                    <ChangeColLabel>{t("pos.cashReceived")}</ChangeColLabel>
+
+                    <ChangeColValue>{formatCurrency(givenAmount)}</ChangeColValue>
+                  </ChangeCol>
+                  <ChangeDivider />
+                  <ChangeCol>
+                    <ChangeColLabel>
+                      {isInsufficient ? t("pos.cashInsufficient") : t("pos.cashChange")}
+                    </ChangeColLabel>
+                    <ChangeColValue $positive={change >= 0} $negative={isInsufficient}>
+                      {isInsufficient
+                        ? formatCurrency(Math.abs(change))
+                        : formatCurrency(change)}
+                    </ChangeColValue>
+                  </ChangeCol>
+                </ChangeDisplay>
+                
+              </>
+            )}
+          </CashHelper>
+        )}
 
         <PrintCheckRow>
           <Checkbox
@@ -280,7 +420,7 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
           </Button>
           <Button onClick={handlePayment} disabled={isLoading} fullWidth>
             {isLoading ? t("common.processing") : t("pos.confirmPayment")}{" "}
-            <ShortcutHint>F10</ShortcutHint>
+            <ShortcutHint>(F10)</ShortcutHint>
           </Button>
         </Actions>
       </Content>

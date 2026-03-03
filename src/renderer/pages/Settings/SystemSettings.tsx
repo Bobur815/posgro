@@ -51,6 +51,23 @@ const InfoText = styled.p`
   margin: 0;
 `;
 
+const TokenUsageBar = styled.div`
+  width: 100%;
+  height: 10px;
+  background: ${({ theme }) => theme.colors.border};
+  border-radius: 5px;
+  overflow: hidden;
+  margin: ${({ theme }) => theme.spacing.sm} 0;
+`;
+
+const TokenUsageFill = styled.div<{ $pct: number }>`
+  height: 100%;
+  width: ${({ $pct }) => Math.min($pct, 100)}%;
+  background: ${({ $pct, theme }) =>
+    $pct >= 90 ? theme.colors.error : $pct >= 60 ? theme.colors.warning : theme.colors.success};
+  transition: width 0.3s;
+`;
+
 const ApiKeyRow = styled.div`
   display: flex;
   gap: ${({ theme }) => theme.spacing.sm};
@@ -93,11 +110,13 @@ export function SystemSettings() {
 
   const [apiKey, setApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [tokenUsage, setTokenUsage] = useState<{ used: number; limit: number } | null>(null);
 
   useEffect(() => {
     loadSettings();
     loadSyncStatus();
     loadApiKey();
+    loadTokenUsage();
   }, []);
 
   const loadSettings = async () => {
@@ -144,6 +163,15 @@ export function SystemSettings() {
       if (key) setApiKey(key);
     } catch (error) {
       console.error('Failed to load API key:', error);
+    }
+  };
+
+  const loadTokenUsage = async () => {
+    try {
+      const usage = await window.electronAPI.receipt.getTokenUsage();
+      setTokenUsage(usage);
+    } catch (error) {
+      console.error('Failed to load token usage:', error);
     }
   };
 
@@ -227,6 +255,26 @@ export function SystemSettings() {
       <Section>
         <SectionTitle>{t('aiSettings.title')}</SectionTitle>
         <InfoText style={{ marginBottom: '12px' }}>{t('aiSettings.description')}</InfoText>
+
+        {tokenUsage !== null && (() => {
+          const pct = Math.round((tokenUsage.used / tokenUsage.limit) * 100);
+          return (
+            <div style={{ marginBottom: '16px' }}>
+              <InfoText style={{ marginBottom: '4px', fontWeight: 500, color: 'inherit' }}>
+                {t('aiSettings.tokenUsageTitle')}:{' '}
+                <strong>{tokenUsage.used.toLocaleString()}</strong>{' '}
+                {t('aiSettings.tokenUsageOf')}{' '}
+                <strong>{tokenUsage.limit.toLocaleString()}</strong>{' '}
+                ({pct}%)
+              </InfoText>
+              <TokenUsageBar>
+                <TokenUsageFill $pct={pct} />
+              </TokenUsageBar>
+              <InfoText style={{ fontSize: 12 }}>{t('aiSettings.tokenLimitNote')}</InfoText>
+            </div>
+          );
+        })()}
+
         <ApiKeyRow>
           <div style={{ flex: 1 }}>
             <Input

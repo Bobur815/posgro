@@ -4,22 +4,34 @@ import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { Table } from "../../components/common/Table";
 import { Button } from "../../components/common/Button";
+import { Input } from "../../components/common/Input";
 import { ConfirmDialog } from "../../components/common/ConfirmDialog";
+import { Pagination } from "../../components/common/Pagination";
+import { VirtualKeyboard } from "../../components/common/VirtualKeyboard";
+import { usePagination } from "../../hooks/usePagination";
+import {
+  SearchInputWrapper,
+  InputControls,
+  ClearButton,
+  KbToggle,
+} from "../../components/common/SearchControls";
 import {
   SupplierFilters,
   SupplierFilterParams,
 } from "../../components/suppliers/SupplierFilters";
+import { SupplierManagementModal } from "./SupplierManagementModal";
 import { useSuppliers } from "../../hooks/useSuppliers";
 import { useProducts } from "../../hooks/useProducts";
 import { useToast } from "../../context/ToastContext";
 import { Supplier } from "@shared/types";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
-import { ChevronDown, ChevronUp, CirclePlus } from "lucide-react";
+import { ChevronDown, ChevronUp, CirclePlus, Keyboard, X } from "lucide-react";
 
 const Container = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${({ theme }) => theme.spacing.md};
+  position: relative;
 `;
 
 const Header = styled.div`
@@ -75,14 +87,15 @@ export function SupplierList() {
   const { suppliers, isLoading, loadSuppliers, deleteSupplier, error } =
     useSuppliers();
   const { products, categories, loadProducts, loadCategories } = useProducts();
-  const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(
-    null,
-  );
+  const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
+  const [modalState, setModalState] = useState<{ open: boolean; view: "list" | "form"; supplier?: Supplier }>({ open: false, view: "list" });
   const [filters, setFilters] = useState<SupplierFilterParams>({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   useEffect(() => {
-    loadSuppliers(true); // Always load all, filter client-side
+    loadSuppliers(true);
     loadProducts();
     loadCategories();
   }, [loadSuppliers, loadProducts, loadCategories]);
@@ -108,7 +121,17 @@ export function SupplierList() {
   }, [categories, supplierIdsByCategory]);
 
   const filteredSuppliers = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
     return suppliers.filter((supplier) => {
+      // Search filter
+      if (q) {
+        const matchName =
+          supplier.nameRu.toLowerCase().includes(q) ||
+          supplier.nameUz.toLowerCase().includes(q);
+        const matchPhone = supplier.phone?.toLowerCase().includes(q);
+        if (!matchName && !matchPhone) return false;
+      }
+
       // Status filter
       if (filters.status === "active" && !supplier.active) return false;
       if (filters.status === "inactive" && supplier.active) return false;
@@ -119,15 +142,25 @@ export function SupplierList() {
 
       // Category filter
       if (filters.categoryId) {
-        const supplierIds = supplierIdsByCategory.get(
-          String(filters.categoryId),
-        );
+        const supplierIds = supplierIdsByCategory.get(String(filters.categoryId));
         if (!supplierIds || !supplierIds.has(supplier.id)) return false;
       }
 
       return true;
     });
-  }, [suppliers, filters, supplierIdsByCategory]);
+  }, [suppliers, filters, supplierIdsByCategory, searchQuery]);
+
+  const {
+    pageData,
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    pageSizeOptions,
+    pageOffset,
+    goToPage,
+    setPageSize,
+  } = usePagination(filteredSuppliers);
 
   const handleDelete = async (supplier: Supplier) => {
     const success = await deleteSupplier(supplier.id);
@@ -139,11 +172,20 @@ export function SupplierList() {
     }
   };
 
+  const handleVirtualKeyPress = (key: string) => {
+    if (key === "BACKSPACE") {
+      setSearchQuery((prev) => prev.slice(0, -1));
+      return;
+    }
+    if (key === "ENTER") return;
+    setSearchQuery((prev) => prev + key);
+  };
+
   const columns = [
     {
       key: "#",
       header: "#",
-      render: (_: Supplier, index: number) => index + 1,
+      render: (_: Supplier, index: number) => pageOffset + index + 1,
     },
     {
       key: "name",
@@ -193,7 +235,7 @@ export function SupplierList() {
           <Button
             size="small"
             variant="secondary"
-            onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}
+            onClick={() => setModalState({ open: true, view: "form", supplier })}
           >
             {t("common.edit")}
           </Button>
@@ -214,24 +256,58 @@ export function SupplierList() {
       <Header>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <Title>{t("suppliers.title")}</Title>
-          <Button
-            style={{ padding: "8px 12px" }}
-            size="small"
-            onClick={() => setIsFilterOpen(!isFilterOpen)}
-          >
-            {t("filters.filters")}{" "}
-            {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
-          </Button>
         </div>
         <HeaderActions>
           <Button
             style={{ fontSize: "26px" }}
-            onClick={() => navigate("/suppliers/new")}
+            onClick={() => setModalState({ open: true, view: "form" })}
           >
             <CirclePlus size={24} /> {t("suppliers.addSupplier")}
           </Button>
         </HeaderActions>
       </Header>
+
+      <Filters>
+        <SearchInputWrapper>
+          <Input
+            type="text"
+            placeholder={t("common.search")}
+            style={{
+              padding: "8px 16px",
+              fontSize: "18px",
+              fontWeight: "bold",
+              paddingRight: "60px",
+            }}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <InputControls>
+            {searchQuery.length > 0 && (
+              <ClearButton onClick={() => setSearchQuery("")} tabIndex={-1}>
+                <X size={16} />
+              </ClearButton>
+            )}
+            <KbToggle
+              type="button"
+              tabIndex={-1}
+              $active={keyboardOpen}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setKeyboardOpen((prev) => !prev)}
+            >
+              <Keyboard size={18} />
+              {keyboardOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </KbToggle>
+          </InputControls>
+        </SearchInputWrapper>
+
+        <Button
+          style={{ padding: "0px 12px" }}
+          size="small"
+          onClick={() => setIsFilterOpen(!isFilterOpen)}
+        >
+          {t("filters.filters")} {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
+        </Button>
+      </Filters>
 
       <SupplierFilters
         filters={filters}
@@ -242,9 +318,20 @@ export function SupplierList() {
 
       <Table
         columns={columns}
-        data={filteredSuppliers}
+        data={pageData}
         loading={isLoading}
         emptyMessage={t("suppliers.noSuppliers")}
+        footer={
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            pageSizeOptions={pageSizeOptions}
+            onPageChange={goToPage}
+            onPageSizeChange={setPageSize}
+          />
+        }
       />
 
       {supplierToDelete && (
@@ -256,6 +343,23 @@ export function SupplierList() {
           variant="danger"
           onConfirm={() => handleDelete(supplierToDelete)}
           onCancel={() => setSupplierToDelete(null)}
+        />
+      )}
+
+      {modalState.open && (
+        <SupplierManagementModal
+          initialView={modalState.view}
+          initialEditSupplier={modalState.supplier}
+          onClose={() => setModalState({ open: false, view: "list" })}
+          onSupplierChanged={() => loadSuppliers(true)}
+        />
+      )}
+
+      {keyboardOpen && (
+        <VirtualKeyboard
+          fixed
+          onKeyPress={handleVirtualKeyPress}
+          onClose={() => setKeyboardOpen(false)}
         />
       )}
     </Container>

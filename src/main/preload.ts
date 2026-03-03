@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getProfile: () => ipcRenderer.invoke('auth:getProfile'),
     restoreSession: (token: string) =>
       ipcRenderer.invoke('auth:restoreSession', token),
+    changePassword: (currentPassword: string, newPassword: string) =>
+      ipcRenderer.invoke('auth:changePassword', currentPassword, newPassword),
   },
 
   // Products
@@ -150,6 +152,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('receipt:scan', imageBase64, mimeType),
     matchProducts: (items: { name: string; mxik?: string | null }[]) =>
       ipcRenderer.invoke('receipt:matchProducts', items),
+    getTokenUsage: () =>
+      ipcRenderer.invoke('receipt:getTokenUsage'),
+  },
+
+  // Analytics
+  analytics: {
+    getData: (filters: { startDate: string; endDate: string }) =>
+      ipcRenderer.invoke('analytics:getData', filters),
   },
 
   // App info
@@ -171,6 +181,7 @@ declare global {
         logout: () => Promise<void>;
         getProfile: () => Promise<unknown>;
         restoreSession: (token: string) => Promise<unknown>;
+        changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
       };
       products: {
         getAll: (filters?: unknown) => Promise<unknown[]>;
@@ -251,6 +262,10 @@ declare global {
       receipt: {
         scan: (imageBase64: string, mimeType: string) => Promise<unknown>;
         matchProducts: (items: { name: string; mxik?: string | null }[]) => Promise<unknown[]>;
+        getTokenUsage: () => Promise<{ used: number; limit: number; date: string }>;
+      };
+      analytics: {
+        getData: (filters: { startDate: string; endDate: string }) => Promise<unknown>;
       };
       app: {
         getVersion: () => Promise<string>;

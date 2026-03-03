@@ -1,5 +1,6 @@
-import React, { forwardRef } from 'react';
-import styled from 'styled-components';
+// src/renderer/components/common/Input.tsx
+import React, { forwardRef } from "react";
+import styled from "styled-components";
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -9,6 +10,7 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 const Container = styled.div`
   display: flex;
   flex-direction: column;
+  width: 100%;
 `;
 
 const Label = styled.label`
@@ -19,9 +21,12 @@ const Label = styled.label`
 `;
 
 const StyledInput = styled.input<{ $hasError: boolean }>`
+  width: 100%;
+  box-sizing: border-box;
   padding: ${({ theme }) => theme.spacing.sm};
   border: 1px solid
-    ${({ theme, $hasError }) => ($hasError ? theme.colors.error : theme.colors.border)};
+    ${({ theme, $hasError }) =>
+      $hasError ? theme.colors.error : theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
   background-color: ${({ theme }) => theme.colors.surface};
   color: ${({ theme }) => theme.colors.text};
@@ -59,5 +64,5 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {error && <ErrorText>{error}</ErrorText>}
       </Container>
     );
-  }
+  },
 );

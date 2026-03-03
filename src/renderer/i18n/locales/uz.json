@@ -47,6 +47,7 @@
   "nav": {
     "main": "Asosiy",
     "pos": "Kassa",
+    "receipts": "Cheklar",
     "products": "Mahsulotlar",
     "reports": "Hisobotlar",
     "dailySummary": "Kunlik hisobot",
@@ -81,7 +82,7 @@
     "checkout": "To'lov",
     "totalToPay": "To'lov summasi",
     "itemsCount": "Mahsulotlar soni",
-    "confirmPayment": "To'lovni tasdiqlash",
+    "confirmPayment": "Tasdiqlash",
     "paymentComplete": "To'lov amalga oshirildi",
     "thankYou": "Xaridingiz uchun rahmat!",
     "receiptNumber": "Chek raqami",
@@ -97,7 +98,11 @@
     "receiptPrinted": "Chek chop etishga yuborildi",
     "saleUpdated": "Sotuv yangilandi",
     "saleDeleted": "Sotuv o'chirildi",
-    "deleteSaleConfirm": "Bu sotuvni o'chirasizmi? Mahsulot qoldiqlari tiklanadi."
+    "deleteSaleConfirm": "Bu sotuvni o'chirasizmi? Mahsulot qoldiqlari tiklanadi.",
+    "cashReceived": "Qabul qilindi",
+    "cashChange": "Qaytim",
+    "cashInsufficient": "Yetarli emas",
+    "clearAmount": "Tozalash"
   },
   "products": {
     "title": "Mahsulotlar",
@@ -228,7 +233,31 @@
     "profitMargins": "Foyda chegaralari",
     "chartPlaceholder": "Grafik shu yerda bo'ladi",
     "startDate": "Boshlanish sanasi",
-    "endDate": "Tugash sanasi"
+    "endDate": "Tugash sanasi",
+    "receipts": "Cheklar",
+    "time": "Vaqt",
+    "cashier": "Kassir",
+    "noReceipts": "Cheklar yo'q",
+    "amount": "Summa",
+    "payment": "To'lov",
+    "allPayments": "Barchasi",
+    "print": "Chop etish",
+    "dateTime": "Sana va vaqt",
+    "cost": "Tannarx",
+    "margin": "Marja",
+    "avgMargin": "O'rtacha marja",
+    "noData": "Tanlangan davr uchun ma'lumot yo'q",
+    "today": "Bugun",
+    "thisWeek": "Hafta boshidan",
+    "last7Days": "So'nggi 7 kun",
+    "thisMonth": "Oy boshidan",
+    "last30Days": "So'nggi 30 kun",
+    "thisYear": "Yil boshidan",
+    "last365Days": "So'nggi 365 kun",
+    "custom": "Ixtiyoriy davr",
+    "revenue": "Daromad",
+    "cost": "Tannarx",
+    "period": "Davr"
   },
   "users": {
     "title": "Foydalanuvchilar",
@@ -281,6 +310,8 @@
     "passwordMismatch": "Parollar mos kelmaydi",
     "passwordTooShort": "Parol kamida 6 belgidan iborat bo'lishi kerak",
     "passwordChangeFailed": "Parolni o'zgartirib bo'lmadi",
+    "passwordChanged": "Parol muvaffaqiyatli o'zgartirildi",
+    "passwordWrong": "Joriy parol noto'g'ri",
     "storeInformation": "Do'kon ma'lumotlari",
     "storeName": "Do'kon nomi",
     "storeAddress": "Manzil",
@@ -508,13 +539,17 @@
     "maxSize": "maks. 20 MB",
     "pasteImage": "yoki rasmni joylashtiring (Ctrl+V)",
     "detectedSupplier": "Aniqlangan yetkazib beruvchi",
-    "arrivalsFailed": "Ba'zi kirimlarni yaratib bo'lmadi"
+    "arrivalsFailed": "Ba'zi kirimlarni yaratib bo'lmadi",
+    "tokenLimitExceeded": "Kunlik AI token limiti tugadi. Limit ertaga yangilanadi."
   },
   "aiSettings": {
     "title": "AI Sozlamalar",
     "description": "Chekni sun'iy intellekt yordamida aniqlash sozlamalari",
     "anthropicApiKey": "Anthropic API kaliti",
     "apiKeyPlaceholder": "sk-ant-...",
-    "apiKeySaved": "API kaliti saqlandi"
+    "apiKeySaved": "API kaliti saqlandi",
+    "tokenUsageTitle": "Bugungi token ishlatish",
+    "tokenUsageOf": "dan",
+    "tokenLimitNote": "Limit server tomonidan belgilanadi (standart 100 000 / kun)"
   }
 }

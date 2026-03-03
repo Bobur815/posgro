@@ -194,11 +194,22 @@ export function setupSalesHandlers(): void {
 
     const sales = await prisma.sale.findMany({
       where,
-      include: { items: true },
+      include: { items: { include: { product: { select: { cost: true } } } } },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
-    return ipcSafe(sales);
+
+    const salesWithMargin = sales.map((sale) => {
+      const totalCost = sale.items.reduce((sum, item) => {
+        const cost = item.product?.cost ? Number(item.product.cost) : 0;
+        return sum + cost * Number(item.quantity);
+      }, 0);
+      const finalAmount = Number(sale.finalAmount);
+      const margin = finalAmount > 0 ? ((finalAmount - totalCost) / finalAmount) * 100 : 0;
+      return { ...sale, totalCost, margin };
+    });
+
+    return ipcSafe(salesWithMargin);
   });
 
   ipcMain.handle('sales:getById', async (_event, id: string) => {
@@ -474,6 +485,146 @@ export function setupSalesHandlers(): void {
     };
   });
 }
+
+ipcMain.handle('analytics:getData', async (_event, filters: {
+  startDate: string;
+  endDate: string;
+}) => {
+  const prisma = getPrismaClient();
+  // Prisma/SQLite stores DateTime as integer milliseconds since epoch
+  const startMs = new Date(filters.startDate).getTime();
+  const endMs = new Date(filters.endDate).getTime();
+
+  const [salesTrend, salesByCategory, hourlyDist, topProducts, cashierPerf, profitMargins, summary] = await Promise.all([
+    prisma.$queryRawUnsafe(`
+      SELECT DATE(datetime(created_at/1000, 'unixepoch', 'localtime')) as date,
+             CAST(SUM(final_amount) AS REAL) as revenue,
+             CAST(COUNT(*) AS REAL) as count
+      FROM sales
+      WHERE created_at >= ? AND created_at <= ?
+      GROUP BY DATE(datetime(created_at/1000, 'unixepoch', 'localtime'))
+      ORDER BY date ASC
+    `, startMs, endMs),
+
+    prisma.$queryRawUnsafe(`
+      SELECT COALESCE(c.name_ru, 'Без категории') as categoryRu,
+             COALESCE(c.name_uz, 'Kategoriyasiz') as categoryUz,
+             CAST(SUM(si.subtotal) AS REAL) as revenue,
+             CAST(SUM(si.quantity) AS REAL) as quantity
+      FROM sale_items si
+      JOIN sales s ON si.sale_id = s.id
+      JOIN products p ON si.product_id = p.id
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE s.created_at >= ? AND s.created_at <= ?
+      GROUP BY c.id
+      ORDER BY revenue DESC
+      LIMIT 10
+    `, startMs, endMs),
+
+    prisma.$queryRawUnsafe(`
+      SELECT CAST(strftime('%H', datetime(created_at/1000, 'unixepoch', 'localtime')) AS INTEGER) as hour,
+             CAST(SUM(final_amount) AS REAL) as revenue,
+             CAST(COUNT(*) AS REAL) as count
+      FROM sales
+      WHERE created_at >= ? AND created_at <= ?
+      GROUP BY strftime('%H', datetime(created_at/1000, 'unixepoch', 'localtime'))
+      ORDER BY hour ASC
+    `, startMs, endMs),
+
+    prisma.$queryRawUnsafe(`
+      SELECT si.product_name as name,
+             CAST(SUM(si.quantity) AS REAL) as quantity,
+             CAST(SUM(si.subtotal) AS REAL) as revenue
+      FROM sale_items si
+      JOIN sales s ON si.sale_id = s.id
+      WHERE s.created_at >= ? AND s.created_at <= ?
+      GROUP BY si.product_id
+      ORDER BY quantity DESC
+      LIMIT 10
+    `, startMs, endMs),
+
+    prisma.$queryRawUnsafe(`
+      SELECT cashier_name as name,
+             CAST(SUM(final_amount) AS REAL) as revenue,
+             CAST(COUNT(*) AS REAL) as count
+      FROM sales
+      WHERE created_at >= ? AND created_at <= ?
+      GROUP BY cashier_id
+      ORDER BY revenue DESC
+    `, startMs, endMs),
+
+    prisma.$queryRawUnsafe(`
+      SELECT COALESCE(c.name_ru, 'Без категории') as categoryRu,
+             COALESCE(c.name_uz, 'Kategoriyasiz') as categoryUz,
+             CAST(SUM(si.subtotal) AS REAL) as revenue,
+             CAST(SUM(si.quantity * COALESCE(p.cost, 0)) AS REAL) as cost
+      FROM sale_items si
+      JOIN sales s ON si.sale_id = s.id
+      JOIN products p ON si.product_id = p.id
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE s.created_at >= ? AND s.created_at <= ?
+      GROUP BY c.id
+      ORDER BY revenue DESC
+      LIMIT 10
+    `, startMs, endMs),
+
+    prisma.$queryRawUnsafe(`
+      SELECT CAST(COUNT(*) AS REAL) as totalSales,
+             CAST(SUM(final_amount) AS REAL) as totalRevenue,
+             CAST(SUM(CASE WHEN payment_method = 'cash' THEN 1 ELSE 0 END) AS REAL) as cashSales,
+             CAST(SUM(CASE WHEN payment_method = 'card' THEN 1 ELSE 0 END) AS REAL) as cardSales
+      FROM sales
+      WHERE created_at >= ? AND created_at <= ?
+    `, startMs, endMs),
+  ]);
+
+  const summaryRow = (summary as any[])[0] || {};
+
+  return ipcSafe({
+    salesTrend: (salesTrend as any[]).map(r => ({
+      date: String(r.date || ''),
+      revenue: Number(r.revenue || 0),
+      count: Number(r.count || 0),
+    })),
+    salesByCategory: (salesByCategory as any[]).map(r => ({
+      categoryRu: String(r.categoryRu || ''),
+      categoryUz: String(r.categoryUz || ''),
+      revenue: Number(r.revenue || 0),
+      quantity: Number(r.quantity || 0),
+    })),
+    hourlyDistribution: (hourlyDist as any[]).map(r => ({
+      hour: Number(r.hour || 0),
+      revenue: Number(r.revenue || 0),
+      count: Number(r.count || 0),
+    })),
+    topProducts: (topProducts as any[]).map(r => ({
+      name: String(r.name || ''),
+      quantity: Number(r.quantity || 0),
+      revenue: Number(r.revenue || 0),
+    })),
+    cashierPerformance: (cashierPerf as any[]).map(r => ({
+      name: String(r.name || ''),
+      revenue: Number(r.revenue || 0),
+      count: Number(r.count || 0),
+    })),
+    profitMargins: (profitMargins as any[]).map(r => ({
+      categoryRu: String(r.categoryRu || ''),
+      categoryUz: String(r.categoryUz || ''),
+      revenue: Number(r.revenue || 0),
+      cost: Number(r.cost || 0),
+    })),
+    summary: {
+      totalSales: Number(summaryRow.totalSales || 0),
+      totalRevenue: Number(summaryRow.totalRevenue || 0),
+      cashSales: Number(summaryRow.cashSales || 0),
+      cardSales: Number(summaryRow.cardSales || 0),
+      averageTransaction:
+        Number(summaryRow.totalSales || 0) > 0
+          ? Number(summaryRow.totalRevenue || 0) / Number(summaryRow.totalSales || 0)
+          : 0,
+    },
+  });
+});
 
 async function generateReceiptNumber(terminalId: string): Promise<string> {
   const prisma = getPrismaClient();

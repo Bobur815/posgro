@@ -18,6 +18,7 @@ import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 import { debounce } from "../../utils/helpers";
 import { VirtualKeyboard } from "../../components/common/VirtualKeyboard";
 import { SearchInputWrapper, InputControls, ClearButton, KbToggle } from "../../components/common/SearchControls";
+import { ProductForm } from "./ProductForm";
 
 const Container = styled.div`
   display: flex;
@@ -52,6 +53,7 @@ export function ProductList() {
   const [filters, setFilters] = useState<ProductFilterParams>({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [formModal, setFormModal] = useState<{ open: boolean; productId?: string }>({ open: false });
   const isAdmin = user?.role === "ADMIN";
   
   useEffect(() => {
@@ -166,7 +168,7 @@ export function ProductList() {
           variant="secondary"
           size="small"
           tooltip={t("common.edit")}
-          onClick={() => navigate(`/products/${product.id}/edit`)}
+          onClick={() => setFormModal({ open: true, productId: String(product.id) })}
         >
           <Edit size={16}/>
         </Button>
@@ -198,7 +200,7 @@ export function ProductList() {
       <Header>
         <Title>{t("products.title")}</Title>
         {isAdmin && (
-          <Button style={{fontSize: "26px"}} onClick={() => navigate("/products/new")}>
+          <Button style={{fontSize: "26px"}} onClick={() => setFormModal({ open: true })}>
            <CirclePlus size={24} /> {t("products.addProduct")}
           </Button>
         )}
@@ -273,6 +275,17 @@ export function ProductList() {
           fixed
           onKeyPress={handleVirtualKeyPress}
           onClose={() => setKeyboardOpen(false)}
+        />
+      )}
+
+      {formModal.open && (
+        <ProductForm
+          productId={formModal.productId}
+          onClose={() => setFormModal({ open: false })}
+          onSuccess={() => {
+            setFormModal({ open: false });
+            loadProducts();
+          }}
         />
       )}
     </Container>

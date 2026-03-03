@@ -47,6 +47,7 @@
   "nav": {
     "main": "Главное",
     "pos": "Касса",
+    "receipts": "Чеки",
     "products": "Товары",
     "reports": "Отчеты",
     "dailySummary": "Дневной отчет",
@@ -81,7 +82,7 @@
     "checkout": "Оплата",
     "totalToPay": "К оплате",
     "itemsCount": "Количество товаров",
-    "confirmPayment": "Подтвердить оплату",
+    "confirmPayment": "Подтвердить",
     "paymentComplete": "Оплата завершена",
     "thankYou": "Спасибо за покупку!",
     "receiptNumber": "Номер чека",
@@ -97,7 +98,11 @@
     "receiptPrinted": "Чек отправлен на печать",
     "saleUpdated": "Продажа обновлена",
     "saleDeleted": "Продажа удалена",
-    "deleteSaleConfirm": "Удалить эту продажу? Остатки товаров будут восстановлены."
+    "deleteSaleConfirm": "Удалить эту продажу? Остатки товаров будут восстановлены.",
+    "cashReceived": "Получено",
+    "cashChange": "Сдача",
+    "cashInsufficient": "Недостаточно",
+    "clearAmount": "Сбросить"
   },
   "products": {
     "title": "Товары",
@@ -228,7 +233,31 @@
     "profitMargins": "Маржинальность",
     "chartPlaceholder": "График будет здесь",
     "startDate": "Дата начала",
-    "endDate": "Дата окончания"
+    "endDate": "Дата окончания",
+    "receipts": "Чеки",
+    "time": "Время",
+    "cashier": "Кассир",
+    "noReceipts": "Чеков нет",
+    "amount": "Сумма",
+    "payment": "Оплата",
+    "allPayments": "Все",
+    "print": "Печать",
+    "dateTime": "Дата и время",
+    "cost": "Себестоимость",
+    "margin": "Маржа",
+    "avgMargin": "Средняя маржа",
+    "noData": "Нет данных за выбранный период",
+    "today": "Сегодня",
+    "thisWeek": "С начала недели",
+    "last7Days": "Последние 7 дней",
+    "thisMonth": "С начала месяца",
+    "last30Days": "Последние 30 дней",
+    "thisYear": "С начала года",
+    "last365Days": "Последние 365 дней",
+    "custom": "Произвольный период",
+    "revenue": "Выручка",
+    "cost": "Себестоимость",
+    "period": "Период"
   },
   "users": {
     "title": "Пользователи",
@@ -281,6 +310,8 @@
     "passwordMismatch": "Пароли не совпадают",
     "passwordTooShort": "Пароль должен быть не менее 6 символов",
     "passwordChangeFailed": "Не удалось изменить пароль",
+    "passwordChanged": "Пароль успешно изменён",
+    "passwordWrong": "Текущий пароль неверен",
     "storeInformation": "Информация о магазине",
     "storeName": "Название магазина",
     "storeAddress": "Адрес",
@@ -510,13 +541,17 @@
     "maxSize": "макс. 20 МБ",
     "pasteImage": "или вставьте изображение (Ctrl+V)",
     "detectedSupplier": "Обнаружен поставщик",
-    "arrivalsFailed": "Не удалось создать некоторые приходы"
+    "arrivalsFailed": "Не удалось создать некоторые приходы",
+    "tokenLimitExceeded": "Суточный лимит токенов AI исчерпан. Лимит сбросится завтра."
   },
   "aiSettings": {
     "title": "ИИ Настройки",
     "description": "Настройки для распознавания чеков с помощью ИИ",
     "anthropicApiKey": "API ключ Anthropic",
     "apiKeyPlaceholder": "sk-ant-...",
-    "apiKeySaved": "API ключ сохранён"
+    "apiKeySaved": "API ключ сохранён",
+    "tokenUsageTitle": "Использование токенов сегодня",
+    "tokenUsageOf": "из",
+    "tokenLimitNote": "Лимит задаётся сервером (по умолчанию 100 000 / день)"
   }
 }

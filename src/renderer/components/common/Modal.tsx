@@ -1,5 +1,5 @@
-import React from 'react';
-import styled from 'styled-components';
+import React from "react";
+import styled from "styled-components";
 
 interface ModalProps {
   title: string;
@@ -25,7 +25,7 @@ const ModalContainer = styled.div<{ $width?: string }>`
   background-color: ${({ theme }) => theme.colors.surface};
   border-radius: ${({ theme }) => theme.borderRadius};
   box-shadow: ${({ theme }) => theme.shadows.lg};
-  max-width: ${({ $width }) => $width || '500px'};
+  max-width: ${({ $width }) => $width || "500px"};
   width: 90%;
   max-height: 90vh;
   overflow-y: auto;
@@ -35,7 +35,7 @@ const Header = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: ${({ theme }) => theme.spacing.md};
+  padding: ${({ theme }) => theme.spacing.sm};
   border-bottom: 1px solid ${({ theme }) => theme.colors.border};
 `;
 
@@ -60,7 +60,7 @@ const CloseButton = styled.button`
 `;
 
 const Content = styled.div`
-  padding: ${({ theme }) => theme.spacing.lg};
+  padding: ${({ theme }) => theme.spacing.md};
 `;
 
 export function Modal({ title, onClose, children, width }: ModalProps) {

@@ -30,8 +30,6 @@ export function createWindow(): BrowserWindow {
   mainWindow.once('ready-to-show', () => {
     mainWindow.maximize(); // Remove space around window
     mainWindow.setBounds({ x: 0, y: 0, width, height }); // Cover taskbar
-    mainWindow.setMaximizable(false);
-    mainWindow.setResizable(false);
     mainWindow.show();
     mainWindow.focus();
   });

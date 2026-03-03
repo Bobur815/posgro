@@ -32,6 +32,21 @@ const SearchHeader = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${({ theme }) => theme.spacing.sm};
+  position: relative;
+`;
+
+const FilterDropdown = styled.div`
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background-color: ${({ theme }) => theme.colors.surface};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-top: none;
+  border-radius: 0 0 ${({ theme }) => theme.borderRadius} ${({ theme }) => theme.borderRadius};
+  padding: ${({ theme }) => theme.spacing.md};
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 `;
 
 const SearchRow = styled.div`
@@ -43,7 +58,7 @@ const SearchRow = styled.div`
 const ProductsGrid = styled.div`
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
   align-content: start;
   gap: ${({ theme }) => theme.spacing.sm};
   overflow-y: auto;
@@ -89,7 +104,7 @@ const ProductName = styled.span`
   text-align: center;
   color: ${({ theme }) => theme.colors.text};
   margin-bottom: ${({ theme }) => theme.spacing.xs};
-  font-size: 13px;
+  font-size: 15px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -261,14 +276,18 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
             {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
           </Button>
         </SearchRow>
-        <ProductFilters
-          filters={filters}
-          onChange={setFilters}
-          categories={categories as any}
-          suppliers={suppliers}
-          compact
-          isOpen={isFilterOpen}
-        />
+        {isFilterOpen && (
+          <FilterDropdown>
+            <ProductFilters
+              filters={filters}
+              onChange={setFilters}
+              categories={categories as any}
+              suppliers={suppliers}
+              compact
+              isOpen={true}
+            />
+          </FilterDropdown>
+        )}
       </SearchHeader>
 
       <ProductsGrid>

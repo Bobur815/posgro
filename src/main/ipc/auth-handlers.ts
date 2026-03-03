@@ -331,6 +331,32 @@ export function setupAuthHandlers(): void {
     return user;
   });
 
+  ipcMain.handle('auth:changePassword', async (_event, currentPassword: string, newPassword: string) => {
+    if (!currentUser) {
+      throw new Error('Not authenticated');
+    }
+
+    const prisma = getPrismaClient();
+    const user = await prisma.user.findUnique({ where: { id: currentUser.id } });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    const isValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isValid) {
+      throw new Error('auth.errors.invalid_password');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: currentUser.id },
+      data: { password: hashedPassword },
+    });
+
+    return true;
+  });
+
   ipcMain.handle('users:delete', async (_event, id: string) => {
     if (!currentUser || currentUser.role !== 'ADMIN') {
       throw new Error('Unauthorized');

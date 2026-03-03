@@ -16,6 +16,8 @@ export interface Sale {
   createdAt: string;
   updatedAt?: string;
   items: SaleItem[];
+  totalCost?: number;
+  margin?: number;
 }
 
 export interface SaleItem {

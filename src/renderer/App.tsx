@@ -9,7 +9,6 @@ import { useAuthStore } from "./store/auth-store";
 import { PinLoginPage } from "./pages/Login/PinLoginPage";
 import { POSScreen } from "./pages/POS/POSScreen";
 import { ProductList } from "./pages/Products/ProductList";
-import { ProductForm } from "./pages/Products/ProductForm";
 import { ProductDetails } from "./pages/Products/ProductDetails";
 import { StockManagement } from "./pages/Products/StockManagement";
 import { DailySummary } from "./pages/Reports/DailySummary";
@@ -23,7 +22,7 @@ import { PrinterSettings } from "./pages/Settings/PrinterSettings";
 import { ReceiptSettings } from "./pages/Settings/ReceiptSettings";
 import { UserList } from "./pages/Users/UserList";
 import { UserForm } from "./pages/Users/UserForm";
-import { SupplierList, SupplierForm, SupplierDetails } from "./pages/Suppliers";
+import { SupplierList, SupplierDetails } from "./pages/Suppliers";
 import { WeighedInventoryPage } from "./pages/Inventory/WeighedInventoryPage";
 import { ScaleSettings } from "./pages/Settings/ScaleSettings";
 
@@ -55,28 +54,10 @@ function App() {
         {/* Products */}
         <Route path="products" element={<ProductList />} />
         <Route
-          path="products/new"
-          element={
-            <RoleGuard allowedRoles={["ADMIN"]}>
-              <ProductForm />
-            </RoleGuard>
-          }
-        />
-
-        <Route
           path="products/:id"
           element={
             <RoleGuard allowedRoles={["ADMIN", "USER"]}>
               <ProductDetails />
-            </RoleGuard>
-          }
-        />
-
-        <Route
-          path="products/:id/edit"
-          element={
-            <RoleGuard allowedRoles={["ADMIN"]}>
-              <ProductForm />
             </RoleGuard>
           }
         />
@@ -195,26 +176,10 @@ function App() {
           }
         />
         <Route
-          path="suppliers/new"
-          element={
-            <RoleGuard allowedRoles={["ADMIN"]}>
-              <SupplierForm />
-            </RoleGuard>
-          }
-        />
-        <Route
           path="suppliers/:id"
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
               <SupplierDetails />
-            </RoleGuard>
-          }
-        />
-        <Route
-          path="suppliers/:id/edit"
-          element={
-            <RoleGuard allowedRoles={["ADMIN"]}>
-              <SupplierForm />
             </RoleGuard>
           }
         />

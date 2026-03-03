@@ -144,6 +144,7 @@ function setupSuppliersHandlers(): void {
     nameUz: string;
     phone?: string;
     address?: string;
+    balance?: number;
   }) => {
     const prisma = getPrismaClient();
     const supplier = await prisma.supplier.create({
@@ -152,7 +153,7 @@ function setupSuppliersHandlers(): void {
         nameUz: data.nameUz,
         phone: data.phone || null,
         address: data.address || null,
-        balance: 0,
+        balance: data.balance ?? 0,
       },
     });
     return ipcSafe(serializeSupplier(supplier));
@@ -165,6 +166,7 @@ function setupSuppliersHandlers(): void {
     phone?: string;
     address?: string;
     active?: boolean;
+    balance?: number;
   }) => {
     const prisma = getPrismaClient();
     const supplier = await prisma.supplier.update({
@@ -175,6 +177,7 @@ function setupSuppliersHandlers(): void {
         ...(data.phone !== undefined && { phone: data.phone || null }),
         ...(data.address !== undefined && { address: data.address || null }),
         ...(data.active !== undefined && { active: data.active }),
+        ...(data.balance !== undefined && { balance: data.balance }),
       },
     });
     return ipcSafe(serializeSupplier(supplier));
@@ -599,14 +602,47 @@ function setupReceiptHandlers(): void {
       throw new Error('ANTHROPIC_API_KEY_NOT_SET');
     }
 
-    const prompt = `You are analyzing a supplier receipt/invoice from a grocery store. The document may be in Russian, Uzbek, or both.
+    // Check daily token limit
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const [limitSetting, tokensDateSetting, tokensUsedSetting] = await Promise.all([
+      prisma.systemSetting.findUnique({ where: { key: 'ai_token_limit_daily' } }),
+      prisma.systemSetting.findUnique({ where: { key: 'ai_tokens_date' } }),
+      prisma.systemSetting.findUnique({ where: { key: 'ai_tokens_used' } }),
+    ]);
+    const dailyLimit = parseInt(limitSetting?.value || '100000', 10);
+    const tokensUsedToday =
+      tokensDateSetting?.value === today
+        ? parseInt(tokensUsedSetting?.value || '0', 10)
+        : 0;
+    if (tokensUsedToday >= dailyLimit) {
+      throw new Error('AI_TOKEN_LIMIT_EXCEEDED');
+    }
 
-Extract all line items. For each item extract:
-- scannedName: the product name as written
-- mxik: the MXIK code (Товар (хизмат) лар Ягона электрон миллий каталоги бўйича идентификация коди) — a numeric code, often 17 digits, found in the product table column. Return null if not present.
-- quantity: quantity purchased (number)
-- unitCost: cost per unit (number)
-- totalCost: total cost for this line item (number)
+    const prompt = `You are analyzing a supplier invoice (Счёт-фактура / Hisob-faktura) from Uzbekistan. The document may be in Russian, Uzbek, or both. This is often a standard SoliqServis e-invoice format.
+
+**MXIK code:**
+Each product row contains a 17-digit MXIK code (Миллий каталог идентификация коди) on a separate line, formatted as:
+  "XXXXXXXXXXXXXXXXXXX - Category description"
+Example: "02202002001010007 - Безалкогольные напитки (газированные и негазированные) COCA-COLA"
+Extract the digits only (no dashes or spaces).
+
+**Invoice column order (left to right after the product name/MXIK block):**
+  [unit_type] [unit_volume] [invoice_quantity] [price_per_invoice_unit] [total_without_VAT] [VAT_%] [VAT_amount] [total_WITH_VAT] [transaction_type]
+
+The unit_type can be:
+- "упаковка=N шт" — 1 invoice unit is a package of N individual items → actual_quantity = invoice_quantity × N
+- "штука" / "шт" / "кг" / "литр" etc. — individual units → actual_quantity = invoice_quantity
+
+**Calculation rules:**
+1. actual_quantity = invoice_quantity × pack_size (pack_size = N from "упаковка=N шт", else 1)
+2. totalCost = the LAST price column — total WITH VAT (ignore spaces in numbers, e.g. "562 464.00" → 562464)
+3. unitCost = round(totalCost / actual_quantity, 2)
+
+**Example:**
+  Product: Coca Cola PET 0.5L
+  MXIK: 02202002001010007
+  Row: упаковка=12 шт  0.50 литр  8  775.00  502 200.00  12%  60 264.00  562 464.00  Олди-сотди
+  → pack_size=12, invoice_quantity=8, actual_quantity=96, totalCost=562464, unitCost=5859
 
 Also extract:
 - supplierName: supplier/vendor name if visible, else null
@@ -618,11 +654,11 @@ Return ONLY valid JSON, no markdown, no explanations:
   "receiptDate": "string or null",
   "items": [
     {
-      "scannedName": "product name",
+      "scannedName": "product name as written",
       "mxik": "17-digit code or null",
-      "quantity": 1,
-      "unitCost": 1000,
-      "totalCost": 1000
+      "quantity": 96,
+      "unitCost": 5859,
+      "totalCost": 562464
     }
   ]
 }
@@ -694,7 +730,41 @@ If you cannot determine a numeric value, use 0. Always return the items array ev
     }
 
     const parsed = JSON.parse(jsonText);
+
+    // Record token usage from the response
+    const tokensUsed =
+      (result.usage?.input_tokens || 0) + (result.usage?.output_tokens || 0);
+    if (tokensUsed > 0) {
+      const newTotal = tokensUsedToday + tokensUsed;
+      await prisma.systemSetting.upsert({
+        where: { key: 'ai_tokens_date' },
+        update: { value: today },
+        create: { key: 'ai_tokens_date', value: today },
+      });
+      await prisma.systemSetting.upsert({
+        where: { key: 'ai_tokens_used' },
+        update: { value: String(newTotal) },
+        create: { key: 'ai_tokens_used', value: String(newTotal) },
+      });
+    }
+
     return ipcSafe(parsed);
+  });
+
+  ipcMain.handle('receipt:getTokenUsage', async () => {
+    const prisma = getPrismaClient();
+    const today = new Date().toISOString().split('T')[0];
+    const [limitSetting, tokensDateSetting, tokensUsedSetting] = await Promise.all([
+      prisma.systemSetting.findUnique({ where: { key: 'ai_token_limit_daily' } }),
+      prisma.systemSetting.findUnique({ where: { key: 'ai_tokens_date' } }),
+      prisma.systemSetting.findUnique({ where: { key: 'ai_tokens_used' } }),
+    ]);
+    const limit = parseInt(limitSetting?.value || '100000', 10);
+    const used =
+      tokensDateSetting?.value === today
+        ? parseInt(tokensUsedSetting?.value || '0', 10)
+        : 0;
+    return { used, limit, date: today };
   });
 
   ipcMain.handle('receipt:matchProducts', async (

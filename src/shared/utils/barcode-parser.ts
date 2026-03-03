@@ -19,7 +19,7 @@ export interface ParsedBarcode {
 }
 
 /** Compute EAN-13 check digit from the first 12 digits (as string). */
-function calculateEan13Check(digits: string): number {
+export function calculateEan13Check(digits: string): number {
   let sum = 0;
   for (let i = 0; i < 12; i++) {
     const d = parseInt(digits[i], 10);
@@ -61,6 +61,17 @@ export function parseBarcode(barcode: string): ParsedBarcode {
   const weightKg = weightGrams / 1000;
 
   return { isWeighted: true, productCode, weightKg, originalBarcode: barcode };
+}
+
+/**
+ * Generate an internal EAN-13 barcode for products without a supplier barcode.
+ * Uses prefix 400 (GS1 internal-use range), avoiding 20-29 reserved for weighted items.
+ */
+export function generateProductBarcode(): string {
+  const base =
+    "400" +
+    String(Math.floor(Math.random() * 1_000_000_000)).padStart(9, "0");
+  return base + String(calculateEan13Check(base));
 }
 
 /**
