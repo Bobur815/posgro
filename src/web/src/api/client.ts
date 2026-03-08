@@ -273,6 +273,65 @@ export const receipt = {
   },
 };
 
+// ─── Stores (Super Admin) ─────────────────────────────────────────────────────
+
+export interface StoreRecord {
+  id: string;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  active: boolean;
+  plan: string;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { users: number; products: number; sales: number };
+}
+
+export interface StoreStats {
+  store: StoreRecord;
+  stats: {
+    totalRevenue: number;
+    totalSales: number;
+    productsCount: number;
+    usersCount: number;
+  };
+}
+
+export const stores = {
+  getAll: async (): Promise<StoreRecord[]> => {
+    const { data } = await axiosInstance.get('/stores');
+    return data;
+  },
+  getById: async (id: string): Promise<StoreRecord> => {
+    const { data } = await axiosInstance.get(`/stores/${id}`);
+    return data;
+  },
+  getStats: async (id: string): Promise<StoreStats> => {
+    const { data } = await axiosInstance.get(`/stores/${id}/stats`);
+    return data;
+  },
+  create: async (payload: { name: string; address?: string; phone?: string }): Promise<StoreRecord> => {
+    const { data } = await axiosInstance.post('/stores', payload);
+    return data;
+  },
+  update: async (id: string, payload: Partial<{ name: string; address: string; phone: string; active: boolean; plan: string }>): Promise<StoreRecord> => {
+    const { data } = await axiosInstance.patch(`/stores/${id}`, payload);
+    return data;
+  },
+  delete: async (id: string): Promise<{ success: boolean }> => {
+    const { data } = await axiosInstance.delete(`/stores/${id}`);
+    return data;
+  },
+  activate: async (id: string): Promise<{ success: boolean }> => {
+    const { data } = await axiosInstance.put(`/stores/${id}/activate`);
+    return data;
+  },
+  deactivate: async (id: string): Promise<{ success: boolean }> => {
+    const { data } = await axiosInstance.put(`/stores/${id}/deactivate`);
+    return data;
+  },
+};
+
 // ─── Combined export ─────────────────────────────────────────────────────────
 
 export const api = {
@@ -285,4 +344,5 @@ export const api = {
   users,
   settings,
   receipt,
+  stores,
 };

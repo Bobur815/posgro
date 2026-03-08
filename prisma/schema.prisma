@@ -19,6 +19,7 @@ model Store {
   address   String?  @db.Text
   phone     String?
   active    Boolean  @default(true)
+  plan      String   @default("free") // "free" | "paid"
   settings  String?  @db.Text // JSON: tax rate, receipt template, etc.
 
   createdAt DateTime @default(now()) @map("created_at")

@@ -1,0 +1,14 @@
+node_modules
+src/web/node_modules
+dist
+dist-electron
+dist-renderer
+.git
+.github
+.vscode
+*.log
+npm-debug.log*
+docker-compose.yml
+Dockerfile
+.env
+.env.*

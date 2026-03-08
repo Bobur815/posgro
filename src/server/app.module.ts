@@ -10,6 +10,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { StoresModule } from './modules/stores/stores.module';
+import { InvoiceScannerModule } from './modules/invoice-scanner/invoice-scanner.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { StoresModule } from './modules/stores/stores.module';
     TelegramModule,
     SuppliersModule,
     StoresModule,
+    InvoiceScannerModule,
   ],
 })
 export class AppModule {}

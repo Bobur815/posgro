@@ -1,0 +1,69 @@
+name: Deploy Grocery POS Backend
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (for context only)
+        uses: actions/checkout@v4
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          envs: GH_PAT
+          script: |
+            set -euo pipefail
+
+            PROJECT_DIR="$HOME/grocery-pos"
+            OWNER="Bobur815"
+            NAME="grocery-pos"
+            REPO_URL_AUTH="https://Bobur815:${GH_PAT}@github.com/${OWNER}/${NAME}.git"
+
+            echo "📁 Ensure project dir"
+            mkdir -p "$PROJECT_DIR"
+            cd "$PROJECT_DIR"
+
+            git config --global --add safe.directory "$PROJECT_DIR" || true
+
+            if [ ! -d .git ]; then
+              echo "🚀 Fresh clone"
+              git clone --depth=1 "$REPO_URL_AUTH" .
+            else
+              echo "🔧 Update origin with PAT"
+              git remote set-url origin "$REPO_URL_AUTH" || true
+
+              echo "📦 Pull latest main"
+              git fetch --depth=1 origin main
+              git reset --hard origin/main
+              git clean -fd
+            fi
+
+            echo "🔐 Write .env from secret"
+            cat > .env <<'ENVEOF'
+            ${{ secrets.ENV_FILE }}
+            ENVEOF
+
+            test -s .env         || { echo ".env is empty!";          exit 1; }
+            grep -q 'JWT_SECRET=' .env || { echo "JWT_SECRET missing"; exit 1; }
+
+            echo "🐳 Docker Compose: build & up"
+            export USER_ID=$(id -u)
+            export GROUP_ID=$(id -g)
+            docker compose down --remove-orphans || true
+            docker compose build
+            docker compose up -d
+
+            echo "✅ Status"
+            docker compose ps
+            docker compose logs -n 100 api || true

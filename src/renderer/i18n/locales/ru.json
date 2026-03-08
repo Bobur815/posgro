@@ -153,7 +153,8 @@
     "avgDailySales": "Сред. продаж в день",
     "transactions": "Транзакции",
     "daysInPeriod": "Дней в периоде",
-    "noAnalyticsData": "Нет данных за выбранный период"
+    "noAnalyticsData": "Нет данных за выбранный период",
+    "generateBarcode": "Сгенерировать штрих-код"
   },
   "inventory": {
     "stockManagement": "Управление складом",
@@ -545,13 +546,16 @@
     "tokenLimitExceeded": "Суточный лимит токенов AI исчерпан. Лимит сбросится завтра."
   },
   "aiSettings": {
-    "title": "ИИ Настройки",
-    "description": "Настройки для распознавания чеков с помощью ИИ",
-    "anthropicApiKey": "API ключ Anthropic",
-    "apiKeyPlaceholder": "sk-ant-...",
-    "apiKeySaved": "API ключ сохранён",
-    "tokenUsageTitle": "Использование токенов сегодня",
-    "tokenUsageOf": "из",
-    "tokenLimitNote": "Лимит задаётся сервером (по умолчанию 100 000 / день)"
+    "title": "ИИ — Распознавание счетов",
+    "refreshPlan": "Обновить тариф",
+    "freePlanBadge": "Бесплатный тариф",
+    "freePlanNote": "Бесплатный тариф поддерживает базовое распознавание счетов. Сложные счета-фактуры (PDF, кириллица, многостраничные) распознаются лучше на Pro-тарифе.",
+    "freePlanContact": "Для подключения Pro-тарифа обратитесь к владельцу или в поддержку.",
+    "proPlanBadge": "Pro тариф",
+    "proPlanNote": "Использование за текущий месяц",
+    "scansThisMonth": "Сканирований в этом месяце",
+    "estimatedCharge": "К оплате",
+    "pricePerScan": "$0.052 / скан",
+    "contactSupport": "Служба поддержки"
   }
 }

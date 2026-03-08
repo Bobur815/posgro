@@ -4,6 +4,7 @@ import {
   Post,
   Patch,
   Put,
+  Delete,
   Body,
   Param,
   UseGuards,
@@ -65,6 +66,15 @@ export class StoresController {
   @ApiResponse({ status: 404, description: 'Store not found' })
   async update(@Param('id') id: string, @Body() updateStoreDto: UpdateStoreDto) {
     return this.storesService.update(id, updateStoreDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete store (Super Admin only)' })
+  @ApiParam({ name: 'id', description: 'Store ID' })
+  @ApiResponse({ status: 200, description: 'Store deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Store not found' })
+  async remove(@Param('id') id: string) {
+    return this.storesService.delete(id);
   }
 
   @Put(':id/activate')

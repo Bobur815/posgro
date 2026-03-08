@@ -585,296 +585,309 @@ export function ReceiptScanModal({
 
   return (
     <>
-    <Modal title={getStepTitle()} onClose={onClose} width="900px">
-      {/* UPLOAD STEP */}
-      {step === "upload" && (
-        <>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,application/pdf"
-            onChange={handleFileSelect}
-            style={{ display: "none" }}
-          />
-          <DropZone
-            $isDragging={isDragging}
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={handleDrop}
-          >
-            <Upload size={48} style={{ opacity: 0.5 }} />
-            <DropZoneText>{t("receiptScan.uploadDescription")}</DropZoneText>
-            <DropZoneText style={{ fontSize: 12 }}>
-              {t("receiptScan.pasteImage")}
-            </DropZoneText>
-            <DropZoneText style={{ fontSize: 11, opacity: 0.7 }}>
-              JPEG · PNG · WebP · PDF — {t("receiptScan.maxSize")}
-            </DropZoneText>
-          </DropZone>
+      <Modal title={getStepTitle()} onClose={onClose} width="900px">
+        {/* UPLOAD STEP */}
+        {step === "upload" && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              onChange={handleFileSelect}
+              style={{ display: "none" }}
+            />
+            <DropZone
+              $isDragging={isDragging}
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+            >
+              <Upload size={48} style={{ opacity: 0.5 }} />
+              <DropZoneText>{t("receiptScan.uploadDescription")}</DropZoneText>
+              <DropZoneText style={{ fontSize: 12 }}>
+                {t("receiptScan.pasteImage")}
+              </DropZoneText>
+              <DropZoneText style={{ fontSize: 11, opacity: 0.7 }}>
+                JPEG · PNG · WebP · PDF — {t("receiptScan.maxSize")}
+              </DropZoneText>
+            </DropZone>
 
-          {imageMimeType === "application/pdf" && fileName ? (
-            <PdfPreview>
-              <FileText size={48} />
-              <span>{fileName}</span>
-            </PdfPreview>
-          ) : imagePreview ? (
-            <div style={{ textAlign: "center" }}>
-              <PreviewImage src={imagePreview} alt="Receipt preview" />
-            </div>
-          ) : null}
+            {imageMimeType === "application/pdf" && fileName ? (
+              <PdfPreview>
+                <FileText size={48} />
+                <span>{fileName}</span>
+              </PdfPreview>
+            ) : imagePreview ? (
+              <div style={{ textAlign: "center" }}>
+                <PreviewImage src={imagePreview} alt="Receipt preview" />
+              </div>
+            ) : null}
 
-          {error && <ErrorText>{error}</ErrorText>}
+            {error && <ErrorText>{error}</ErrorText>}
 
-          <Actions>
-            <Button variant="secondary" onClick={onClose}>
-              {t("common.cancel")}
-            </Button>
-            <Button onClick={handleScan} disabled={!imageBase64}>
-              {t("receiptScan.scanReceipt")}
-            </Button>
-          </Actions>
-        </>
-      )}
+            <Actions>
+              <Button variant="secondary" onClick={onClose}>
+                {t("common.cancel")}
+              </Button>
+              <Button onClick={handleScan} disabled={!imageBase64}>
+                {t("receiptScan.scanReceipt")}
+              </Button>
+            </Actions>
+          </>
+        )}
 
-      {/* SCANNING / MATCHING STEP */}
-      {(step === "scanning" || step === "matching") && (
-        <SpinnerContainer>
-          <Loader2 size={48} />
-          <SpinnerText>
-            {step === "scanning"
-              ? t("receiptScan.scanningDescription")
-              : t("receiptScan.matchingDescription")}
-          </SpinnerText>
-        </SpinnerContainer>
-      )}
+        {/* SCANNING / MATCHING STEP */}
+        {(step === "scanning" || step === "matching") && (
+          <SpinnerContainer>
+            <Loader2 size={48} />
+            <SpinnerText>
+              {step === "scanning"
+                ? t("receiptScan.scanningDescription")
+                : t("receiptScan.matchingDescription")}
+            </SpinnerText>
+          </SpinnerContainer>
+        )}
 
-      {/* REVIEW STEP */}
-      {step === "review" && (
-        <>
-          {scanResult?.supplierName && (
-            <StepIndicator>
-              <AlertCircle size={16} />
-              {t("receiptScan.detectedSupplier")}:{" "}
-              <strong>{scanResult.supplierName}</strong>
-            </StepIndicator>
-          )}
+        {/* REVIEW STEP */}
+        {step === "review" && (
+          <>
+            {scanResult?.supplierName && (
+              <StepIndicator>
+                <AlertCircle size={16} />
+                {t("receiptScan.detectedSupplier")}:{" "}
+                <strong>{scanResult.supplierName}</strong>
+              </StepIndicator>
+            )}
 
-          <SupplierRow>
-            <FormGroup>
-              <Label>{t("products.supplier")}</Label>
-              <FullSelect
-                value={supplierId}
-                onChange={(e) => setSupplierId(e.target.value)}
-              >
-                <option value="">{t("products.noSupplier")}</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {i18n.language === "uz" ? s.nameUz : s.nameRu}
-                  </option>
-                ))}
-              </FullSelect>
-            </FormGroup>
-            {supplierId && (
+            <SupplierRow>
               <FormGroup>
-                <Label>{t("suppliers.paymentMethod")}</Label>
+                <Label>{t("products.supplier")}</Label>
                 <FullSelect
-                  value={paymentMethod}
-                  onChange={(e) =>
-                    setPaymentMethod(e.target.value as SupplierPaymentMethod)
-                  }
+                  value={supplierId}
+                  onChange={(e) => setSupplierId(e.target.value)}
                 >
-                  {PAYMENT_METHODS.map((m) => (
-                    <option key={m} value={m}>
-                      {getPaymentMethodLabel(m)}
+                  <option value="">{t("products.noSupplier")}</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {i18n.language === "uz" ? s.nameUz : s.nameRu}
                     </option>
                   ))}
                 </FullSelect>
               </FormGroup>
-            )}
-          </SupplierRow>
+              {supplierId && (
+                <FormGroup>
+                  <Label>{t("suppliers.paymentMethod")}</Label>
+                  <FullSelect
+                    value={paymentMethod}
+                    onChange={(e) =>
+                      setPaymentMethod(e.target.value as SupplierPaymentMethod)
+                    }
+                  >
+                    {PAYMENT_METHODS.map((m) => (
+                      <option key={m} value={m}>
+                        {getPaymentMethodLabel(m)}
+                      </option>
+                    ))}
+                  </FullSelect>
+                </FormGroup>
+              )}
+            </SupplierRow>
 
-          <div style={{ overflowX: "auto" }}>
-            <ReviewTable>
-              <thead>
-                <tr>
-                  <Th style={{ width: 30 }}></Th>
-                  <Th>{t("receiptScan.scannedName")}</Th>
-                  <Th style={{ width: 130 }}>MXIK</Th>
-                  <Th>{t("receiptScan.matchedProduct")}</Th>
-                  <Th style={{ width: 80 }}>{t("receiptScan.confidence")}</Th>
-                  <Th style={{ width: 90 }}>{t("receiptScan.quantity")}</Th>
-                  <Th style={{ width: 100 }}>{t("receiptScan.unitCost")}</Th>
-                  <Th style={{ width: 100 }}>{t("receiptScan.totalCost")}</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {reviewItems.map((item, idx) => (
-                  <tr key={idx} style={{ opacity: item.skip ? 0.4 : 1 }}>
-                    <Td>
-                      <SkipCheckbox
-                        type="checkbox"
-                        checked={!item.skip}
-                        onChange={(e) =>
-                          updateReviewItem(idx, { skip: !e.target.checked })
-                        }
-                        title={t("receiptScan.skipItem")}
-                      />
-                    </Td>
-                    <Td>{item.scannedName}</Td>
-                    <Td style={{ fontSize: 11, opacity: 0.6, fontFamily: "monospace" }}>
-                      {item.mxik || "—"}
-                    </Td>
-                    <Td>
-                      <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-                        <ProductSelect
-                          value={item.productId}
+            <div style={{ overflowX: "auto" }}>
+              <ReviewTable>
+                <thead>
+                  <tr>
+                    <Th style={{ width: 30 }}></Th>
+                    <Th>{t("receiptScan.scannedName")}</Th>
+                    <Th style={{ width: 130 }}>MXIK</Th>
+                    <Th>{t("receiptScan.matchedProduct")}</Th>
+                    <Th style={{ width: 80 }}>{t("receiptScan.confidence")}</Th>
+                    <Th style={{ width: 90 }}>{t("receiptScan.quantity")}</Th>
+                    <Th style={{ width: 100 }}>{t("receiptScan.unitCost")}</Th>
+                    <Th style={{ width: 100 }}>{t("receiptScan.totalCost")}</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reviewItems.map((item, idx) => (
+                    <tr key={idx} style={{ opacity: item.skip ? 0.4 : 1 }}>
+                      <Td>
+                        <SkipCheckbox
+                          type="checkbox"
+                          checked={!item.skip}
+                          onChange={(e) =>
+                            updateReviewItem(idx, { skip: !e.target.checked })
+                          }
+                          title={t("receiptScan.skipItem")}
+                        />
+                      </Td>
+                      <Td>{item.scannedName}</Td>
+                      <Td
+                        style={{
+                          fontSize: 11,
+                          opacity: 0.6,
+                          fontFamily: "monospace",
+                        }}
+                      >
+                        {item.mxik || "—"}
+                      </Td>
+                      <Td>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "4px",
+                            alignItems: "center",
+                          }}
+                        >
+                          <ProductSelect
+                            value={item.productId}
+                            onChange={(e) =>
+                              updateReviewItem(idx, {
+                                productId: e.target.value,
+                                confidence: e.target.value ? "high" : "none",
+                              })
+                            }
+                            disabled={item.skip}
+                            style={{ flex: 1 }}
+                          >
+                            <option value="">
+                              {t("receiptScan.selectProduct")}
+                            </option>
+                            {localProducts.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {getProductName(p)}
+                              </option>
+                            ))}
+                          </ProductSelect>
+                          {!item.productId && !item.skip && (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="small"
+                              title={t("products.addProduct")}
+                              style={{ flexShrink: 0, padding: "4px 6px" }}
+                              onClick={() => setAddingForRowIdx(idx)}
+                            >
+                              <PlusCircle size={15} />
+                            </Button>
+                          )}
+                        </div>
+                      </Td>
+                      <Td>
+                        <ConfidenceBadge $level={item.confidence}>
+                          {getConfidenceLabel(item.confidence)}
+                        </ConfidenceBadge>
+                      </Td>
+                      <Td>
+                        <NumberInput
+                          type="number"
+                          step="any"
+                          value={item.quantity}
                           onChange={(e) =>
                             updateReviewItem(idx, {
-                              productId: e.target.value,
-                              confidence: e.target.value ? "high" : "none",
+                              quantity: parseFloat(e.target.value) || 0,
                             })
                           }
                           disabled={item.skip}
-                          style={{ flex: 1 }}
-                        >
-                          <option value="">
-                            {t("receiptScan.selectProduct")}
-                          </option>
-                          {localProducts.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {getProductName(p)}
-                            </option>
-                          ))}
-                        </ProductSelect>
-                        {!item.productId && !item.skip && (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="small"
-                            title={t("products.addProduct")}
-                            style={{ flexShrink: 0, padding: "4px 6px" }}
-                            onClick={() => setAddingForRowIdx(idx)}
-                          >
-                            <PlusCircle size={15} />
-                          </Button>
-                        )}
-                      </div>
-                    </Td>
-                    <Td>
-                      <ConfidenceBadge $level={item.confidence}>
-                        {getConfidenceLabel(item.confidence)}
-                      </ConfidenceBadge>
-                    </Td>
-                    <Td>
-                      <NumberInput
-                        type="number"
-                        step="any"
-                        value={item.quantity}
-                        onChange={(e) =>
-                          updateReviewItem(idx, {
-                            quantity: parseFloat(e.target.value) || 0,
-                          })
-                        }
-                        disabled={item.skip}
-                      />
-                    </Td>
-                    <Td>
-                      <NumberInput
-                        type="number"
-                        step="any"
-                        value={item.unitCost}
-                        onChange={(e) =>
-                          updateReviewItem(idx, {
-                            unitCost: parseFloat(e.target.value) || 0,
-                          })
-                        }
-                        disabled={item.skip}
-                      />
-                    </Td>
-                    <Td style={{ textAlign: "right", fontWeight: 600 }}>
-                      {(item.quantity * item.unitCost).toLocaleString()}
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </ReviewTable>
-          </div>
+                        />
+                      </Td>
+                      <Td>
+                        <NumberInput
+                          type="number"
+                          step="any"
+                          value={item.unitCost}
+                          onChange={(e) =>
+                            updateReviewItem(idx, {
+                              unitCost: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                          disabled={item.skip}
+                        />
+                      </Td>
+                      <Td style={{ textAlign: "right", fontWeight: 600 }}>
+                        {(item.quantity * item.unitCost).toLocaleString()}
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </ReviewTable>
+            </div>
 
-          {error && <ErrorText>{error}</ErrorText>}
-
-          <Actions>
-            <Button variant="secondary" onClick={onClose}>
-              {t("common.cancel")}
-            </Button>
-            <Button
-              onClick={handleCreateArrivals}
-              disabled={
-                reviewItems.filter((i) => !i.skip && i.productId).length === 0
-              }
-            >
-              {t("receiptScan.createArrivals")} (
-              {reviewItems.filter((i) => !i.skip && i.productId).length})
-            </Button>
-          </Actions>
-        </>
-      )}
-
-      {/* CREATING STEP */}
-      {step === "creating" && (
-        <SpinnerContainer>
-          <Loader2 size={48} />
-          <SpinnerText>
-            {t("receiptScan.progress", {
-              current: createProgress,
-              total: createTotal,
-            })}
-          </SpinnerText>
-          <ProgressBar>
-            <ProgressFill
-              $percent={
-                createTotal > 0 ? (createProgress / createTotal) * 100 : 0
-              }
-            />
-          </ProgressBar>
-        </SpinnerContainer>
-      )}
-
-      {/* DONE STEP */}
-      {step === "done" && (
-        <>
-          <SuccessContainer>
-            <CheckCircle size={64} />
-            <p style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>
-              {t("receiptScan.doneDescription")}
-            </p>
             {error && <ErrorText>{error}</ErrorText>}
-          </SuccessContainer>
-          <Actions>
-            <Button onClick={handleDone}>{t("common.close")}</Button>
-          </Actions>
-        </>
-      )}
-    </Modal>
 
-    {addingForRowIdx !== null && (() => {
-      const row = reviewItems[addingForRowIdx];
-      return (
-        <ProductForm
-          initialData={{
-            nameRu: row.scannedName,
-            nameUz: row.scannedName,
-            mxik: row.mxik || undefined,
-            cost: row.unitCost || undefined,
-          }}
-          onClose={() => setAddingForRowIdx(null)}
-          onSuccess={handleProductCreated}
-        />
-      );
-    })()}
+            <Actions>
+              <Button variant="secondary" onClick={onClose}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                onClick={handleCreateArrivals}
+                disabled={
+                  reviewItems.filter((i) => !i.skip && i.productId).length === 0
+                }
+              >
+                {t("receiptScan.createArrivals")} (
+                {reviewItems.filter((i) => !i.skip && i.productId).length})
+              </Button>
+            </Actions>
+          </>
+        )}
+
+        {/* CREATING STEP */}
+        {step === "creating" && (
+          <SpinnerContainer>
+            <Loader2 size={48} />
+            <SpinnerText>
+              {t("receiptScan.progress", {
+                current: createProgress,
+                total: createTotal,
+              })}
+            </SpinnerText>
+            <ProgressBar>
+              <ProgressFill
+                $percent={
+                  createTotal > 0 ? (createProgress / createTotal) * 100 : 0
+                }
+              />
+            </ProgressBar>
+          </SpinnerContainer>
+        )}
+
+        {/* DONE STEP */}
+        {step === "done" && (
+          <>
+            <SuccessContainer>
+              <CheckCircle size={64} />
+              <p style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>
+                {t("receiptScan.doneDescription")}
+              </p>
+              {error && <ErrorText>{error}</ErrorText>}
+            </SuccessContainer>
+            <Actions>
+              <Button onClick={handleDone}>{t("common.close")}</Button>
+            </Actions>
+          </>
+        )}
+      </Modal>
+
+      {addingForRowIdx !== null &&
+        (() => {
+          const row = reviewItems[addingForRowIdx];
+          return (
+            <ProductForm
+              initialData={{
+                nameRu: row.scannedName,
+                nameUz: row.scannedName,
+                mxik: row.mxik || undefined,
+                cost: row.unitCost || undefined,
+              }}
+              onClose={() => setAddingForRowIdx(null)}
+              onSuccess={handleProductCreated}
+            />
+          );
+        })()}
     </>
   );
 }

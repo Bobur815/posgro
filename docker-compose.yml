@@ -1,49 +1,72 @@
-version: '3.8'
+name: grocery_pos
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: grocery-pos-db
-    environment:
-      POSTGRES_USER: ${DB_USER:postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:postgres}
-      POSTGRES_DB: grocery_pos
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    restart: always
+  ocr-python:
+    build:
+      context: ./src/server/ocr-python
+    restart: unless-stopped
     networks:
       - grocery-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:postgres} -d grocery_pos"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: grocery_pos
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - grocery-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d grocery_pos"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: grocery-pos-api
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql://${DB_USER:postgres}:${DB_PASSWORD:postgres}@postgres:5432/grocery_pos
-      JWT_SECRET: ${JWT_SECRET}
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      NODE_ENV: production
-      PORT: 3000
+      DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/grocery_pos"
+      PYTHON_OCR_URL: "http://ocr-python:8001"
+      NODE_ENV: "production"
+      PORT: "3000"
+      RUN_MIGRATIONS: "true"
     ports:
       - "3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
-    restart: always
+      ocr-python:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
       - grocery-network
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -e
+        if [ "$$RUN_MIGRATIONS" = "true" ]; then
+          echo "Running Prisma migrations..."
+          npx prisma migrate deploy || exit 1
+        fi
+        echo "Starting app..."
+        exec node dist/server/main.js
 
   nginx:
     image: nginx:alpine
-    container_name: grocery-pos-nginx
     ports:
       - "80:80"
       - "443:443"
@@ -52,7 +75,7 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - api
-    restart: always
+    restart: unless-stopped
     networks:
       - grocery-network
 

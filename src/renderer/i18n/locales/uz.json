@@ -153,7 +153,8 @@
     "avgDailySales": "O'rtacha kunlik sotuv",
     "transactions": "Tranzaksiyalar",
     "daysInPeriod": "Davrdagi kunlar",
-    "noAnalyticsData": "Tanlangan davr uchun ma'lumot yo'q"
+    "noAnalyticsData": "Tanlangan davr uchun ma'lumot yo'q",
+    "generateBarcode": "Shtrix-kod yaratish"
   },
   "inventory": {
     "stockManagement": "Omborni boshqarish",
@@ -543,13 +544,16 @@
     "tokenLimitExceeded": "Kunlik AI token limiti tugadi. Limit ertaga yangilanadi."
   },
   "aiSettings": {
-    "title": "AI Sozlamalar",
-    "description": "Chekni sun'iy intellekt yordamida aniqlash sozlamalari",
-    "anthropicApiKey": "Anthropic API kaliti",
-    "apiKeyPlaceholder": "sk-ant-...",
-    "apiKeySaved": "API kaliti saqlandi",
-    "tokenUsageTitle": "Bugungi token ishlatish",
-    "tokenUsageOf": "dan",
-    "tokenLimitNote": "Limit server tomonidan belgilanadi (standart 100 000 / kun)"
+    "title": "AI — Hisob-faktura tanish",
+    "refreshPlan": "Tarifni yangilash",
+    "freePlanBadge": "Bepul tarif",
+    "freePlanNote": "Bepul tarifda asosiy hisob-faktura tanish ishlaydi. Murakkab hujjatlar (PDF, kirill, ko'p sahifali) Pro-tarifda aniqroq taniladi.",
+    "freePlanContact": "Pro-tarifga o'tish uchun egasi yoki qo'llab-quvvatlash xizmatiga murojaat qiling.",
+    "proPlanBadge": "Pro tarif",
+    "proPlanNote": "Joriy oy uchun foydalanish",
+    "scansThisMonth": "Bu oyda skanerlar",
+    "estimatedCharge": "To'lov miqdori",
+    "pricePerScan": "$0.052 / skaner",
+    "contactSupport": "Qo'llab-quvvatlash xizmati"
   }
 }

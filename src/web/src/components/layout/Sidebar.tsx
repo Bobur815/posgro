@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Truck,
+  Store,
   type LucideIcon,
 } from "lucide-react";
 import { useAuthStore } from "../../store/auth-store";
@@ -267,7 +268,8 @@ export function Sidebar() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const { isCollapsed, toggleSidebar } = useSidebar();
-  const isAdmin = user?.role === "ADMIN";
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
   const handleLogout = async () => {
     await logout();
@@ -347,6 +349,13 @@ export function Sidebar() {
             </NavSection>
           )}
 
+          {isSuperAdmin && (
+            <NavSection>
+              <SectionTitle $collapsed={isCollapsed}>Super Admin</SectionTitle>
+              {renderNavItem("/admin/stores", Store, "Stores")}
+            </NavSection>
+          )}
+
           {!isAdmin && (
             <NavSection>
               <SectionTitle $collapsed={isCollapsed}>{t("nav.settings")}</SectionTitle>
@@ -365,7 +374,7 @@ export function Sidebar() {
                 <UserDetails $collapsed={isCollapsed}>
                   <UserName>{getUserName()}</UserName>
                   <UserRole>
-                    {user.role === "ADMIN" ? t("users.admin") : t("users.cashier")}
+                    {user.role === "SUPER_ADMIN" ? "Super Admin" : user.role === "ADMIN" ? t("users.admin") : t("users.cashier")}
                   </UserRole>
                 </UserDetails>
               </UserSection>

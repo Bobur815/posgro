@@ -154,6 +154,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('receipt:matchProducts', items),
     getTokenUsage: () =>
       ipcRenderer.invoke('receipt:getTokenUsage'),
+    getPlan: () =>
+      ipcRenderer.invoke('receipt:getPlan'),
+    getScanUsage: () =>
+      ipcRenderer.invoke('receipt:getScanUsage'),
   },
 
   // Analytics
@@ -263,6 +267,8 @@ declare global {
         scan: (imageBase64: string, mimeType: string) => Promise<unknown>;
         matchProducts: (items: { name: string; mxik?: string | null }[]) => Promise<unknown[]>;
         getTokenUsage: () => Promise<{ used: number; limit: number; date: string }>;
+        getPlan: () => Promise<{ plan: string }>;
+        getScanUsage: () => Promise<{ scans: number; costUsd: number; month: string }>;
       };
       analytics: {
         getData: (filters: { startDate: string; endDate: string }) => Promise<unknown>;

@@ -32,4 +32,5 @@ export default defineConfig({
     outDir: '../../dist/web',
     emptyOutDir: true,
   },
+  base: '/web/',
 });

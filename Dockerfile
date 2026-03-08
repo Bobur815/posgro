@@ -1,63 +1,46 @@
-# ================================
-# Grocery POS - NestJS Backend
-# ================================
-
-# Build stage
+# ---- Build stage ----
 FROM node:20-alpine AS builder
-
 WORKDIR /app
 
-# Copy package files
+RUN apk add --no-cache python3 make g++ openssl
+
+# Install root deps (NestJS server + shared)
 COPY package*.json ./
-COPY prisma ./prisma/
+RUN npm ci --legacy-peer-deps
 
-# Install dependencies
-RUN npm ci
-
-# Copy source code
 COPY . .
-
-# Generate Prisma client
-RUN npm run prisma:generate
-
-# Build application
+RUN npx prisma generate
 RUN npm run build:server
 
-# ================================
-# Production stage
-FROM node:20-alpine AS production
+# Build web app (src/web has its own package.json)
+WORKDIR /app/src/web
+COPY src/web/package*.json ./
+RUN npm ci --legacy-peer-deps
+# Vite outDir is ../../dist/web → /app/dist/web
+RUN npm run build
 
 WORKDIR /app
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nestjs -u 1001
 
-# Copy package files
-COPY package*.json ./
+# ---- Runtime stage ----
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
 
-# Install production dependencies only
-RUN npm ci --only=production && npm cache clean --force
+RUN apk add --no-cache openssl libc6-compat
 
-# Copy Prisma files
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+# Use existing 'node' user (UID 1000) — no need to create a new one
+COPY --from=builder --chown=node:node /app/package*.json ./
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --from=builder --chown=node:node /app/prisma ./prisma
 
-# Copy built application
-COPY --from=builder /app/dist ./dist
+# Web assets are already in dist/web (built above)
 
-# Set ownership
-RUN chown -R nestjs:nodejs /app
-
-# Switch to non-root user
-USER nestjs
-
-# Expose port
+USER node
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
 
-# Start application
 CMD ["node", "dist/server/main.js"]

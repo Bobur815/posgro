@@ -18,13 +18,23 @@ import { UserForm } from './pages/Users/UserForm';
 import { SettingsPage } from './pages/Settings/SettingsPage';
 import { SystemSettings } from './pages/Settings/SystemSettings';
 import { UserSettings } from './pages/Settings/UserSettings';
+import { StoreList } from './pages/Admin/StoreList';
 
-function PrivateRoute({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
+function PrivateRoute({
+  children,
+  adminOnly = false,
+  superAdminOnly = false,
+}: {
+  children: React.ReactNode;
+  adminOnly?: boolean;
+  superAdminOnly?: boolean;
+}) {
   const { isAuthenticated, user, sessionRestored } = useAuthStore();
 
   if (!sessionRestored) return null;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (adminOnly && user?.role !== 'ADMIN') return <Navigate to="/" replace />;
+  if (superAdminOnly && user?.role !== 'SUPER_ADMIN') return <Navigate to="/" replace />;
+  if (adminOnly && user?.role !== 'ADMIN' && user?.role !== 'SUPER_ADMIN') return <Navigate to="/" replace />;
 
   return <>{children}</>;
 }
@@ -36,8 +46,10 @@ export function App() {
     restoreSession();
   }, [restoreSession]);
 
+  const basename = import.meta.env.PROD ? '/web' : '/';
+
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 
@@ -78,6 +90,9 @@ export function App() {
           <Route path="settings" element={<PrivateRoute adminOnly><SettingsPage /></PrivateRoute>} />
           <Route path="settings/system" element={<PrivateRoute adminOnly><SystemSettings /></PrivateRoute>} />
           <Route path="settings/user" element={<UserSettings />} />
+
+          {/* Super Admin */}
+          <Route path="admin/stores" element={<PrivateRoute superAdminOnly><StoreList /></PrivateRoute>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

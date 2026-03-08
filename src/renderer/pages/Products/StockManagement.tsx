@@ -233,7 +233,11 @@ export function StockManagement() {
     formatCurrencyBase(amount, i18n.language as "ru" | "uz");
 
   const columns = [
-    { key: "#", header: "#", render: (_: Product, index: number) => pageOffset + index + 1 },
+    {
+      key: "#",
+      header: "#",
+      render: (_: Product, index: number) => pageOffset + index + 1,
+    },
     { key: "id", header: t("pos.id") },
     { key: "barcode", header: t("products.barcode") },
     {

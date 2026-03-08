@@ -64,6 +64,7 @@ export class StoresService {
     if (updateStoreDto.address !== undefined) data.address = updateStoreDto.address;
     if (updateStoreDto.phone !== undefined) data.phone = updateStoreDto.phone;
     if (updateStoreDto.active !== undefined) data.active = updateStoreDto.active;
+    if (updateStoreDto.plan !== undefined) data.plan = updateStoreDto.plan;
     if (updateStoreDto.settings !== undefined) {
       data.settings = JSON.stringify(updateStoreDto.settings);
     }
@@ -82,6 +83,12 @@ export class StoresService {
       data: { active: true },
     });
 
+    return { success: true };
+  }
+
+  async delete(id: string) {
+    await this.findById(id);
+    await this.prisma.store.delete({ where: { id } });
     return { success: true };
   }
 

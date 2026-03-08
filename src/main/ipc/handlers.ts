@@ -4,6 +4,7 @@ import { setupProductsHandlers } from './products-handlers';
 import { setupSalesHandlers } from './sales-handlers';
 import { setupWeighedItemsHandlers } from './weighed-items-handlers';
 import { getAppConfig } from '../config/app-config';
+import { getAuthToken } from '../sync/queue-manager';
 import { getPrismaClient } from '../database/sqlite-client';
 import { setPrinterConfig, setupPrinterHandlers } from '../printer/thermal-printer';
 import { convertUzbekText } from '../../shared/utils/transliterator';
@@ -593,14 +594,7 @@ function setupAppHandlers(): void {
 function setupReceiptHandlers(): void {
   ipcMain.handle('receipt:scan', async (_event, imageBase64: string, mimeType: string) => {
     const prisma = getPrismaClient();
-
-    const apiKeySetting = await prisma.systemSetting.findUnique({
-      where: { key: 'anthropic_api_key' },
-    });
-
-    if (!apiKeySetting?.value) {
-      throw new Error('ANTHROPIC_API_KEY_NOT_SET');
-    }
+    const config = getAppConfig();
 
     // Check daily token limit
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
@@ -618,124 +612,41 @@ function setupReceiptHandlers(): void {
       throw new Error('AI_TOKEN_LIMIT_EXCEEDED');
     }
 
-    const prompt = `You are analyzing a supplier invoice (Счёт-фактура / Hisob-faktura) from Uzbekistan. The document may be in Russian, Uzbek, or both. This is often a standard SoliqServis e-invoice format.
-
-**MXIK code:**
-Each product row contains a 17-digit MXIK code (Миллий каталог идентификация коди) on a separate line, formatted as:
-  "XXXXXXXXXXXXXXXXXXX - Category description"
-Example: "02202002001010007 - Безалкогольные напитки (газированные и негазированные) COCA-COLA"
-Extract the digits only (no dashes or spaces).
-
-**Invoice column order (left to right after the product name/MXIK block):**
-  [unit_type] [unit_volume] [invoice_quantity] [price_per_invoice_unit] [total_without_VAT] [VAT_%] [VAT_amount] [total_WITH_VAT] [transaction_type]
-
-The unit_type can be:
-- "упаковка=N шт" — 1 invoice unit is a package of N individual items → actual_quantity = invoice_quantity × N
-- "штука" / "шт" / "кг" / "литр" etc. — individual units → actual_quantity = invoice_quantity
-
-**Calculation rules:**
-1. actual_quantity = invoice_quantity × pack_size (pack_size = N from "упаковка=N шт", else 1)
-2. totalCost = the LAST price column — total WITH VAT (ignore spaces in numbers, e.g. "562 464.00" → 562464)
-3. unitCost = round(totalCost / actual_quantity, 2)
-
-**Example:**
-  Product: Coca Cola PET 0.5L
-  MXIK: 02202002001010007
-  Row: упаковка=12 шт  0.50 литр  8  775.00  502 200.00  12%  60 264.00  562 464.00  Олди-сотди
-  → pack_size=12, invoice_quantity=8, actual_quantity=96, totalCost=562464, unitCost=5859
-
-Also extract:
-- supplierName: supplier/vendor name if visible, else null
-- receiptDate: date on the receipt in YYYY-MM-DD format if visible, else null
-
-Return ONLY valid JSON, no markdown, no explanations:
-{
-  "supplierName": "string or null",
-  "receiptDate": "string or null",
-  "items": [
-    {
-      "scannedName": "product name as written",
-      "mxik": "17-digit code or null",
-      "quantity": 96,
-      "unitCost": 5859,
-      "totalCost": 562464
+    // Delegate scanning to the NestJS server
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error('NOT_AUTHENTICATED');
     }
-  ]
-}
 
-If you cannot determine a numeric value, use 0. Always return the items array even if empty.`;
-
-    const isPDF = mimeType === 'application/pdf';
-
-    const fileContent = isPDF
-      ? {
-          type: 'document',
-          source: {
-            type: 'base64',
-            media_type: 'application/pdf' as const,
-            data: imageBase64,
-          },
-        }
-      : {
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: mimeType,
-            data: imageBase64,
-          },
-        };
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch(`${config.vpsApiUrl}/invoice/scan`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKeySetting.value,
-        'anthropic-version': '2023-06-01',
-        ...(isPDF && { 'anthropic-beta': 'pdfs-2024-09-25' }),
+        Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 4096,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              fileContent,
-              {
-                type: 'text',
-                text: prompt,
-              },
-            ],
-          },
-        ],
-      }),
+      body: JSON.stringify({ imageBase64, mimeType }),
     });
 
     if (!response.ok) {
       const errorBody = await response.text();
-      console.error('Anthropic API error:', response.status, errorBody);
+      console.error('Invoice scan API error:', response.status, errorBody);
       throw new Error(`API error: ${response.status}`);
     }
 
-    const result = await response.json();
-    const textContent = result.content?.find((c: { type: string }) => c.type === 'text');
-    if (!textContent) {
-      throw new Error('No text response from API');
-    }
+    const result = await response.json() as {
+      supplierName: string | null;
+      receiptDate: string | null;
+      items: unknown[];
+      tier: string;
+      cost_usd?: number;
+    };
 
-    let jsonText = textContent.text.trim();
-    // Strip markdown code fences if present
-    if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    }
+    if (result.cost_usd && result.cost_usd > 0) {
+      const thisMonth = today.slice(0, 7); // YYYY-MM
 
-    const parsed = JSON.parse(jsonText);
-
-    // Record token usage from the response
-    const tokensUsed =
-      (result.usage?.input_tokens || 0) + (result.usage?.output_tokens || 0);
-    if (tokensUsed > 0) {
-      const newTotal = tokensUsedToday + tokensUsed;
+      // Keep real token-equivalent for daily rate limiting (approximate: $3/1M input rate)
+      const approxTokens = Math.round(result.cost_usd / (3.0 / 1_000_000));
+      const newTokenTotal = tokensUsedToday + approxTokens;
       await prisma.systemSetting.upsert({
         where: { key: 'ai_tokens_date' },
         update: { value: today },
@@ -743,12 +654,39 @@ If you cannot determine a numeric value, use 0. Always return the items array ev
       });
       await prisma.systemSetting.upsert({
         where: { key: 'ai_tokens_used' },
-        update: { value: String(newTotal) },
-        create: { key: 'ai_tokens_used', value: String(newTotal) },
+        update: { value: String(newTokenTotal) },
+        create: { key: 'ai_tokens_used', value: String(newTokenTotal) },
+      });
+
+      // Billed cost = actual cost × 1.3 (30% margin), accumulated monthly
+      const billedCost = result.cost_usd * 1.3;
+      const [scanMonthSetting, scanCountSetting, costSetting] = await Promise.all([
+        prisma.systemSetting.findUnique({ where: { key: 'ai_scans_month' } }),
+        prisma.systemSetting.findUnique({ where: { key: 'ai_scans_count' } }),
+        prisma.systemSetting.findUnique({ where: { key: 'ai_cost_usd' } }),
+      ]);
+      const sameMonth = scanMonthSetting?.value === thisMonth;
+      const currentScans = sameMonth ? parseInt(scanCountSetting?.value || '0', 10) : 0;
+      const currentCost  = sameMonth ? parseFloat(costSetting?.value || '0') : 0;
+
+      await prisma.systemSetting.upsert({
+        where: { key: 'ai_scans_month' },
+        update: { value: thisMonth },
+        create: { key: 'ai_scans_month', value: thisMonth },
+      });
+      await prisma.systemSetting.upsert({
+        where: { key: 'ai_scans_count' },
+        update: { value: String(currentScans + 1) },
+        create: { key: 'ai_scans_count', value: String(currentScans + 1) },
+      });
+      await prisma.systemSetting.upsert({
+        where: { key: 'ai_cost_usd' },
+        update: { value: String(currentCost + billedCost) },
+        create: { key: 'ai_cost_usd', value: String(currentCost + billedCost) },
       });
     }
 
-    return ipcSafe(parsed);
+    return ipcSafe(result);
   });
 
   ipcMain.handle('receipt:getTokenUsage', async () => {
@@ -765,6 +703,49 @@ If you cannot determine a numeric value, use 0. Always return the items array ev
         ? parseInt(tokensUsedSetting?.value || '0', 10)
         : 0;
     return { used, limit, date: today };
+  });
+
+  // Fetches the store plan from the server and caches it locally
+  ipcMain.handle('receipt:getPlan', async () => {
+    const prisma = getPrismaClient();
+    const config = getAppConfig();
+    try {
+      const token = await getAuthToken();
+      if (!token) return { plan: 'free' };
+
+      const response = await fetch(`${config.vpsApiUrl}/invoice/plan`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const data = (await response.json()) as { plan: string };
+      // Cache locally so the UI shows it even offline
+      await prisma.systemSetting.upsert({
+        where: { key: 'ai_plan' },
+        update: { value: data.plan },
+        create: { key: 'ai_plan', value: data.plan },
+      });
+      return data;
+    } catch {
+      // Fallback to cached value
+      const cached = await prisma.systemSetting.findUnique({ where: { key: 'ai_plan' } });
+      return { plan: cached?.value ?? 'free' };
+    }
+  });
+
+  // Returns monthly scan count and billed cost (actual Anthropic cost × 1.3) for the paid plan UI
+  ipcMain.handle('receipt:getScanUsage', async () => {
+    const prisma = getPrismaClient();
+    const thisMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+    const [scanMonthSetting, scanCountSetting, costSetting] = await Promise.all([
+      prisma.systemSetting.findUnique({ where: { key: 'ai_scans_month' } }),
+      prisma.systemSetting.findUnique({ where: { key: 'ai_scans_count' } }),
+      prisma.systemSetting.findUnique({ where: { key: 'ai_cost_usd' } }),
+    ]);
+    const sameMonth = scanMonthSetting?.value === thisMonth;
+    const scans   = sameMonth ? parseInt(scanCountSetting?.value || '0', 10) : 0;
+    const costUsd = sameMonth ? parseFloat(costSetting?.value || '0') : 0;
+    return { scans, costUsd: Math.round(costUsd * 10000) / 10000, month: thisMonth };
   });
 
   ipcMain.handle('receipt:matchProducts', async (
