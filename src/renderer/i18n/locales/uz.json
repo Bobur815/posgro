@@ -1,5 +1,6 @@
 {
   "common": {
+    "noResults":"Hech narsa topilmadi",
     "save": "Saqlash",
     "cancel": "Bekor qilish",
     "delete": "O'chirish",
