@@ -196,6 +196,13 @@ export class UsersService {
     return { success: true };
   }
 
+  async updatePassword(id: string, hashedPassword: string) {
+    return this.prisma.user.update({
+      where: { id },
+      data: { password: hashedPassword },
+    });
+  }
+
   async delete(id: string, storeId: string) {
     const user = await this.findById(id);
     if (user.storeId !== storeId) {

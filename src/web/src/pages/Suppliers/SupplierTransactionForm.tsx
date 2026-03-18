@@ -9,6 +9,10 @@ import {
   SupplierTransactionType,
   SupplierPaymentMethod,
 } from '@shared/types';
+import {
+  SUPPLIER_PAYMENT_METHODS,
+  SUPPLIER_PAYMENT_METHOD_I18N_KEYS,
+} from '@shared/constants/payment-methods';
 
 const Overlay = styled.div`
   position: fixed;
@@ -85,13 +89,6 @@ const TRANSACTION_TYPES: SupplierTransactionType[] = [
   'ADJUSTMENT',
 ];
 
-const PAYMENT_METHODS: SupplierPaymentMethod[] = [
-  'CASH',
-  'CARD',
-  'BANK_TRANSFER',
-  'INSTALLMENT',
-  'ONE_TO_ONE',
-];
 
 interface SupplierTransactionFormProps {
   supplierId: string;
@@ -191,16 +188,6 @@ export function SupplierTransactionForm({
     return labels[type];
   };
 
-  const getPaymentMethodLabel = (method: SupplierPaymentMethod) => {
-    const labels: Record<SupplierPaymentMethod, string> = {
-      CASH: t('suppliers.cash'),
-      CARD: t('suppliers.card'),
-      BANK_TRANSFER: t('suppliers.bankTransfer'),
-      INSTALLMENT: t('suppliers.installment'),
-      ONE_TO_ONE: t('suppliers.oneToOne'),
-    };
-    return labels[method];
-  };
 
   return (
     <Overlay onClick={onCancel}>
@@ -231,9 +218,9 @@ export function SupplierTransactionForm({
               value={formData.paymentMethod}
               onChange={(e) => handleChange('paymentMethod', e.target.value)}
             >
-              {PAYMENT_METHODS.map((method) => (
+              {SUPPLIER_PAYMENT_METHODS.map((method) => (
                 <option key={method} value={method}>
-                  {getPaymentMethodLabel(method)}
+                  {t(SUPPLIER_PAYMENT_METHOD_I18N_KEYS[method])}
                 </option>
               ))}
             </Select>

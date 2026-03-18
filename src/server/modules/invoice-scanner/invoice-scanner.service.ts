@@ -92,6 +92,9 @@ export class InvoiceScannerService {
       }
 
       const data = (await response.json()) as Omit<ScanResult, 'tier'>;
+      if (!data.items || data.items.length === 0) {
+        throw new Error('PaddleOCR returned no items');
+      }
       return { ...data, tier: 'free' };
     } catch (err) {
       this.logger.warn(`PaddleOCR failed, falling back to Claude: ${(err as Error).message}`);

@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   UseGuards,
+  HttpCode,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { SuppliersService } from './suppliers.service';
@@ -72,6 +73,13 @@ export class SuppliersController {
     @Body() updateSupplierDto: UpdateSupplierDto,
   ) {
     return this.suppliersService.update(id, storeId, updateSupplierDto);
+  }
+
+  @Post('sync-bulk')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Bulk upsert suppliers from POS terminal (Admin only)' })
+  async syncBulk(@CurrentStore() storeId: string, @Body() body: { suppliers: any[] }) {
+    return this.suppliersService.syncBulk(storeId, body.suppliers ?? []);
   }
 
   @Delete(':id')

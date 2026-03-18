@@ -29,7 +29,7 @@ axiosInstance.interceptors.response.use(
     if (error.response?.status === 401) {
       // Clear auth state
       localStorage.removeItem('auth-storage');
-      window.location.href = '/login';
+      window.location.href = '/web/login';
     }
     return Promise.reject(error instanceof Error ? error : new Error(error.response?.data?.message ?? String(error)));
   }
@@ -49,6 +49,10 @@ export const auth = {
   },
   getProfile: async () => {
     const { data } = await axiosInstance.get('/auth/profile');
+    return data;
+  },
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    const { data } = await axiosInstance.post('/auth/change-password', { currentPassword, newPassword });
     return data;
   },
 };
@@ -77,7 +81,7 @@ export const products = {
     return data;
   },
   update: async (id: string, productData: unknown) => {
-    const { data } = await axiosInstance.put(`/products/${id}`, productData);
+    const { data } = await axiosInstance.patch(`/products/${id}`, productData);
     return data;
   },
   delete: async (id: string) => {
@@ -264,11 +268,15 @@ export const settings = {
 
 export const receipt = {
   scan: async (imageData: string, mimeType?: string) => {
-    const { data } = await axiosInstance.post('/receipt/scan', { imageData, mimeType });
+    const { data } = await axiosInstance.post('/invoice/scan', { imageBase64: imageData, mimeType });
     return data;
   },
   matchProducts: async (items: unknown[]) => {
-    const { data } = await axiosInstance.post('/receipt/match-products', { items });
+    const { data } = await axiosInstance.post('/invoice/match-products', { items });
+    return data;
+  },
+  getPlan: async (): Promise<{ plan: string; balance_usd: number | null }> => {
+    const { data } = await axiosInstance.get('/invoice/plan');
     return data;
   },
 };
@@ -332,6 +340,15 @@ export const stores = {
   },
 };
 
+// ─── Analytics ───────────────────────────────────────────────────────────────
+
+export const analytics = {
+  getData: async (filters: { startDate: string; endDate: string }) => {
+    const { data } = await axiosInstance.get('/analytics/data', { params: filters });
+    return data;
+  },
+};
+
 // ─── Combined export ─────────────────────────────────────────────────────────
 
 export const api = {
@@ -345,4 +362,5 @@ export const api = {
   settings,
   receipt,
   stores,
+  analytics,
 };

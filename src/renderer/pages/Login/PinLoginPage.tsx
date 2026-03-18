@@ -388,7 +388,7 @@ export function PinLoginPage() {
     <Container>
       <LeftPanel>
         <LoginCard $kbOpen={keyboardOpen}>
-          <Logo>Grocery POS</Logo>
+          <Logo>Yangi Asr</Logo>
 
           {mode === "pin" ? (
             <ContentWrapper key="pin">

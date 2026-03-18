@@ -1,6 +1,6 @@
 import { getPrismaClient } from '../database/sqlite-client';
 import { getAppConfig } from '../config/app-config';
-import { getAuthToken } from './queue-manager';
+import { getServerToken } from './queue-manager';
 
 const BATCH_SIZE = 50;
 
@@ -23,9 +23,9 @@ export async function syncSales(): Promise<void> {
 
   console.log(`Syncing ${unsyncedSales.length} sales...`);
 
-  const token = await getAuthToken();
+  const token = getServerToken();
   if (!token) {
-    throw new Error('No auth token available for sync');
+    throw new Error('No server token available — log in first to sync');
   }
 
   let successCount = 0;

@@ -4,6 +4,7 @@ import { setupIpcHandlers } from "./ipc/handlers";
 import { SyncService } from "./sync/sync-service";
 import { initializeDatabase } from "./database/sqlite-client";
 import { seedLocalDatabase } from "./database/seed";
+import { getAppConfig } from "./config/app-config";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 try {
@@ -45,13 +46,15 @@ async function bootstrap() {
 
     // Setup sync IPC handlers
     ipcMain.handle("sync:getStatus", () => {
-      return (
-        syncService?.getStatus() ?? {
+      const config = getAppConfig();
+      return {
+        ...(syncService?.getStatus() ?? {
           isSyncing: false,
           lastSyncTime: null,
           lastError: null,
-        }
-      );
+        }),
+        vpsApiUrl: config.vpsApiUrl,
+      };
     });
 
     ipcMain.handle("sync:trigger", async () => {

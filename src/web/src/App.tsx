@@ -4,7 +4,6 @@ import { useAuthStore } from './store/auth-store';
 import { Layout } from './components/layout/Layout';
 import { LoginPage } from './pages/Login/LoginPage';
 import { ProductList } from './pages/Products/ProductList';
-import { ProductForm } from './pages/Products/ProductForm';
 import { ProductDetails } from './pages/Products/ProductDetails';
 import { StockManagement } from './pages/Products/StockManagement';
 import { SupplierList } from './pages/Suppliers/SupplierList';
@@ -24,10 +23,12 @@ function PrivateRoute({
   children,
   adminOnly = false,
   superAdminOnly = false,
+  excludeSuperAdmin = false,
 }: {
   children: React.ReactNode;
   adminOnly?: boolean;
   superAdminOnly?: boolean;
+  excludeSuperAdmin?: boolean;
 }) {
   const { isAuthenticated, user, sessionRestored } = useAuthStore();
 
@@ -35,8 +36,14 @@ function PrivateRoute({
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (superAdminOnly && user?.role !== 'SUPER_ADMIN') return <Navigate to="/" replace />;
   if (adminOnly && user?.role !== 'ADMIN' && user?.role !== 'SUPER_ADMIN') return <Navigate to="/" replace />;
+  if (excludeSuperAdmin && user?.role === 'SUPER_ADMIN') return <Navigate to="/admin/stores" replace />;
 
   return <>{children}</>;
+}
+
+function IndexRedirect() {
+  const { user } = useAuthStore();
+  return <Navigate to={user?.role === 'SUPER_ADMIN' ? '/admin/stores' : '/products'} replace />;
 }
 
 export function App() {
@@ -46,7 +53,7 @@ export function App() {
     restoreSession();
   }, [restoreSession]);
 
-  const basename = import.meta.env.PROD ? '/web' : '/';
+  const basename = '/web';
 
   return (
     <BrowserRouter basename={basename}>
@@ -61,30 +68,28 @@ export function App() {
             </PrivateRoute>
           }
         >
-          <Route index element={<Navigate to="/products" replace />} />
+          <Route index element={<IndexRedirect />} />
 
-          {/* Products */}
-          <Route path="products" element={<ProductList />} />
-          <Route path="products/new" element={<ProductForm />} />
-          <Route path="products/stock" element={<StockManagement />} />
-          <Route path="products/:id" element={<ProductDetails />} />
-          <Route path="products/:id/edit" element={<ProductForm />} />
+          {/* Products (not for super admin) */}
+          <Route path="products" element={<PrivateRoute excludeSuperAdmin><ProductList /></PrivateRoute>} />
+          <Route path="products/stock" element={<PrivateRoute excludeSuperAdmin><StockManagement /></PrivateRoute>} />
+          <Route path="products/:id" element={<PrivateRoute excludeSuperAdmin><ProductDetails /></PrivateRoute>} />
 
-          {/* Suppliers */}
-          <Route path="suppliers" element={<SupplierList />} />
-          <Route path="suppliers/new" element={<SupplierForm />} />
-          <Route path="suppliers/:id" element={<SupplierDetails />} />
-          <Route path="suppliers/:id/edit" element={<SupplierForm />} />
+          {/* Suppliers (not for super admin) */}
+          <Route path="suppliers" element={<PrivateRoute excludeSuperAdmin><SupplierList /></PrivateRoute>} />
+          <Route path="suppliers/new" element={<PrivateRoute excludeSuperAdmin><SupplierForm /></PrivateRoute>} />
+          <Route path="suppliers/:id" element={<PrivateRoute excludeSuperAdmin><SupplierDetails /></PrivateRoute>} />
+          <Route path="suppliers/:id/edit" element={<PrivateRoute excludeSuperAdmin><SupplierForm /></PrivateRoute>} />
 
-          {/* Reports */}
-          <Route path="reports/daily" element={<DailySummary />} />
-          <Route path="reports/monthly" element={<MonthlyReport />} />
-          <Route path="reports/analytics" element={<Analytics />} />
+          {/* Reports (not for super admin) */}
+          <Route path="reports/daily" element={<PrivateRoute excludeSuperAdmin><DailySummary /></PrivateRoute>} />
+          <Route path="reports/monthly" element={<PrivateRoute excludeSuperAdmin adminOnly><MonthlyReport /></PrivateRoute>} />
+          <Route path="reports/analytics" element={<PrivateRoute excludeSuperAdmin adminOnly><Analytics /></PrivateRoute>} />
 
-          {/* Users (admin only) */}
-          <Route path="users" element={<PrivateRoute adminOnly><UserList /></PrivateRoute>} />
-          <Route path="users/new" element={<PrivateRoute adminOnly><UserForm /></PrivateRoute>} />
-          <Route path="users/:id/edit" element={<PrivateRoute adminOnly><UserForm /></PrivateRoute>} />
+          {/* Users (admin only, not for super admin) */}
+          <Route path="users" element={<PrivateRoute adminOnly excludeSuperAdmin><UserList /></PrivateRoute>} />
+          <Route path="users/new" element={<PrivateRoute adminOnly excludeSuperAdmin><UserForm /></PrivateRoute>} />
+          <Route path="users/:id/edit" element={<PrivateRoute adminOnly excludeSuperAdmin><UserForm /></PrivateRoute>} />
 
           {/* Settings */}
           <Route path="settings" element={<PrivateRoute adminOnly><SettingsPage /></PrivateRoute>} />

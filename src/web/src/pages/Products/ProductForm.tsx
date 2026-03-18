@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { generateProductBarcode } from "@shared/utils/barcode-parser";
@@ -10,6 +9,7 @@ import { Button } from "@components/common/Button";
 import { Input } from "@components/common/Input";
 import { Modal } from "@components/common/Modal";
 import { DateInput } from "@components/common/DateInput";
+import { BarcodeScannerModal } from "../../components/common/BarcodeScannerModal";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import {
   Product,
@@ -17,20 +17,15 @@ import {
   Supplier,
   SupplierPaymentMethod,
 } from "@shared/types";
+import {
+  SUPPLIER_PAYMENT_METHODS,
+  SUPPLIER_PAYMENT_METHOD_I18N_KEYS,
+} from "@shared/constants/payment-methods";
 import { convertUzbekText } from "@shared/utils/transliterator";
-import { RefreshCw, Settings } from "lucide-react";
+import { Camera, RefreshCw, Settings } from "lucide-react";
 import { SupplierManagementModal } from "../Suppliers/SupplierManagementModal";
 import { CategoryManagementModal } from "./CategoryManagementModal";
 import { inventory } from "../../api/client";
-
-const Container = styled.div`
-  max-width: 600px;
-`;
-
-const Title = styled.h1`
-  margin: 0 0 ${({ theme }) => theme.spacing.lg};
-  color: ${({ theme }) => theme.colors.text};
-`;
 
 const Form = styled.form`
   display: flex;
@@ -42,7 +37,10 @@ const Row = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: ${({ theme }) => theme.spacing.md};
-  @media (max-width: 600px) { grid-template-columns: 1fr; }
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const Actions = styled.div`
@@ -103,6 +101,21 @@ const ArrivalForm = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${({ theme }) => theme.spacing.md};
+`;
+
+const FlexRow = styled.div`
+  display: flex;
+  gap: 16px;
+
+  > div {
+    flex: 1;
+    min-width: 0;
+  }
+
+  @media (max-width: 640px) {
+    flex-direction: column;
+    gap: ${({ theme }) => theme.spacing.md};
+  }
 `;
 
 const ModalActions = styled.div`
@@ -169,20 +182,28 @@ const RadioDescription = styled.div`
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
-const PAYMENT_METHODS: SupplierPaymentMethod[] = [
-  "CASH",
-  "CARD",
-  "BANK_TRANSFER",
-  "INSTALLMENT",
-  "ONE_TO_ONE",
-];
-
 const UNIT_OPTIONS: ProductUnit[] = ["шт", "кг", "л", "м"];
 
-export function ProductForm() {
+interface ProductFormProps {
+  productId?: string;
+  initialData?: {
+    nameRu?: string;
+    nameUz?: string;
+    mxik?: string;
+    cost?: number;
+    stock?: number;
+  };
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+export function ProductForm({
+  productId,
+  initialData,
+  onClose,
+  onSuccess,
+}: ProductFormProps) {
   const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
-  const { id } = useParams();
   const toast = useToast();
   const { user } = useAuthStore();
   const {
@@ -198,16 +219,19 @@ export function ProductForm() {
     error,
   } = useProducts();
 
-  const isEdit = Boolean(id);
-  const barcodeCheckTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isEdit = Boolean(productId);
+  const barcodeCheckTimeout = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const isMobile = window.matchMedia("(pointer: coarse)").matches;
 
   const [formData, setFormData] = useState({
     barcode: "",
-    nameRu: "",
-    nameUz: "",
+    nameRu: initialData?.nameRu || "",
+    nameUz: initialData?.nameUz || "",
     price: "",
-    cost: "",
-    stock: "0",
+    cost: initialData?.cost ? String(initialData.cost) : "",
+    stock: initialData?.stock ? String(initialData.stock) : "0",
     minStock: "0",
     unit: "шт" as ProductUnit,
     categoryId: "",
@@ -217,7 +241,7 @@ export function ProductForm() {
     discountPercent: "",
     isOnPromotion: false,
     active: true,
-    mxik: "",
+    mxik: initialData?.mxik || "",
   });
 
   const [existingProduct, setExistingProduct] = useState<Product | null>(null);
@@ -229,22 +253,23 @@ export function ProductForm() {
     priceMode: "none" as "none" | "immediate" | "deferred",
     notes: "",
     supplierId: "",
-    paymentMethod: "INSTALLMENT" as SupplierPaymentMethod,
+    paymentMethod: "CASH" as SupplierPaymentMethod,
     productionDate: "",
     expirationDate: "",
   });
   const [isSubmittingArrival, setIsSubmittingArrival] = useState(false);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
   useEffect(() => {
     loadCategories();
     loadSuppliers();
 
-    if (isEdit && id) {
+    if (isEdit && productId) {
       loadProduct();
     }
-  }, [id, isEdit]);
+  }, [productId, isEdit]);
 
   const checkBarcode = useCallback(
     async (barcode: string) => {
@@ -256,7 +281,7 @@ export function ProductForm() {
         setShowArrivalModal(true);
         setArrivalData((prev) => ({
           ...prev,
-          cost: product.costPrice ? String(product.costPrice) : "",
+          cost: product.cost ? String(product.cost) : "",
           newPrice: String(product.price),
           priceMode: "none",
           supplierId: product.supplierId || "",
@@ -285,7 +310,9 @@ export function ProductForm() {
     }
 
     if (value.length >= 8) {
-      checkBarcode(value);
+      barcodeCheckTimeout.current = setTimeout(() => {
+        checkBarcode(value);
+      }, 300);
     } else if (value.length >= 3) {
       barcodeCheckTimeout.current = setTimeout(() => {
         checkBarcode(value);
@@ -293,10 +320,16 @@ export function ProductForm() {
     }
   };
 
+  const handleScanResult = (barcode: string) => {
+    setShowScanner(false);
+    setFormData((prev) => ({ ...prev, barcode }));
+    checkBarcode(barcode);
+  };
+
   const costChanged =
     existingProduct &&
     arrivalData.cost !== "" &&
-    Number(arrivalData.cost) !== (existingProduct.costPrice ?? 0);
+    Number(arrivalData.cost) !== (existingProduct.cost ?? 0);
 
   const arrivalProfitMargin =
     arrivalData.cost && arrivalData.newPrice
@@ -343,10 +376,11 @@ export function ProductForm() {
         priceMode: "none",
         notes: "",
         supplierId: "",
-        paymentMethod: "INSTALLMENT",
+        paymentMethod: "CASH",
         productionDate: "",
         expirationDate: "",
       });
+      onSuccess();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.error"));
     } finally {
@@ -358,17 +392,6 @@ export function ProductForm() {
     setShowArrivalModal(false);
     setExistingProduct(null);
     setFormData((prev) => ({ ...prev, barcode: "" }));
-  };
-
-  const getPaymentMethodLabel = (method: SupplierPaymentMethod) => {
-    const labels: Record<SupplierPaymentMethod, string> = {
-      CASH: t("suppliers.cash"),
-      CARD: t("suppliers.card"),
-      BANK_TRANSFER: t("suppliers.bankTransfer"),
-      INSTALLMENT: t("suppliers.installment"),
-      ONE_TO_ONE: t("suppliers.oneToOne"),
-    };
-    return labels[method];
   };
 
   const getUnitLabel = (unit: ProductUnit) => {
@@ -394,16 +417,16 @@ export function ProductForm() {
       : null;
 
   const loadProduct = async () => {
-    if (!id) return;
+    if (!productId) return;
 
-    const product = await getById(id);
+    const product = await getById(productId);
     if (product) {
       setFormData({
         barcode: product.barcode,
         nameRu: product.nameRu,
         nameUz: product.nameUz,
         price: String(product.price),
-        cost: product.costPrice ? String(product.costPrice) : "",
+        cost: product.cost ? String(product.cost) : "",
         stock: String(product.stock),
         minStock: String(product.minStock),
         unit: product.unit,
@@ -432,7 +455,7 @@ export function ProductForm() {
       nameRu: formData.nameRu,
       nameUz: formData.nameUz,
       price: parseFloat(formData.price),
-      cost: formData.cost ? parseFloat(formData.cost) : null,
+      cost: formData.cost ? parseFloat(formData.cost) : undefined,
       stock: parseInt(formData.stock),
       minStock: parseInt(formData.minStock),
       unit: formData.unit,
@@ -449,20 +472,16 @@ export function ProductForm() {
     };
 
     let success = false;
-    if (isEdit && id) {
-      success = await updateProduct(id, data);
-      if (success) {
-        toast.success(t("common.saved"));
-      }
+    if (isEdit && productId) {
+      success = await updateProduct(productId, data);
+      if (success) toast.success(t("common.saved"));
     } else {
       success = await createProduct(data);
-      if (success) {
-        toast.success(t("common.saved"));
-      }
+      if (success) toast.success(t("common.saved"));
     }
 
     if (success) {
-      navigate("/products");
+      onSuccess();
     } else if (error) {
       toast.error(error);
     }
@@ -500,120 +519,163 @@ export function ProductForm() {
     });
   };
 
-  return (
-    <Container>
-      <Title>
-        {isEdit ? t("products.editProduct") : t("products.addProduct")}
-      </Title>
+  const title = isEdit ? t("products.editProduct") : t("products.addProduct");
 
-      <Form onSubmit={handleSubmit}>
-        <Row>
-          <Input
-            label={t("products.mxik")}
-            value={formData.mxik}
-            placeholder="00000000000000000"
-            onChange={(e) => handleChange("mxik", e.target.value)}
-          />
-          <FormGroup>
-            <Label>{t("products.barcode")}</Label>
-            <div style={{ display: "flex", flexDirection: "row", gap: "8px" }}>
-              <Input
-                value={formData.barcode}
-                autoFocus
-                onChange={(e) => handleBarcodeChange(e.target.value)}
-                disabled={isEdit}
-                required
-                style={{ flex: 1 }}
-              />
-              {!isEdit && (
+  return (
+    <>
+      <Modal title={title} onClose={onClose} width="750px">
+        <Form onSubmit={handleSubmit}>
+          <Row>
+            <Input
+              label={t("products.mxik")}
+              value={formData.mxik}
+              placeholder="00000000000000000"
+              onChange={(e) => handleChange("mxik", e.target.value)}
+            />
+            <FormGroup>
+              <Label>{t("products.barcode")}</Label>
+              <div
+                style={{ display: "flex", flexDirection: "row", gap: "8px" }}
+              >
+                <Input
+                  value={formData.barcode}
+                  autoFocus
+                  onChange={(e) => handleBarcodeChange(e.target.value)}
+                  disabled={isEdit}
+                  required
+                  style={{ flex: 1 }}
+                />
+                {!isEdit && (
+                  <>
+                    {isMobile && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="small"
+                        onClick={() => setShowScanner(true)}
+                        title={t("scanner.scanBarcode") || "Scan barcode"}
+                        style={{ flexShrink: 0 }}
+                      >
+                        <Camera size={16} />
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="small"
+                      onClick={handleGenerateBarcode}
+                      title={t("products.generateBarcode")}
+                      style={{ flexShrink: 0 }}
+                    >
+                      <RefreshCw size={16} />
+                    </Button>
+                  </>
+                )}
+              </div>
+            </FormGroup>
+          </Row>
+
+          <Row>
+            <Input
+              label={t("products.nameUz")}
+              value={formData.nameUz}
+              onChange={(e) => handleNameUzChange(e.target.value)}
+              required
+            />
+            <Input
+              label={t("products.nameRu")}
+              value={formData.nameRu}
+              onChange={(e) => handleNameRuChange(e.target.value)}
+              required
+            />
+          </Row>
+
+          <Row>
+            <Input
+              label={`${t("products.price")}${formProfitMargin !== null ? ` (${formProfitMargin}%)` : ""}`}
+              type="number"
+              value={formData.price}
+              onChange={(e) => handleChange("price", e.target.value)}
+              required
+            />
+            <Input
+              label={t("products.cost")}
+              type="number"
+              value={formData.cost}
+              onChange={(e) => handleChange("cost", e.target.value)}
+            />
+          </Row>
+
+          <Row>
+            <Input
+              label={t("products.stock")}
+              type="number"
+              value={formData.stock}
+              onChange={(e) => handleChange("stock", e.target.value)}
+            />
+            <Input
+              label={t("products.minStock")}
+              type="number"
+              value={formData.minStock}
+              onChange={(e) => handleChange("minStock", e.target.value)}
+            />
+          </Row>
+
+          <Row>
+            <FormGroup>
+              <Label>{t("products.unit")}</Label>
+              <Select
+                value={formData.unit}
+                onChange={(e) => handleChange("unit", e.target.value)}
+              >
+                {UNIT_OPTIONS.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {getUnitLabel(unit)}
+                  </option>
+                ))}
+              </Select>
+            </FormGroup>
+            <FormGroup>
+              <Label>{t("products.category")}</Label>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <Select
+                  value={formData.categoryId}
+                  onChange={(e) => handleChange("categoryId", e.target.value)}
+                  required
+                  style={{ flex: 1 }}
+                >
+                  <option value="">{t("products.selectCategory")}</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {i18n.language === "uz" ? cat.nameUz : cat.nameRu}
+                    </option>
+                  ))}
+                </Select>
                 <Button
                   type="button"
                   variant="secondary"
                   size="small"
-                  onClick={handleGenerateBarcode}
-                  title={t("products.generateBarcode")}
+                  onClick={() => setShowCategoryModal(true)}
                   style={{ flexShrink: 0 }}
                 >
-                  <RefreshCw size={16} />
+                  <Settings size={16} />
                 </Button>
-              )}
-            </div>
-          </FormGroup>
-        </Row>
+              </div>
+            </FormGroup>
+          </Row>
 
-        <Row>
-          <Input
-            label={t("products.nameUz")}
-            value={formData.nameUz}
-            onChange={(e) => handleNameUzChange(e.target.value)}
-            required
-          />
-          <Input
-            label={t("products.nameRu")}
-            value={formData.nameRu}
-            onChange={(e) => handleNameRuChange(e.target.value)}
-            required
-          />
-        </Row>
-
-        <Row>
-          <Input
-            label={`${t("products.price")}${formProfitMargin !== null ? ` (${formProfitMargin}%)` : ""}`}
-            type="number"
-            value={formData.price}
-            onChange={(e) => handleChange("price", e.target.value)}
-            required
-          />
-          <Input
-            label={t("products.cost")}
-            type="number"
-            value={formData.cost}
-            onChange={(e) => handleChange("cost", e.target.value)}
-          />
-        </Row>
-
-        <Row>
-          <Input
-            label={t("products.stock")}
-            type="number"
-            value={formData.stock}
-            onChange={(e) => handleChange("stock", e.target.value)}
-          />
-          <Input
-            label={t("products.minStock")}
-            type="number"
-            value={formData.minStock}
-            onChange={(e) => handleChange("minStock", e.target.value)}
-          />
-        </Row>
-
-        <Row>
           <FormGroup>
-            <Label>{t("products.unit")}</Label>
-            <Select
-              value={formData.unit}
-              onChange={(e) => handleChange("unit", e.target.value)}
-            >
-              {UNIT_OPTIONS.map((unit) => (
-                <option key={unit} value={unit}>
-                  {getUnitLabel(unit)}
-                </option>
-              ))}
-            </Select>
-          </FormGroup>
-          <FormGroup>
-            <Label>{t("products.category")}</Label>
+            <Label>{t("filters.supplier")}</Label>
             <div style={{ display: "flex", gap: "8px" }}>
               <Select
-                value={formData.categoryId}
-                onChange={(e) => handleChange("categoryId", e.target.value)}
-                required
+                value={formData.supplierId}
+                onChange={(e) => handleChange("supplierId", e.target.value)}
                 style={{ flex: 1 }}
               >
-                <option value="">{t("products.selectCategory")}</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {i18n.language === "uz" ? cat.nameUz : cat.nameRu}
+                <option value="">{t("products.noSupplier")}</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {i18n.language === "uz" ? s.nameUz : s.nameRu}
                   </option>
                 ))}
               </Select>
@@ -621,99 +683,75 @@ export function ProductForm() {
                 type="button"
                 variant="secondary"
                 size="small"
-                onClick={() => setShowCategoryModal(true)}
+                onClick={() => setShowSupplierModal(true)}
                 style={{ flexShrink: 0 }}
               >
                 <Settings size={16} />
               </Button>
             </div>
           </FormGroup>
-        </Row>
 
-        <FormGroup>
-          <Label>{t("filters.supplier")}</Label>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <Select
-              value={formData.supplierId}
-              onChange={(e) => handleChange("supplierId", e.target.value)}
-              style={{ flex: 1 }}
-            >
-              <option value="">{t("products.noSupplier")}</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {i18n.language === "uz" ? s.nameUz : s.nameRu}
-                </option>
-              ))}
-            </Select>
-            <Button
-              type="button"
-              variant="secondary"
-              size="small"
-              onClick={() => setShowSupplierModal(true)}
-              style={{ flexShrink: 0 }}
-            >
-              <Settings size={16} />
+          <Row>
+            <DateInput
+              label={t("products.productionDate")}
+              value={formData.productionDate}
+              onChange={(val) => handleChange("productionDate", val)}
+            />
+            <DateInput
+              label={t("products.expiryDate")}
+              value={formData.expiryDate}
+              onChange={(val) => handleChange("expiryDate", val)}
+            />
+          </Row>
+
+          <Row>
+            <Input
+              label={t("filters.discount")}
+              type="number"
+              min="0"
+              max="100"
+              value={formData.discountPercent}
+              onChange={(e) => handleChange("discountPercent", e.target.value)}
+            />
+            <FormGroup>
+              <Label>{t("filters.isOnPromotion")}</Label>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  marginTop: "4px",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={formData.isOnPromotion}
+                  onChange={(e) =>
+                    handleChange("isOnPromotion", e.target.checked)
+                  }
+                />
+                {t("filters.onPromotion")}
+              </label>
+            </FormGroup>
+          </Row>
+
+          <Actions>
+            <Button type="button" variant="secondary" onClick={onClose}>
+              {t("common.cancel")}
             </Button>
-          </div>
-        </FormGroup>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? t("common.saving") : t("common.save")}
+            </Button>
+          </Actions>
+        </Form>
+      </Modal>
 
-        <Row>
-          <DateInput
-            label={t("products.productionDate")}
-            value={formData.productionDate}
-            onChange={(val) => handleChange("productionDate", val)}
-          />
-          <DateInput
-            label={t("products.expiryDate")}
-            value={formData.expiryDate}
-            onChange={(val) => handleChange("expiryDate", val)}
-          />
-        </Row>
-
-        <Row>
-          <Input
-            label={t("filters.discount")}
-            type="number"
-            min="0"
-            max="100"
-            value={formData.discountPercent}
-            onChange={(e) => handleChange("discountPercent", e.target.value)}
-          />
-          <FormGroup>
-            <Label>{t("filters.isOnPromotion")}</Label>
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                marginTop: "4px",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={formData.isOnPromotion}
-                onChange={(e) =>
-                  handleChange("isOnPromotion", e.target.checked)
-                }
-              />
-              {t("filters.onPromotion")}
-            </label>
-          </FormGroup>
-        </Row>
-
-        <Actions>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => navigate("/products")}
-          >
-            {t("common.cancel")}
-          </Button>
-          <Button type="submit" disabled={isLoading}>
-            {isLoading ? t("common.saving") : t("common.save")}
-          </Button>
-        </Actions>
-      </Form>
+      {showScanner && (
+        <BarcodeScannerModal
+          onScan={handleScanResult}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
 
       {showArrivalModal && existingProduct && (
         <Modal
@@ -748,12 +786,56 @@ export function ProductForm() {
             <ProductInfoRow>
               <ProductInfoLabel>{t("products.cost")}</ProductInfoLabel>
               <ProductInfoValue>
-                {existingProduct.costPrice
-                  ? formatCurrency(existingProduct.costPrice)
+                {existingProduct.cost
+                  ? formatCurrency(existingProduct.cost)
                   : "—"}
               </ProductInfoValue>
             </ProductInfoRow>
+            <ProductInfoRow>
+              <ProductInfoLabel>{t("products.profitMargin")}</ProductInfoLabel>
+              <ProductInfoValue>
+                {existingProduct.cost ? (
+                  <ProfitBadge
+                    $negative={
+                      ((existingProduct.price - existingProduct.cost) /
+                        existingProduct.cost) *
+                        100 <
+                      0
+                    }
+                  >
+                    {(
+                      ((existingProduct.price - existingProduct.cost) /
+                        existingProduct.cost) *
+                      100
+                    ).toFixed(1)}
+                    %
+                  </ProfitBadge>
+                ) : (
+                  "—"
+                )}
+              </ProductInfoValue>
+            </ProductInfoRow>
           </ProductInfo>
+
+          {existingProduct.pendingPrice != null && (
+            <ProductInfo>
+              <ProductInfoRow>
+                <ProductInfoLabel>
+                  {t("inventory.pendingPriceLabel")}
+                </ProductInfoLabel>
+                <ProductInfoValue>
+                  {formatCurrency(existingProduct.pendingPrice)}{" "}
+                  <span style={{ fontSize: 12, fontWeight: 400 }}>
+                    (
+                    {t("inventory.afterStockDrops", {
+                      threshold: `${existingProduct.pendingPriceThreshold} ${existingProduct.unit}`,
+                    })}
+                    )
+                  </span>
+                </ProductInfoValue>
+              </ProductInfoRow>
+            </ProductInfo>
+          )}
 
           <ArrivalForm>
             <Input
@@ -772,8 +854,8 @@ export function ProductForm() {
               required
             />
 
-            <div style={{ display: "flex", gap: "16px" }}>
-              <div style={{ flex: 1 }}>
+            <FlexRow>
+              <div>
                 <Input
                   label={t("inventory.costPerUnit")}
                   type="number"
@@ -789,7 +871,7 @@ export function ProductForm() {
                   required
                 />
               </div>
-              <div style={{ flex: 1 }}>
+              <div>
                 <Input
                   label={`${t("products.price")}${arrivalProfitMargin !== null ? ` (${arrivalProfitMargin}%)` : ""}`}
                   type="number"
@@ -803,7 +885,7 @@ export function ProductForm() {
                   disabled={arrivalData.priceMode === "none"}
                 />
               </div>
-            </div>
+            </FlexRow>
 
             {costChanged && (
               <PriceChangeSection>
@@ -926,17 +1008,17 @@ export function ProductForm() {
                     }))
                   }
                 >
-                  {PAYMENT_METHODS.map((method) => (
+                  {SUPPLIER_PAYMENT_METHODS.map((method) => (
                     <option key={method} value={method}>
-                      {getPaymentMethodLabel(method)}
+                      {t(SUPPLIER_PAYMENT_METHOD_I18N_KEYS[method])}
                     </option>
                   ))}
                 </Select>
               </FormGroup>
             )}
 
-            <div style={{ display: "flex", gap: "16px" }}>
-              <div style={{ flex: 1 }}>
+            <FlexRow>
+              <div>
                 <DateInput
                   label={t("products.productionDate")}
                   value={arrivalData.productionDate}
@@ -948,7 +1030,7 @@ export function ProductForm() {
                   }
                 />
               </div>
-              <div style={{ flex: 1 }}>
+              <div>
                 <DateInput
                   label={t("products.expiryDate")}
                   value={arrivalData.expirationDate}
@@ -960,7 +1042,7 @@ export function ProductForm() {
                   }
                 />
               </div>
-            </div>
+            </FlexRow>
 
             <Input
               label={t("inventory.notes")}
@@ -1009,6 +1091,6 @@ export function ProductForm() {
           onCategoryChanged={loadCategories}
         />
       )}
-    </Container>
+    </>
   );
 }

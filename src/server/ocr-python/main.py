@@ -175,7 +175,7 @@ async def scan(request: ScanRequest):
         )
     except Exception:
         traceback.print_exc()
-        return ScanResponse(items=[], tier="free")
+        raise  # Let NestJS fall back to Claude
 
 
 @app.get("/health")

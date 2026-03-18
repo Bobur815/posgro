@@ -1,14 +1,14 @@
 import { getPrismaClient } from '../database/sqlite-client';
 import { getAppConfig } from '../config/app-config';
-import { getAuthToken } from './queue-manager';
+import { getServerToken } from './queue-manager';
 
 export async function syncProducts(): Promise<void> {
   const prisma = getPrismaClient();
   const config = getAppConfig();
 
-  const token = await getAuthToken();
+  const token = getServerToken();
   if (!token) {
-    throw new Error('No auth token available for sync');
+    throw new Error('No server token available — log in first to sync');
   }
 
   // Get last sync timestamp
@@ -42,12 +42,12 @@ export async function syncProducts(): Promise<void> {
 
     console.log(`Updating ${products.length} products...`);
 
-    // Upsert products
+    // Upsert products by barcode (natural unique key) to avoid conflicts
+    // when local products have different auto-increment IDs than server products
     for (const product of products) {
       await prisma.product.upsert({
-        where: { id: product.id },
+        where: { barcode: product.barcode },
         update: {
-          barcode: product.barcode,
           nameRu: product.nameRu,
           nameUz: product.nameUz,
           price: product.price,
@@ -60,7 +60,6 @@ export async function syncProducts(): Promise<void> {
           updatedAt: new Date(product.updatedAt),
         },
         create: {
-          id: product.id,
           barcode: product.barcode,
           nameRu: product.nameRu,
           nameUz: product.nameUz,
@@ -96,9 +95,9 @@ export async function syncCategories(): Promise<void> {
   const prisma = getPrismaClient();
   const config = getAppConfig();
 
-  const token = await getAuthToken();
+  const token = getServerToken();
   if (!token) {
-    throw new Error('No auth token available for sync');
+    throw new Error('No server token available — log in first to sync');
   }
 
   try {

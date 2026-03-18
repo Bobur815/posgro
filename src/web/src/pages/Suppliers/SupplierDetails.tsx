@@ -14,6 +14,7 @@ import {
   SupplierTransactionType,
   SupplierPaymentMethod,
 } from '@shared/types';
+import { SUPPLIER_PAYMENT_METHOD_I18N_KEYS } from '@shared/constants/payment-methods';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 import { formatDate } from '../../utils/formatters';
 import { ArrowLeft } from 'lucide-react';
@@ -210,16 +211,8 @@ export function SupplierDetails() {
     return labels[type];
   };
 
-  const getPaymentMethodLabel = (method: SupplierPaymentMethod) => {
-    const labels: Record<SupplierPaymentMethod, string> = {
-      CASH: t('suppliers.cash'),
-      CARD: t('suppliers.card'),
-      BANK_TRANSFER: t('suppliers.bankTransfer'),
-      INSTALLMENT: t('suppliers.installment'),
-      ONE_TO_ONE: t('suppliers.oneToOne'),
-    };
-    return labels[method];
-  };
+  const getPaymentMethodLabel = (method: SupplierPaymentMethod) =>
+    t(SUPPLIER_PAYMENT_METHOD_I18N_KEYS[method]);
 
   if (isLoading && !selectedSupplier) {
     return <Container>{t('common.loading')}</Container>;
@@ -311,6 +304,12 @@ export function SupplierDetails() {
           <InfoLabel>{t('common.createdAt')}</InfoLabel>
           <InfoValue>
             {formatDate(selectedSupplier.createdAt)}
+          </InfoValue>
+        </InfoItem>
+        <InfoItem>
+          <InfoLabel>{t('suppliers.status') || 'Status'}</InfoLabel>
+          <InfoValue style={{ color: selectedSupplier.active ? undefined : '#ef4444' }}>
+            {selectedSupplier.active ? t('suppliers.active') : t('suppliers.inactive')}
           </InfoValue>
         </InfoItem>
         <BalanceCard $positive={selectedSupplier.balance >= 0}>

@@ -5,6 +5,7 @@ import {
   Body,
   Query,
   UseGuards,
+  HttpCode,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { InventoryService } from './inventory.service';
@@ -52,6 +53,13 @@ export class InventoryController {
     @CurrentUser() user: User,
   ) {
     return this.inventoryService.createArrival(storeId, createArrivalDto, user.id);
+  }
+
+  @Post('arrivals/sync-bulk')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Bulk sync inventory arrivals from POS terminal (Admin only)' })
+  async syncBulkArrivals(@CurrentStore() storeId: string, @Body() body: { arrivals: any[] }) {
+    return this.inventoryService.syncBulkArrivals(storeId, body.arrivals ?? []);
   }
 
   @Get('low-stock')

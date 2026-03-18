@@ -53,6 +53,12 @@ const CloseButton = styled.button`
   color: ${({ theme }) => theme.colors.textSecondary};
   padding: 0;
   line-height: 1;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 
   &:hover {
     color: ${({ theme }) => theme.colors.text};
@@ -61,6 +67,10 @@ const CloseButton = styled.button`
 
 const Content = styled.div`
   padding: ${({ theme }) => theme.spacing.md};
+
+  @media (max-width: 640px) {
+    padding: ${({ theme }) => theme.spacing.sm};
+  }
 `;
 
 export function Modal({ title, onClose, children, width }: ModalProps) {

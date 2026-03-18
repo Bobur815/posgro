@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
+import { debounce } from "../../utils/helpers";
 import {
   Upload,
   Loader2,
@@ -20,6 +21,10 @@ import {
   ProductMatch,
   Product,
 } from "@shared/types";
+import {
+  SUPPLIER_PAYMENT_METHODS,
+  SUPPLIER_PAYMENT_METHOD_I18N_KEYS,
+} from "@shared/constants/payment-methods";
 
 type Step = "upload" | "scanning" | "matching" | "review" | "creating" | "done";
 
@@ -165,14 +170,49 @@ const ConfidenceBadge = styled.span<{ $level: string }>`
             : theme.colors.error};
 `;
 
-const ProductSelect = styled.select`
+const SearchInput = styled.input<{ $selected?: boolean }>`
   width: 100%;
   padding: 4px 6px;
-  border: 1px solid ${({ theme }) => theme.colors.border};
+  border: 1px solid
+    ${({ theme, $selected }) =>
+      $selected ? theme.colors.primary : theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
   background-color: ${({ theme }) => theme.colors.surface};
   color: ${({ theme }) => theme.colors.text};
   font-size: 13px;
+  cursor: text;
+`;
+
+const SearchWrapper = styled.div`
+  position: relative;
+  flex: 1;
+`;
+
+const SearchDropdown = styled.div`
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: ${({ theme }) => theme.colors.surface};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 2px;
+`;
+
+const SearchDropdownItem = styled.div<{ $active?: boolean }>`
+  padding: 6px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  background: ${({ theme, $active }) =>
+    $active ? theme.colors.primary + "20" : "transparent"};
+  color: ${({ theme }) => theme.colors.text};
+  &:hover {
+    background: ${({ theme }) => theme.colors.primary + "15"};
+  }
 `;
 
 const NumberInput = styled.input`
@@ -255,14 +295,6 @@ const SkipCheckbox = styled.input`
   cursor: pointer;
 `;
 
-const PAYMENT_METHODS: SupplierPaymentMethod[] = [
-  "CASH",
-  "CARD",
-  "BANK_TRANSFER",
-  "INSTALLMENT",
-  "ONE_TO_ONE",
-];
-
 interface ReviewItem {
   scannedName: string;
   mxik: string | null;
@@ -297,6 +329,11 @@ export function ReceiptScanModal({
   const [paymentMethod, setPaymentMethod] =
     useState<SupplierPaymentMethod>("CASH");
 
+  // Reset payment method to CASH whenever supplier is cleared
+  useEffect(() => {
+    if (!supplierId) setPaymentMethod("CASH");
+  }, [supplierId]);
+
   // Local product list — starts from prop, updated after new product creation
   const [localProducts, setLocalProducts] = useState<Product[]>(products);
   // Index of the review row for which we're creating a new product
@@ -304,6 +341,62 @@ export function ReceiptScanModal({
 
   const [createProgress, setCreateProgress] = useState(0);
   const [createTotal, setCreateTotal] = useState(0);
+
+  const [rowSearches, setRowSearches] = useState<Record<number, string>>({});
+  const [rowFilters, setRowFilters] = useState<Record<number, string>>({});
+  const [openDropdownIdx, setOpenDropdownIdx] = useState<number | null>(null);
+
+  const debouncedSetFilter = useRef(
+    debounce((idx: number, value: string) => {
+      setRowFilters((prev) => ({ ...prev, [idx]: value }));
+    }, 200),
+  ).current;
+
+  const handleInputChange = (idx: number, value: string) => {
+    setRowSearches((prev) => ({ ...prev, [idx]: value }));
+    debouncedSetFilter(idx, value);
+  };
+
+  const handleInputFocus = (idx: number) => {
+    setRowSearches((prev) => ({ ...prev, [idx]: "" }));
+    setRowFilters((prev) => ({ ...prev, [idx]: "" }));
+    setOpenDropdownIdx(idx);
+  };
+
+  const handleInputBlur = (idx: number) => {
+    setTimeout(() => {
+      setOpenDropdownIdx((prev) => (prev === idx ? null : prev));
+    }, 150);
+  };
+
+  const handleProductSelect = (idx: number, productId: string) => {
+    updateReviewItem(idx, {
+      productId,
+      confidence: productId ? "high" : "none",
+    });
+    setOpenDropdownIdx(null);
+    setRowSearches((prev) => ({ ...prev, [idx]: "" }));
+    setRowFilters((prev) => ({ ...prev, [idx]: "" }));
+  };
+
+  const getInputDisplayValue = (idx: number, item: ReviewItem) => {
+    if (openDropdownIdx === idx) return rowSearches[idx] || "";
+    if (item.productId) {
+      const p = localProducts.find((p) => String(p.id) === item.productId);
+      return p ? getProductName(p) : "";
+    }
+    return "";
+  };
+
+  const getFilteredProducts = (idx: number) => {
+    const filter = (rowFilters[idx] || "").toLowerCase();
+    if (!filter) return localProducts;
+    return localProducts.filter(
+      (p) =>
+        p.nameRu.toLowerCase().includes(filter) ||
+        p.nameUz.toLowerCase().includes(filter),
+    );
+  };
 
   const handleProductCreated = async () => {
     // Reload the full product list from IPC
@@ -353,17 +446,6 @@ export function ReceiptScanModal({
       none: t("receiptScan.confidenceNone"),
     };
     return map[c] || c;
-  };
-
-  const getPaymentMethodLabel = (method: SupplierPaymentMethod) => {
-    const labels: Record<SupplierPaymentMethod, string> = {
-      CASH: t("suppliers.cash"),
-      CARD: t("suppliers.card"),
-      BANK_TRANSFER: t("suppliers.bankTransfer"),
-      INSTALLMENT: t("suppliers.installment"),
-      ONE_TO_ONE: t("suppliers.oneToOne"),
-    };
-    return labels[method];
   };
 
   const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
@@ -687,9 +769,9 @@ export function ReceiptScanModal({
                       setPaymentMethod(e.target.value as SupplierPaymentMethod)
                     }
                   >
-                    {PAYMENT_METHODS.map((m) => (
+                    {SUPPLIER_PAYMENT_METHODS.map((m) => (
                       <option key={m} value={m}>
-                        {getPaymentMethodLabel(m)}
+                        {t(SUPPLIER_PAYMENT_METHOD_I18N_KEYS[m])}
                       </option>
                     ))}
                   </FullSelect>
@@ -742,26 +824,43 @@ export function ReceiptScanModal({
                             alignItems: "center",
                           }}
                         >
-                          <ProductSelect
-                            value={item.productId}
-                            onChange={(e) =>
-                              updateReviewItem(idx, {
-                                productId: e.target.value,
-                                confidence: e.target.value ? "high" : "none",
-                              })
-                            }
-                            disabled={item.skip}
-                            style={{ flex: 1 }}
-                          >
-                            <option value="">
-                              {t("receiptScan.selectProduct")}
-                            </option>
-                            {localProducts.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {getProductName(p)}
-                              </option>
-                            ))}
-                          </ProductSelect>
+                          <SearchWrapper>
+                            <SearchInput
+                              type="text"
+                              placeholder={t("receiptScan.selectProduct")}
+                              value={getInputDisplayValue(idx, item)}
+                              $selected={!!item.productId && openDropdownIdx !== idx}
+                              onFocus={() => handleInputFocus(idx)}
+                              onBlur={() => handleInputBlur(idx)}
+                              onChange={(e) =>
+                                handleInputChange(idx, e.target.value)
+                              }
+                              disabled={item.skip}
+                            />
+                            {openDropdownIdx === idx && (
+                              <SearchDropdown>
+                                {getFilteredProducts(idx).length === 0 ? (
+                                  <SearchDropdownItem
+                                    style={{ opacity: 0.5, cursor: "default" }}
+                                  >
+                                    {t("common.noResults") || "No results"}
+                                  </SearchDropdownItem>
+                                ) : (
+                                  getFilteredProducts(idx).map((p) => (
+                                    <SearchDropdownItem
+                                      key={p.id}
+                                      $active={String(p.id) === item.productId}
+                                      onMouseDown={() =>
+                                        handleProductSelect(idx, String(p.id))
+                                      }
+                                    >
+                                      {getProductName(p)}
+                                    </SearchDropdownItem>
+                                  ))
+                                )}
+                              </SearchDropdown>
+                            )}
+                          </SearchWrapper>
                           {!item.productId && !item.skip && (
                             <Button
                               type="button"
@@ -882,6 +981,7 @@ export function ReceiptScanModal({
                 nameUz: row.scannedName,
                 mxik: row.mxik || undefined,
                 cost: row.unitCost || undefined,
+                stock: row.quantity || undefined,
               }}
               onClose={() => setAddingForRowIdx(null)}
               onSuccess={handleProductCreated}

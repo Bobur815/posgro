@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
 import { Button } from '@components/common/Button';
+import { useSales } from '../../hooks/useSales';
+import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 
 const Container = styled.div`
   display: flex;
@@ -18,7 +20,6 @@ const FilterRow = styled.div`
   display: flex;
   gap: ${({ theme }) => theme.spacing.md};
   align-items: center;
-  flex-wrap: wrap;
 `;
 
 const Select = styled.select`
@@ -29,63 +30,271 @@ const Select = styled.select`
   color: ${({ theme }) => theme.colors.text};
 `;
 
-const ReportSection = styled.div`
+const StatsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: ${({ theme }) => theme.spacing.md};
+`;
+
+const StatCard = styled.div`
   background-color: ${({ theme }) => theme.colors.surface};
   padding: ${({ theme }) => theme.spacing.lg};
   border-radius: ${({ theme }) => theme.borderRadius};
   box-shadow: ${({ theme }) => theme.shadows.sm};
 `;
 
-const SectionTitle = styled.h2`
-  margin: 0 0 ${({ theme }) => theme.spacing.md};
-  color: ${({ theme }) => theme.colors.text};
-  font-size: 18px;
-`;
-
-const Placeholder = styled.div`
+const StatLabel = styled.div`
+  font-size: 14px;
   color: ${({ theme }) => theme.colors.textSecondary};
-  text-align: center;
-  padding: ${({ theme }) => theme.spacing.xl};
+  margin-bottom: ${({ theme }) => theme.spacing.xs};
 `;
 
-const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const StatValue = styled.div`
+  font-size: 24px;
+  font-weight: bold;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const StatSubtext = styled.div`
+  font-size: 12px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  margin-top: ${({ theme }) => theme.spacing.xs};
+`;
+
+const TableCard = styled.div`
+  background-color: ${({ theme }) => theme.colors.surface};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  box-shadow: ${({ theme }) => theme.shadows.sm};
+  overflow: hidden;
+`;
+
+const TableCardHeader = styled.div`
+  padding: ${({ theme }) => `${theme.spacing.md} ${theme.spacing.lg}`};
+  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
+`;
+
+const SectionTitle = styled.h2`
+  margin: 0;
+  font-size: 18px;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const Table = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+`;
+
+const Th = styled.th`
+  padding: ${({ theme }) => `${theme.spacing.sm} ${theme.spacing.md}`};
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
+  white-space: nowrap;
+`;
+
+const Td = styled.td`
+  padding: ${({ theme }) => `${theme.spacing.sm} ${theme.spacing.md}`};
+  font-size: 14px;
+  color: ${({ theme }) => theme.colors.text};
+  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
+`;
+
+const Tr = styled.tr`
+  &:last-child td {
+    border-bottom: none;
+  }
+  &:hover {
+    background-color: ${({ theme }) => theme.colors.background};
+  }
+`;
+
+const PaymentBadge = styled.span<{ $method: string }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background-color: ${({ theme, $method }) =>
+    $method === 'cash' ? theme.colors.success + '20' : theme.colors.primary + '20'};
+  color: ${({ theme, $method }) =>
+    $method === 'cash' ? theme.colors.success : theme.colors.primary};
+  font-weight: 500;
+`;
+
+const EmptyCell = styled.div`
+  padding: ${({ theme }) => theme.spacing.xl};
+  text-align: center;
+  color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
+const months = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
 
 export function MonthlyReport() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const { loadSales, sales, isLoading } = useSales();
+
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth();
+
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [generated, setGenerated] = useState(false);
+
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
-  const handleGenerateReport = () => {
-    console.log(`Generating report for ${months[selectedMonth]} ${selectedYear}`);
+  const formatCurrency = (amount: number) =>
+    formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
+
+  const formatDateTime = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString(i18n.language, { day: '2-digit', month: '2-digit' }) +
+      ' ' +
+      d.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' });
   };
+
+  const handleGenerateReport = async () => {
+    const startDate = new Date(selectedYear, selectedMonth, 1);
+    const endDate = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59, 999);
+    await loadSales({ startDate: startDate.toISOString(), endDate: endDate.toISOString() });
+    setGenerated(true);
+  };
+
+  // Stats computed from loaded sales
+  const totalRevenue = sales.reduce((sum, s) => sum + Number(s.finalAmount), 0);
+  const cashCount = sales.filter((s) => s.paymentMethod === 'cash').length;
+  const cardCount = sales.filter((s) => s.paymentMethod === 'card').length;
+  const totalItems = sales.reduce((sum, s) => sum + s.items.length, 0);
+  const avgTransaction = sales.length > 0 ? totalRevenue / sales.length : 0;
 
   return (
     <Container>
       <Title>{t('reports.monthlyReport')}</Title>
+
       <FilterRow>
-        <Select value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))}>
-          {months.map((month, index) => <option key={month} value={index}>{month}</option>)}
+        <Select
+          value={selectedMonth}
+          onChange={(e) => { setSelectedMonth(Number(e.target.value)); setGenerated(false); }}
+        >
+          {months.map((month, index) => (
+            <option key={month} value={index}>
+              {month}
+            </option>
+          ))}
         </Select>
-        <Select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))}>
-          {years.map((year) => <option key={year} value={year}>{year}</option>)}
+
+        <Select
+          value={selectedYear}
+          onChange={(e) => { setSelectedYear(Number(e.target.value)); setGenerated(false); }}
+        >
+          {years.map((year) => (
+            <option key={year} value={year}>
+              {year}
+            </option>
+          ))}
         </Select>
-        <Button onClick={handleGenerateReport}>{t('reports.generateReport')}</Button>
+
+        <Button onClick={handleGenerateReport} disabled={isLoading}>
+          {isLoading ? t('common.loading') : t('reports.generateReport')}
+        </Button>
       </FilterRow>
-      <ReportSection>
-        <SectionTitle>{t('reports.salesOverview')}</SectionTitle>
-        <Placeholder>{t('reports.selectPeriod')}</Placeholder>
-      </ReportSection>
-      <ReportSection>
-        <SectionTitle>{t('reports.topProducts')}</SectionTitle>
-        <Placeholder>{t('reports.selectPeriod')}</Placeholder>
-      </ReportSection>
-      <ReportSection>
-        <SectionTitle>{t('reports.revenueByCategory')}</SectionTitle>
-        <Placeholder>{t('reports.selectPeriod')}</Placeholder>
-      </ReportSection>
+
+      {generated && !isLoading && (
+        <>
+          <StatsGrid>
+            <StatCard>
+              <StatLabel>{t('reports.totalSales')}</StatLabel>
+              <StatValue>{sales.length}</StatValue>
+              <StatSubtext>{t('reports.transactions')}</StatSubtext>
+            </StatCard>
+
+            <StatCard>
+              <StatLabel>{t('reports.totalRevenue')}</StatLabel>
+              <StatValue>{formatCurrency(totalRevenue)}</StatValue>
+              <StatSubtext>{months[selectedMonth]} {selectedYear}</StatSubtext>
+            </StatCard>
+
+            <StatCard>
+              <StatLabel>{t('reports.averageTransaction')}</StatLabel>
+              <StatValue>{formatCurrency(avgTransaction)}</StatValue>
+              <StatSubtext>{t('reports.perSale')}</StatSubtext>
+            </StatCard>
+
+            <StatCard>
+              <StatLabel>{t('reports.itemsSold')}</StatLabel>
+              <StatValue>{totalItems}</StatValue>
+              <StatSubtext>{t('reports.items')}</StatSubtext>
+            </StatCard>
+
+            <StatCard>
+              <StatLabel>{t('reports.cashPayments')}</StatLabel>
+              <StatValue>{cashCount}</StatValue>
+              <StatSubtext>{t('reports.transactions')}</StatSubtext>
+            </StatCard>
+
+            <StatCard>
+              <StatLabel>{t('reports.cardPayments')}</StatLabel>
+              <StatValue>{cardCount}</StatValue>
+              <StatSubtext>{t('reports.transactions')}</StatSubtext>
+            </StatCard>
+          </StatsGrid>
+
+          <TableCard>
+            <TableCardHeader>
+              <SectionTitle>{t('reports.receipts')}</SectionTitle>
+            </TableCardHeader>
+
+            {!sales.length ? (
+              <EmptyCell>{t('reports.noData')}</EmptyCell>
+            ) : (
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>{t('reports.time')}</Th>
+                    <Th>{t('pos.receiptNumber')}</Th>
+                    <Th>{t('reports.cashier')}</Th>
+                    <Th style={{ textAlign: 'center' }}>{t('pos.items')}</Th>
+                    <Th>{t('reports.payment')}</Th>
+                    <Th style={{ textAlign: 'right' }}>{t('reports.amount')}</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sales.map((sale) => (
+                    <Tr key={sale.id}>
+                      <Td style={{ whiteSpace: 'nowrap' }}>{formatDateTime(sale.createdAt)}</Td>
+                      <Td style={{ fontFamily: 'monospace' }}>#{sale.receiptNumber}</Td>
+                      <Td>{sale.cashierName}</Td>
+                      <Td style={{ textAlign: 'center' }}>{sale.items.length}</Td>
+                      <Td>
+                        <PaymentBadge $method={sale.paymentMethod}>
+                          {sale.paymentMethod === 'cash' ? '💵' : '💳'}{' '}
+                          {t(`pos.${sale.paymentMethod}`)}
+                        </PaymentBadge>
+                      </Td>
+                      <Td style={{ textAlign: 'right', fontWeight: 600 }}>
+                        {formatCurrency(Number(sale.finalAmount))}
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </Table>
+            )}
+          </TableCard>
+        </>
+      )}
+
+      {!generated && !isLoading && (
+        <EmptyCell style={{ background: 'transparent' }}>
+          {t('reports.selectPeriod')}
+        </EmptyCell>
+      )}
     </Container>
   );
 }

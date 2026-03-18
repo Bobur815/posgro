@@ -40,6 +40,10 @@ export class SuppliersService {
           orderBy: { createdAt: 'desc' },
           include: { product: true },
         },
+        transactions: {
+          orderBy: { createdAt: 'desc' },
+          take: 100,
+        },
       },
     });
 
@@ -95,6 +99,44 @@ export class SuppliersService {
     });
 
     return { success: true };
+  }
+
+  async syncBulk(storeId: string, suppliers: Array<{
+    id: string;
+    nameUz: string;
+    nameRu: string;
+    phone?: string;
+    address?: string;
+    active?: boolean;
+  }>) {
+    let created = 0, updated = 0, errors = 0;
+    for (const s of suppliers) {
+      try {
+        await this.prisma.supplier.upsert({
+          where: { id: s.id },
+          update: {
+            nameUz: s.nameUz,
+            nameRu: s.nameRu,
+            phone: s.phone || null,
+            address: s.address || null,
+            ...(s.active !== undefined && { active: s.active }),
+          },
+          create: {
+            id: s.id,
+            storeId,
+            nameUz: s.nameUz,
+            nameRu: s.nameRu,
+            phone: s.phone || null,
+            address: s.address || null,
+            active: s.active !== undefined ? s.active : true,
+          },
+        });
+        created++;
+      } catch {
+        errors++;
+      }
+    }
+    return { created, updated, errors };
   }
 
   async delete(id: string, storeId: string) {

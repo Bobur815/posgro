@@ -14,6 +14,7 @@ interface Summary {
 export function useSales() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sales, setSales] = useState<any[]>([]);
 
   const getTodaySummary = useCallback(async (): Promise<Summary | null> => {
     setIsLoading(true);
@@ -35,19 +36,32 @@ export function useSales() {
 
     try {
       const data = await salesApi.getAll(filters);
+      setSales(data);
       return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load sales');
+      setSales([]);
       return [];
     } finally {
       setIsLoading(false);
     }
   }, []);
 
+  const deleteSale = useCallback(async (id: string) => {
+    try {
+      await salesApi.delete(id);
+      setSales((prev) => prev.filter((s) => s.id !== id));
+    } catch (err) {
+      console.error('Failed to delete sale:', err);
+    }
+  }, []);
+
   return {
     isLoading,
     error,
+    sales,
     getTodaySummary,
     loadSales,
+    deleteSale,
   };
 }

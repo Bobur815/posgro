@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsInt,
   IsIn,
+  IsBoolean,
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -65,4 +66,41 @@ export class CreateProductDto {
   @IsInt()
   @Type(() => Number)
   categoryId!: number;
+
+  @ApiPropertyOptional({ example: 'supplier-cuid', description: 'Supplier ID' })
+  @IsOptional()
+  @IsString()
+  supplierId?: string;
+
+  @ApiPropertyOptional({ example: '2026-01-01', description: 'Production date (ISO string)' })
+  @IsOptional()
+  @IsString()
+  productionDate?: string;
+
+  @ApiPropertyOptional({ example: '2027-01-01', description: 'Expiry date (ISO string)' })
+  @IsOptional()
+  @IsString()
+  expiryDate?: string;
+
+  @ApiPropertyOptional({ example: 5, description: 'Discount percentage' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  discountPercent?: number;
+
+  @ApiPropertyOptional({ example: false, description: 'Is on promotion' })
+  @IsOptional()
+  @IsBoolean()
+  isOnPromotion?: boolean;
+
+  @ApiPropertyOptional({ example: true, description: 'Active status' })
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+
+  @ApiPropertyOptional({ example: '00000000000000000', description: 'Uzbekistan national catalog code' })
+  @IsOptional()
+  @IsString()
+  mxik?: string;
 }

@@ -2,7 +2,7 @@ import { ipcMain } from 'electron';
 import * as bcrypt from 'bcrypt';
 import * as jwt from 'jsonwebtoken';
 import { getPrismaClient } from '../database/sqlite-client';
-import { setAuthToken, clearAuthToken } from '../sync/queue-manager';
+import { setAuthToken, clearAuthToken, setServerToken, clearServerToken } from '../sync/queue-manager';
 import { getAppConfig } from '../config/app-config';
 import type { AuthUser } from '../../shared/types/user.types';
 
@@ -55,6 +55,27 @@ export function setupAuthHandlers(): void {
 
     // Store token for sync operations
     await setAuthToken(token);
+
+    // Also login to the VPS server to get a server-issued token for API calls (invoice scan, etc.)
+    try {
+      const serverRes = await fetch(`${config.vpsApiUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: config.storeId, phone, password }),
+      });
+      if (serverRes.ok) {
+        const { token: sToken } = await serverRes.json() as { token: string };
+        setServerToken(sToken);
+        // Persist so session restore can reload it
+        await prisma.systemSetting.upsert({
+          where: { key: 'server_token' },
+          update: { value: sToken },
+          create: { key: 'server_token', value: sToken },
+        });
+      }
+    } catch {
+      // Server unreachable — invoice scanning will be unavailable
+    }
 
     // Set current user
     currentUser = {
@@ -176,8 +197,10 @@ export function setupAuthHandlers(): void {
       });
     }
 
-    // Clear token and user
+    // Clear tokens and user
     await clearAuthToken();
+    clearServerToken();
+    await prisma.systemSetting.deleteMany({ where: { key: 'server_token' } });
     currentUser = null;
   });
 
@@ -221,6 +244,20 @@ export function setupAuthHandlers(): void {
 
       // Restore token for sync
       await setAuthToken(token);
+
+      // Restore server token if persisted and not expired
+      const serverTokenSetting = await prisma.systemSetting.findUnique({ where: { key: 'server_token' } });
+      if (serverTokenSetting?.value) {
+        try {
+          const parts = serverTokenSetting.value.split('.');
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString()) as { exp?: number };
+          if (!payload.exp || payload.exp * 1000 > Date.now()) {
+            setServerToken(serverTokenSetting.value);
+          }
+        } catch {
+          // Invalid token — ignore
+        }
+      }
 
       return currentUser;
     } catch (err) {

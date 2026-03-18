@@ -6,6 +6,10 @@ import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
 import { DateInput } from "../../components/common/DateInput";
 import { Product, Supplier, SupplierPaymentMethod } from "@shared/types";
+import {
+  SUPPLIER_PAYMENT_METHODS,
+  SUPPLIER_PAYMENT_METHOD_I18N_KEYS,
+} from "@shared/constants/payment-methods";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { formatQuantity } from "../../utils/formatters";
 import { getExpireInDays } from "@renderer/utils/helpers";
@@ -127,13 +131,6 @@ const ProfitBadge = styled.span<{ $negative?: boolean }>`
     $negative ? theme.colors.error : theme.colors.success};
 `;
 
-const PAYMENT_METHODS: SupplierPaymentMethod[] = [
-  "CASH",
-  "CARD",
-  "BANK_TRANSFER",
-  "INSTALLMENT",
-  "ONE_TO_ONE",
-];
 
 interface ArrivalData {
   quantity: string;
@@ -168,7 +165,7 @@ export function NewArrivalModal({
 
   const [arrivalData, setArrivalData] = useState<ArrivalData>({
     quantity: "",
-    cost: product.costPrice ? String(product.costPrice) : "",
+    cost: product.cost ? String(product.cost) : "",
     newPrice: String(product.price),
     priceMode: "none",
     notes: "",
@@ -186,20 +183,10 @@ export function NewArrivalModal({
   const getProductName = (p: Product) =>
     i18n.language === "uz" ? p.nameUz : p.nameRu;
 
-  const getPaymentMethodLabel = (method: SupplierPaymentMethod) => {
-    const labels: Record<SupplierPaymentMethod, string> = {
-      CASH: t("suppliers.cash"),
-      CARD: t("suppliers.card"),
-      BANK_TRANSFER: t("suppliers.bankTransfer"),
-      INSTALLMENT: t("suppliers.installment"),
-      ONE_TO_ONE: t("suppliers.oneToOne"),
-    };
-    return labels[method];
-  };
 
   const costChanged =
     arrivalData.cost !== "" &&
-    Number(arrivalData.cost) !== (product.costPrice ?? 0);
+    Number(arrivalData.cost) !== (product.cost ?? 0);
 
   const profitMargin =
     arrivalData.cost && arrivalData.newPrice
@@ -265,7 +252,7 @@ export function NewArrivalModal({
           <InfoItem>
             <InfoLabel>{t("products.cost")}</InfoLabel>
             <InfoValue>
-              {product.costPrice ? formatCurrency(product.costPrice) : "—"}
+              {product.cost ? formatCurrency(product.cost) : "—"}
             </InfoValue>
           </InfoItem>
           <InfoItem>
@@ -275,16 +262,16 @@ export function NewArrivalModal({
           <InfoItem>
             <InfoLabel>{t("products.profitMargin")}</InfoLabel>
             <InfoValue>
-              {product.costPrice ? (
+              {product.cost ? (
                 <ProfitBadge
                   $negative={
-                    ((product.price - product.costPrice) / product.costPrice) *
+                    ((product.price - product.cost) / product.cost) *
                       100 <
                     0
                   }
                 >
                   {(
-                    ((product.price - product.costPrice) / product.costPrice) *
+                    ((product.price - product.cost) / product.cost) *
                     100
                   ).toFixed(1)}
                   %
@@ -445,9 +432,9 @@ export function NewArrivalModal({
                   }))
                 }
               >
-                {PAYMENT_METHODS.map((method) => (
+                {SUPPLIER_PAYMENT_METHODS.map((method) => (
                   <option key={method} value={method}>
-                    {getPaymentMethodLabel(method)}
+                    {t(SUPPLIER_PAYMENT_METHOD_I18N_KEYS[method])}
                   </option>
                 ))}
               </Select>

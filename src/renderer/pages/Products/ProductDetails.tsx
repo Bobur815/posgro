@@ -8,7 +8,7 @@ import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
 import { Product } from "@shared/types";
 import { products as productsApi } from "../../api/ipc-client";
-import { formatCurrency as formatCurrencyBase } from '@shared/utils';
+import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { ProductForm } from "./ProductForm";
 import {
   Edit,
@@ -176,7 +176,7 @@ interface ProductAnalytics {
   };
   inventory: {
     currentStock: number;
-    costPrice: number;
+    cost: number;
     inventoryValue: number;
   };
 }
@@ -246,7 +246,8 @@ export function ProductDetails() {
     }
   };
 
-  const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
+  const formatCurrency = (amount: number) =>
+    formatCurrencyBase(amount, i18n.language as "ru" | "uz");
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "-";
@@ -273,9 +274,9 @@ export function ProductDetails() {
   };
 
   const getProfitMarginFromPrice = () => {
-    if (!product || !product.costPrice || product.costPrice === 0) return null;
+    if (!product || !product.cost || product.cost === 0) return null;
     const margin =
-      ((product.price - product.costPrice) / product.costPrice) * 100;
+      ((product.price - product.cost) / product.cost) * 100;
     return Math.round(margin * 100) / 100;
   };
 
@@ -284,7 +285,11 @@ export function ProductDetails() {
   }
 
   const profitMargin = getProfitMarginFromPrice();
-  const expiryDays = getExpiryDays(t, product?.productionDate, product?.expiryDate);
+  const expiryDays = getExpiryDays(
+    t,
+    product?.productionDate,
+    product?.expiryDate,
+  );
   return (
     <Container>
       <Header>
@@ -377,7 +382,7 @@ export function ProductDetails() {
               <InfoRow>
                 <InfoLabel>{t("products.cost")}</InfoLabel>
                 <InfoValue>
-                  {product.costPrice ? formatCurrency(product.costPrice) : "-"}
+                  {product.cost ? formatCurrency(product.cost) : "-"}
                 </InfoValue>
               </InfoRow>
               {profitMargin !== null && (
@@ -394,8 +399,8 @@ export function ProductDetails() {
               <InfoRow>
                 <InfoLabel>{t("products.inventoryValue")}</InfoLabel>
                 <InfoValue>
-                  {product.costPrice
-                    ? formatCurrency(product.stock * product.costPrice)
+                  {product.cost
+                    ? formatCurrency(product.stock * product.cost)
                     : "-"}
                 </InfoValue>
               </InfoRow>
@@ -430,10 +435,12 @@ export function ProductDetails() {
             <InfoLabel>{t("products.expiryDays")}</InfoLabel>
             <InfoValue>{expiryDays}</InfoValue>
           </InfoRow>
-          
+
           <InfoRow>
             <InfoLabel>{t("products.expireInDays")}</InfoLabel>
-            <InfoValue>{getExpireInDays(t, expiryDays, product?.expiryDate)}</InfoValue>
+            <InfoValue>
+              {getExpireInDays(t, expiryDays, product?.expiryDate)}
+            </InfoValue>
           </InfoRow>
 
           <InfoRow>

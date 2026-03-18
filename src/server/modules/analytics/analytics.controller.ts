@@ -39,6 +39,20 @@ export class AnalyticsController {
     return this.analyticsService.getMonthlyAnalytics(storeId, targetYear, targetMonth);
   }
 
+  @Get('data')
+  @ApiOperation({ summary: 'Get full analytics data (Admin only)' })
+  @ApiQuery({ name: 'startDate', required: true, type: String })
+  @ApiQuery({ name: 'endDate', required: true, type: String })
+  async getAnalyticsData(
+    @CurrentStore() storeId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    return this.analyticsService.getAnalyticsData(storeId, start, end);
+  }
+
   @Get('product-performance')
   @ApiOperation({ summary: 'Get product performance report (Admin only)' })
   @ApiQuery({ name: 'startDate', required: false, type: String })

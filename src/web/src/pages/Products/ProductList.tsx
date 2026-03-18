@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { ProductForm } from "./ProductForm";
 import styled from "styled-components";
 import { useProducts } from "../../hooks/useProducts";
 import { useAuthStore } from "../../store/auth-store";
@@ -12,7 +13,15 @@ import { Button } from "@components/common/Button";
 import { Input } from "@components/common/Input";
 import { ProductFilters } from "@components/products/ProductFilters";
 import { Product, ProductFilterParams } from "@shared/types";
-import { ChevronDown, ChevronUp, PlusCircle, Edit, Package, Trash, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  PlusCircle,
+  Edit,
+  List,
+  Trash,
+  X,
+} from "lucide-react";
 import { formatDate } from "../../utils/formatters";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { debounce } from "../../utils/helpers";
@@ -45,10 +54,20 @@ export function ProductList() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { products, categories, suppliers, loadProducts, loadCategories, loadSuppliers, isLoading } = useProducts();
+  const {
+    products,
+    categories,
+    suppliers,
+    loadProducts,
+    loadCategories,
+    loadSuppliers,
+    isLoading,
+  } = useProducts();
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<ProductFilterParams>({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [editProductId, setEditProductId] = useState<string | null>(null);
   const isAdmin = user?.role === "ADMIN";
 
   useEffect(() => {
@@ -58,13 +77,14 @@ export function ProductList() {
   }, [loadProducts, loadCategories, loadSuppliers]);
 
   const debouncedSearch = useMemo(
-    () => debounce((query: string, f: ProductFilterParams) => {
-      const params: ProductFilterParams = { ...f };
-      if (query) {
-        params.query = query;
-      }
-      loadProducts(params);
-    }, 300),
+    () =>
+      debounce((query: string, f: ProductFilterParams) => {
+        const params: ProductFilterParams = { ...f };
+        if (query) {
+          params.query = query;
+        }
+        loadProducts(params);
+      }, 300),
     [loadProducts],
   );
 
@@ -84,10 +104,15 @@ export function ProductList() {
     setPageSize,
   } = usePagination(products);
 
-  const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
+  const formatCurrency = (amount: number) =>
+    formatCurrencyBase(amount, i18n.language as "ru" | "uz");
 
   const columns = [
-    { key: "index", header: "#", render: (_: Product, index: number) => pageOffset + index + 1 },
+    {
+      key: "index",
+      header: "#",
+      render: (_: Product, index: number) => pageOffset + index + 1,
+    },
     { key: "id", header: t("pos.id") },
     { key: "barcode", header: t("products.barcode") },
     {
@@ -105,7 +130,11 @@ export function ProductList() {
       key: "stock",
       header: t("products.stock"),
       render: (product: Product) => (
-        <span style={{ color: product.stock <= product.minStock ? "#f44336" : "inherit" }}>
+        <span
+          style={{
+            color: product.stock <= product.minStock ? "#f44336" : "inherit",
+          }}
+        >
           {product.stock} {product.unit}
         </span>
       ),
@@ -148,7 +177,7 @@ export function ProductList() {
             variant="secondary"
             size="small"
             tooltip={t("common.edit")}
-            onClick={() => navigate(`/products/${product.id}/edit`)}
+            onClick={() => setEditProductId(String(product.id))}
           >
             <Edit size={16} />
           </Button>
@@ -166,7 +195,7 @@ export function ProductList() {
             tooltip={t("products.viewDetails")}
             onClick={() => navigate(`/products/${product.id}`)}
           >
-            <Package size={16} />
+            <List size={16} />
           </Button>
         </div>
       ),
@@ -178,7 +207,10 @@ export function ProductList() {
       <Header>
         <Title>{t("products.title")}</Title>
         {isAdmin && (
-          <Button style={{ fontSize: "26px" }} onClick={() => navigate("/products/new")}>
+          <Button
+            style={{ fontSize: "26px" }}
+            onClick={() => setShowProductForm(true)}
+          >
             <PlusCircle size={24} /> {t("products.addProduct")}
           </Button>
         )}
@@ -189,7 +221,11 @@ export function ProductList() {
           <Input
             type="text"
             placeholder={t("common.search")}
-            style={{ padding: "8px 40px 8px 16px", fontSize: "16px", width: "100%" }}
+            style={{
+              padding: "8px 40px 8px 16px",
+              fontSize: "16px",
+              width: "100%",
+            }}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -197,8 +233,14 @@ export function ProductList() {
             <button
               onClick={() => setSearchQuery("")}
               style={{
-                position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)",
-                background: "none", border: "none", cursor: "pointer", padding: "4px",
+                position: "absolute",
+                right: "8px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "4px",
               }}
             >
               <X size={16} />
@@ -211,7 +253,8 @@ export function ProductList() {
           size="small"
           onClick={() => setIsFilterOpen(!isFilterOpen)}
         >
-          {t("filters.filters")} {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
+          {t("filters.filters")}{" "}
+          {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
         </Button>
       </Filters>
 
@@ -240,6 +283,27 @@ export function ProductList() {
           />
         }
       />
+
+      {showProductForm && (
+        <ProductForm
+          onClose={() => setShowProductForm(false)}
+          onSuccess={() => {
+            setShowProductForm(false);
+            loadProducts();
+          }}
+        />
+      )}
+
+      {editProductId && (
+        <ProductForm
+          productId={editProductId}
+          onClose={() => setEditProductId(null)}
+          onSuccess={() => {
+            setEditProductId(null);
+            loadProducts();
+          }}
+        />
+      )}
     </Container>
   );
 }

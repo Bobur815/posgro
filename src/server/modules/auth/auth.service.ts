@@ -58,6 +58,20 @@ export class AuthService {
     };
   }
 
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.usersService.findById(userId);
+
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('invalid_password');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await this.usersService.updatePassword(userId, hashedPassword);
+
+    return { success: true };
+  }
+
   async validateUser(payload: JwtPayload) {
     const user = await this.usersService.findById(payload.sub);
     if (!user || !user.active) {

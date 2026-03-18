@@ -29,6 +29,7 @@ jobs:
             OWNER="Bobur815"
             NAME="grocery-pos"
             REPO_URL_AUTH="https://Bobur815:${GH_PAT}@github.com/${OWNER}/${NAME}.git"
+            NGINX_SITE="pos.bobur-dev.uz"
 
             echo "📁 Ensure project dir"
             mkdir -p "$PROJECT_DIR"
@@ -56,6 +57,12 @@ jobs:
 
             test -s .env         || { echo ".env is empty!";          exit 1; }
             grep -q 'JWT_SECRET=' .env || { echo "JWT_SECRET missing"; exit 1; }
+
+            echo "🌐 Deploy nginx config"
+            sudo cp nginx.conf /etc/nginx/sites-available/${NGINX_SITE}
+            sudo ln -sf /etc/nginx/sites-available/${NGINX_SITE} /etc/nginx/sites-enabled/${NGINX_SITE}
+            sudo nginx -t
+            sudo systemctl reload nginx
 
             echo "🐳 Docker Compose: build & up"
             export USER_ID=$(id -u)

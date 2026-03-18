@@ -1,0 +1,31 @@
+import { Controller, Get, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentStore } from '../../common/decorators/current-store.decorator';
+import { PrismaService } from '../../prisma/prisma.service';
+
+const AI_TOKEN_LIMIT_FREE = 5;
+const AI_TOKEN_LIMIT_PAID = 100;
+
+@ApiTags('store-config')
+@Controller('store-config')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth('JWT-auth')
+export class StoreConfigController {
+  constructor(private readonly prisma: PrismaService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'Get server-controlled config for the current store' })
+  async getConfig(@CurrentStore() storeId: string) {
+    const store = storeId
+      ? await this.prisma.store.findUnique({
+          where: { id: storeId },
+          select: { plan: true },
+        })
+      : null;
+
+    return {
+      ai_token_limit_daily: store?.plan === 'paid' ? AI_TOKEN_LIMIT_PAID : AI_TOKEN_LIMIT_FREE,
+    };
+  }
+}

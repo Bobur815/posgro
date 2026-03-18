@@ -87,6 +87,22 @@ export async function hasValidToken(): Promise<boolean> {
   }
 }
 
+// Server-issued token (obtained by logging in to the VPS server)
+// Stored in memory only — must re-authenticate each app session
+let serverToken: string | null = null;
+
+export function setServerToken(token: string): void {
+  serverToken = token;
+}
+
+export function getServerToken(): string | null {
+  return serverToken;
+}
+
+export function clearServerToken(): void {
+  serverToken = null;
+}
+
 /**
  * Queue for offline operations
  */

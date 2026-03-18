@@ -1,7 +1,7 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import styled from 'styled-components';
+import React from "react";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import styled from "styled-components";
 import {
   UserCog,
   Settings,
@@ -12,7 +12,7 @@ import {
   Users,
   Package,
   Scale,
-} from 'lucide-react';
+} from "lucide-react";
 
 const Container = styled.div`
   display: flex;
@@ -68,67 +68,70 @@ export function SettingsPage() {
   const settingsSections = [
     {
       icon: <UserCog size={32} />,
-      title: t('settings.userSettings'),
-      description: t('settings.userSettingsDescription'),
-      path: '/settings/user',
+      title: t("settings.userSettings"),
+      description: t("settings.userSettingsDescription"),
+      path: "/settings/user",
     },
     {
       icon: <Settings size={32} />,
-      title: t('settings.systemSettings'),
-      description: t('settings.systemSettingsDescription'),
-      path: '/settings/system',
+      title: t("settings.systemSettings"),
+      description: t("settings.systemSettingsDescription"),
+      path: "/settings/system",
     },
     {
       icon: <Printer size={32} />,
-      title: t('settings.printerSettings'),
-      description: t('settings.printerSettingsDescription'),
-      path: '/settings/printer',
+      title: t("settings.printerSettings"),
+      description: t("settings.printerSettingsDescription"),
+      path: "/settings/printer",
     },
     {
       icon: <Receipt size={32} />,
-      title: t('receipt.title'),
-      description: t('receipt.description'),
-      path: '/settings/receipt',
+      title: t("receipt.title"),
+      description: t("receipt.description"),
+      path: "/settings/receipt",
     },
     {
       icon: <RefreshCw size={32} />,
-      title: t('settings.syncSettings'),
-      description: t('settings.syncSettingsDescription'),
-      path: '/settings/sync',
+      title: t("settings.syncSettings"),
+      description: t("settings.syncSettingsDescription"),
+      path: "/settings/sync",
     },
     {
       icon: <Tag size={32} />,
-      title: t('priceTags.title'),
-      description: t('priceTags.settingsDescription'),
-      path: '/settings/price-tags',
+      title: t("priceTags.title"),
+      description: t("priceTags.settingsDescription"),
+      path: "/settings/price-tags",
     },
     {
       icon: <Users size={32} />,
-      title: t('settings.userManagement'),
-      description: t('settings.userManagementDescription'),
-      path: '/users',
+      title: t("settings.userManagement"),
+      description: t("settings.userManagementDescription"),
+      path: "/users",
     },
     {
       icon: <Package size={32} />,
-      title: t('settings.inventorySettings'),
-      description: t('settings.inventorySettingsDescription'),
-      path: '/products/stock',
+      title: t("settings.inventorySettings"),
+      description: t("settings.inventorySettingsDescription"),
+      path: "/products/stock",
     },
     {
       icon: <Scale size={32} />,
-      title: t('scaleSettings.title'),
-      description: t('scaleSettings.description'),
-      path: '/settings/scale',
+      title: t("scaleSettings.title"),
+      description: t("scaleSettings.description"),
+      path: "/settings/scale",
     },
   ];
 
   return (
     <Container>
-      <Title>{t('settings.title')}</Title>
+      <Title>{t("settings.title")}</Title>
 
       <SettingsGrid>
         {settingsSections.map((section) => (
-          <SettingsCard key={section.path} onClick={() => navigate(section.path)}>
+          <SettingsCard
+            key={section.path}
+            onClick={() => navigate(section.path)}
+          >
             <CardIcon>{section.icon}</CardIcon>
             <CardTitle>{section.title}</CardTitle>
             <CardDescription>{section.description}</CardDescription>

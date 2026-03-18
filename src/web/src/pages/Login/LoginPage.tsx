@@ -117,7 +117,7 @@ export function LoginPage() {
   return (
     <Container>
       <Card>
-        <Logo>Grocery POS</Logo>
+        <Logo>Yangi Asr</Logo>
         <Subtitle>{t("auth.login")}</Subtitle>
 
         <Form onSubmit={handleSubmit}>

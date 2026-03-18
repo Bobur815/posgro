@@ -20,6 +20,7 @@ model Store {
   phone     String?
   active    Boolean  @default(true)
   plan      String   @default("free") // "free" | "paid"
+  aiCredits Decimal  @default(0) @db.Decimal(12, 4) // Pre-paid AI scan credit balance in USD
   settings  String?  @db.Text // JSON: tax rate, receipt template, etc.
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -166,8 +167,8 @@ model SaleItem {
   saleId String @map("sale_id")
   sale   Sale   @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
-  productId Int  @map("product_id")
-  product   Product @relation(fields: [productId], references: [id])
+  productId Int?  @map("product_id")
+  product   Product? @relation(fields: [productId], references: [id])
 
   productName String  @map("product_name") // Denormalized
   barcode     String

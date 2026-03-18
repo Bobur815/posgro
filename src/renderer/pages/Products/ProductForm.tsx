@@ -15,6 +15,10 @@ import {
   Supplier,
   SupplierPaymentMethod,
 } from "@shared/types";
+import {
+  SUPPLIER_PAYMENT_METHODS,
+  SUPPLIER_PAYMENT_METHOD_I18N_KEYS,
+} from "@shared/constants/payment-methods";
 import { convertUzbekText } from "@shared/utils/transliterator";
 import { RefreshCw, Settings } from "lucide-react";
 import { SupplierManagementModal } from "../Suppliers/SupplierManagementModal";
@@ -157,14 +161,6 @@ const RadioDescription = styled.div`
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
-const PAYMENT_METHODS: SupplierPaymentMethod[] = [
-  "CASH",
-  "CARD",
-  "BANK_TRANSFER",
-  "INSTALLMENT",
-  "ONE_TO_ONE",
-];
-
 const UNIT_OPTIONS: ProductUnit[] = ["шт", "кг", "л", "м"];
 
 interface ProductFormProps {
@@ -174,6 +170,16 @@ interface ProductFormProps {
     nameUz?: string;
     mxik?: string;
     cost?: number;
+    stock?: number;
+    minStock?: number;
+    unit?: ProductUnit;
+    categoryId?: string;
+    supplierId?: string;
+    productionDate?: string;
+    expiryDate?: string;
+    discountPercent?: number;
+    isOnPromotion?: boolean;
+    active?: boolean;
   };
   onClose: () => void;
   onSuccess: () => void;
@@ -210,7 +216,7 @@ export function ProductForm({
     nameUz: initialData?.nameUz || "",
     price: "",
     cost: initialData?.cost ? String(initialData.cost) : "",
-    stock: "0",
+    stock: initialData?.stock ? String(initialData.stock) : "0",
     minStock: "0",
     unit: "шт" as ProductUnit,
     categoryId: "",
@@ -232,7 +238,7 @@ export function ProductForm({
     priceMode: "none" as "none" | "immediate" | "deferred",
     notes: "",
     supplierId: "",
-    paymentMethod: "INSTALLMENT" as SupplierPaymentMethod,
+    paymentMethod: "CASH" as SupplierPaymentMethod,
     productionDate: "",
     expirationDate: "",
   });
@@ -259,7 +265,7 @@ export function ProductForm({
         setShowArrivalModal(true);
         setArrivalData((prev) => ({
           ...prev,
-          cost: product.costPrice ? String(product.costPrice) : "",
+          cost: product.cost ? String(product.cost) : "",
           newPrice: String(product.price),
           priceMode: "none",
           supplierId: product.supplierId || "",
@@ -299,7 +305,7 @@ export function ProductForm({
   const costChanged =
     existingProduct &&
     arrivalData.cost !== "" &&
-    Number(arrivalData.cost) !== (existingProduct.costPrice ?? 0);
+    Number(arrivalData.cost) !== (existingProduct.cost ?? 0);
 
   const arrivalProfitMargin =
     arrivalData.cost && arrivalData.newPrice
@@ -364,17 +370,6 @@ export function ProductForm({
     setFormData((prev) => ({ ...prev, barcode: "" }));
   };
 
-  const getPaymentMethodLabel = (method: SupplierPaymentMethod) => {
-    const labels: Record<SupplierPaymentMethod, string> = {
-      CASH: t("suppliers.cash"),
-      CARD: t("suppliers.card"),
-      BANK_TRANSFER: t("suppliers.bankTransfer"),
-      INSTALLMENT: t("suppliers.installment"),
-      ONE_TO_ONE: t("suppliers.oneToOne"),
-    };
-    return labels[method];
-  };
-
   const getUnitLabel = (unit: ProductUnit) => {
     const labels: Record<ProductUnit, string> = {
       шт: t("units.piece"),
@@ -407,7 +402,7 @@ export function ProductForm({
         nameRu: product.nameRu,
         nameUz: product.nameUz,
         price: String(product.price),
-        cost: product.costPrice ? String(product.costPrice) : "",
+        cost: product.cost ? String(product.cost) : "",
         stock: String(product.stock),
         minStock: String(product.minStock),
         unit: product.unit,
@@ -436,7 +431,7 @@ export function ProductForm({
       nameRu: formData.nameRu,
       nameUz: formData.nameUz,
       price: parseFloat(formData.price),
-      cost: formData.cost ? parseFloat(formData.cost) : null,
+      cost: formData.cost ? parseFloat(formData.cost) : undefined,
       stock: parseInt(formData.stock),
       minStock: parseInt(formData.minStock),
       unit: formData.unit,
@@ -501,7 +496,7 @@ export function ProductForm({
   };
 
   const title = isEdit ? t("products.editProduct") : t("products.addProduct");
-
+  
   return (
     <>
       <Modal title={title} onClose={onClose} width="750px">
@@ -746,26 +741,26 @@ export function ProductForm({
             <ProductInfoRow>
               <ProductInfoLabel>{t("products.cost")}</ProductInfoLabel>
               <ProductInfoValue>
-                {existingProduct.costPrice
-                  ? formatCurrency(existingProduct.costPrice)
+                {existingProduct.cost
+                  ? formatCurrency(existingProduct.cost)
                   : "—"}
               </ProductInfoValue>
             </ProductInfoRow>
             <ProductInfoRow>
               <ProductInfoLabel>{t("products.profitMargin")}</ProductInfoLabel>
               <ProductInfoValue>
-                {existingProduct.costPrice ? (
+                {existingProduct.cost ? (
                   <ProfitBadge
                     $negative={
-                      ((existingProduct.price - existingProduct.costPrice) /
-                        existingProduct.costPrice) *
+                      ((existingProduct.price - existingProduct.cost) /
+                        existingProduct.cost) *
                         100 <
                       0
                     }
                   >
                     {(
-                      ((existingProduct.price - existingProduct.costPrice) /
-                        existingProduct.costPrice) *
+                      ((existingProduct.price - existingProduct.cost) /
+                        existingProduct.cost) *
                       100
                     ).toFixed(1)}
                     %
@@ -968,9 +963,9 @@ export function ProductForm({
                     }))
                   }
                 >
-                  {PAYMENT_METHODS.map((method) => (
+                  {SUPPLIER_PAYMENT_METHODS.map((method) => (
                     <option key={method} value={method}>
-                      {getPaymentMethodLabel(method)}
+                      {t(SUPPLIER_PAYMENT_METHOD_I18N_KEYS[method])}
                     </option>
                   ))}
                 </Select>

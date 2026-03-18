@@ -21,6 +21,9 @@ export default defineConfig({
   },
 
   renderer: {
+    server: {
+      port: 5174,
+    },
     build: {
       outDir: 'dist-renderer'
     },

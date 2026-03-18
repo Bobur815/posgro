@@ -25,6 +25,7 @@ import { UserForm } from "./pages/Users/UserForm";
 import { SupplierList, SupplierDetails } from "./pages/Suppliers";
 import { WeighedInventoryPage } from "./pages/Inventory/WeighedInventoryPage";
 import { ScaleSettings } from "./pages/Settings/ScaleSettings";
+import { SyncSettings } from "./pages/Settings/SyncSettings";
 
 function App() {
   const { isAuthenticated } = useAuthStore();
@@ -136,6 +137,14 @@ function App() {
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
               <ScaleSettings />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="settings/sync"
+          element={
+            <RoleGuard allowedRoles={["ADMIN"]}>
+              <SyncSettings />
             </RoleGuard>
           }
         />

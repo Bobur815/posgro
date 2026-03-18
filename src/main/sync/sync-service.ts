@@ -1,8 +1,10 @@
 import { BrowserWindow } from 'electron';
 import { syncSales } from './sales-sync';
-import { syncProducts } from './products-sync';
+import { syncProducts, syncCategories } from './products-sync';
+import { uploadLocalData } from './upload-sync';
 import { getAppConfig } from '../config/app-config';
 import { getPrismaClient } from '../database/sqlite-client';
+import { getServerToken } from './queue-manager';
 
 export class SyncService {
   private syncInterval: NodeJS.Timeout | null = null;
@@ -13,13 +15,14 @@ export class SyncService {
   start(): void {
     console.log('Sync service started');
 
-    // Initial sync after a short delay
+    // Initial sync after a short delay (faster in dev/local mode)
+    const config = getAppConfig();
+    const isLocal = config.vpsApiUrl.includes('localhost') || config.vpsApiUrl.includes('127.0.0.1');
     setTimeout(() => {
       this.sync();
-    }, 5000);
+    }, isLocal ? 1000 : 5000);
 
     // Periodic sync
-    const config = getAppConfig();
     this.syncInterval = setInterval(() => {
       this.sync();
     }, config.syncIntervalMs);
@@ -52,8 +55,18 @@ export class SyncService {
 
       console.log('Starting sync...');
 
+      // Upload locally-created categories, suppliers, products, and arrivals to VPS
+      try {
+        await uploadLocalData();
+      } catch (uploadError) {
+        console.error('Upload sync failed (non-fatal):', uploadError instanceof Error ? uploadError.message : uploadError);
+      }
+
       // Sync sales (upload local sales to VPS)
       await syncSales();
+
+      // Sync categories (download from VPS — must come before products)
+      await syncCategories();
 
       // Sync products (download updated products from VPS)
       await syncProducts();
@@ -86,8 +99,10 @@ export class SyncService {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const token = getServerToken();
       const response = await fetch(`${config.vpsApiUrl}/store-config`, {
         signal: controller.signal,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       clearTimeout(timeoutId);
       if (!response.ok) return;
@@ -109,6 +124,12 @@ export class SyncService {
 
   private async checkConnectivity(): Promise<boolean> {
     const config = getAppConfig();
+
+    // Skip connectivity check for local development
+    const isLocal = config.vpsApiUrl.includes('localhost') || config.vpsApiUrl.includes('127.0.0.1');
+    if (isLocal) {
+      return true;
+    }
 
     try {
       const controller = new AbortController();

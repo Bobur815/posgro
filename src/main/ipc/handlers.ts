@@ -1,13 +1,16 @@
-import { ipcMain, app } from 'electron';
-import { setupAuthHandlers } from './auth-handlers';
-import { setupProductsHandlers } from './products-handlers';
-import { setupSalesHandlers } from './sales-handlers';
-import { setupWeighedItemsHandlers } from './weighed-items-handlers';
-import { getAppConfig } from '../config/app-config';
-import { getAuthToken } from '../sync/queue-manager';
-import { getPrismaClient } from '../database/sqlite-client';
-import { setPrinterConfig, setupPrinterHandlers } from '../printer/thermal-printer';
-import { convertUzbekText } from '../../shared/utils/transliterator';
+import { ipcMain, app } from "electron";
+import { setupAuthHandlers } from "./auth-handlers";
+import { setupProductsHandlers } from "./products-handlers";
+import { setupSalesHandlers } from "./sales-handlers";
+import { setupWeighedItemsHandlers } from "./weighed-items-handlers";
+import { getAppConfig } from "../config/app-config";
+import { getAuthToken, getServerToken } from "../sync/queue-manager";
+import { getPrismaClient } from "../database/sqlite-client";
+import {
+  setPrinterConfig,
+  setupPrinterHandlers,
+} from "../printer/thermal-printer";
+import { convertUzbekText } from "../../shared/utils/transliterator";
 
 export function setupIpcHandlers(): void {
   // Setup all IPC handlers
@@ -23,24 +26,24 @@ export function setupIpcHandlers(): void {
   setupAppHandlers();
   setupReceiptHandlers();
 
-  console.log('IPC handlers initialized');
+  console.log("IPC handlers initialized");
 }
 
 function setupCategoriesHandlers(): void {
-  ipcMain.handle('categories:getAll', async () => {
+  ipcMain.handle("categories:getAll", async () => {
     const prisma = getPrismaClient();
     return prisma.category.findMany({
       where: { active: true },
-      orderBy: { nameRu: 'asc' },
+      orderBy: { nameRu: "asc" },
     });
   });
 
-  ipcMain.handle('categories:create', async (_event, data) => {
+  ipcMain.handle("categories:create", async (_event, data) => {
     const prisma = getPrismaClient();
     return prisma.category.create({ data });
   });
 
-  ipcMain.handle('categories:update', async (_event, id: string, data) => {
+  ipcMain.handle("categories:update", async (_event, id: string, data) => {
     const prisma = getPrismaClient();
     return prisma.category.update({
       where: { id },
@@ -48,7 +51,7 @@ function setupCategoriesHandlers(): void {
     });
   });
 
-  ipcMain.handle('categories:delete', async (_event, id: string) => {
+  ipcMain.handle("categories:delete", async (_event, id: string) => {
     const prisma = getPrismaClient();
     await prisma.category.update({
       where: { id },
@@ -60,9 +63,9 @@ function setupCategoriesHandlers(): void {
 
 function toNumber(value: unknown): number {
   if (value === null || value === undefined) return 0;
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') return parseFloat(value) || 0;
-  if (typeof value === 'object' && value !== null && 'toNumber' in value) {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return parseFloat(value) || 0;
+  if (typeof value === "object" && value !== null && "toNumber" in value) {
     return (value as { toNumber: () => number }).toNumber();
   }
   return 0;
@@ -108,24 +111,27 @@ function serializeTransaction(tx: any) {
 
 function setupSuppliersHandlers(): void {
   // Get all suppliers
-  ipcMain.handle('suppliers:getAll', async (_event, includeInactive?: boolean) => {
-    const prisma = getPrismaClient();
-    const where = includeInactive ? {} : { active: true };
-    const suppliers = await prisma.supplier.findMany({
-      where,
-      orderBy: { nameRu: 'asc' },
-    });
-    return ipcSafe(suppliers.map(serializeSupplier));
-  });
+  ipcMain.handle(
+    "suppliers:getAll",
+    async (_event, includeInactive?: boolean) => {
+      const prisma = getPrismaClient();
+      const where = includeInactive ? {} : { active: true };
+      const suppliers = await prisma.supplier.findMany({
+        where,
+        orderBy: { nameRu: "asc" },
+      });
+      return ipcSafe(suppliers.map(serializeSupplier));
+    },
+  );
 
   // Get supplier by ID with transactions
-  ipcMain.handle('suppliers:getById', async (_event, id: string) => {
+  ipcMain.handle("suppliers:getById", async (_event, id: string) => {
     const prisma = getPrismaClient();
     const supplier = await prisma.supplier.findUnique({
       where: { id },
       include: {
         transactions: {
-          orderBy: { createdAt: 'desc' },
+          orderBy: { createdAt: "desc" },
           take: 50,
         },
       },
@@ -140,199 +146,253 @@ function setupSuppliersHandlers(): void {
   });
 
   // Create supplier
-  ipcMain.handle('suppliers:create', async (_event, data: {
-    nameRu: string;
-    nameUz: string;
-    phone?: string;
-    address?: string;
-    balance?: number;
-  }) => {
-    const prisma = getPrismaClient();
-    const supplier = await prisma.supplier.create({
+  ipcMain.handle(
+    "suppliers:create",
+    async (
+      _event,
       data: {
-        nameRu: data.nameRu,
-        nameUz: data.nameUz,
-        phone: data.phone || null,
-        address: data.address || null,
-        balance: data.balance ?? 0,
+        nameRu: string;
+        nameUz: string;
+        phone?: string;
+        address?: string;
+        balance?: number;
       },
-    });
-    return ipcSafe(serializeSupplier(supplier));
-  });
+    ) => {
+      const prisma = getPrismaClient();
+      const supplier = await prisma.supplier.create({
+        data: {
+          nameRu: data.nameRu,
+          nameUz: data.nameUz,
+          phone: data.phone || null,
+          address: data.address || null,
+          balance: data.balance ?? 0,
+        },
+      });
+      return ipcSafe(serializeSupplier(supplier));
+    },
+  );
 
   // Update supplier
-  ipcMain.handle('suppliers:update', async (_event, id: string, data: {
-    nameRu?: string;
-    nameUz?: string;
-    phone?: string;
-    address?: string;
-    active?: boolean;
-    balance?: number;
-  }) => {
-    const prisma = getPrismaClient();
-    const supplier = await prisma.supplier.update({
-      where: { id },
+  ipcMain.handle(
+    "suppliers:update",
+    async (
+      _event,
+      id: string,
       data: {
-        ...(data.nameRu !== undefined && { nameRu: data.nameRu }),
-        ...(data.nameUz !== undefined && { nameUz: data.nameUz }),
-        ...(data.phone !== undefined && { phone: data.phone || null }),
-        ...(data.address !== undefined && { address: data.address || null }),
-        ...(data.active !== undefined && { active: data.active }),
-        ...(data.balance !== undefined && { balance: data.balance }),
+        nameRu?: string;
+        nameUz?: string;
+        phone?: string;
+        address?: string;
+        active?: boolean;
+        balance?: number;
       },
-    });
-    return ipcSafe(serializeSupplier(supplier));
-  });
+    ) => {
+      const prisma = getPrismaClient();
+      const supplier = await prisma.supplier.update({
+        where: { id },
+        data: {
+          ...(data.nameRu !== undefined && { nameRu: data.nameRu }),
+          ...(data.nameUz !== undefined && { nameUz: data.nameUz }),
+          ...(data.phone !== undefined && { phone: data.phone || null }),
+          ...(data.address !== undefined && { address: data.address || null }),
+          ...(data.active !== undefined && { active: data.active }),
+          ...(data.balance !== undefined && { balance: data.balance }),
+        },
+      });
+      return ipcSafe(serializeSupplier(supplier));
+    },
+  );
 
-  // Delete (soft) supplier
-  ipcMain.handle('suppliers:delete', async (_event, id: string) => {
+  // Delete supplier: hard delete if no arrivals/transactions, soft delete otherwise
+  ipcMain.handle("suppliers:delete", async (_event, id: string) => {
     const prisma = getPrismaClient();
-    await prisma.supplier.update({
-      where: { id },
-      data: { active: false },
-    });
+
+    const arrivalsCount = await prisma.inventoryArrival.count({ where: { supplierId: id } });
+    const txCount = await prisma.supplierTransaction.count({ where: { supplierId: id } });
+
+    if (arrivalsCount === 0 && txCount === 0) {
+      await prisma.supplier.delete({ where: { id } });
+    } else {
+      await prisma.supplier.update({ where: { id }, data: { active: false } });
+    }
     return true;
   });
 
   // Get transactions for a supplier
-  ipcMain.handle('suppliers:getTransactions', async (_event, filters: {
-    supplierId?: string;
-    type?: string;
-    paymentMethod?: string;
-    startDate?: string;
-    endDate?: string;
-  }) => {
-    const prisma = getPrismaClient();
-    const where: Record<string, unknown> = {};
+  ipcMain.handle(
+    "suppliers:getTransactions",
+    async (
+      _event,
+      filters: {
+        supplierId?: string;
+        type?: string;
+        paymentMethod?: string;
+        startDate?: string;
+        endDate?: string;
+      },
+    ) => {
+      const prisma = getPrismaClient();
+      const where: Record<string, unknown> = {};
 
-    if (filters.supplierId) where.supplierId = filters.supplierId;
-    if (filters.type) where.type = filters.type;
-    if (filters.paymentMethod) where.paymentMethod = filters.paymentMethod;
+      if (filters.supplierId) where.supplierId = filters.supplierId;
+      if (filters.type) where.type = filters.type;
+      if (filters.paymentMethod) where.paymentMethod = filters.paymentMethod;
 
-    if (filters.startDate || filters.endDate) {
-      where.createdAt = {};
-      if (filters.startDate) (where.createdAt as Record<string, Date>).gte = new Date(filters.startDate);
-      if (filters.endDate) {
-        const endDate = new Date(filters.endDate);
-        endDate.setHours(23, 59, 59, 999);
-        (where.createdAt as Record<string, Date>).lte = endDate;
+      if (filters.startDate || filters.endDate) {
+        where.createdAt = {};
+        if (filters.startDate)
+          (where.createdAt as Record<string, Date>).gte = new Date(
+            filters.startDate,
+          );
+        if (filters.endDate) {
+          const endDate = new Date(filters.endDate);
+          endDate.setHours(23, 59, 59, 999);
+          (where.createdAt as Record<string, Date>).lte = endDate;
+        }
       }
-    }
 
-    const transactions = await prisma.supplierTransaction.findMany({
-      where,
-      include: { supplier: true },
-      orderBy: { createdAt: 'desc' },
-    });
+      const transactions = await prisma.supplierTransaction.findMany({
+        where,
+        include: { supplier: true },
+        orderBy: { createdAt: "desc" },
+      });
 
-    return ipcSafe(transactions.map(serializeTransaction));
-  });
+      return ipcSafe(transactions.map(serializeTransaction));
+    },
+  );
 
   // Create transaction and update supplier balance
-  ipcMain.handle('suppliers:createTransaction', async (_event, data: {
-    supplierId: string;
-    type: string;
-    paymentMethod: string;
-    amount: number;
-    description?: string;
-    referenceId?: string;
-    referenceType?: string;
-    dueDate?: string;
-    createdBy: string;
-  }) => {
-    const prisma = getPrismaClient();
-
-    // Determine balance change based on transaction type
-    // PURCHASE: negative (we owe more)
-    // PAYMENT, RETURN: positive (we owe less)
-    // ADVANCE: positive (they owe us)
-    // ADJUSTMENT: use amount as-is
-    let balanceChange = data.amount;
-    if (data.type === 'PURCHASE') {
-      balanceChange = -Math.abs(data.amount); // Always negative
-    } else if (['PAYMENT', 'RETURN', 'ADVANCE'].includes(data.type)) {
-      balanceChange = Math.abs(data.amount); // Always positive
-    }
-    // ADJUSTMENT uses the amount as provided (can be + or -)
-
-    const transaction = await prisma.supplierTransaction.create({
+  ipcMain.handle(
+    "suppliers:createTransaction",
+    async (
+      _event,
       data: {
-        supplierId: data.supplierId,
-        type: data.type,
-        paymentMethod: data.paymentMethod,
-        amount: balanceChange,
-        description: data.description || null,
-        referenceId: data.referenceId || null,
-        referenceType: data.referenceType || null,
-        dueDate: data.dueDate ? new Date(data.dueDate) : null,
-        paidAt: ['PAYMENT', 'ADVANCE'].includes(data.type) ? new Date() : null,
-        createdBy: data.createdBy,
+        supplierId: string;
+        type: string;
+        paymentMethod: string;
+        amount: number;
+        description?: string;
+        referenceId?: string;
+        referenceType?: string;
+        dueDate?: string;
+        createdBy: string;
       },
-      include: { supplier: true },
-    });
+    ) => {
+      const prisma = getPrismaClient();
 
-    // Update supplier balance
-    await prisma.supplier.update({
-      where: { id: data.supplierId },
-      data: {
-        balance: { increment: balanceChange },
-      },
-    });
+      // Determine balance change based on transaction type
+      // PURCHASE: negative (we owe more)
+      // PAYMENT, RETURN: positive (we owe less)
+      // ADVANCE: positive (they owe us)
+      // ADJUSTMENT: use amount as-is
+      let balanceChange = data.amount;
+      if (data.type === "PURCHASE") {
+        balanceChange = -Math.abs(data.amount); // Always negative
+      } else if (["PAYMENT", "RETURN", "ADVANCE"].includes(data.type)) {
+        balanceChange = Math.abs(data.amount); // Always positive
+      }
+      // ADJUSTMENT uses the amount as provided (can be + or -)
 
-    return ipcSafe(serializeTransaction(transaction));
-  });
-
-  // Update transaction
-  ipcMain.handle('suppliers:updateTransaction', async (_event, id: string, data: {
-    type?: string;
-    paymentMethod?: string;
-    amount?: number;
-    description?: string;
-    dueDate?: string;
-    paidAt?: string;
-  }) => {
-    const prisma = getPrismaClient();
-
-    // Get original transaction to calculate balance difference
-    const original = await prisma.supplierTransaction.findUnique({ where: { id } });
-    if (!original) throw new Error('Transaction not found');
-
-    const oldAmount = toNumber(original.amount);
-    const newAmount = data.amount !== undefined ? data.amount : oldAmount;
-    const balanceDiff = newAmount - oldAmount;
-
-    const transaction = await prisma.supplierTransaction.update({
-      where: { id },
-      data: {
-        ...(data.type !== undefined && { type: data.type }),
-        ...(data.paymentMethod !== undefined && { paymentMethod: data.paymentMethod }),
-        ...(data.amount !== undefined && { amount: data.amount }),
-        ...(data.description !== undefined && { description: data.description || null }),
-        ...(data.dueDate !== undefined && { dueDate: data.dueDate ? new Date(data.dueDate) : null }),
-        ...(data.paidAt !== undefined && { paidAt: data.paidAt ? new Date(data.paidAt) : null }),
-      },
-      include: { supplier: true },
-    });
-
-    // Update supplier balance if amount changed
-    if (balanceDiff !== 0) {
-      await prisma.supplier.update({
-        where: { id: original.supplierId },
+      const transaction = await prisma.supplierTransaction.create({
         data: {
-          balance: { increment: balanceDiff },
+          supplierId: data.supplierId,
+          type: data.type,
+          paymentMethod: data.paymentMethod,
+          amount: balanceChange,
+          description: data.description || null,
+          referenceId: data.referenceId || null,
+          referenceType: data.referenceType || null,
+          dueDate: data.dueDate ? new Date(data.dueDate) : null,
+          paidAt: ["PAYMENT", "ADVANCE"].includes(data.type)
+            ? new Date()
+            : null,
+          createdBy: data.createdBy,
+        },
+        include: { supplier: true },
+      });
+
+      // Update supplier balance
+      await prisma.supplier.update({
+        where: { id: data.supplierId },
+        data: {
+          balance: { increment: balanceChange },
         },
       });
-    }
 
-    return ipcSafe(serializeTransaction(transaction));
-  });
+      return ipcSafe(serializeTransaction(transaction));
+    },
+  );
+
+  // Update transaction
+  ipcMain.handle(
+    "suppliers:updateTransaction",
+    async (
+      _event,
+      id: string,
+      data: {
+        type?: string;
+        paymentMethod?: string;
+        amount?: number;
+        description?: string;
+        dueDate?: string;
+        paidAt?: string;
+      },
+    ) => {
+      const prisma = getPrismaClient();
+
+      // Get original transaction to calculate balance difference
+      const original = await prisma.supplierTransaction.findUnique({
+        where: { id },
+      });
+      if (!original) throw new Error("Transaction not found");
+
+      const oldAmount = toNumber(original.amount);
+      const newAmount = data.amount !== undefined ? data.amount : oldAmount;
+      const balanceDiff = newAmount - oldAmount;
+
+      const transaction = await prisma.supplierTransaction.update({
+        where: { id },
+        data: {
+          ...(data.type !== undefined && { type: data.type }),
+          ...(data.paymentMethod !== undefined && {
+            paymentMethod: data.paymentMethod,
+          }),
+          ...(data.amount !== undefined && { amount: data.amount }),
+          ...(data.description !== undefined && {
+            description: data.description || null,
+          }),
+          ...(data.dueDate !== undefined && {
+            dueDate: data.dueDate ? new Date(data.dueDate) : null,
+          }),
+          ...(data.paidAt !== undefined && {
+            paidAt: data.paidAt ? new Date(data.paidAt) : null,
+          }),
+        },
+        include: { supplier: true },
+      });
+
+      // Update supplier balance if amount changed
+      if (balanceDiff !== 0) {
+        await prisma.supplier.update({
+          where: { id: original.supplierId },
+          data: {
+            balance: { increment: balanceDiff },
+          },
+        });
+      }
+
+      return ipcSafe(serializeTransaction(transaction));
+    },
+  );
 
   // Delete transaction and reverse balance
-  ipcMain.handle('suppliers:deleteTransaction', async (_event, id: string) => {
+  ipcMain.handle("suppliers:deleteTransaction", async (_event, id: string) => {
     const prisma = getPrismaClient();
 
-    const transaction = await prisma.supplierTransaction.findUnique({ where: { id } });
-    if (!transaction) throw new Error('Transaction not found');
+    const transaction = await prisma.supplierTransaction.findUnique({
+      where: { id },
+    });
+    if (!transaction) throw new Error("Transaction not found");
 
     // Reverse the balance change
     const amount = toNumber(transaction.amount);
@@ -349,7 +409,7 @@ function setupSuppliersHandlers(): void {
   });
 
   // Get supplier balance summary
-  ipcMain.handle('suppliers:getBalance', async (_event, supplierId: string) => {
+  ipcMain.handle("suppliers:getBalance", async (_event, supplierId: string) => {
     const prisma = getPrismaClient();
 
     const supplier = await prisma.supplier.findUnique({
@@ -363,7 +423,7 @@ function setupSuppliersHandlers(): void {
       where: { supplierId },
     });
 
-    let totalDebt = 0;   // What we owe (sum of negative)
+    let totalDebt = 0; // What we owe (sum of negative)
     let totalCredit = 0; // What they owe us (sum of positive)
 
     for (const tx of transactions) {
@@ -380,40 +440,46 @@ function setupSuppliersHandlers(): void {
   });
 
   // Record payment shortcut
-  ipcMain.handle('suppliers:recordPayment', async (_event, data: {
-    supplierId: string;
-    amount: number;
-    paymentMethod: string;
-    description?: string;
-    createdBy: string;
-  }) => {
-    const prisma = getPrismaClient();
-
-    const transaction = await prisma.supplierTransaction.create({
+  ipcMain.handle(
+    "suppliers:recordPayment",
+    async (
+      _event,
       data: {
-        supplierId: data.supplierId,
-        type: 'PAYMENT',
-        paymentMethod: data.paymentMethod,
-        amount: Math.abs(data.amount), // Positive = reduces our debt
-        description: data.description || null,
-        paidAt: new Date(),
-        createdBy: data.createdBy,
+        supplierId: string;
+        amount: number;
+        paymentMethod: string;
+        description?: string;
+        createdBy: string;
       },
-    });
+    ) => {
+      const prisma = getPrismaClient();
 
-    await prisma.supplier.update({
-      where: { id: data.supplierId },
-      data: {
-        balance: { increment: Math.abs(data.amount) },
-      },
-    });
+      const transaction = await prisma.supplierTransaction.create({
+        data: {
+          supplierId: data.supplierId,
+          type: "PAYMENT",
+          paymentMethod: data.paymentMethod,
+          amount: Math.abs(data.amount), // Positive = reduces our debt
+          description: data.description || null,
+          paidAt: new Date(),
+          createdBy: data.createdBy,
+        },
+      });
 
-    return ipcSafe(serializeTransaction(transaction));
-  });
+      await prisma.supplier.update({
+        where: { id: data.supplierId },
+        data: {
+          balance: { increment: Math.abs(data.amount) },
+        },
+      });
+
+      return ipcSafe(serializeTransaction(transaction));
+    },
+  );
 }
 
 function setupInventoryHandlers(): void {
-  ipcMain.handle('inventory:createArrival', async (_event, data) => {
+  ipcMain.handle("inventory:createArrival", async (_event, data) => {
     const prisma = getPrismaClient();
 
     const totalCost = data.quantity * data.cost;
@@ -438,12 +504,12 @@ function setupInventoryHandlers(): void {
     };
 
     if (data.newPrice !== undefined && data.priceMode) {
-      if (data.priceMode === 'immediate') {
+      if (data.priceMode === "immediate") {
         // Change price immediately for all stock
         productUpdate.price = data.newPrice;
         productUpdate.pendingPrice = null;
         productUpdate.pendingPriceThreshold = null;
-      } else if (data.priceMode === 'deferred') {
+      } else if (data.priceMode === "deferred") {
         // Apply new price after old stock is sold (when stock drops to new arrival qty)
         productUpdate.pendingPrice = data.newPrice;
         productUpdate.pendingPriceThreshold = data.quantity;
@@ -452,10 +518,14 @@ function setupInventoryHandlers(): void {
 
     // Update production/expiry dates if provided
     if (data.productionDate !== undefined) {
-      productUpdate.productionDate = data.productionDate ? new Date(data.productionDate) : null;
+      productUpdate.productionDate = data.productionDate
+        ? new Date(data.productionDate)
+        : null;
     }
     if (data.expiryDate !== undefined) {
-      productUpdate.expiryDate = data.expiryDate ? new Date(data.expiryDate) : null;
+      productUpdate.expiryDate = data.expiryDate
+        ? new Date(data.expiryDate)
+        : null;
     }
 
     await prisma.product.update({
@@ -465,34 +535,41 @@ function setupInventoryHandlers(): void {
 
     // If supplier is specified, create a supplier transaction (PURCHASE type)
     if (data.supplierId && data.createdBy) {
-      const balanceChange = -Math.abs(totalCost); // PURCHASE = negative (we owe more)
+      const paymentMethod = data.paymentMethod || "CASH";
+      // Immediate payment methods don't create debt; only credit-based methods affect balance
+      const isImmediatePayment = ["CASH", "CARD", "BANK_TRANSFER"].includes(
+        paymentMethod,
+      );
+      const balanceChange = isImmediatePayment ? 0 : -Math.abs(totalCost);
 
       await prisma.supplierTransaction.create({
         data: {
           supplierId: data.supplierId,
-          type: 'PURCHASE',
-          paymentMethod: data.paymentMethod || 'INSTALLMENT', // Default to installment (credit)
+          type: "PURCHASE",
+          paymentMethod,
           amount: balanceChange,
           description: data.notes || null,
           referenceId: arrival.id,
-          referenceType: 'INVENTORY_ARRIVAL',
+          referenceType: "INVENTORY_ARRIVAL",
           createdBy: data.createdBy,
         },
       });
 
-      // Update supplier balance
-      await prisma.supplier.update({
-        where: { id: data.supplierId },
-        data: {
-          balance: { increment: balanceChange },
-        },
-      });
+      // Only update balance for credit-based purchases (INSTALLMENT, ONE_TO_ONE)
+      if (!isImmediatePayment) {
+        await prisma.supplier.update({
+          where: { id: data.supplierId },
+          data: {
+            balance: { increment: balanceChange },
+          },
+        });
+      }
     }
 
     return ipcSafe(arrival);
   });
 
-  ipcMain.handle('inventory:getArrivals', async (_event, filters) => {
+  ipcMain.handle("inventory:getArrivals", async (_event, filters) => {
     const prisma = getPrismaClient();
 
     const where: Record<string, unknown> = {};
@@ -506,13 +583,13 @@ function setupInventoryHandlers(): void {
         product: true,
         supplier: true,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       take: 100,
     });
     return ipcSafe(arrivals);
   });
 
-  ipcMain.handle('inventory:getLowStock', async () => {
+  ipcMain.handle("inventory:getLowStock", async () => {
     const prisma = getPrismaClient();
     // Fetch products where stock <= minStock using raw query for column comparison
     const products = await prisma.$queryRaw`
@@ -527,7 +604,7 @@ function setupInventoryHandlers(): void {
 }
 
 function setupSettingsHandlers(): void {
-  ipcMain.handle('settings:get', async (_event, key: string) => {
+  ipcMain.handle("settings:get", async (_event, key: string) => {
     const prisma = getPrismaClient();
     const setting = await prisma.systemSetting.findUnique({
       where: { key },
@@ -535,19 +612,19 @@ function setupSettingsHandlers(): void {
     return setting?.value || null;
   });
 
-  ipcMain.handle('settings:set', async (_event, key: string, value: string) => {
+  ipcMain.handle("settings:set", async (_event, key: string, value: string) => {
     const prisma = getPrismaClient();
     await prisma.systemSetting.upsert({
       where: { key },
       update: { value },
       create: { key, value },
     });
-    if (key === 'printer_name') {
+    if (key === "printer_name") {
       setPrinterConfig({ name: value });
     }
   });
 
-  ipcMain.handle('settings:getAll', async () => {
+  ipcMain.handle("settings:getAll", async () => {
     const prisma = getPrismaClient();
     const settings = await prisma.systemSetting.findMany();
     const result: Record<string, string> = {};
@@ -559,7 +636,7 @@ function setupSettingsHandlers(): void {
 
   // Load saved printer name on startup
   getPrismaClient()
-    .systemSetting.findUnique({ where: { key: 'printer_name' } })
+    .systemSetting.findUnique({ where: { key: "printer_name" } })
     .then((setting: { value: string } | null) => {
       if (setting?.value) {
         setPrinterConfig({ name: setting.value });
@@ -571,259 +648,174 @@ function setupSettingsHandlers(): void {
 function setupAppHandlers(): void {
   const config = getAppConfig();
 
-  ipcMain.handle('app:getVersion', () => {
+  ipcMain.handle("app:getVersion", () => {
     return app.getVersion();
   });
 
-  ipcMain.handle('app:getTerminalId', () => {
+  ipcMain.handle("app:getTerminalId", () => {
     return config.terminalId;
   });
 
-  ipcMain.handle('app:getStoreInfo', () => {
+  ipcMain.handle("app:getStoreInfo", () => {
     return {
       storeId: config.storeId,
       storeName: config.storeName,
     };
   });
 
-  ipcMain.handle('app:quit', () => {
+  ipcMain.handle("app:quit", () => {
     app.quit();
   });
 }
 
 function setupReceiptHandlers(): void {
-  ipcMain.handle('receipt:scan', async (_event, imageBase64: string, mimeType: string) => {
-    const prisma = getPrismaClient();
-    const config = getAppConfig();
+  ipcMain.handle(
+    "receipt:scan",
+    async (_event, imageBase64: string, mimeType: string) => {
+      const prisma = getPrismaClient();
+      const config = getAppConfig();
 
-    // Check daily token limit
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    const [limitSetting, tokensDateSetting, tokensUsedSetting] = await Promise.all([
-      prisma.systemSetting.findUnique({ where: { key: 'ai_token_limit_daily' } }),
-      prisma.systemSetting.findUnique({ where: { key: 'ai_tokens_date' } }),
-      prisma.systemSetting.findUnique({ where: { key: 'ai_tokens_used' } }),
-    ]);
-    const dailyLimit = parseInt(limitSetting?.value || '100000', 10);
-    const tokensUsedToday =
-      tokensDateSetting?.value === today
-        ? parseInt(tokensUsedSetting?.value || '0', 10)
-        : 0;
-    if (tokensUsedToday >= dailyLimit) {
-      throw new Error('AI_TOKEN_LIMIT_EXCEEDED');
-    }
+      // Delegate scanning to the NestJS server (API key is managed server-side)
+      // Use the server-issued token (obtained during login); local token won't work server-side
+      const token = getServerToken();
+      if (!token) {
+        throw new Error("NOT_AUTHENTICATED");
+      }
 
-    // Delegate scanning to the NestJS server
-    const token = await getAuthToken();
-    if (!token) {
-      throw new Error('NOT_AUTHENTICATED');
-    }
-
-    const response = await fetch(`${config.vpsApiUrl}/invoice/scan`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ imageBase64, mimeType }),
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error('Invoice scan API error:', response.status, errorBody);
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const result = await response.json() as {
-      supplierName: string | null;
-      receiptDate: string | null;
-      items: unknown[];
-      tier: string;
-      cost_usd?: number;
-    };
-
-    if (result.cost_usd && result.cost_usd > 0) {
-      const thisMonth = today.slice(0, 7); // YYYY-MM
-
-      // Keep real token-equivalent for daily rate limiting (approximate: $3/1M input rate)
-      const approxTokens = Math.round(result.cost_usd / (3.0 / 1_000_000));
-      const newTokenTotal = tokensUsedToday + approxTokens;
-      await prisma.systemSetting.upsert({
-        where: { key: 'ai_tokens_date' },
-        update: { value: today },
-        create: { key: 'ai_tokens_date', value: today },
-      });
-      await prisma.systemSetting.upsert({
-        where: { key: 'ai_tokens_used' },
-        update: { value: String(newTokenTotal) },
-        create: { key: 'ai_tokens_used', value: String(newTokenTotal) },
+      const response = await fetch(`${config.vpsApiUrl}/invoice/scan`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ imageBase64, mimeType }),
       });
 
-      // Billed cost = actual cost × 1.3 (30% margin), accumulated monthly
-      const billedCost = result.cost_usd * 1.3;
-      const [scanMonthSetting, scanCountSetting, costSetting] = await Promise.all([
-        prisma.systemSetting.findUnique({ where: { key: 'ai_scans_month' } }),
-        prisma.systemSetting.findUnique({ where: { key: 'ai_scans_count' } }),
-        prisma.systemSetting.findUnique({ where: { key: 'ai_cost_usd' } }),
-      ]);
-      const sameMonth = scanMonthSetting?.value === thisMonth;
-      const currentScans = sameMonth ? parseInt(scanCountSetting?.value || '0', 10) : 0;
-      const currentCost  = sameMonth ? parseFloat(costSetting?.value || '0') : 0;
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error("Invoice scan API error:", response.status, errorBody);
+        throw new Error(`API error: ${response.status}`);
+      }
 
-      await prisma.systemSetting.upsert({
-        where: { key: 'ai_scans_month' },
-        update: { value: thisMonth },
-        create: { key: 'ai_scans_month', value: thisMonth },
-      });
-      await prisma.systemSetting.upsert({
-        where: { key: 'ai_scans_count' },
-        update: { value: String(currentScans + 1) },
-        create: { key: 'ai_scans_count', value: String(currentScans + 1) },
-      });
-      await prisma.systemSetting.upsert({
-        where: { key: 'ai_cost_usd' },
-        update: { value: String(currentCost + billedCost) },
-        create: { key: 'ai_cost_usd', value: String(currentCost + billedCost) },
-      });
-    }
+      const result = (await response.json()) as {
+        supplierName: string | null;
+        receiptDate: string | null;
+        items: unknown[];
+        tier: string;
+        cost_usd?: number;
+        balance_usd?: number;
+      };
 
-    return ipcSafe(result);
-  });
+      // Cache updated balance locally if server returned it
+      if (typeof result.balance_usd === "number") {
+        await prisma.systemSetting.upsert({
+          where: { key: "ai_balance_usd" },
+          update: { value: String(result.balance_usd) },
+          create: { key: "ai_balance_usd", value: String(result.balance_usd) },
+        });
+      }
 
-  ipcMain.handle('receipt:getTokenUsage', async () => {
-    const prisma = getPrismaClient();
-    const today = new Date().toISOString().split('T')[0];
-    const [limitSetting, tokensDateSetting, tokensUsedSetting] = await Promise.all([
-      prisma.systemSetting.findUnique({ where: { key: 'ai_token_limit_daily' } }),
-      prisma.systemSetting.findUnique({ where: { key: 'ai_tokens_date' } }),
-      prisma.systemSetting.findUnique({ where: { key: 'ai_tokens_used' } }),
-    ]);
-    const limit = parseInt(limitSetting?.value || '100000', 10);
-    const used =
-      tokensDateSetting?.value === today
-        ? parseInt(tokensUsedSetting?.value || '0', 10)
-        : 0;
-    return { used, limit, date: today };
-  });
+      return ipcSafe(result);
+    },
+  );
 
-  // Fetches the store plan from the server and caches it locally
-  ipcMain.handle('receipt:getPlan', async () => {
+  // Fetches the store plan + credit balance from the server and caches locally
+  ipcMain.handle("receipt:getPlan", async () => {
     const prisma = getPrismaClient();
     const config = getAppConfig();
     try {
-      const token = await getAuthToken();
-      if (!token) return { plan: 'free' };
+      const token = getServerToken();
+      if (!token) return { plan: "free", balance_usd: null };
 
       const response = await fetch(`${config.vpsApiUrl}/invoice/plan`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      const data = (await response.json()) as { plan: string };
+      const data = (await response.json()) as {
+        plan: string;
+        balance_usd: number | null;
+      };
       // Cache locally so the UI shows it even offline
       await prisma.systemSetting.upsert({
-        where: { key: 'ai_plan' },
+        where: { key: "ai_plan" },
         update: { value: data.plan },
-        create: { key: 'ai_plan', value: data.plan },
+        create: { key: "ai_plan", value: data.plan },
       });
+      if (typeof data.balance_usd === "number") {
+        await prisma.systemSetting.upsert({
+          where: { key: "ai_balance_usd" },
+          update: { value: String(data.balance_usd) },
+          create: { key: "ai_balance_usd", value: String(data.balance_usd) },
+        });
+      }
       return data;
     } catch {
-      // Fallback to cached value
-      const cached = await prisma.systemSetting.findUnique({ where: { key: 'ai_plan' } });
-      return { plan: cached?.value ?? 'free' };
+      // Fallback to cached values
+      const [planSetting, balanceSetting] = await Promise.all([
+        prisma.systemSetting.findUnique({ where: { key: "ai_plan" } }),
+        prisma.systemSetting.findUnique({ where: { key: "ai_balance_usd" } }),
+      ]);
+      return {
+        plan: planSetting?.value ?? "free",
+        balance_usd: balanceSetting ? parseFloat(balanceSetting.value) : null,
+      };
     }
   });
 
-  // Returns monthly scan count and billed cost (actual Anthropic cost × 1.3) for the paid plan UI
-  ipcMain.handle('receipt:getScanUsage', async () => {
+  // Returns the cached credit balance for the pro plan UI
+  ipcMain.handle("receipt:getScanUsage", async () => {
     const prisma = getPrismaClient();
-    const thisMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
-    const [scanMonthSetting, scanCountSetting, costSetting] = await Promise.all([
-      prisma.systemSetting.findUnique({ where: { key: 'ai_scans_month' } }),
-      prisma.systemSetting.findUnique({ where: { key: 'ai_scans_count' } }),
-      prisma.systemSetting.findUnique({ where: { key: 'ai_cost_usd' } }),
-    ]);
-    const sameMonth = scanMonthSetting?.value === thisMonth;
-    const scans   = sameMonth ? parseInt(scanCountSetting?.value || '0', 10) : 0;
-    const costUsd = sameMonth ? parseFloat(costSetting?.value || '0') : 0;
-    return { scans, costUsd: Math.round(costUsd * 10000) / 10000, month: thisMonth };
+    const balanceSetting = await prisma.systemSetting.findUnique({
+      where: { key: "ai_balance_usd" },
+    });
+    const balance_usd = balanceSetting
+      ? parseFloat(balanceSetting.value)
+      : null;
+    return { balance_usd };
   });
 
-  ipcMain.handle('receipt:matchProducts', async (
-    _event,
-    items: { name: string; mxik?: string | null }[],
-  ) => {
-    const prisma = getPrismaClient();
-    const matches = [];
+  ipcMain.handle(
+    "receipt:matchProducts",
+    async (_event, items: { name: string; mxik?: string | null }[]) => {
+      const prisma = getPrismaClient();
+      const matches = [];
 
-    for (const item of items) {
-      const name = item.name;
-      const mxik = item.mxik?.trim() || null;
-      const nameLower = name.toLowerCase().trim();
-      const transliterated = convertUzbekText(nameLower);
+      for (const item of items) {
+        const name = item.name;
+        const mxik = item.mxik?.trim() || null;
+        const nameLower = name.toLowerCase().trim();
+        const transliterated = convertUzbekText(nameLower);
 
-      type ProductRow = { id: string; name_ru: string; name_uz: string };
+        type ProductRow = { id: string; name_ru: string; name_uz: string };
 
-      // ── 1. MXIK exact match (highest confidence) ─────────────────────────
-      if (mxik) {
-        const byMxik = await prisma.$queryRawUnsafe(
-          `SELECT id, name_ru, name_uz FROM products WHERE active = 1 AND mxik = ? LIMIT 1`,
-          mxik,
-        ) as ProductRow[];
+        // ── 1. MXIK exact match (highest confidence) ─────────────────────────
+        if (mxik) {
+          const byMxik = (await prisma.$queryRawUnsafe(
+            `SELECT id, name_ru, name_uz FROM products WHERE active = 1 AND mxik = ? LIMIT 1`,
+            mxik,
+          )) as ProductRow[];
 
-        if (byMxik.length > 0) {
-          matches.push({
-            scannedName: name,
-            matchedProductId: String(byMxik[0].id),
-            matchedProductNameRu: byMxik[0].name_ru,
-            matchedProductNameUz: byMxik[0].name_uz,
-            confidence: 'exact' as const,
-          });
-          continue;
+          if (byMxik.length > 0) {
+            matches.push({
+              scannedName: name,
+              matchedProductId: String(byMxik[0].id),
+              matchedProductNameRu: byMxik[0].name_ru,
+              matchedProductNameUz: byMxik[0].name_uz,
+              confidence: "exact" as const,
+            });
+            continue;
+          }
         }
-      }
 
-      // ── 2. Name exact match ───────────────────────────────────────────────
-      let products = await prisma.$queryRawUnsafe(
-        `SELECT id, name_ru, name_uz FROM products WHERE active = 1 AND (LOWER(name_ru) = ? OR LOWER(name_uz) = ? OR LOWER(name_ru) = ? OR LOWER(name_uz) = ?) LIMIT 1`,
-        nameLower, nameLower, transliterated, transliterated,
-      ) as ProductRow[];
-
-      if (products.length > 0) {
-        matches.push({
-          scannedName: name,
-          matchedProductId: String(products[0].id),
-          matchedProductNameRu: products[0].name_ru,
-          matchedProductNameUz: products[0].name_uz,
-          confidence: 'high' as const,
-        });
-        continue;
-      }
-
-      // ── 3. Name substring match ───────────────────────────────────────────
-      products = await prisma.$queryRawUnsafe(
-        `SELECT id, name_ru, name_uz FROM products WHERE active = 1 AND (LOWER(name_ru) LIKE ? OR LOWER(name_uz) LIKE ? OR LOWER(name_ru) LIKE ? OR LOWER(name_uz) LIKE ?) LIMIT 1`,
-        `%${nameLower}%`, `%${nameLower}%`, `%${transliterated}%`, `%${transliterated}%`,
-      ) as ProductRow[];
-
-      if (products.length > 0) {
-        matches.push({
-          scannedName: name,
-          matchedProductId: String(products[0].id),
-          matchedProductNameRu: products[0].name_ru,
-          matchedProductNameUz: products[0].name_uz,
-          confidence: 'medium' as const,
-        });
-        continue;
-      }
-
-      // ── 4. First-word partial match ───────────────────────────────────────
-      const firstWord = nameLower.split(/\s+/)[0];
-      const firstWordTranslit = convertUzbekText(firstWord);
-      if (firstWord.length >= 3) {
-        products = await prisma.$queryRawUnsafe(
-          `SELECT id, name_ru, name_uz FROM products WHERE active = 1 AND (LOWER(name_ru) LIKE ? OR LOWER(name_uz) LIKE ? OR LOWER(name_ru) LIKE ? OR LOWER(name_uz) LIKE ?) LIMIT 1`,
-          `%${firstWord}%`, `%${firstWord}%`, `%${firstWordTranslit}%`, `%${firstWordTranslit}%`,
-        ) as ProductRow[];
+        // ── 2. Name exact match ───────────────────────────────────────────────
+        let products = (await prisma.$queryRawUnsafe(
+          `SELECT id, name_ru, name_uz FROM products WHERE active = 1 AND (LOWER(name_ru) = ? OR LOWER(name_uz) = ? OR LOWER(name_ru) = ? OR LOWER(name_uz) = ?) LIMIT 1`,
+          nameLower,
+          nameLower,
+          transliterated,
+          transliterated,
+        )) as ProductRow[];
 
         if (products.length > 0) {
           matches.push({
@@ -831,22 +823,66 @@ function setupReceiptHandlers(): void {
             matchedProductId: String(products[0].id),
             matchedProductNameRu: products[0].name_ru,
             matchedProductNameUz: products[0].name_uz,
-            confidence: 'low' as const,
+            confidence: "high" as const,
           });
           continue;
         }
+
+        // ── 3. Name substring match ───────────────────────────────────────────
+        products = (await prisma.$queryRawUnsafe(
+          `SELECT id, name_ru, name_uz FROM products WHERE active = 1 AND (LOWER(name_ru) LIKE ? OR LOWER(name_uz) LIKE ? OR LOWER(name_ru) LIKE ? OR LOWER(name_uz) LIKE ?) LIMIT 1`,
+          `%${nameLower}%`,
+          `%${nameLower}%`,
+          `%${transliterated}%`,
+          `%${transliterated}%`,
+        )) as ProductRow[];
+
+        if (products.length > 0) {
+          matches.push({
+            scannedName: name,
+            matchedProductId: String(products[0].id),
+            matchedProductNameRu: products[0].name_ru,
+            matchedProductNameUz: products[0].name_uz,
+            confidence: "medium" as const,
+          });
+          continue;
+        }
+
+        // ── 4. First-word partial match ───────────────────────────────────────
+        const firstWord = nameLower.split(/\s+/)[0];
+        const firstWordTranslit = convertUzbekText(firstWord);
+        if (firstWord.length >= 3) {
+          products = (await prisma.$queryRawUnsafe(
+            `SELECT id, name_ru, name_uz FROM products WHERE active = 1 AND (LOWER(name_ru) LIKE ? OR LOWER(name_uz) LIKE ? OR LOWER(name_ru) LIKE ? OR LOWER(name_uz) LIKE ?) LIMIT 1`,
+            `%${firstWord}%`,
+            `%${firstWord}%`,
+            `%${firstWordTranslit}%`,
+            `%${firstWordTranslit}%`,
+          )) as ProductRow[];
+
+          if (products.length > 0) {
+            matches.push({
+              scannedName: name,
+              matchedProductId: String(products[0].id),
+              matchedProductNameRu: products[0].name_ru,
+              matchedProductNameUz: products[0].name_uz,
+              confidence: "low" as const,
+            });
+            continue;
+          }
+        }
+
+        // ── 5. No match ───────────────────────────────────────────────────────
+        matches.push({
+          scannedName: name,
+          matchedProductId: null,
+          matchedProductNameRu: null,
+          matchedProductNameUz: null,
+          confidence: "none" as const,
+        });
       }
 
-      // ── 5. No match ───────────────────────────────────────────────────────
-      matches.push({
-        scannedName: name,
-        matchedProductId: null,
-        matchedProductNameRu: null,
-        matchedProductNameUz: null,
-        confidence: 'none' as const,
-      });
-    }
-
-    return ipcSafe(matches);
-  });
+      return ipcSafe(matches);
+    },
+  );
 }

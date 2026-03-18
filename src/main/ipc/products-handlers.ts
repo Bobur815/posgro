@@ -37,7 +37,7 @@ function serializeProduct(product: any): Product | null {
     nameRu: String(product.nameRu || ''),
     nameUz: String(product.nameUz || ''),
     price: toNumber(product.price),
-    costPrice: toNumberOrUndefined(product.cost),
+    cost: toNumberOrUndefined(product.cost),
     stock: toNumber(product.stock),
     minStock: toNumber(product.minStock),
     unit: String(product.unit || 'шт') as Product['unit'],
@@ -512,7 +512,7 @@ export function setupProductsHandlers(): void {
       },
       inventory: {
         currentStock,
-        costPrice,
+        cost: costPrice,
         inventoryValue,
       },
     });

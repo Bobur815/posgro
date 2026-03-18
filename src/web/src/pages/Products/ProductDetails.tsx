@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { getExpireInDays, getExpiryDays } from "../../utils/helpers";
 import { formatDate as formatDateUtil } from "../../utils/formatters";
+import { ProductForm } from "./ProductForm";
 
 const Container = styled.div`
   min-width: 0;
@@ -71,7 +72,7 @@ const Card = styled.div`
 const CardTitle = styled.h2`
   margin: 0 0 ${({ theme }) => theme.spacing.md};
   color: ${({ theme }) => theme.colors.text};
-  font-size: 18px;
+  font-size: 24px;
   display: flex;
   align-items: center;
   gap: ${({ theme }) => theme.spacing.sm};
@@ -90,13 +91,13 @@ const InfoRow = styled.div`
 
 const InfoLabel = styled.span`
   color: ${({ theme }) => theme.colors.textSecondary};
-  font-size: 14px;
+  font-size: 24px;
 `;
 
 const InfoValue = styled.span`
   color: ${({ theme }) => theme.colors.text};
   font-weight: 500;
-  font-size: 14px;
+  font-size: 24px;
 `;
 
 const ProfitBadge = styled.span<{ $positive?: boolean }>`
@@ -106,7 +107,7 @@ const ProfitBadge = styled.span<{ $positive?: boolean }>`
     $positive ? theme.colors.success : theme.colors.error};
   padding: 2px 8px;
   border-radius: 12px;
-  font-size: 13px;
+  font-size: 24px;
   font-weight: 600;
 `;
 
@@ -119,7 +120,6 @@ const DateRangeRow = styled.div`
   gap: ${({ theme }) => theme.spacing.md};
   align-items: flex-end;
   margin-bottom: ${({ theme }) => theme.spacing.md};
-  flex-wrap: wrap;
 `;
 
 const StatsGrid = styled.div`
@@ -140,13 +140,13 @@ const StatCard = styled.div`
 `;
 
 const StatValue = styled.div`
-  font-size: 20px;
+  font-size: 24px;
   font-weight: bold;
   color: ${({ theme }) => theme.colors.primary};
 `;
 
 const StatLabel = styled.div`
-  font-size: 13px;
+  font-size: 16px;
   color: ${({ theme }) => theme.colors.textSecondary};
   margin-top: ${({ theme }) => theme.spacing.xs};
 `;
@@ -175,7 +175,7 @@ interface ProductAnalytics {
   };
   inventory: {
     currentStock: number;
-    costPrice: number;
+    cost: number;
     inventoryValue: number;
   };
 }
@@ -188,6 +188,7 @@ export function ProductDetails() {
   const { getById, deleteProduct, isLoading } = useProducts();
 
   const [product, setProduct] = useState<Product | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [analytics, setAnalytics] = useState<ProductAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [startDate, setStartDate] = useState(() => {
@@ -244,7 +245,8 @@ export function ProductDetails() {
     }
   };
 
-  const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
+  const formatCurrency = (amount: number) =>
+    formatCurrencyBase(amount, i18n.language as "ru" | "uz");
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "-";
@@ -271,9 +273,9 @@ export function ProductDetails() {
   };
 
   const getProfitMarginFromPrice = () => {
-    if (!product || !product.costPrice || product.costPrice === 0) return null;
+    if (!product || !product.cost || product.cost === 0) return null;
     const margin =
-      ((product.price - product.costPrice) / product.costPrice) * 100;
+      ((product.price - product.cost) / product.cost) * 100;
     return Math.round(margin * 100) / 100;
   };
 
@@ -282,8 +284,11 @@ export function ProductDetails() {
   }
 
   const profitMargin = getProfitMarginFromPrice();
-  const expiryDays = getExpiryDays(t, product?.productionDate, product?.expiryDate);
-
+  const expiryDays = getExpiryDays(
+    t,
+    product?.productionDate,
+    product?.expiryDate,
+  );
   return (
     <Container>
       <Header>
@@ -300,25 +305,28 @@ export function ProductDetails() {
         {isAdmin && (
           <Actions>
             <Button
+              style={{ fontSize: "22px" }}
               variant="secondary"
-              onClick={() => navigate(`/products/${id}/edit`)}
+              onClick={() => setShowEditModal(true)}
             >
-              <Edit size={18} /> {t("common.edit")}
+              <Edit size={22} /> {t("common.edit")}
             </Button>
             <Button
+              style={{ fontSize: "22px" }}
               variant="danger"
               onClick={handleDelete}
             >
-              <Trash size={18} /> {t("common.delete")}
+              <Trash size={22} /> {t("common.delete")}
             </Button>
           </Actions>
         )}
       </Header>
 
       <Grid>
+        {/* Basic Info */}
         <Card>
           <CardTitle>
-            <Package size={20} /> {t("products.product")}
+            <Package size={24} /> {t("products.product")}
           </CardTitle>
           <InfoRow>
             <InfoLabel>{t("products.barcode")}</InfoLabel>
@@ -359,9 +367,10 @@ export function ProductDetails() {
           </InfoRow>
         </Card>
 
+        {/* Pricing (Admin only shows cost) */}
         <Card>
           <CardTitle>
-            <DollarSign size={20} /> {t("products.price")}
+            <DollarSign size={24} /> {t("products.price")}
           </CardTitle>
           <InfoRow>
             <InfoLabel>{t("products.price")}</InfoLabel>
@@ -372,7 +381,7 @@ export function ProductDetails() {
               <InfoRow>
                 <InfoLabel>{t("products.cost")}</InfoLabel>
                 <InfoValue>
-                  {product.costPrice ? formatCurrency(product.costPrice) : "-"}
+                  {product.cost ? formatCurrency(product.cost) : "-"}
                 </InfoValue>
               </InfoRow>
               {profitMargin !== null && (
@@ -389,8 +398,8 @@ export function ProductDetails() {
               <InfoRow>
                 <InfoLabel>{t("products.inventoryValue")}</InfoLabel>
                 <InfoValue>
-                  {product.costPrice
-                    ? formatCurrency(product.stock * product.costPrice)
+                  {product.cost
+                    ? formatCurrency(product.stock * product.cost)
                     : "-"}
                 </InfoValue>
               </InfoRow>
@@ -408,9 +417,10 @@ export function ProductDetails() {
           </InfoRow>
         </Card>
 
+        {/* Expiration Dates */}
         <Card>
           <CardTitle>
-            <Calendar size={20} /> {t("products.expiryDate")}
+            <Calendar size={24} /> {t("products.expiryDate")}
           </CardTitle>
           <InfoRow>
             <InfoLabel>{t("products.productionDate")}</InfoLabel>
@@ -424,10 +434,14 @@ export function ProductDetails() {
             <InfoLabel>{t("products.expiryDays")}</InfoLabel>
             <InfoValue>{expiryDays}</InfoValue>
           </InfoRow>
+
           <InfoRow>
             <InfoLabel>{t("products.expireInDays")}</InfoLabel>
-            <InfoValue>{getExpireInDays(t, expiryDays, product?.expiryDate)}</InfoValue>
+            <InfoValue>
+              {getExpireInDays(t, expiryDays, product?.expiryDate)}
+            </InfoValue>
           </InfoRow>
+
           <InfoRow>
             <InfoLabel>{t("common.createdAt")}</InfoLabel>
             <InfoValue>{formatDate(product.createdAt)}</InfoValue>
@@ -438,9 +452,10 @@ export function ProductDetails() {
           </InfoRow>
         </Card>
 
+        {/* Supplier Info */}
         <Card>
           <CardTitle>
-            <Package size={20} /> {t("products.supplier")}
+            <Package size={24} /> {t("products.supplier")}
           </CardTitle>
           {product.supplier ? (
             <>
@@ -464,26 +479,29 @@ export function ProductDetails() {
           )}
         </Card>
 
+        {/* Analytics (Admin only) */}
         {isAdmin && (
           <AnalyticsSection>
             <Card>
               <CardTitle>
-                <TrendingUp size={20} /> {t("products.salesAnalytics")}
+                <TrendingUp size={24} /> {t("products.salesAnalytics")}
               </CardTitle>
 
               <DateRangeRow>
                 <DateInput
+                  style={{ padding: "11px 12px", fontSize: "22px" }}
                   label={t("reports.startDate")}
                   value={startDate}
                   onChange={(val) => setStartDate(val)}
                 />
                 <DateInput
+                  style={{ padding: "11px 12px", fontSize: "22px" }}
                   label={t("reports.endDate")}
                   value={endDate}
                   onChange={(val) => setEndDate(val)}
                 />
                 <Button onClick={loadAnalytics} disabled={analyticsLoading}>
-                  <RefreshCcw size={18} /> {t("common.refresh")}
+                  <RefreshCcw size={24} /> {t("common.refresh")}
                 </Button>
               </DateRangeRow>
 
@@ -541,6 +559,17 @@ export function ProductDetails() {
           </AnalyticsSection>
         )}
       </Grid>
+
+      {showEditModal && id && (
+        <ProductForm
+          productId={id}
+          onClose={() => setShowEditModal(false)}
+          onSuccess={() => {
+            setShowEditModal(false);
+            loadProduct();
+          }}
+        />
+      )}
     </Container>
   );
 }

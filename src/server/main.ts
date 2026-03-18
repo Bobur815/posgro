@@ -41,7 +41,7 @@ async function bootstrap() {
 
   // Swagger configuration
   const config = new DocumentBuilder()
-    .setTitle('Grocery POS API')
+    .setTitle('Yangi Asr API')
     .setDescription('API for Grocery Store POS System - Sales, Products, Inventory, Users')
     .setVersion('1.0')
     .addBearerAuth(
@@ -65,6 +65,12 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
+
+  // Health check endpoint (used by Docker/load balancer)
+  const httpAdapter = app.getHttpAdapter();
+  httpAdapter.get('/api/health', (_req: any, res: any) => {
+    res.json({ status: 'ok' });
+  });
 
   // SPA fallback: /web/* routes that don't match a static file → index.html
   const webIndex = join(webDistPath, 'index.html');

@@ -35,6 +35,8 @@ const Header = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: ${({ theme }) => theme.spacing.md};
+  flex-wrap: wrap;
 `;
 
 const SearchRow = styled.div`
@@ -235,7 +237,11 @@ export function StockManagement() {
     formatCurrencyBase(amount, i18n.language as "ru" | "uz");
 
   const columns = [
-    { key: "#", header: "#", render: (_: Product, index: number) => pageOffset + index + 1 },
+    {
+      key: "#",
+      header: "#",
+      render: (_: Product, index: number) => pageOffset + index + 1,
+    },
     { key: "id", header: t("pos.id") },
     { key: "barcode", header: t("products.barcode") },
     {
@@ -245,10 +251,10 @@ export function StockManagement() {
         i18n.language === "uz" ? product.nameUz : product.nameRu,
     },
     {
-      key: "costPrice",
+      key: "cost",
       header: t("products.cost"),
       render: (product: Product) =>
-        product.costPrice ? formatCurrency(product.costPrice) : "—",
+        product.cost ? formatCurrency(product.cost) : "—",
     },
     {
       key: "price",

@@ -1,18 +1,14 @@
 // Supplier Transaction Types
 
+import type { SupplierPaymentMethod } from '../constants/payment-methods';
+export type { SupplierPaymentMethod };
+
 export type SupplierTransactionType =
   | 'PURCHASE'    // We received goods (increases our debt)
   | 'PAYMENT'     // We paid supplier (decreases our debt)
   | 'RETURN'      // We returned goods (decreases our debt)
   | 'ADVANCE'     // We paid in advance (supplier owes us)
   | 'ADJUSTMENT'; // Manual balance correction
-
-export type SupplierPaymentMethod =
-  | 'CASH'
-  | 'CARD'
-  | 'BANK_TRANSFER'
-  | 'INSTALLMENT'
-  | 'ONE_TO_ONE';  // Previous debt cleared against new purchase
 
 export interface Supplier {
   id: string;

@@ -63,6 +63,7 @@ export class AnalyticsService {
     const productSales: Record<number, { name: string; quantity: number; revenue: number }> = {};
     for (const sale of sales) {
       for (const item of sale.items) {
+        if (item.productId == null) continue;
         if (!productSales[item.productId]) {
           productSales[item.productId] = { name: item.productName, quantity: 0, revenue: 0 };
         }
@@ -132,6 +133,135 @@ export class AnalyticsService {
     };
   }
 
+  async getAnalyticsData(storeId: string, startDate: Date, endDate: Date) {
+    const [
+      salesTrendRaw,
+      salesByCategoryRaw,
+      hourlyDistributionRaw,
+      topProductsRaw,
+      cashierPerformanceRaw,
+      profitMarginsRaw,
+      summaryRaw,
+    ] = await Promise.all([
+      this.prisma.$queryRaw<{ date: string; revenue: number; count: number }[]>`
+        SELECT
+          DATE(created_at)::text AS date,
+          SUM(final_amount)::float AS revenue,
+          COUNT(*)::int AS count
+        FROM sales
+        WHERE store_id = ${storeId}
+          AND created_at >= ${startDate}
+          AND created_at <= ${endDate}
+        GROUP BY DATE(created_at)
+        ORDER BY DATE(created_at)
+      `,
+      this.prisma.$queryRaw<{ categoryRu: string; categoryUz: string; revenue: number; quantity: number }[]>`
+        SELECT
+          COALESCE(c.name_ru, 'Uncategorized') AS "categoryRu",
+          COALESCE(c.name_uz, 'Uncategorized') AS "categoryUz",
+          SUM(si.subtotal)::float AS revenue,
+          SUM(si.quantity)::float AS quantity
+        FROM sale_items si
+        JOIN sales s ON si.sale_id = s.id
+        LEFT JOIN products p ON si.product_id = p.id
+        LEFT JOIN categories c ON p.category_id = c.id
+        WHERE s.store_id = ${storeId}
+          AND s.created_at >= ${startDate}
+          AND s.created_at <= ${endDate}
+        GROUP BY c.name_ru, c.name_uz
+        ORDER BY revenue DESC
+      `,
+      this.prisma.$queryRaw<{ hour: number; revenue: number; count: number }[]>`
+        SELECT
+          EXTRACT(HOUR FROM created_at)::int AS hour,
+          SUM(final_amount)::float AS revenue,
+          COUNT(*)::int AS count
+        FROM sales
+        WHERE store_id = ${storeId}
+          AND created_at >= ${startDate}
+          AND created_at <= ${endDate}
+        GROUP BY EXTRACT(HOUR FROM created_at)
+        ORDER BY hour
+      `,
+      this.prisma.$queryRaw<{ name: string; quantity: number; revenue: number }[]>`
+        SELECT
+          si.product_name AS name,
+          SUM(si.quantity)::float AS quantity,
+          SUM(si.subtotal)::float AS revenue
+        FROM sale_items si
+        JOIN sales s ON si.sale_id = s.id
+        WHERE s.store_id = ${storeId}
+          AND s.created_at >= ${startDate}
+          AND s.created_at <= ${endDate}
+        GROUP BY si.product_id, si.product_name
+        ORDER BY revenue DESC
+        LIMIT 10
+      `,
+      this.prisma.$queryRaw<{ name: string; revenue: number; count: number }[]>`
+        SELECT
+          cashier_name AS name,
+          SUM(final_amount)::float AS revenue,
+          COUNT(*)::int AS count
+        FROM sales
+        WHERE store_id = ${storeId}
+          AND created_at >= ${startDate}
+          AND created_at <= ${endDate}
+        GROUP BY cashier_name
+        ORDER BY revenue DESC
+      `,
+      this.prisma.$queryRaw<{ categoryRu: string; categoryUz: string; revenue: number; cost: number }[]>`
+        SELECT
+          COALESCE(c.name_ru, 'Uncategorized') AS "categoryRu",
+          COALESCE(c.name_uz, 'Uncategorized') AS "categoryUz",
+          SUM(si.subtotal)::float AS revenue,
+          SUM(si.quantity * COALESCE(p.cost, 0))::float AS cost
+        FROM sale_items si
+        JOIN sales s ON si.sale_id = s.id
+        LEFT JOIN products p ON si.product_id = p.id
+        LEFT JOIN categories c ON p.category_id = c.id
+        WHERE s.store_id = ${storeId}
+          AND s.created_at >= ${startDate}
+          AND s.created_at <= ${endDate}
+        GROUP BY c.name_ru, c.name_uz
+        ORDER BY revenue DESC
+      `,
+      this.prisma.$queryRaw<{
+        totalSales: number;
+        totalRevenue: number;
+        cashSales: number;
+        cardSales: number;
+        averageTransaction: number;
+      }[]>`
+        SELECT
+          COUNT(*)::int AS "totalSales",
+          SUM(final_amount)::float AS "totalRevenue",
+          COUNT(*) FILTER (WHERE payment_method = 'CASH')::int AS "cashSales",
+          COUNT(*) FILTER (WHERE payment_method = 'CARD')::int AS "cardSales",
+          CASE WHEN COUNT(*) > 0 THEN (SUM(final_amount) / COUNT(*))::float ELSE 0 END AS "averageTransaction"
+        FROM sales
+        WHERE store_id = ${storeId}
+          AND created_at >= ${startDate}
+          AND created_at <= ${endDate}
+      `,
+    ]);
+
+    return {
+      salesTrend: salesTrendRaw,
+      salesByCategory: salesByCategoryRaw,
+      hourlyDistribution: hourlyDistributionRaw,
+      topProducts: topProductsRaw,
+      cashierPerformance: cashierPerformanceRaw,
+      profitMargins: profitMarginsRaw,
+      summary: summaryRaw[0] ?? {
+        totalSales: 0,
+        totalRevenue: 0,
+        cashSales: 0,
+        cardSales: 0,
+        averageTransaction: 0,
+      },
+    };
+  }
+
   async getProductPerformance(storeId: string, startDate: Date, endDate: Date) {
     const sales = await this.prisma.sale.findMany({
       where: {
@@ -151,6 +281,7 @@ export class AnalyticsService {
 
     for (const sale of sales) {
       for (const item of sale.items) {
+        if (item.productId == null) continue;
         if (!productStats[item.productId]) {
           productStats[item.productId] = {
             id: item.productId,

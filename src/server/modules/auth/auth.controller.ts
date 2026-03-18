@@ -39,6 +39,18 @@ export class AuthController {
     return { success: true };
   }
 
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Change current user password' })
+  async changePassword(
+    @CurrentUser() user: User & { storeId: string | null },
+    @Body() body: { currentPassword: string; newPassword: string },
+  ) {
+    return this.authService.changePassword(user.id, body.currentPassword, body.newPassword);
+  }
+
   @Get('profile')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')

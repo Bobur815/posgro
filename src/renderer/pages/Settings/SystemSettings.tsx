@@ -57,7 +57,8 @@ const PlanBadge = styled.span<{ $pro?: boolean }>`
   border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
-  background: ${({ $pro, theme }) => ($pro ? theme.colors.primary : theme.colors.border)};
+  background: ${({ $pro, theme }) =>
+    $pro ? theme.colors.primary : theme.colors.border};
   color: ${({ $pro, theme }) => ($pro ? "#fff" : theme.colors.textSecondary)};
   margin-left: 8px;
   vertical-align: middle;
@@ -111,11 +112,7 @@ export function SystemSettings() {
 
   const [plan, setPlan] = useState<string | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
-  const [scanUsage, setScanUsage] = useState<{
-    scans: number;
-    costUsd: number;
-    month: string;
-  } | null>(null);
+  const [balanceUsd, setBalanceUsd] = useState<number | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -169,11 +166,12 @@ export function SystemSettings() {
   const loadPlan = async () => {
     setPlanLoading(true);
     try {
-      const { plan: p } = await window.electronAPI.receipt.getPlan();
-      setPlan(p);
-      if (p === "paid") {
-        const usage = await window.electronAPI.receipt.getScanUsage();
-        setScanUsage(usage);
+      const data = await window.electronAPI.receipt.getPlan();
+      setPlan(data.plan);
+      if (data.plan === "paid") {
+        setBalanceUsd(
+          typeof data.balance_usd === "number" ? data.balance_usd : null,
+        );
       }
     } catch (error) {
       console.error("Failed to load plan:", error);
@@ -279,28 +277,17 @@ export function SystemSettings() {
           </PlanCard>
         )}
 
-        {plan === "paid" && scanUsage !== null && (
+        {plan === "paid" && (
           <PlanCard $pro>
-            <InfoText style={{ marginBottom: "12px", fontWeight: 500, color: "inherit" }}>
-              {t("aiSettings.proPlanNote")} —{" "}
-              {new Date(scanUsage.month + "-01").toLocaleDateString(undefined, {
-                month: "long",
-                year: "numeric",
-              })}
+            <StatRow>
+              <StatLabel>{t("aiSettings.creditBalance")}</StatLabel>
+              <StatValue>
+                {balanceUsd !== null ? `$${balanceUsd.toFixed(4)}` : "—"}
+              </StatValue>
+            </StatRow>
+            <InfoText style={{ marginTop: "8px", fontSize: 12, opacity: 0.7 }}>
+              {t("aiSettings.proPlanNote")}
             </InfoText>
-            <StatRow>
-              <StatLabel>{t("aiSettings.scansThisMonth")}</StatLabel>
-              <StatValue>{scanUsage.scans.toLocaleString()}</StatValue>
-            </StatRow>
-            <StatRow>
-              <StatLabel>
-                {t("aiSettings.estimatedCharge")}{" "}
-                <span style={{ fontSize: 11, opacity: 0.7 }}>
-                  ({t("aiSettings.pricePerScan")})
-                </span>
-              </StatLabel>
-              <StatValue>${scanUsage.costUsd.toFixed(2)}</StatValue>
-            </StatRow>
           </PlanCard>
         )}
 
@@ -310,7 +297,12 @@ export function SystemSettings() {
             disabled={planLoading}
             style={{ display: "flex", alignItems: "center", gap: "6px" }}
           >
-            <RefreshCw size={14} style={{ animation: planLoading ? "spin 1s linear infinite" : "none" }} />
+            <RefreshCw
+              size={14}
+              style={{
+                animation: planLoading ? "spin 1s linear infinite" : "none",
+              }}
+            />
             {t("aiSettings.refreshPlan")}
           </Button>
         </Actions>

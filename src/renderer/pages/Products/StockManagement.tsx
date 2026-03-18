@@ -247,10 +247,10 @@ export function StockManagement() {
         i18n.language === "uz" ? product.nameUz : product.nameRu,
     },
     {
-      key: "costPrice",
+      key: "cost",
       header: t("products.cost"),
       render: (product: Product) =>
-        product.costPrice ? formatCurrency(product.costPrice) : "—",
+        product.cost ? formatCurrency(product.cost) : "—",
     },
     {
       key: "price",

@@ -12,13 +12,28 @@ import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
 import { ProductFilters } from "../../components/products/ProductFilters";
 import { Product, ProductFilterParams } from "@shared/types";
-import { ChevronDown, ChevronUp, Circle, CirclePlus, Edit, Keyboard, ListIndentIncrease, Trash, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  CirclePlus,
+  Edit,
+  Keyboard,
+  ListIndentIncrease,
+  Trash,
+  X,
+} from "lucide-react";
 import { formatDate } from "../../utils/formatters";
-import { formatCurrency as formatCurrencyBase } from '@shared/utils';
+import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { debounce } from "../../utils/helpers";
 import { VirtualKeyboard } from "../../components/common/VirtualKeyboard";
-import { SearchInputWrapper, InputControls, ClearButton, KbToggle } from "../../components/common/SearchControls";
+import {
+  SearchInputWrapper,
+  InputControls,
+  ClearButton,
+  KbToggle,
+} from "../../components/common/SearchControls";
 import { ProductForm } from "./ProductForm";
+import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 
 const Container = styled.div`
   display: flex;
@@ -48,14 +63,30 @@ export function ProductList() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { products, categories, suppliers, loadProducts, loadCategories, loadSuppliers, isLoading } = useProducts();
+  const {
+    products,
+    categories,
+    suppliers,
+    loadProducts,
+    loadCategories,
+    loadSuppliers,
+    deleteProduct,
+    isLoading,
+  } = useProducts();
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<ProductFilterParams>({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
-  const [formModal, setFormModal] = useState<{ open: boolean; productId?: string }>({ open: false });
+  const [formModal, setFormModal] = useState<{
+    open: boolean;
+    productId?: string;
+  }>({ open: false });
+  const [deleteModal, setDeleteModal] = useState<{
+    open: boolean;
+    product?: Product;
+  }>({ open: false });
   const isAdmin = user?.role === "ADMIN";
-  
+
   useEffect(() => {
     loadProducts();
     loadCategories();
@@ -63,13 +94,14 @@ export function ProductList() {
   }, [loadProducts, loadCategories, loadSuppliers]);
 
   const debouncedSearch = useMemo(
-    () => debounce((query: string, f: ProductFilterParams) => {
-      const params: ProductFilterParams = { ...f };
-      if (query) {
-        params.query = query;
-      }
-      loadProducts(params);
-    }, 300),
+    () =>
+      debounce((query: string, f: ProductFilterParams) => {
+        const params: ProductFilterParams = { ...f };
+        if (query) {
+          params.query = query;
+        }
+        loadProducts(params);
+      }, 300),
     [loadProducts],
   );
 
@@ -89,7 +121,17 @@ export function ProductList() {
     setPageSize,
   } = usePagination(products);
 
-  const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
+  const formatCurrency = (amount: number) =>
+    formatCurrencyBase(amount, i18n.language as "ru" | "uz");
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal.product) return;
+    const success = await deleteProduct(String(deleteModal.product.id));
+    if (success) {
+      setDeleteModal({ open: false });
+      loadProducts();
+    }
+  };
 
   const handleVirtualKeyPress = (key: string) => {
     if (key === "BACKSPACE") {
@@ -101,8 +143,12 @@ export function ProductList() {
   };
 
   const columns = [
-    {key: "index", header: "#", render: (_: Product, index: number) => pageOffset + index + 1},
-    {key: "id", header: t("pos.id")},
+    {
+      key: "index",
+      header: "#",
+      render: (_: Product, index: number) => pageOffset + index + 1,
+    },
+    { key: "id", header: t("pos.id") },
     { key: "barcode", header: t("products.barcode") },
     {
       key: "name",
@@ -132,9 +178,7 @@ export function ProductList() {
       key: "expiryDate",
       header: t("products.expiryDate"),
       render: (product: Product) =>
-        product.expiryDate
-          ? formatDate(product.expiryDate)
-          : "-",
+        product.expiryDate ? formatDate(product.expiryDate) : "-",
     },
     {
       key: "supplier",
@@ -164,32 +208,34 @@ export function ProductList() {
       header: t("common.actions"),
       render: (product: Product) => (
         <div style={{ display: "flex", gap: "8px" }}>
-        <Button
-          variant="secondary"
-          size="small"
-          tooltip={t("common.edit")}
-          onClick={() => setFormModal({ open: true, productId: String(product.id) })}
-        >
-          <Edit size={16}/>
-        </Button>
+          <Button
+            variant="secondary"
+            size="small"
+            tooltip={t("common.edit")}
+            onClick={() =>
+              setFormModal({ open: true, productId: String(product.id) })
+            }
+          >
+            <Edit size={16} />
+          </Button>
 
-        <Button
-          variant="danger"
-          size="small"
-          tooltip={t("common.delete")}
-          onClick={() => navigate(`/products/${product.id}/delete`)}
-        >
-          <Trash size={16}/>
-        </Button>
+          <Button
+            variant="danger"
+            size="small"
+            tooltip={t("common.delete")}
+            onClick={() => setDeleteModal({ open: true, product })}
+          >
+            <Trash size={16} />
+          </Button>
 
-        <Button
-          variant="primary"
-          size="small"
-          tooltip={t("products.viewDetails")}
-          onClick={() => navigate(`/products/${product.id}`)}
-        >
-          <ListIndentIncrease size={16} />
-        </Button>
+          <Button
+            variant="primary"
+            size="small"
+            tooltip={t("products.viewDetails")}
+            onClick={() => navigate(`/products/${product.id}`)}
+          >
+            <ListIndentIncrease size={16} />
+          </Button>
         </div>
       ),
     });
@@ -200,8 +246,11 @@ export function ProductList() {
       <Header>
         <Title>{t("products.title")}</Title>
         {isAdmin && (
-          <Button style={{fontSize: "26px"}} onClick={() => setFormModal({ open: true })}>
-           <CirclePlus size={24} /> {t("products.addProduct")}
+          <Button
+            style={{ fontSize: "26px" }}
+            onClick={() => setFormModal({ open: true })}
+          >
+            <CirclePlus size={24} /> {t("products.addProduct")}
           </Button>
         )}
       </Header>
@@ -234,13 +283,22 @@ export function ProductList() {
               onClick={() => setKeyboardOpen((prev) => !prev)}
             >
               <Keyboard size={18} />
-              {keyboardOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              {keyboardOpen ? (
+                <ChevronUp size={14} />
+              ) : (
+                <ChevronDown size={14} />
+              )}
             </KbToggle>
           </InputControls>
         </SearchInputWrapper>
 
-        <Button style={{ padding: "0px 12px" }} size="small" onClick={() => setIsFilterOpen(!isFilterOpen)}>
-          {t("filters.filters")} {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
+        <Button
+          style={{ padding: "0px 12px" }}
+          size="small"
+          onClick={() => setIsFilterOpen(!isFilterOpen)}
+        >
+          {t("filters.filters")}{" "}
+          {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
         </Button>
       </Filters>
 
@@ -286,6 +344,18 @@ export function ProductList() {
             setFormModal({ open: false });
             loadProducts();
           }}
+        />
+      )}
+
+      {deleteModal.open && deleteModal.product && (
+        <ConfirmDialog
+          title={t("common.delete")}
+          message={t("common.confirmDelete")}
+          confirmLabel={t("common.delete")}
+          cancelLabel={t("common.cancel")}
+          variant="danger"
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setDeleteModal({ open: false })}
         />
       )}
     </Container>

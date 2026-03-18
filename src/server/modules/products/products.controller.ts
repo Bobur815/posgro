@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  HttpCode,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
@@ -58,6 +59,23 @@ export class ProductsController {
     return this.productsService.search(storeId, query || '');
   }
 
+  @Get(':id/analytics')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get product sales analytics (Admin only)' })
+  @ApiQuery({ name: 'startDate', required: false, type: String })
+  @ApiQuery({ name: 'endDate', required: false, type: String })
+  async getAnalytics(
+    @CurrentStore() storeId: string,
+    @Param('id', ParseIntPipe) id: number,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    const end = endDate ? new Date(endDate + 'T23:59:59Z') : new Date();
+    const start = startDate ? new Date(startDate + 'T00:00:00Z') : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+    return this.productsService.getAnalytics(id, storeId, start, end);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get product by ID' })
   @ApiResponse({ status: 200, description: 'Product details' })
@@ -95,6 +113,15 @@ export class ProductsController {
     @Body() updateProductDto: UpdateProductDto,
   ) {
     return this.productsService.update(id, storeId, updateProductDto);
+  }
+
+  @Post('sync-bulk')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Bulk upsert products from POS terminal (Admin only)' })
+  async syncBulk(@CurrentStore() storeId: string, @Body() body: { products: any[] }) {
+    return this.productsService.syncBulk(storeId, body.products ?? []);
   }
 
   @Delete(':id')

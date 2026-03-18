@@ -80,6 +80,57 @@ export class InventoryService {
     return arrival;
   }
 
+  async syncBulkArrivals(storeId: string, arrivals: Array<{
+    id: string;
+    productBarcode: string;
+    supplierId?: string;
+    quantity: number;
+    cost: number;
+    notes?: string;
+    createdBy: string;
+    createdAt: string;
+  }>) {
+    let created = 0, skipped = 0, errors = 0;
+    for (const a of arrivals) {
+      try {
+        // Skip if already synced (idempotent by local id)
+        const existing = await this.prisma.inventoryArrival.findUnique({ where: { id: a.id } });
+        if (existing) { skipped++; continue; }
+
+        // Look up product by barcode
+        const product = await this.prisma.product.findUnique({
+          where: { storeId_barcode: { storeId, barcode: a.productBarcode } },
+        });
+        if (!product) { errors++; continue; }
+
+        const totalCost = a.quantity * a.cost;
+        await this.prisma.inventoryArrival.create({
+          data: {
+            id: a.id,
+            storeId,
+            productId: product.id,
+            supplierId: a.supplierId || null,
+            quantity: a.quantity,
+            cost: a.cost,
+            totalCost,
+            notes: a.notes || null,
+            createdBy: a.createdBy,
+            createdAt: new Date(a.createdAt),
+          },
+        });
+        // Update stock on server too
+        await this.prisma.product.update({
+          where: { id: product.id },
+          data: { stock: { increment: a.quantity }, cost: a.cost },
+        });
+        created++;
+      } catch {
+        errors++;
+      }
+    }
+    return { created, skipped, errors };
+  }
+
   async getLowStock(storeId: string) {
     // Get products where stock is at or below minStock
     const products = await this.prisma.product.findMany({

@@ -15,6 +15,7 @@ import {
   SupplierTransactionType,
   SupplierPaymentMethod,
 } from '@shared/types';
+import { SUPPLIER_PAYMENT_METHOD_I18N_KEYS } from '@shared/constants/payment-methods';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 import { formatDate } from '../../utils/formatters';
 import { ArrowLeft } from 'lucide-react';
@@ -168,7 +169,7 @@ export function SupplierDetails() {
     deleteTransaction,
     clearSelectedSupplier,
   } = useSuppliers();
-
+  
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [transactionToDelete, setTransactionToDelete] =
     useState<SupplierTransaction | null>(null);
@@ -222,16 +223,8 @@ export function SupplierDetails() {
     return labels[type];
   };
 
-  const getPaymentMethodLabel = (method: SupplierPaymentMethod) => {
-    const labels: Record<SupplierPaymentMethod, string> = {
-      CASH: t('suppliers.cash'),
-      CARD: t('suppliers.card'),
-      BANK_TRANSFER: t('suppliers.bankTransfer'),
-      INSTALLMENT: t('suppliers.installment'),
-      ONE_TO_ONE: t('suppliers.oneToOne'),
-    };
-    return labels[method];
-  };
+  const getPaymentMethodLabel = (method: SupplierPaymentMethod) =>
+    t(SUPPLIER_PAYMENT_METHOD_I18N_KEYS[method]);
 
   if (isLoading && !selectedSupplier) {
     return <Container>{t('common.loading')}</Container>;

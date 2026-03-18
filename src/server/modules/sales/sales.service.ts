@@ -61,6 +61,14 @@ export class SalesService {
       return { id: existing.id, synced: true, message: 'Already synced' };
     }
 
+    // Resolve server-side productId by barcode (terminal IDs are local SQLite auto-increments)
+    const barcodes = [...new Set(syncSaleDto.items.map((i) => i.barcode))];
+    const serverProducts = await this.prisma.product.findMany({
+      where: { storeId, barcode: { in: barcodes } },
+      select: { id: true, barcode: true },
+    });
+    const productIdByBarcode = new Map(serverProducts.map((p) => [p.barcode, p.id]));
+
     // Create sale with items
     const sale = await this.prisma.sale.create({
       data: {
@@ -80,7 +88,7 @@ export class SalesService {
         items: {
           create: syncSaleDto.items.map((item) => ({
             id: item.id,
-            productId: item.productId,
+            productId: productIdByBarcode.get(item.barcode) ?? null,
             productName: item.productName,
             barcode: item.barcode,
             quantity: item.quantity,
@@ -92,10 +100,12 @@ export class SalesService {
       include: { items: true },
     });
 
-    // Update product stock
+    // Update product stock using server-side product IDs
     for (const item of syncSaleDto.items) {
+      const serverId = productIdByBarcode.get(item.barcode);
+      if (!serverId) continue;
       await this.productsService.updateStock(
-        item.productId,
+        serverId,
         storeId,
         -parseFloat(item.quantity),
       );

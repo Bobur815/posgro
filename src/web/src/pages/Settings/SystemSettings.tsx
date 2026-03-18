@@ -1,131 +1,258 @@
-import React, { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import styled from 'styled-components';
-import { Eye, EyeOff } from 'lucide-react';
-import { Button } from '@components/common/Button';
-import { Input } from '@components/common/Input';
-import { settings as settingsApi } from '../../api/client';
+import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import styled from "styled-components";
+import { RefreshCw } from "lucide-react";
+import { Button } from "@components/common/Button";
+import { Input } from "@components/common/Input";
+import { settings as settingsApi, receipt as receiptApi } from "../../api/client";
 
-const Container = styled.div`max-width: 800px;`;
-const Title = styled.h1`margin: 0 0 ${({ theme }) => theme.spacing.lg}; color: ${({ theme }) => theme.colors.text};`;
+const Container = styled.div`
+  max-width: 800px;
+`;
+const Title = styled.h1`
+  margin: 0 0 ${({ theme }) => theme.spacing.lg};
+  color: ${({ theme }) => theme.colors.text};
+`;
 const Section = styled.div`
   background-color: ${({ theme }) => theme.colors.surface};
   padding: ${({ theme }) => theme.spacing.lg};
   border-radius: ${({ theme }) => theme.borderRadius};
   margin-bottom: ${({ theme }) => theme.spacing.lg};
 `;
-const SectionTitle = styled.h2`margin: 0 0 ${({ theme }) => theme.spacing.md}; font-size: 18px; color: ${({ theme }) => theme.colors.text};`;
-const Form = styled.form`display: flex; flex-direction: column; gap: ${({ theme }) => theme.spacing.md};`;
-const Row = styled.div`display: grid; grid-template-columns: 1fr 1fr; gap: ${({ theme }) => theme.spacing.md}; @media (max-width: 600px) { grid-template-columns: 1fr; }`;
-const Actions = styled.div`display: flex; gap: ${({ theme }) => theme.spacing.md}; margin-top: ${({ theme }) => theme.spacing.md};`;
-const InfoText = styled.p`color: ${({ theme }) => theme.colors.textSecondary}; font-size: 14px; margin: 0;`;
-const ApiKeyRow = styled.div`display: flex; gap: ${({ theme }) => theme.spacing.sm}; align-items: flex-end;`;
-const ToggleButton = styled.button`
-  height: 38px; width: 38px;
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  border-radius: ${({ theme }) => theme.borderRadius};
-  background: ${({ theme }) => theme.colors.surface};
-  color: ${({ theme }) => theme.colors.textSecondary};
-  cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  &:hover { color: ${({ theme }) => theme.colors.text}; }
+const SectionTitle = styled.h2`
+  margin: 0 0 ${({ theme }) => theme.spacing.md};
+  font-size: 18px;
+  color: ${({ theme }) => theme.colors.text};
 `;
-const SuccessText = styled.p`color: ${({ theme }) => theme.colors.success}; font-size: 14px; margin: 0;`;
+const Form = styled.form`
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.spacing.md};
+`;
+const Row = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: ${({ theme }) => theme.spacing.md};
+  @media (max-width: 600px) {
+    grid-template-columns: 1fr;
+  }
+`;
+const Actions = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.md};
+  margin-top: ${({ theme }) => theme.spacing.md};
+`;
+const InfoText = styled.p`
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-size: 14px;
+  margin: 0;
+`;
+const SuccessText = styled.p`
+  color: ${({ theme }) => theme.colors.success};
+  font-size: 14px;
+  margin: 0;
+`;
+const PlanBadge = styled.span<{ $pro?: boolean }>`
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: ${({ $pro, theme }) =>
+    $pro ? theme.colors.primary : theme.colors.border};
+  color: ${({ $pro, theme }) => ($pro ? "#fff" : theme.colors.textSecondary)};
+  margin-left: 8px;
+  vertical-align: middle;
+`;
+const PlanCard = styled.div<{ $pro?: boolean }>`
+  border: 1px solid
+    ${({ $pro, theme }) => ($pro ? theme.colors.primary : theme.colors.border)};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  padding: ${({ theme }) => theme.spacing.md};
+`;
+const StatRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: ${({ theme }) => theme.spacing.sm} 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
+  &:last-child {
+    border-bottom: none;
+  }
+`;
+const StatLabel = styled.span`
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-size: 14px;
+`;
+const StatValue = styled.span`
+  font-weight: 600;
+  font-size: 14px;
+  color: ${({ theme }) => theme.colors.text};
+`;
 
 export function SystemSettings() {
   const { t } = useTranslation();
 
-  const [settings, setSettings] = useState({
-    storeName: '', storeAddress: '', storePhone: '', taxRate: '0',
+  const [storeSettings, setStoreSettings] = useState({
+    storeName: "",
+    storeAddress: "",
+    storePhone: "",
+    taxRate: "0",
   });
-  const [apiKey, setApiKey] = useState('');
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
 
-  useEffect(() => { loadSettings(); loadApiKey(); }, []);
+  const [plan, setPlan] = useState<string | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [balanceUsd, setBalanceUsd] = useState<number | null>(null);
+
+  useEffect(() => {
+    loadSettings();
+    loadPlan();
+  }, []);
 
   const loadSettings = async () => {
     try {
       const allSettings = await settingsApi.getAll();
-      setSettings((prev) => ({
-        ...prev,
-        storeName: allSettings.store_name || '',
-        storeAddress: allSettings.store_address || '',
-        storePhone: allSettings.store_phone || '',
-        taxRate: allSettings.tax_rate || '0',
-      }));
+      setStoreSettings({
+        storeName: allSettings.store_name || "",
+        storeAddress: allSettings.store_address || "",
+        storePhone: allSettings.store_phone || "",
+        taxRate: allSettings.tax_rate || "0",
+      });
     } catch (error) {
-      console.error('Failed to load settings:', error);
+      console.error("Failed to load settings:", error);
     }
   };
 
-  const loadApiKey = async () => {
+  const loadPlan = async () => {
+    setPlanLoading(true);
     try {
-      const key = await settingsApi.get('anthropic_api_key');
-      if (key) setApiKey(key);
+      const data = await receiptApi.getPlan();
+      setPlan(data.plan);
+      setBalanceUsd(data.plan === "paid" && typeof data.balance_usd === "number" ? data.balance_usd : null);
     } catch (error) {
-      console.error('Failed to load API key:', error);
+      console.error("Failed to load plan:", error);
+    } finally {
+      setPlanLoading(false);
     }
   };
 
   const handleSaveStore = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaveStatus('saving');
+    setSaveStatus("saving");
     try {
-      await settingsApi.set('store_name', settings.storeName);
-      await settingsApi.set('store_address', settings.storeAddress);
-      await settingsApi.set('store_phone', settings.storePhone);
-      await settingsApi.set('tax_rate', settings.taxRate);
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 2000);
+      await settingsApi.set("store_name", storeSettings.storeName);
+      await settingsApi.set("store_address", storeSettings.storeAddress);
+      await settingsApi.set("store_phone", storeSettings.storePhone);
+      await settingsApi.set("tax_rate", storeSettings.taxRate);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2000);
     } catch (error) {
-      console.error('Failed to save settings:', error);
-      setSaveStatus('idle');
-    }
-  };
-
-  const handleSaveApiKey = async () => {
-    try {
-      await settingsApi.set('anthropic_api_key', apiKey);
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 2000);
-    } catch (error) {
-      console.error('Failed to save API key:', error);
+      console.error("Failed to save settings:", error);
+      setSaveStatus("idle");
     }
   };
 
   return (
     <Container>
-      <Title>{t('settings.systemSettings')}</Title>
+      <Title>{t("settings.systemSettings")}</Title>
 
       <Section>
-        <SectionTitle>{t('settings.storeInformation')}</SectionTitle>
+        <SectionTitle>{t("settings.storeInformation")}</SectionTitle>
         <Form onSubmit={handleSaveStore}>
-          <Input label={t('settings.storeName')} value={settings.storeName} onChange={(e) => setSettings((prev) => ({ ...prev, storeName: e.target.value }))} />
-          <Input label={t('settings.storeAddress')} value={settings.storeAddress} onChange={(e) => setSettings((prev) => ({ ...prev, storeAddress: e.target.value }))} />
+          <Input
+            label={t("settings.storeName")}
+            value={storeSettings.storeName}
+            onChange={(e) =>
+              setStoreSettings((prev) => ({ ...prev, storeName: e.target.value }))
+            }
+          />
+          <Input
+            label={t("settings.storeAddress")}
+            value={storeSettings.storeAddress}
+            onChange={(e) =>
+              setStoreSettings((prev) => ({ ...prev, storeAddress: e.target.value }))
+            }
+          />
           <Row>
-            <Input label={t('settings.storePhone')} value={settings.storePhone} onChange={(e) => setSettings((prev) => ({ ...prev, storePhone: e.target.value }))} />
-            <Input label={t('settings.taxRate')} type="number" step="0.01" value={settings.taxRate} onChange={(e) => setSettings((prev) => ({ ...prev, taxRate: e.target.value }))} />
+            <Input
+              label={t("settings.storePhone")}
+              value={storeSettings.storePhone}
+              onChange={(e) =>
+                setStoreSettings((prev) => ({ ...prev, storePhone: e.target.value }))
+              }
+            />
+            <Input
+              label={t("settings.taxRate")}
+              type="number"
+              step="0.01"
+              value={storeSettings.taxRate}
+              onChange={(e) =>
+                setStoreSettings((prev) => ({ ...prev, taxRate: e.target.value }))
+              }
+            />
           </Row>
           <Actions>
-            <Button type="submit" disabled={saveStatus === 'saving'}>{saveStatus === 'saving' ? t('common.saving') : t('common.save')}</Button>
-            {saveStatus === 'saved' && <SuccessText>{t('common.saved')}</SuccessText>}
+            <Button type="submit" disabled={saveStatus === "saving"}>
+              {saveStatus === "saving" ? t("common.saving") : t("common.save")}
+            </Button>
+            {saveStatus === "saved" && (
+              <SuccessText>{t("common.saved")}</SuccessText>
+            )}
           </Actions>
         </Form>
       </Section>
 
       <Section>
-        <SectionTitle>{t('aiSettings.title')}</SectionTitle>
-        <InfoText style={{ marginBottom: '12px' }}>{t('aiSettings.description')}</InfoText>
-        <ApiKeyRow>
-          <div style={{ flex: 1 }}>
-            <Input label={t('aiSettings.anthropicApiKey')} type={showApiKey ? 'text' : 'password'} value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={t('aiSettings.apiKeyPlaceholder')} />
-          </div>
-          <ToggleButton type="button" onClick={() => setShowApiKey(!showApiKey)}>
-            {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
-          </ToggleButton>
-        </ApiKeyRow>
-        <Actions>
-          <Button onClick={handleSaveApiKey}>{t('common.save')}</Button>
+        <SectionTitle>
+          {t("aiSettings.title")}
+          {plan === "paid" && (
+            <PlanBadge $pro>{t("aiSettings.proPlanBadge")}</PlanBadge>
+          )}
+          {plan === "free" && (
+            <PlanBadge>{t("aiSettings.freePlanBadge")}</PlanBadge>
+          )}
+        </SectionTitle>
+
+        {plan === "free" && (
+          <PlanCard>
+            <InfoText style={{ marginBottom: "8px" }}>
+              {t("aiSettings.freePlanNote")}
+            </InfoText>
+            <InfoText style={{ color: "inherit" }}>
+              {t("aiSettings.freePlanContact")}
+            </InfoText>
+          </PlanCard>
+        )}
+
+        {plan === "paid" && (
+          <PlanCard $pro>
+            <StatRow>
+              <StatLabel>{t("aiSettings.creditBalance")}</StatLabel>
+              <StatValue>
+                {balanceUsd !== null ? `$${balanceUsd.toFixed(4)}` : "—"}
+              </StatValue>
+            </StatRow>
+            <InfoText style={{ marginTop: "8px", fontSize: 12, opacity: 0.7 }}>
+              {t("aiSettings.proPlanNote")}
+            </InfoText>
+          </PlanCard>
+        )}
+
+        <Actions style={{ marginTop: "12px" }}>
+          <Button
+            onClick={loadPlan}
+            disabled={planLoading}
+            style={{ display: "flex", alignItems: "center", gap: "6px" }}
+          >
+            <RefreshCw
+              size={14}
+              style={{
+                animation: planLoading ? "spin 1s linear infinite" : "none",
+              }}
+            />
+            {t("aiSettings.refreshPlan")}
+          </Button>
         </Actions>
       </Section>
     </Container>

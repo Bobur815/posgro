@@ -182,6 +182,8 @@ export function StoreList() {
       <Table>
         <thead>
           <tr>
+            <Th>#</Th>
+            <Th>ID</Th>
             <Th>Name</Th>
             <Th>Phone</Th>
             <Th>Plan</Th>
@@ -198,6 +200,8 @@ export function StoreList() {
             <tr><Td colSpan={7}><Empty>No stores yet. Create one.</Empty></Td></tr>
           ) : list.map((store) => (
             <tr key={store.id}>
+              <Td>{store._count?.users ?? '—'}</Td>
+              <Td>{store.id}</Td>
               <Td>
                 <div style={{ fontWeight: 600 }}>{store.name}</div>
                 {store.address && (

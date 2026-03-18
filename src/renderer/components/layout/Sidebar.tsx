@@ -323,7 +323,7 @@ export function Sidebar() {
     <Container $collapsed={isCollapsed}>
       <LogoSection $collapsed={isCollapsed}>
         <Logo $collapsed={isCollapsed}>
-          {isCollapsed ? "POS" : "Grocery POS"}
+          {isCollapsed ? "YA" : "Yangi Asr"}
         </Logo>
         <ToggleButton
           onClick={toggleSidebar}

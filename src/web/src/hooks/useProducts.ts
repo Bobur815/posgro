@@ -3,6 +3,70 @@ import { useProductsStore, Category } from '../store/products-store';
 import { Product, Supplier, ProductFilterParams } from '@shared/types';
 import { products as productsApi, categories as categoriesApi, inventory as inventoryApi } from '../api/client';
 
+// Map raw server response fields to Product type
+function transformProduct(p: any): Product {
+  return {
+    ...p,
+    isActive: p.isActive ?? p.active,
+  };
+}
+
+// Apply filters that the server doesn't handle
+function applyClientFilters(products: Product[], filters: ProductFilterParams): Product[] {
+  let result = products;
+  const now = new Date();
+
+  if (filters.query) {
+    const q = filters.query.toLowerCase();
+    result = result.filter(
+      (p) =>
+        p.nameRu.toLowerCase().includes(q) ||
+        p.nameUz.toLowerCase().includes(q) ||
+        p.barcode.includes(q),
+    );
+  }
+  if (filters.categoryId) {
+    result = result.filter((p) => p.categoryId === filters.categoryId);
+  }
+  if (filters.supplierId) {
+    result = result.filter((p) => p.supplierId === filters.supplierId);
+  }
+  if (filters.unit && filters.unit !== 'all') {
+    result = result.filter((p) => p.unit === filters.unit);
+  }
+  if (filters.priceMin !== undefined) {
+    result = result.filter((p) => p.price >= filters.priceMin!);
+  }
+  if (filters.priceMax !== undefined) {
+    result = result.filter((p) => p.price <= filters.priceMax!);
+  }
+  if (filters.promotionStatus === 'on_promotion') {
+    result = result.filter((p) => p.isOnPromotion);
+  } else if (filters.promotionStatus === 'no_promotion') {
+    result = result.filter((p) => !p.isOnPromotion);
+  }
+  if (filters.availability === 'in_stock') {
+    result = result.filter((p) => p.stock > 0 && p.stock > p.minStock);
+  } else if (filters.availability === 'out_of_stock') {
+    result = result.filter((p) => p.stock <= 0);
+  } else if (filters.availability === 'low_stock') {
+    result = result.filter((p) => p.stock > 0 && p.stock <= p.minStock);
+  }
+  if (filters.expiryStatus === 'expired') {
+    result = result.filter((p) => p.expiryDate && new Date(p.expiryDate) < now);
+  } else if (filters.expiryStatus === 'expiring_soon') {
+    const soon = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    result = result.filter(
+      (p) => p.expiryDate && new Date(p.expiryDate) >= now && new Date(p.expiryDate) <= soon,
+    );
+  } else if (filters.expiryStatus === 'fresh') {
+    const soon = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    result = result.filter((p) => !p.expiryDate || new Date(p.expiryDate) > soon);
+  }
+
+  return result;
+}
+
 export function useProducts() {
   const {
     products,
@@ -22,8 +86,12 @@ export function useProducts() {
     setError(null);
 
     try {
-      const data = await productsApi.getAll(filters as Record<string, unknown>);
-      setProducts(data as Product[]);
+      // Fetch all active products from server (server handles active filter only)
+      const raw = await productsApi.getAll({ active: true } as Record<string, unknown>);
+      const allProducts = (raw as any[]).map(transformProduct);
+      // Apply remaining filters client-side
+      const filtered = filters ? applyClientFilters(allProducts, filters) : allProducts;
+      setProducts(filtered);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load products');
     } finally {
@@ -54,8 +122,10 @@ export function useProducts() {
     setLoading(true);
 
     try {
-      const data = await productsApi.getAll({ ...extraFilters, query } as Record<string, unknown>);
-      setProducts(data as Product[]);
+      const raw = await productsApi.getAll({ active: true } as Record<string, unknown>);
+      const allProducts = (raw as any[]).map(transformProduct);
+      const filtered = applyClientFilters(allProducts, { ...extraFilters, query });
+      setProducts(filtered);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Search failed');
     } finally {

@@ -7,9 +7,11 @@ import {
   CheckCircle,
   AlertCircle,
   FileText,
+  PlusCircle,
 } from "lucide-react";
 import { Modal } from "@components/common/Modal";
 import { Button } from "@components/common/Button";
+import { ProductForm } from "./ProductForm";
 import {
   Supplier,
   SupplierPaymentMethod,
@@ -17,7 +19,16 @@ import {
   ProductMatch,
   Product,
 } from "@shared/types";
-import { receipt as receiptApi, inventory } from "../../api/client";
+import {
+  SUPPLIER_PAYMENT_METHODS,
+  SUPPLIER_PAYMENT_METHOD_I18N_KEYS,
+} from "@shared/constants/payment-methods";
+import {
+  receipt as receiptApi,
+  inventory,
+  products as productsApi,
+} from "../../api/client";
+import { debounce } from "../../utils/helpers";
 
 type Step = "upload" | "scanning" | "matching" | "review" | "creating" | "done";
 
@@ -163,14 +174,57 @@ const ConfidenceBadge = styled.span<{ $level: string }>`
             : theme.colors.error};
 `;
 
-const ProductSelect = styled.select`
+const SearchInput = styled.input<{ $selected?: boolean }>`
   width: 100%;
   padding: 4px 6px;
-  border: 1px solid ${({ theme }) => theme.colors.border};
+  border: 1px solid
+    ${({ theme, $selected }) =>
+      $selected ? theme.colors.primary : theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
   background-color: ${({ theme }) => theme.colors.surface};
   color: ${({ theme }) => theme.colors.text};
   font-size: 13px;
+  cursor: text;
+`;
+
+const SearchWrapper = styled.div`
+  position: relative;
+  flex: 1;
+`;
+
+const SearchDropdown = styled.div`
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: ${({ theme }) => theme.colors.surface};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 2px;
+`;
+
+const SearchDropdownItem = styled.div<{ $active?: boolean }>`
+  padding: 6px 8px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  cursor: pointer;
+  background: ${({ theme, $active }) =>
+    $active ? theme.colors.primary + "20" : "transparent"};
+  color: ${({ theme }) => theme.colors.text};
+  &:hover {
+    background: ${({ theme }) => theme.colors.primary + "15"};
+  }
+
+  @media (max-width: 640px) {
+    min-height: 44px;
+    font-size: 14px;
+  }
 `;
 
 const NumberInput = styled.input`
@@ -188,6 +242,7 @@ const SupplierRow = styled.div`
   display: flex;
   gap: ${({ theme }) => theme.spacing.md};
   margin-bottom: ${({ theme }) => theme.spacing.md};
+  flex-wrap: wrap;
 `;
 
 const FormGroup = styled.div`
@@ -253,16 +308,9 @@ const SkipCheckbox = styled.input`
   cursor: pointer;
 `;
 
-const PAYMENT_METHODS: SupplierPaymentMethod[] = [
-  "CASH",
-  "CARD",
-  "BANK_TRANSFER",
-  "INSTALLMENT",
-  "ONE_TO_ONE",
-];
-
 interface ReviewItem {
   scannedName: string;
+  mxik: string | null;
   productId: string;
   quantity: number;
   unitCost: number;
@@ -294,8 +342,108 @@ export function ReceiptScanModal({
   const [paymentMethod, setPaymentMethod] =
     useState<SupplierPaymentMethod>("CASH");
 
+  useEffect(() => {
+    if (!supplierId) setPaymentMethod("CASH");
+  }, [supplierId]);
+
+  // Local product list — starts from prop, updated after new product creation
+  const [localProducts, setLocalProducts] = useState<Product[]>(products);
+  // Index of the review row for which we're creating a new product
+  const [addingForRowIdx, setAddingForRowIdx] = useState<number | null>(null);
+
   const [createProgress, setCreateProgress] = useState(0);
   const [createTotal, setCreateTotal] = useState(0);
+
+  const [rowSearches, setRowSearches] = useState<Record<number, string>>({});
+  const [rowFilters, setRowFilters] = useState<Record<number, string>>({});
+  const [openDropdownIdx, setOpenDropdownIdx] = useState<number | null>(null);
+
+  const debouncedSetFilter = useRef(
+    debounce((idx: number, value: string) => {
+      setRowFilters((prev) => ({ ...prev, [idx]: value }));
+    }, 200),
+  ).current;
+
+  const handleInputChange = (idx: number, value: string) => {
+    setRowSearches((prev) => ({ ...prev, [idx]: value }));
+    debouncedSetFilter(idx, value);
+  };
+
+  const handleInputFocus = (idx: number) => {
+    setRowSearches((prev) => ({ ...prev, [idx]: "" }));
+    setRowFilters((prev) => ({ ...prev, [idx]: "" }));
+    setOpenDropdownIdx(idx);
+  };
+
+  const handleInputBlur = (idx: number) => {
+    setTimeout(() => {
+      setOpenDropdownIdx((prev) => (prev === idx ? null : prev));
+    }, 150);
+  };
+
+  const handleProductSelect = (idx: number, productId: string) => {
+    updateReviewItem(idx, {
+      productId,
+      confidence: productId ? "high" : "none",
+    });
+    setOpenDropdownIdx(null);
+    setRowSearches((prev) => ({ ...prev, [idx]: "" }));
+    setRowFilters((prev) => ({ ...prev, [idx]: "" }));
+  };
+
+  const getInputDisplayValue = (idx: number, item: ReviewItem) => {
+    if (openDropdownIdx === idx) return rowSearches[idx] || "";
+    if (item.productId) {
+      const p = localProducts.find((p) => String(p.id) === item.productId);
+      return p ? getProductName(p) : "";
+    }
+    return "";
+  };
+
+  const getFilteredProducts = (idx: number) => {
+    const filter = (rowFilters[idx] || "").toLowerCase();
+    if (!filter) return localProducts;
+    return localProducts.filter(
+      (p) =>
+        p.nameRu.toLowerCase().includes(filter) ||
+        p.nameUz.toLowerCase().includes(filter),
+    );
+  };
+
+  const handleProductCreated = async () => {
+    // Reload the full product list from the API
+    const updated = (await productsApi.getAll()) as Product[];
+    setLocalProducts(updated);
+
+    // Try to auto-assign the newly created product to the row
+    if (addingForRowIdx !== null) {
+      const row = reviewItems[addingForRowIdx];
+
+      let matched: Product | undefined;
+      if (row.mxik) {
+        matched = updated.find((p) => p.mxik === row.mxik);
+      }
+      if (!matched) {
+        const nameLower = row.scannedName.toLowerCase();
+        matched = updated.find(
+          (p) =>
+            p.nameRu.toLowerCase().includes(nameLower) ||
+            p.nameUz.toLowerCase().includes(nameLower) ||
+            nameLower.includes(p.nameRu.toLowerCase()) ||
+            nameLower.includes(p.nameUz.toLowerCase()),
+        );
+      }
+
+      if (matched) {
+        updateReviewItem(addingForRowIdx, {
+          productId: String(matched.id),
+          confidence: "high",
+        });
+      }
+    }
+
+    setAddingForRowIdx(null);
+  };
 
   const getProductName = (p: Product) =>
     i18n.language === "uz" ? p.nameUz : p.nameRu;
@@ -309,17 +457,6 @@ export function ReceiptScanModal({
       none: t("receiptScan.confidenceNone"),
     };
     return map[c] || c;
-  };
-
-  const getPaymentMethodLabel = (method: SupplierPaymentMethod) => {
-    const labels: Record<SupplierPaymentMethod, string> = {
-      CASH: t("suppliers.cash"),
-      CARD: t("suppliers.card"),
-      BANK_TRANSFER: t("suppliers.bankTransfer"),
-      INSTALLMENT: t("suppliers.installment"),
-      ONE_TO_ONE: t("suppliers.oneToOne"),
-    };
-    return labels[method];
   };
 
   const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -402,7 +539,10 @@ export function ReceiptScanModal({
     setError(null);
 
     try {
-      const result = (await receiptApi.scan(imageBase64, imageMimeType)) as ScannedReceiptData;
+      const result = (await receiptApi.scan(
+        imageBase64,
+        imageMimeType,
+      )) as ScannedReceiptData;
 
       if (!result.items || result.items.length === 0) {
         setError(t("receiptScan.noItemsDetected"));
@@ -417,7 +557,9 @@ export function ReceiptScanModal({
         name: item.scannedName,
         mxik: item.mxik ?? null,
       }));
-      const matches = (await receiptApi.matchProducts(matchItems)) as ProductMatch[];
+      const matches = (await receiptApi.matchProducts(
+        matchItems,
+      )) as ProductMatch[];
 
       if (result.supplierName) {
         const matchedSupplier = suppliers.find((s) => {
@@ -440,6 +582,7 @@ export function ReceiptScanModal({
         const match = matches[idx];
         return {
           scannedName: item.scannedName,
+          mxik: item.mxik ?? null,
           productId: match?.matchedProductId || "",
           quantity: item.quantity,
           unitCost: item.unitCost,
@@ -489,7 +632,7 @@ export function ReceiptScanModal({
           supplierId: supplierId || undefined,
           paymentMethod: supplierId ? paymentMethod : undefined,
           createdBy: userId,
-          notes: `Receipt scan: ${item.scannedName}`,
+          notes: `Receipt scan: ${item.scannedName}${item.mxik ? ` [MXIK: ${item.mxik}]` : ""}`,
         });
       } catch (err) {
         console.error("Failed to create arrival for", item.scannedName, err);
@@ -512,265 +655,341 @@ export function ReceiptScanModal({
 
   const getStepTitle = () => {
     switch (step) {
-      case "upload": return t("receiptScan.uploadImage");
-      case "scanning": return t("receiptScan.scanning");
-      case "matching": return t("receiptScan.matching");
-      case "review": return t("receiptScan.reviewTitle");
-      case "creating": return t("receiptScan.creating");
-      case "done": return t("receiptScan.done");
+      case "upload":
+        return t("receiptScan.uploadImage");
+      case "scanning":
+        return t("receiptScan.scanning");
+      case "matching":
+        return t("receiptScan.matching");
+      case "review":
+        return t("receiptScan.reviewTitle");
+      case "creating":
+        return t("receiptScan.creating");
+      case "done":
+        return t("receiptScan.done");
     }
   };
 
   return (
-    <Modal title={getStepTitle()} onClose={onClose} width="900px">
-      {step === "upload" && (
-        <>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,application/pdf"
-            onChange={handleFileSelect}
-            style={{ display: "none" }}
-          />
-          <DropZone
-            $isDragging={isDragging}
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={handleDrop}
-          >
-            <Upload size={48} style={{ opacity: 0.5 }} />
-            <DropZoneText>{t("receiptScan.uploadDescription")}</DropZoneText>
-            <DropZoneText style={{ fontSize: 12 }}>
-              {t("receiptScan.pasteImage")}
-            </DropZoneText>
-            <DropZoneText style={{ fontSize: 11, opacity: 0.7 }}>
-              JPEG · PNG · WebP · PDF — {t("receiptScan.maxSize")}
-            </DropZoneText>
-          </DropZone>
+    <>
+      <Modal title={getStepTitle()} onClose={onClose} width="900px">
+        {step === "upload" && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              onChange={handleFileSelect}
+              style={{ display: "none" }}
+            />
+            <DropZone
+              $isDragging={isDragging}
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+            >
+              <Upload size={48} style={{ opacity: 0.5 }} />
+              <DropZoneText>{t("receiptScan.uploadDescription")}</DropZoneText>
+              <DropZoneText style={{ fontSize: 12 }}>
+                {t("receiptScan.pasteImage")}
+              </DropZoneText>
+              <DropZoneText style={{ fontSize: 11, opacity: 0.7 }}>
+                JPEG · PNG · WebP · PDF — {t("receiptScan.maxSize")}
+              </DropZoneText>
+            </DropZone>
 
-          {imageMimeType === "application/pdf" && fileName ? (
-            <PdfPreview>
-              <FileText size={48} />
-              <span>{fileName}</span>
-            </PdfPreview>
-          ) : imagePreview ? (
-            <div style={{ textAlign: "center" }}>
-              <PreviewImage src={imagePreview} alt="Receipt preview" />
-            </div>
-          ) : null}
+            {imageMimeType === "application/pdf" && fileName ? (
+              <PdfPreview>
+                <FileText size={48} />
+                <span>{fileName}</span>
+              </PdfPreview>
+            ) : imagePreview ? (
+              <div style={{ textAlign: "center" }}>
+                <PreviewImage src={imagePreview} alt="Receipt preview" />
+              </div>
+            ) : null}
 
-          {error && <ErrorText>{error}</ErrorText>}
+            {error && <ErrorText>{error}</ErrorText>}
 
-          <Actions>
-            <Button variant="secondary" onClick={onClose}>
-              {t("common.cancel")}
-            </Button>
-            <Button onClick={handleScan} disabled={!imageBase64}>
-              {t("receiptScan.scanReceipt")}
-            </Button>
-          </Actions>
-        </>
-      )}
+            <Actions>
+              <Button variant="secondary" onClick={onClose}>
+                {t("common.cancel")}
+              </Button>
+              <Button onClick={handleScan} disabled={!imageBase64}>
+                {t("receiptScan.scanReceipt")}
+              </Button>
+            </Actions>
+          </>
+        )}
 
-      {(step === "scanning" || step === "matching") && (
-        <SpinnerContainer>
-          <Loader2 size={48} />
-          <SpinnerText>
-            {step === "scanning"
-              ? t("receiptScan.scanningDescription")
-              : t("receiptScan.matchingDescription")}
-          </SpinnerText>
-        </SpinnerContainer>
-      )}
+        {(step === "scanning" || step === "matching") && (
+          <SpinnerContainer>
+            <Loader2 size={48} />
+            <SpinnerText>
+              {step === "scanning"
+                ? t("receiptScan.scanningDescription")
+                : t("receiptScan.matchingDescription")}
+            </SpinnerText>
+          </SpinnerContainer>
+        )}
 
-      {step === "review" && (
-        <>
-          {scanResult?.supplierName && (
-            <StepIndicator>
-              <AlertCircle size={16} />
-              {t("receiptScan.detectedSupplier")}:{" "}
-              <strong>{scanResult.supplierName}</strong>
-            </StepIndicator>
-          )}
+        {step === "review" && (
+          <>
+            {scanResult?.supplierName && (
+              <StepIndicator>
+                <AlertCircle size={16} />
+                {t("receiptScan.detectedSupplier")}:{" "}
+                <strong>{scanResult.supplierName}</strong>
+              </StepIndicator>
+            )}
 
-          <SupplierRow>
-            <FormGroup>
-              <Label>{t("products.supplier")}</Label>
-              <FullSelect
-                value={supplierId}
-                onChange={(e) => setSupplierId(e.target.value)}
-              >
-                <option value="">{t("products.noSupplier")}</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {i18n.language === "uz" ? s.nameUz : s.nameRu}
-                  </option>
-                ))}
-              </FullSelect>
-            </FormGroup>
-            {supplierId && (
+            <SupplierRow>
               <FormGroup>
-                <Label>{t("suppliers.paymentMethod")}</Label>
+                <Label>{t("products.supplier")}</Label>
                 <FullSelect
-                  value={paymentMethod}
-                  onChange={(e) =>
-                    setPaymentMethod(e.target.value as SupplierPaymentMethod)
-                  }
+                  value={supplierId}
+                  onChange={(e) => setSupplierId(e.target.value)}
                 >
-                  {PAYMENT_METHODS.map((m) => (
-                    <option key={m} value={m}>
-                      {getPaymentMethodLabel(m)}
+                  <option value="">{t("products.noSupplier")}</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {i18n.language === "uz" ? s.nameUz : s.nameRu}
                     </option>
                   ))}
                 </FullSelect>
               </FormGroup>
-            )}
-          </SupplierRow>
+              {supplierId && (
+                <FormGroup>
+                  <Label>{t("suppliers.paymentMethod")}</Label>
+                  <FullSelect
+                    value={paymentMethod}
+                    onChange={(e) =>
+                      setPaymentMethod(e.target.value as SupplierPaymentMethod)
+                    }
+                  >
+                    {SUPPLIER_PAYMENT_METHODS.map((m) => (
+                      <option key={m} value={m}>
+                        {t(SUPPLIER_PAYMENT_METHOD_I18N_KEYS[m])}
+                      </option>
+                    ))}
+                  </FullSelect>
+                </FormGroup>
+              )}
+            </SupplierRow>
 
-          <div style={{ overflowX: "auto" }}>
-            <ReviewTable>
-              <thead>
-                <tr>
-                  <Th style={{ width: 30 }}></Th>
-                  <Th>{t("receiptScan.scannedName")}</Th>
-                  <Th>{t("receiptScan.matchedProduct")}</Th>
-                  <Th style={{ width: 80 }}>{t("receiptScan.confidence")}</Th>
-                  <Th style={{ width: 90 }}>{t("receiptScan.quantity")}</Th>
-                  <Th style={{ width: 100 }}>{t("receiptScan.unitCost")}</Th>
-                  <Th style={{ width: 100 }}>{t("receiptScan.totalCost")}</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {reviewItems.map((item, idx) => (
-                  <tr key={idx} style={{ opacity: item.skip ? 0.4 : 1 }}>
-                    <Td>
-                      <SkipCheckbox
-                        type="checkbox"
-                        checked={!item.skip}
-                        onChange={(e) =>
-                          updateReviewItem(idx, { skip: !e.target.checked })
-                        }
-                        title={t("receiptScan.skipItem")}
-                      />
-                    </Td>
-                    <Td>{item.scannedName}</Td>
-                    <Td>
-                      <ProductSelect
-                        value={item.productId}
-                        onChange={(e) =>
-                          updateReviewItem(idx, {
-                            productId: e.target.value,
-                            confidence: e.target.value ? "high" : "none",
-                          })
-                        }
-                        disabled={item.skip}
-                      >
-                        <option value="">
-                          {t("receiptScan.selectProduct")}
-                        </option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {getProductName(p)}
-                          </option>
-                        ))}
-                      </ProductSelect>
-                    </Td>
-                    <Td>
-                      <ConfidenceBadge $level={item.confidence}>
-                        {getConfidenceLabel(item.confidence)}
-                      </ConfidenceBadge>
-                    </Td>
-                    <Td>
-                      <NumberInput
-                        type="number"
-                        step="any"
-                        value={item.quantity}
-                        onChange={(e) =>
-                          updateReviewItem(idx, {
-                            quantity: parseFloat(e.target.value) || 0,
-                          })
-                        }
-                        disabled={item.skip}
-                      />
-                    </Td>
-                    <Td>
-                      <NumberInput
-                        type="number"
-                        step="any"
-                        value={item.unitCost}
-                        onChange={(e) =>
-                          updateReviewItem(idx, {
-                            unitCost: parseFloat(e.target.value) || 0,
-                          })
-                        }
-                        disabled={item.skip}
-                      />
-                    </Td>
-                    <Td style={{ textAlign: "right", fontWeight: 600 }}>
-                      {(item.quantity * item.unitCost).toLocaleString()}
-                    </Td>
+            <div style={{ overflowX: "auto" }}>
+              <ReviewTable>
+                <thead>
+                  <tr>
+                    <Th style={{ width: 30 }}></Th>
+                    <Th>{t("receiptScan.scannedName")}</Th>
+                    <Th style={{ width: 130 }}>MXIK</Th>
+                    <Th>{t("receiptScan.matchedProduct")}</Th>
+                    <Th style={{ width: 80 }}>{t("receiptScan.confidence")}</Th>
+                    <Th style={{ width: 90 }}>{t("receiptScan.quantity")}</Th>
+                    <Th style={{ width: 100 }}>{t("receiptScan.unitCost")}</Th>
+                    <Th style={{ width: 100 }}>{t("receiptScan.totalCost")}</Th>
                   </tr>
-                ))}
-              </tbody>
-            </ReviewTable>
-          </div>
+                </thead>
+                <tbody>
+                  {reviewItems.map((item, idx) => (
+                    <tr key={idx} style={{ opacity: item.skip ? 0.4 : 1 }}>
+                      <Td>
+                        <SkipCheckbox
+                          type="checkbox"
+                          checked={!item.skip}
+                          onChange={(e) =>
+                            updateReviewItem(idx, { skip: !e.target.checked })
+                          }
+                          title={t("receiptScan.skipItem")}
+                        />
+                      </Td>
+                      <Td>{item.scannedName}</Td>
+                      <Td
+                        style={{
+                          fontSize: 11,
+                          opacity: 0.6,
+                          fontFamily: "monospace",
+                        }}
+                      >
+                        {item.mxik || "—"}
+                      </Td>
+                      <Td>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "4px",
+                            alignItems: "center",
+                          }}
+                        >
+                          <SearchWrapper>
+                            <SearchInput
+                              type="text"
+                              placeholder={t("receiptScan.selectProduct")}
+                              value={getInputDisplayValue(idx, item)}
+                              $selected={
+                                !!item.productId && openDropdownIdx !== idx
+                              }
+                              onFocus={() => handleInputFocus(idx)}
+                              onBlur={() => handleInputBlur(idx)}
+                              onChange={(e) =>
+                                handleInputChange(idx, e.target.value)
+                              }
+                              disabled={item.skip}
+                            />
+                            {openDropdownIdx === idx && (
+                              <SearchDropdown>
+                                {getFilteredProducts(idx).length === 0 ? (
+                                  <SearchDropdownItem
+                                    style={{ opacity: 0.5, cursor: "default" }}
+                                  >
+                                    {t("common.noResults") || "No results"}
+                                  </SearchDropdownItem>
+                                ) : (
+                                  getFilteredProducts(idx).map((p) => (
+                                    <SearchDropdownItem
+                                      key={p.id}
+                                      $active={String(p.id) === item.productId}
+                                      onMouseDown={() =>
+                                        handleProductSelect(idx, String(p.id))
+                                      }
+                                    >
+                                      {getProductName(p)}
+                                    </SearchDropdownItem>
+                                  ))
+                                )}
+                              </SearchDropdown>
+                            )}
+                          </SearchWrapper>
+                          {!item.productId && !item.skip && (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="small"
+                              title={t("products.addProduct")}
+                              style={{ flexShrink: 0, padding: "4px 6px" }}
+                              onClick={() => setAddingForRowIdx(idx)}
+                            >
+                              <PlusCircle size={15} />
+                            </Button>
+                          )}
+                        </div>
+                      </Td>
+                      <Td>
+                        <ConfidenceBadge $level={item.confidence}>
+                          {getConfidenceLabel(item.confidence)}
+                        </ConfidenceBadge>
+                      </Td>
+                      <Td>
+                        <NumberInput
+                          type="number"
+                          step="any"
+                          value={item.quantity}
+                          onChange={(e) =>
+                            updateReviewItem(idx, {
+                              quantity: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                          disabled={item.skip}
+                        />
+                      </Td>
+                      <Td>
+                        <NumberInput
+                          type="number"
+                          step="any"
+                          value={item.unitCost}
+                          onChange={(e) =>
+                            updateReviewItem(idx, {
+                              unitCost: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                          disabled={item.skip}
+                        />
+                      </Td>
+                      <Td style={{ textAlign: "right", fontWeight: 600 }}>
+                        {(item.quantity * item.unitCost).toLocaleString()}
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </ReviewTable>
+            </div>
 
-          {error && <ErrorText>{error}</ErrorText>}
-
-          <Actions>
-            <Button variant="secondary" onClick={onClose}>
-              {t("common.cancel")}
-            </Button>
-            <Button
-              onClick={handleCreateArrivals}
-              disabled={
-                reviewItems.filter((i) => !i.skip && i.productId).length === 0
-              }
-            >
-              {t("receiptScan.createArrivals")} (
-              {reviewItems.filter((i) => !i.skip && i.productId).length})
-            </Button>
-          </Actions>
-        </>
-      )}
-
-      {step === "creating" && (
-        <SpinnerContainer>
-          <Loader2 size={48} />
-          <SpinnerText>
-            {t("receiptScan.progress", {
-              current: createProgress,
-              total: createTotal,
-            })}
-          </SpinnerText>
-          <ProgressBar>
-            <ProgressFill
-              $percent={
-                createTotal > 0 ? (createProgress / createTotal) * 100 : 0
-              }
-            />
-          </ProgressBar>
-        </SpinnerContainer>
-      )}
-
-      {step === "done" && (
-        <>
-          <SuccessContainer>
-            <CheckCircle size={64} />
-            <p style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>
-              {t("receiptScan.doneDescription")}
-            </p>
             {error && <ErrorText>{error}</ErrorText>}
-          </SuccessContainer>
-          <Actions>
-            <Button onClick={handleDone}>{t("common.close")}</Button>
-          </Actions>
-        </>
-      )}
-    </Modal>
+
+            <Actions>
+              <Button variant="secondary" onClick={onClose}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                onClick={handleCreateArrivals}
+                disabled={
+                  reviewItems.filter((i) => !i.skip && i.productId).length === 0
+                }
+              >
+                {t("receiptScan.createArrivals")} (
+                {reviewItems.filter((i) => !i.skip && i.productId).length})
+              </Button>
+            </Actions>
+          </>
+        )}
+
+        {step === "creating" && (
+          <SpinnerContainer>
+            <Loader2 size={48} />
+            <SpinnerText>
+              {t("receiptScan.progress", {
+                current: createProgress,
+                total: createTotal,
+              })}
+            </SpinnerText>
+            <ProgressBar>
+              <ProgressFill
+                $percent={
+                  createTotal > 0 ? (createProgress / createTotal) * 100 : 0
+                }
+              />
+            </ProgressBar>
+          </SpinnerContainer>
+        )}
+
+        {step === "done" && (
+          <>
+            <SuccessContainer>
+              <CheckCircle size={64} />
+              <p style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>
+                {t("receiptScan.doneDescription")}
+              </p>
+              {error && <ErrorText>{error}</ErrorText>}
+            </SuccessContainer>
+            <Actions>
+              <Button onClick={handleDone}>{t("common.close")}</Button>
+            </Actions>
+          </>
+        )}
+      </Modal>
+
+      {addingForRowIdx !== null &&
+        (() => {
+          const row = reviewItems[addingForRowIdx];
+          return (
+            <ProductForm
+              initialData={{
+                nameRu: row.scannedName,
+                nameUz: row.scannedName,
+                mxik: row.mxik || undefined,
+                cost: row.unitCost || undefined,
+                stock: row.quantity || undefined,
+              }}
+              onClose={() => setAddingForRowIdx(null)}
+              onSuccess={handleProductCreated}
+            />
+          );
+        })()}
+    </>
   );
 }

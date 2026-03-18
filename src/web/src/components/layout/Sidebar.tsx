@@ -66,7 +66,7 @@ const MobileNavItem = styled(NavLink)`
   gap: 2px;
   color: ${({ theme }) => theme.colors.textSecondary};
   text-decoration: none;
-  font-size: 10px;
+  font-size: 11px;
   transition: color 0.2s;
 
   &.active {
@@ -298,13 +298,15 @@ export function Sidebar() {
     </NavItemWrapper>
   );
 
-  const mobileNavItems = [
-    { to: "/products", icon: Package, label: t("nav.products") },
-    { to: "/suppliers", icon: Truck, label: t("suppliers.title") },
-    { to: "/reports/daily", icon: BarChart3, label: t("nav.reports") },
-    ...(isAdmin ? [{ to: "/users", icon: Users, label: t("nav.users") }] : []),
-    { to: "/settings", icon: Settings, label: t("nav.settings") },
-  ];
+  const mobileNavItems = isSuperAdmin
+    ? [{ to: "/admin/stores", icon: Store, label: "Stores" }]
+    : [
+        { to: "/products", icon: Package, label: t("nav.products") },
+        { to: "/suppliers", icon: Truck, label: t("suppliers.title") },
+        { to: "/reports/daily", icon: BarChart3, label: t("nav.reports") },
+        ...(isAdmin ? [{ to: "/users", icon: Users, label: t("nav.users") }] : []),
+        { to: "/settings", icon: Settings, label: t("nav.settings") },
+      ];
 
   return (
     <>
@@ -312,7 +314,7 @@ export function Sidebar() {
       <Container $collapsed={isCollapsed}>
         <LogoSection $collapsed={isCollapsed}>
           <Logo $collapsed={isCollapsed}>
-            {isCollapsed ? "POS" : "Grocery POS"}
+            {isCollapsed ? "YA" : "Yangi Asr"}
           </Logo>
           <ToggleButton
             onClick={toggleSidebar}
@@ -323,43 +325,47 @@ export function Sidebar() {
         </LogoSection>
 
         <Nav>
-          <NavSection>
-            <SectionTitle $collapsed={isCollapsed}>{t("nav.main")}</SectionTitle>
-            {renderNavItem("/products", Package, t("nav.products"))}
-          </NavSection>
+          {!isSuperAdmin && (
+            <>
+              <NavSection>
+                <SectionTitle $collapsed={isCollapsed}>{t("nav.main")}</SectionTitle>
+                {renderNavItem("/products", Package, t("nav.products"))}
+              </NavSection>
 
-          <NavSection>
-            <SectionTitle $collapsed={isCollapsed}>{t("nav.reports")}</SectionTitle>
-            {renderNavItem("/reports/daily", BarChart3, t("nav.dailySummary"))}
-            {isAdmin && (
-              <>
-                {renderNavItem("/reports/monthly", TrendingUp, t("nav.monthlyReport"))}
-                {renderNavItem("/reports/analytics", LineChart, t("nav.analytics"))}
-              </>
-            )}
-          </NavSection>
+              <NavSection>
+                <SectionTitle $collapsed={isCollapsed}>{t("nav.reports")}</SectionTitle>
+                {renderNavItem("/reports/daily", BarChart3, t("nav.dailySummary"))}
+                {isAdmin && (
+                  <>
+                    {renderNavItem("/reports/monthly", TrendingUp, t("nav.monthlyReport"))}
+                    {renderNavItem("/reports/analytics", LineChart, t("nav.analytics"))}
+                  </>
+                )}
+              </NavSection>
 
-          {isAdmin && (
-            <NavSection>
-              <SectionTitle $collapsed={isCollapsed}>{t("nav.management")}</SectionTitle>
-              {renderNavItem("/products/stock", ClipboardList, t("nav.inventory"))}
-              {renderNavItem("/suppliers", Truck, t("suppliers.title"))}
-              {renderNavItem("/users", Users, t("nav.users"))}
-              {renderNavItem("/settings", Settings, t("nav.settings"))}
-            </NavSection>
+              {isAdmin && (
+                <NavSection>
+                  <SectionTitle $collapsed={isCollapsed}>{t("nav.management")}</SectionTitle>
+                  {renderNavItem("/products/stock", ClipboardList, t("nav.inventory"))}
+                  {renderNavItem("/suppliers", Truck, t("suppliers.title"))}
+                  {renderNavItem("/users", Users, t("nav.users"))}
+                  {renderNavItem("/settings", Settings, t("nav.settings"))}
+                </NavSection>
+              )}
+
+              {!isAdmin && (
+                <NavSection>
+                  <SectionTitle $collapsed={isCollapsed}>{t("nav.settings")}</SectionTitle>
+                  {renderNavItem("/settings/user", User, t("nav.userSettings"))}
+                </NavSection>
+              )}
+            </>
           )}
 
           {isSuperAdmin && (
             <NavSection>
               <SectionTitle $collapsed={isCollapsed}>Super Admin</SectionTitle>
               {renderNavItem("/admin/stores", Store, "Stores")}
-            </NavSection>
-          )}
-
-          {!isAdmin && (
-            <NavSection>
-              <SectionTitle $collapsed={isCollapsed}>{t("nav.settings")}</SectionTitle>
-              {renderNavItem("/settings/user", User, t("nav.userSettings"))}
             </NavSection>
           )}
         </Nav>

@@ -6,6 +6,10 @@ import { Button } from "@components/common/Button";
 import { Input } from "@components/common/Input";
 import { DateInput } from "@components/common/DateInput";
 import { Product, Supplier, SupplierPaymentMethod } from "@shared/types";
+import {
+  SUPPLIER_PAYMENT_METHODS,
+  SUPPLIER_PAYMENT_METHOD_I18N_KEYS,
+} from "@shared/constants/payment-methods";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { formatQuantity } from "../../utils/formatters";
 import { getExpireInDays } from "../../utils/helpers";
@@ -16,6 +20,21 @@ const Form = styled.form`
   display: flex;
   flex-direction: column;
   gap: ${({ theme }) => theme.spacing.md};
+`;
+
+const FlexRow = styled.div`
+  display: flex;
+  gap: 16px;
+
+  > div, > * {
+    flex: 1;
+    min-width: 0;
+  }
+
+  @media (max-width: 640px) {
+    flex-direction: column;
+    gap: ${({ theme }) => theme.spacing.md};
+  }
 `;
 
 const Actions = styled.div`
@@ -48,10 +67,12 @@ const Select = styled.select`
 const InfoRow = styled.div`
   display: flex;
   gap: ${({ theme }) => theme.spacing.md};
+  flex-wrap: wrap;
 `;
 
 const InfoItem = styled.div`
   flex: 1;
+  min-width: 100px;
   padding: ${({ theme }) => theme.spacing.sm};
   background-color: ${({ theme }) => theme.colors.background};
   border-radius: ${({ theme }) => theme.borderRadius};
@@ -59,7 +80,7 @@ const InfoItem = styled.div`
 `;
 
 const InfoLabel = styled.div`
-  font-size: 11px;
+  font-size: 12px;
   color: ${({ theme }) => theme.colors.textSecondary};
   text-transform: uppercase;
   margin-bottom: 2px;
@@ -92,8 +113,9 @@ const RadioOption = styled.label<{ $active?: boolean }>`
   align-items: center;
   gap: ${({ theme }) => theme.spacing.sm};
   padding: ${({ theme }) => theme.spacing.sm} ${({ theme }) => theme.spacing.md};
-  border: 1px solid ${({ theme, $active }) =>
-    $active ? theme.colors.primary : theme.colors.border};
+  border: 1px solid
+    ${({ theme, $active }) =>
+      $active ? theme.colors.primary : theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
   cursor: pointer;
   background-color: ${({ theme, $active }) =>
@@ -105,12 +127,16 @@ const RadioOption = styled.label<{ $active?: boolean }>`
   }
 `;
 
-const RadioText = styled.div`flex: 1;`;
+const RadioText = styled.div`
+  flex: 1;
+`;
+
 const RadioLabel = styled.div`
   font-size: 13px;
   font-weight: 500;
   color: ${({ theme }) => theme.colors.text};
 `;
+
 const RadioDescription = styled.div`
   font-size: 11px;
   color: ${({ theme }) => theme.colors.textSecondary};
@@ -122,10 +148,6 @@ const ProfitBadge = styled.span<{ $negative?: boolean }>`
   color: ${({ theme, $negative }) =>
     $negative ? theme.colors.error : theme.colors.success};
 `;
-
-const PAYMENT_METHODS: SupplierPaymentMethod[] = [
-  "CASH", "CARD", "BANK_TRANSFER", "INSTALLMENT", "ONE_TO_ONE",
-];
 
 interface ArrivalData {
   quantity: string;
@@ -149,13 +171,18 @@ interface NewArrivalModalProps {
 }
 
 export function NewArrivalModal({
-  product, suppliers, userId, onClose, onSuccess, onOpenSupplierModal,
+  product,
+  suppliers,
+  userId,
+  onClose,
+  onSuccess,
+  onOpenSupplierModal,
 }: NewArrivalModalProps) {
   const { t, i18n } = useTranslation();
 
   const [arrivalData, setArrivalData] = useState<ArrivalData>({
     quantity: "",
-    cost: product.costPrice ? String(product.costPrice) : "",
+    cost: product.cost ? String(product.cost) : "",
     newPrice: String(product.price),
     priceMode: "none",
     notes: "",
@@ -171,22 +198,17 @@ export function NewArrivalModal({
   const getProductName = (p: Product) =>
     i18n.language === "uz" ? p.nameUz : p.nameRu;
 
-  const getPaymentMethodLabel = (method: SupplierPaymentMethod) => {
-    const labels: Record<SupplierPaymentMethod, string> = {
-      CASH: t("suppliers.cash"), CARD: t("suppliers.card"),
-      BANK_TRANSFER: t("suppliers.bankTransfer"), INSTALLMENT: t("suppliers.installment"),
-      ONE_TO_ONE: t("suppliers.oneToOne"),
-    };
-    return labels[method];
-  };
-
   const costChanged =
     arrivalData.cost !== "" &&
-    Number(arrivalData.cost) !== (product.costPrice ?? 0);
+    Number(arrivalData.cost) !== (product.cost ?? 0);
 
   const profitMargin =
     arrivalData.cost && arrivalData.newPrice
-      ? (((Number(arrivalData.newPrice) - Number(arrivalData.cost)) / Number(arrivalData.cost)) * 100).toFixed(1)
+      ? (
+          ((Number(arrivalData.newPrice) - Number(arrivalData.cost)) /
+            Number(arrivalData.cost)) *
+          100
+        ).toFixed(1)
       : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -198,10 +220,16 @@ export function NewArrivalModal({
         cost: parseFloat(arrivalData.cost),
         notes: arrivalData.notes,
         supplierId: arrivalData.supplierId || undefined,
-        paymentMethod: arrivalData.supplierId ? arrivalData.paymentMethod : undefined,
+        paymentMethod: arrivalData.supplierId
+          ? arrivalData.paymentMethod
+          : undefined,
         createdBy: userId,
-        newPrice: arrivalData.priceMode !== "none" ? Number(arrivalData.newPrice) : undefined,
-        priceMode: arrivalData.priceMode !== "none" ? arrivalData.priceMode : undefined,
+        newPrice:
+          arrivalData.priceMode !== "none"
+            ? Number(arrivalData.newPrice)
+            : undefined,
+        priceMode:
+          arrivalData.priceMode !== "none" ? arrivalData.priceMode : undefined,
         productionDate: arrivalData.productionDate || undefined,
         expiryDate: arrivalData.expirationDate || undefined,
       });
@@ -223,7 +251,11 @@ export function NewArrivalModal({
           <InfoItem>
             <InfoLabel>{t("products.currentStock")}</InfoLabel>
             <InfoValue>
-              {formatQuantity(product.stock, product.unit || "шт", i18n.language as "ru" | "uz")}
+              {formatQuantity(
+                product.stock,
+                product.unit || "шт",
+                i18n.language as "ru" | "uz",
+              )}
             </InfoValue>
           </InfoItem>
         </InfoRow>
@@ -231,7 +263,9 @@ export function NewArrivalModal({
         <InfoRow>
           <InfoItem>
             <InfoLabel>{t("products.cost")}</InfoLabel>
-            <InfoValue>{product.costPrice ? formatCurrency(product.costPrice) : "—"}</InfoValue>
+            <InfoValue>
+              {product.cost ? formatCurrency(product.cost) : "—"}
+            </InfoValue>
           </InfoItem>
           <InfoItem>
             <InfoLabel>{t("products.price")}</InfoLabel>
@@ -240,88 +274,176 @@ export function NewArrivalModal({
           <InfoItem>
             <InfoLabel>{t("products.profitMargin")}</InfoLabel>
             <InfoValue>
-              {product.costPrice ? (
-                <ProfitBadge $negative={((product.price - product.costPrice) / product.costPrice) * 100 < 0}>
-                  {(((product.price - product.costPrice) / product.costPrice) * 100).toFixed(1)}%
+              {product.cost ? (
+                <ProfitBadge
+                  $negative={
+                    ((product.price - product.cost) / product.cost) *
+                      100 <
+                    0
+                  }
+                >
+                  {(
+                    ((product.price - product.cost) / product.cost) *
+                    100
+                  ).toFixed(1)}
+                  %
                 </ProfitBadge>
-              ) : "—"}
+              ) : (
+                "—"
+              )}
             </InfoValue>
           </InfoItem>
         </InfoRow>
 
+        {product.pendingPrice != null && (
+          <InfoRow>
+            <InfoItem style={{ borderColor: "#ff9800" }}>
+              <InfoLabel>{t("inventory.pendingPriceLabel")}</InfoLabel>
+              <InfoValue>
+                {formatCurrency(product.pendingPrice)}{" "}
+                <span style={{ fontSize: 12, fontWeight: 400 }}>
+                  (
+                  {t("inventory.afterStockDrops", {
+                    threshold: `${product.pendingPriceThreshold} ${product.unit}`,
+                  })}
+                  )
+                </span>
+              </InfoValue>
+            </InfoItem>
+          </InfoRow>
+        )}
+
         <Input
-          label={t("inventory.quantity")} type="number" autoFocus
+          label={t("inventory.quantity")}
+          type="number"
+          autoFocus
           value={arrivalData.quantity}
-          onChange={(e) => setArrivalData((prev) => ({ ...prev, quantity: e.target.value }))}
+          onChange={(e) =>
+            setArrivalData((prev) => ({ ...prev, quantity: e.target.value }))
+          }
           required
         />
 
-        <div style={{ display: "flex", gap: "16px" }}>
-          <div style={{ flex: 1 }}>
+        <FlexRow>
+          <div>
             <Input
-              label={t("inventory.costPerUnit")} type="number"
+              label={t("inventory.costPerUnit")}
+              type="number"
               value={arrivalData.cost}
-              onChange={(e) => setArrivalData((prev) => ({ ...prev, cost: e.target.value }))}
+              onChange={(e) =>
+                setArrivalData((prev) => ({ ...prev, cost: e.target.value }))
+              }
               required
             />
           </div>
-          <div style={{ flex: 1 }}>
+          <div>
             <Input
               label={`${t("products.price")}${profitMargin !== null ? ` (${profitMargin}%)` : ""}`}
-              type="number" value={arrivalData.newPrice}
-              onChange={(e) => setArrivalData((prev) => ({ ...prev, newPrice: e.target.value }))}
+              type="number"
+              value={arrivalData.newPrice}
+              onChange={(e) =>
+                setArrivalData((prev) => ({
+                  ...prev,
+                  newPrice: e.target.value,
+                }))
+              }
               disabled={arrivalData.priceMode === "none"}
             />
           </div>
-        </div>
+        </FlexRow>
 
         {costChanged && (
           <PriceChangeSection>
             <PriceChangeTitle>{t("inventory.priceChanged")}</PriceChangeTitle>
             <RadioOption $active={arrivalData.priceMode === "none"}>
-              <input type="radio" name="priceMode" checked={arrivalData.priceMode === "none"}
-                onChange={() => setArrivalData((prev) => ({ ...prev, priceMode: "none", newPrice: String(product.price) }))} />
+              <input
+                type="radio"
+                name="priceMode"
+                checked={arrivalData.priceMode === "none"}
+                onChange={() =>
+                  setArrivalData((prev) => ({
+                    ...prev,
+                    priceMode: "none",
+                    newPrice: String(product.price),
+                  }))
+                }
+              />
               <RadioText>
                 <RadioLabel>{t("inventory.keepCurrentPrice")}</RadioLabel>
                 <RadioDescription>{formatCurrency(product.price)}</RadioDescription>
               </RadioText>
             </RadioOption>
             <RadioOption $active={arrivalData.priceMode === "immediate"}>
-              <input type="radio" name="priceMode" checked={arrivalData.priceMode === "immediate"}
-                onChange={() => setArrivalData((prev) => ({ ...prev, priceMode: "immediate" }))} />
+              <input
+                type="radio"
+                name="priceMode"
+                checked={arrivalData.priceMode === "immediate"}
+                onChange={() =>
+                  setArrivalData((prev) => ({ ...prev, priceMode: "immediate" }))
+                }
+              />
               <RadioText>
                 <RadioLabel>{t("inventory.changePriceImmediately")}</RadioLabel>
-                <RadioDescription>{t("inventory.changePriceImmediatelyDesc")}</RadioDescription>
+                <RadioDescription>
+                  {t("inventory.changePriceImmediatelyDesc")}
+                </RadioDescription>
               </RadioText>
             </RadioOption>
             <RadioOption $active={arrivalData.priceMode === "deferred"}>
-              <input type="radio" name="priceMode" checked={arrivalData.priceMode === "deferred"}
-                onChange={() => setArrivalData((prev) => ({ ...prev, priceMode: "deferred" }))} />
+              <input
+                type="radio"
+                name="priceMode"
+                checked={arrivalData.priceMode === "deferred"}
+                onChange={() =>
+                  setArrivalData((prev) => ({ ...prev, priceMode: "deferred" }))
+                }
+              />
               <RadioText>
                 <RadioLabel>{t("inventory.changePriceAfterOldStock")}</RadioLabel>
-                <RadioDescription>{t("inventory.changePriceAfterOldStockDesc", { stock: `${product.stock} ${product.unit}` })}</RadioDescription>
+                <RadioDescription>
+                  {t("inventory.changePriceAfterOldStockDesc", {
+                    stock: `${product.stock} ${product.unit}`,
+                  })}
+                </RadioDescription>
               </RadioText>
             </RadioOption>
           </PriceChangeSection>
         )}
 
-        <div style={{ display: "flex", gap: "16px" }}>
+        <FlexRow>
           {arrivalData.supplierId && (
             <FormGroup>
               <Label>{t("suppliers.paymentMethod")}</Label>
-              <Select value={arrivalData.paymentMethod}
-                onChange={(e) => setArrivalData((prev) => ({ ...prev, paymentMethod: e.target.value as SupplierPaymentMethod }))}>
-                {PAYMENT_METHODS.map((method) => (
-                  <option key={method} value={method}>{getPaymentMethodLabel(method)}</option>
+              <Select
+                value={arrivalData.paymentMethod}
+                onChange={(e) =>
+                  setArrivalData((prev) => ({
+                    ...prev,
+                    paymentMethod: e.target.value as SupplierPaymentMethod,
+                  }))
+                }
+              >
+                {SUPPLIER_PAYMENT_METHODS.map((method) => (
+                  <option key={method} value={method}>
+                    {t(SUPPLIER_PAYMENT_METHOD_I18N_KEYS[method])}
+                  </option>
                 ))}
               </Select>
             </FormGroup>
           )}
-          <FormGroup>
+          <FormGroup style={{ flex: 1 }}>
             <Label>{t("products.supplier")}</Label>
             <div style={{ display: "flex", gap: "8px" }}>
-              <Select value={arrivalData.supplierId} style={{ flex: 1 }}
-                onChange={(e) => setArrivalData((prev) => ({ ...prev, supplierId: e.target.value }))}>
+              <Select
+                value={arrivalData.supplierId}
+                style={{ flex: 1 }}
+                onChange={(e) =>
+                  setArrivalData((prev) => ({
+                    ...prev,
+                    supplierId: e.target.value,
+                  }))
+                }
+              >
                 <option value="">{t("products.noSupplier")}</option>
                 {suppliers.map((supplier: Supplier) => (
                   <option key={supplier.id} value={supplier.id}>
@@ -329,29 +451,58 @@ export function NewArrivalModal({
                   </option>
                 ))}
               </Select>
-              <Button type="button" variant="secondary" size="small" onClick={onOpenSupplierModal} style={{ flexShrink: 0 }}>
+              <Button
+                type="button"
+                variant="secondary"
+                size="small"
+                onClick={onOpenSupplierModal}
+                style={{ flexShrink: 0 }}
+              >
                 <Settings size={16} />
               </Button>
             </div>
           </FormGroup>
-        </div>
+        </FlexRow>
 
-        <div style={{ display: "flex", gap: "16px" }}>
-          <div style={{ flex: 1 }}>
-            <DateInput label={t("products.productionDate")} value={arrivalData.productionDate}
-              onChange={(val) => setArrivalData((prev) => ({ ...prev, productionDate: val }))} />
+        <FlexRow>
+          <div>
+            <DateInput
+              label={t("products.productionDate")}
+              value={arrivalData.productionDate}
+              onChange={(val) =>
+                setArrivalData((prev) => ({ ...prev, productionDate: val }))
+              }
+            />
           </div>
-          <div style={{ flex: 1 }}>
-            <DateInput label={t("products.expiryDate")} value={arrivalData.expirationDate}
-              onChange={(val) => setArrivalData((prev) => ({ ...prev, expirationDate: val }))} />
+          <div>
+            <DateInput
+              label={t("products.expiryDate")}
+              value={arrivalData.expirationDate}
+              onChange={(val) =>
+                setArrivalData((prev) => ({ ...prev, expirationDate: val }))
+              }
+            />
           </div>
-        </div>
+        </FlexRow>
 
-        <Input label={t("inventory.notes")} value={arrivalData.notes}
-          onChange={(e) => setArrivalData((prev) => ({ ...prev, notes: e.target.value }))} />
+        {arrivalData.expirationDate && (
+          <InfoItem>
+            {getExpireInDays(t, arrivalData.expirationDate, arrivalData.expirationDate)}
+          </InfoItem>
+        )}
+
+        <Input
+          label={t("inventory.notes")}
+          value={arrivalData.notes}
+          onChange={(e) =>
+            setArrivalData((prev) => ({ ...prev, notes: e.target.value }))
+          }
+        />
 
         <Actions>
-          <Button type="button" variant="secondary" onClick={onClose}>{t("common.cancel")}</Button>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
           <Button type="submit">{t("common.save")}</Button>
         </Actions>
       </Form>

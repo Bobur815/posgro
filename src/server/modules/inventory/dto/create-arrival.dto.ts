@@ -1,6 +1,5 @@
 import {
   IsString,
-  IsNotEmpty,
   IsNumber,
   IsInt,
   IsOptional,
@@ -36,4 +35,14 @@ export class CreateArrivalDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ example: 'CASH', description: 'Payment method (informational)' })
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+
+  @ApiPropertyOptional({ example: 'user-cuid', description: 'Created by user ID (informational)' })
+  @IsOptional()
+  @IsString()
+  createdBy?: string;
 }

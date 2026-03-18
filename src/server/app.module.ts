@@ -11,6 +11,8 @@ import { TelegramModule } from './modules/telegram/telegram.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { StoresModule } from './modules/stores/stores.module';
 import { InvoiceScannerModule } from './modules/invoice-scanner/invoice-scanner.module';
+import { CategoriesModule } from './modules/categories/categories.module';
+import { SettingsModule } from './modules/settings/settings.module';
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { InvoiceScannerModule } from './modules/invoice-scanner/invoice-scanner.
     AuthModule,
     UsersModule,
     ProductsModule,
+    CategoriesModule,
+    SettingsModule,
     SalesModule,
     InventoryModule,
     AnalyticsModule,

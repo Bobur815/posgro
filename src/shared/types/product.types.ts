@@ -15,7 +15,7 @@ export interface Product {
   descriptionRu?: string;
   descriptionUz?: string;
   price: number;
-  costPrice?: number;
+  cost?: number;
   unit: ProductUnit;
   stock: number;
   minStock: number;
@@ -94,7 +94,7 @@ export interface ProductCreateInput {
   descriptionRu?: string;
   descriptionUz?: string;
   price: number;
-  costPrice?: number;
+  cost?: number;
   unit?: ProductUnit;
   stock?: number;
   minStock?: number;
@@ -114,7 +114,7 @@ export interface ProductUpdateInput {
   descriptionRu?: string;
   descriptionUz?: string;
   price?: number;
-  costPrice?: number;
+  cost?: number;
   unit?: ProductUnit;
   stock?: number;
   minStock?: number;

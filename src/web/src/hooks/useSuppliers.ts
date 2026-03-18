@@ -12,6 +12,17 @@ import {
 } from '@shared/types';
 import { suppliers as suppliersApi } from '../api/client';
 
+function transformSupplier<T extends { balance?: any; transactions?: any[] }>(s: T): T {
+  return {
+    ...s,
+    balance: s.balance !== undefined ? Number(s.balance) : 0,
+    transactions: s.transactions?.map((tx: any) => ({
+      ...tx,
+      amount: Number(tx.amount),
+    })),
+  };
+}
+
 interface BalanceSummary {
   balance: number;
   totalDebt: number;
@@ -38,7 +49,7 @@ export function useSuppliers() {
 
     try {
       const data = await suppliersApi.getAll(includeInactive);
-      setSuppliers(data as Supplier[]);
+      setSuppliers((data as any[]).map(transformSupplier) as Supplier[]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load suppliers');
     } finally {
@@ -52,7 +63,7 @@ export function useSuppliers() {
 
     try {
       const data = await suppliersApi.getById(id);
-      const supplier = data as SupplierWithTransactions | null;
+      const supplier = data ? transformSupplier(data as any) as SupplierWithTransactions : null;
       setSelectedSupplier(supplier);
       return supplier;
     } catch (err) {

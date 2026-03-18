@@ -327,7 +327,12 @@
     "lastSync": "Oxirgi sinxronizatsiya",
     "never": "Hech qachon",
     "syncNow": "Hozir sinxronlash",
-    "syncing": "Sinxronlanmoqda..."
+    "syncing": "Sinxronlanmoqda...",
+    "syncStatus": "Sinxronizatsiya holati",
+    "syncOk": "Sinxronlashtirildi",
+    "syncFailed": "Xato",
+    "syncNever": "Sinxronlanmagan",
+    "vpsApiUrl": "Server URL"
   },
   "pagination": {
     "showing": "{{from}}–{{to}} / {{total}} ta",
@@ -547,13 +552,11 @@
     "title": "AI — Hisob-faktura tanish",
     "refreshPlan": "Tarifni yangilash",
     "freePlanBadge": "Bepul tarif",
-    "freePlanNote": "Bepul tarifda asosiy hisob-faktura tanish ishlaydi. Murakkab hujjatlar (PDF, kirill, ko'p sahifali) Pro-tarifda aniqroq taniladi.",
+    "freePlanNote": "Bepul tarifda asosiy OCR-tanish ishlaydi. Murakkab hisob-fakturalar noto'g'ri tanilishi mumkin. Pro-tarifga o'tish uchun egasi yoki qo'llab-quvvatlash xizmatiga murojaat qiling.",
     "freePlanContact": "Pro-tarifga o'tish uchun egasi yoki qo'llab-quvvatlash xizmatiga murojaat qiling.",
     "proPlanBadge": "Pro tarif",
-    "proPlanNote": "Joriy oy uchun foydalanish",
-    "scansThisMonth": "Bu oyda skanerlar",
-    "estimatedCharge": "To'lov miqdori",
-    "pricePerScan": "$0.052 / skaner",
+    "proPlanNote": "Haqiqiy foydalanish bo'yicha hisoblanadi. Balansni to'ldirish uchun egasi yoki qo'llab-quvvatlash xizmatiga murojaat qiling.",
+    "creditBalance": "Kredit balansi",
     "contactSupport": "Qo'llab-quvvatlash xizmati"
   }
 }

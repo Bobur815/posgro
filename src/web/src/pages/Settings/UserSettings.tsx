@@ -4,6 +4,7 @@ import styled from 'styled-components';
 import { Button } from '@components/common/Button';
 import { Input } from '@components/common/Input';
 import { useTheme } from '@theme/ThemeProvider';
+import { auth as authApi } from '../../api/client';
 
 const Container = styled.div`
   max-width: 600px;
@@ -57,6 +58,12 @@ const Form = styled.form`
   gap: ${({ theme }) => theme.spacing.md};
 `;
 
+const FeedbackText = styled.p<{ $error?: boolean }>`
+  margin: 0;
+  font-size: 14px;
+  color: ${({ theme, $error }) => $error ? theme.colors.error : theme.colors.success};
+`;
+
 export function UserSettings() {
   const { t, i18n } = useTranslation();
   const { mode, toggleTheme } = useTheme();
@@ -68,7 +75,7 @@ export function UserSettings() {
     newPassword: '',
     confirmPassword: '',
   });
-  const [passwordError, setPasswordError] = useState('');
+  const [feedback, setFeedback] = useState<{ message: string; error: boolean } | null>(null);
 
   const handleLanguageChange = (lang: string) => {
     setLanguageState(lang);
@@ -78,23 +85,29 @@ export function UserSettings() {
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPasswordError('');
+    setFeedback(null);
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setPasswordError(t('settings.passwordMismatch'));
+      setFeedback({ message: t('settings.passwordMismatch'), error: true });
       return;
     }
 
     if (passwordData.newPassword.length < 6) {
-      setPasswordError(t('settings.passwordTooShort'));
+      setFeedback({ message: t('settings.passwordTooShort'), error: true });
       return;
     }
 
     try {
-      console.log('Changing password');
+      await authApi.changePassword(passwordData.currentPassword, passwordData.newPassword);
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    } catch (error) {
-      setPasswordError(t('settings.passwordChangeFailed'));
+      setFeedback({ message: t('settings.passwordChanged'), error: false });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '';
+      if (message.includes('invalid_password')) {
+        setFeedback({ message: t('settings.passwordWrong'), error: true });
+      } else {
+        setFeedback({ message: t('settings.passwordChangeFailed'), error: true });
+      }
     }
   };
 
@@ -159,8 +172,8 @@ export function UserSettings() {
             required
           />
 
-          {passwordError && (
-            <div style={{ color: 'red', fontSize: '14px' }}>{passwordError}</div>
+          {feedback && (
+            <FeedbackText $error={feedback.error}>{feedback.message}</FeedbackText>
           )}
 
           <Button type="submit">{t('settings.updatePassword')}</Button>
