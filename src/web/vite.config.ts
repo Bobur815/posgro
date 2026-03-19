@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   plugins: [react()],
   resolve: {
+    dedupe: ['react', 'react-dom', 'styled-components', 'i18next', 'react-i18next'],
     alias: {
       '@shared': path.resolve(__dirname, '../../src/shared'),
       '@renderer': path.resolve(__dirname, '../../src/renderer'),
