@@ -27,6 +27,8 @@
     "currency": "so'm"
   },
   "auth": {
+    "showPassword": "Parolni ko'rsatish",
+    "hidePassword": "Parolni yashirish",
     "login": "Kirish",
     "logout": "Chiqish",
     "phone": "Telefon",

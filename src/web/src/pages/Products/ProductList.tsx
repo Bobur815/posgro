@@ -18,14 +18,18 @@ import {
   ChevronUp,
   PlusCircle,
   Edit,
-  List,
   Trash,
   X,
+  Eye,
 } from "lucide-react";
 import { formatDate } from "../../utils/formatters";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { debounce } from "../../utils/helpers";
-import { MobileCard, MobileCardList, DesktopOnly } from "../../components/common/MobileCard";
+import {
+  MobileCard,
+  MobileCardList,
+  DesktopOnly,
+} from "../../components/common/MobileCard";
 
 const Container = styled.div`
   display: flex;
@@ -202,7 +206,7 @@ export function ProductList() {
             tooltip={t("products.viewDetails")}
             onClick={() => navigate(`/products/${product.id}`)}
           >
-            <List size={16} />
+            <Eye size={16} />
           </Button>
         </div>
       ),
@@ -280,11 +284,21 @@ export function ProductList() {
             title={i18n.language === "uz" ? product.nameUz : product.nameRu}
             subtitle={product.barcode}
             fields={[
-              { label: t("products.price"), value: formatCurrency(product.price) },
+              {
+                label: t("products.price"),
+                value: formatCurrency(product.price),
+              },
               {
                 label: t("products.stock"),
                 value: (
-                  <span style={{ color: product.stock <= product.minStock ? "#f44336" : "inherit" }}>
+                  <span
+                    style={{
+                      color:
+                        product.stock <= product.minStock
+                          ? "#f44336"
+                          : "inherit",
+                    }}
+                  >
                     {product.stock} {product.unit}
                   </span>
                 ),
@@ -292,31 +306,52 @@ export function ProductList() {
               {
                 label: t("products.supplier"),
                 value: product.supplier
-                  ? (i18n.language === "uz" ? product.supplier.nameUz : product.supplier.nameRu)
+                  ? i18n.language === "uz"
+                    ? product.supplier.nameUz
+                    : product.supplier.nameRu
                   : "-",
               },
               {
                 label: t("products.category"),
                 value: product.category
-                  ? (i18n.language === "uz" ? product.category.nameUz : product.category.nameRu)
+                  ? i18n.language === "uz"
+                    ? product.category.nameUz
+                    : product.category.nameRu
                   : "-",
               },
               {
                 label: t("products.expiryDate"),
-                value: product.expiryDate ? formatDate(product.expiryDate) : "-",
+                value: product.expiryDate
+                  ? formatDate(product.expiryDate)
+                  : "-",
               },
             ]}
             actions={
               isAdmin ? (
                 <>
-                  <Button variant="secondary" size="small" tooltip={t("common.edit")} onClick={() => setEditProductId(String(product.id))}>
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    tooltip={t("common.edit")}
+                    onClick={() => setEditProductId(String(product.id))}
+                  >
                     <Edit size={16} />
                   </Button>
-                  <Button variant="danger" size="small" tooltip={t("common.delete")} onClick={() => navigate(`/products/${product.id}/delete`)}>
+                  <Button
+                    variant="danger"
+                    size="small"
+                    tooltip={t("common.delete")}
+                    onClick={() => navigate(`/products/${product.id}/delete`)}
+                  >
                     <Trash size={16} />
                   </Button>
-                  <Button variant="primary" size="small" tooltip={t("products.viewDetails")} onClick={() => navigate(`/products/${product.id}`)}>
-                    <List size={16} />
+                  <Button
+                    variant="primary"
+                    size="small"
+                    tooltip={t("products.viewDetails")}
+                    onClick={() => navigate(`/products/${product.id}`)}
+                  >
+                    <Eye size={16} />
                   </Button>
                 </>
               ) : undefined

@@ -15,8 +15,19 @@ import { useProducts } from "../../hooks/useProducts";
 import { useToast } from "@context/ToastContext";
 import { Supplier } from "@shared/types";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
-import { ChevronDown, ChevronUp, PlusCircle, Eye, Edit, Trash } from "lucide-react";
-import { MobileCard, MobileCardList, DesktopOnly } from "../../components/common/MobileCard";
+import {
+  ChevronDown,
+  ChevronUp,
+  PlusCircle,
+  Eye,
+  Edit,
+  Trash,
+} from "lucide-react";
+import {
+  MobileCard,
+  MobileCardList,
+  DesktopOnly,
+} from "../../components/common/MobileCard";
 
 const Container = styled.div`
   display: flex;
@@ -76,7 +87,9 @@ export function SupplierList() {
   const { suppliers, isLoading, loadSuppliers, deleteSupplier, error } =
     useSuppliers();
   const { products, categories, loadProducts, loadCategories } = useProducts();
-  const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
+  const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(
+    null,
+  );
   const [showSupplierForm, setShowSupplierForm] = useState(false);
   const [editSupplierId, setEditSupplierId] = useState<string | null>(null);
   const [filters, setFilters] = useState<SupplierFilterParams>({});
@@ -176,14 +189,31 @@ export function SupplierList() {
       header: "",
       render: (supplier: Supplier) => (
         <div style={{ display: "flex", gap: "8px" }}>
-          <Button size="small" variant="secondary" tooltip={t("suppliers.viewDetails")} onClick={() => navigate(`/suppliers/${supplier.id}`)}>
-            <Eye size={16} />
-          </Button>
-          <Button size="small" variant="secondary" tooltip={t("common.edit")} onClick={() => setEditSupplierId(supplier.id)}>
+          <Button
+            size="small"
+            variant="secondary"
+            tooltip={t("common.edit")}
+            onClick={() => setEditSupplierId(supplier.id)}
+          >
             <Edit size={16} />
           </Button>
-          <Button size="small" variant="danger" tooltip={t("common.delete")} onClick={() => setSupplierToDelete(supplier)}>
+
+          <Button
+            size="small"
+            variant="danger"
+            tooltip={t("common.delete")}
+            onClick={() => setSupplierToDelete(supplier)}
+          >
             <Trash size={16} />
+          </Button>
+
+          <Button
+            size="small"
+            variant="primary"
+            tooltip={t("suppliers.viewDetails")}
+            onClick={() => navigate(`/suppliers/${supplier.id}`)}
+          >
+            <Eye size={16} />
           </Button>
         </div>
       ),
@@ -241,20 +271,37 @@ export function SupplierList() {
                 label: t("users.status"),
                 value: (
                   <Badge $active={supplier.active}>
-                    {supplier.active ? t("suppliers.active") : t("suppliers.inactive")}
+                    {supplier.active
+                      ? t("suppliers.active")
+                      : t("suppliers.inactive")}
                   </Badge>
                 ),
               },
             ]}
             actions={
               <>
-                <Button size="small" variant="secondary" tooltip={t("suppliers.viewDetails")} onClick={() => navigate(`/suppliers/${supplier.id}`)}>
+                <Button
+                  size="small"
+                  variant="secondary"
+                  tooltip={t("suppliers.viewDetails")}
+                  onClick={() => navigate(`/suppliers/${supplier.id}`)}
+                >
                   <Eye size={16} />
                 </Button>
-                <Button size="small" variant="secondary" tooltip={t("common.edit")} onClick={() => setEditSupplierId(supplier.id)}>
+                <Button
+                  size="small"
+                  variant="secondary"
+                  tooltip={t("common.edit")}
+                  onClick={() => setEditSupplierId(supplier.id)}
+                >
                   <Edit size={16} />
                 </Button>
-                <Button size="small" variant="danger" tooltip={t("common.delete")} onClick={() => setSupplierToDelete(supplier)}>
+                <Button
+                  size="small"
+                  variant="danger"
+                  tooltip={t("common.delete")}
+                  onClick={() => setSupplierToDelete(supplier)}
+                >
                   <Trash size={16} />
                 </Button>
               </>
@@ -287,7 +334,10 @@ export function SupplierList() {
       {showSupplierForm && (
         <SupplierForm
           onClose={() => setShowSupplierForm(false)}
-          onSuccess={() => { setShowSupplierForm(false); loadSuppliers(true); }}
+          onSuccess={() => {
+            setShowSupplierForm(false);
+            loadSuppliers(true);
+          }}
         />
       )}
 
@@ -295,7 +345,10 @@ export function SupplierList() {
         <SupplierForm
           supplierId={editSupplierId}
           onClose={() => setEditSupplierId(null)}
-          onSuccess={() => { setEditSupplierId(null); loadSuppliers(true); }}
+          onSuccess={() => {
+            setEditSupplierId(null);
+            loadSuppliers(true);
+          }}
         />
       )}
     </Container>

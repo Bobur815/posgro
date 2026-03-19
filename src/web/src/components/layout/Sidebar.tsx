@@ -469,11 +469,11 @@ export function Sidebar() {
       <MobileBottomNav>
         {mobileNavItems.map(({ to, icon: Icon }) => (
           <MobileNavItem key={to} to={to}>
-            <Icon size={22} />
+            <Icon size={24} />
           </MobileNavItem>
         ))}
         <MobileNavButton onClick={handleLogout}>
-          <LogOut size={22} />
+          <LogOut size={24} />
         </MobileNavButton>
       </MobileBottomNav>
     </>

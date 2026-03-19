@@ -93,7 +93,9 @@ export function SupplierFilters({
           style={{ padding: "8px" }}
           value={filters.balance || "all"}
           onChange={(e) =>
-            update({ balance: e.target.value as SupplierFilterParams["balance"] })
+            update({
+              balance: e.target.value as SupplierFilterParams["balance"],
+            })
           }
         />
       </FilterItem>

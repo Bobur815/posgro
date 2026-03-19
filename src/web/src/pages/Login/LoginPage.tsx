@@ -89,7 +89,7 @@ const PasswordWrapper = styled.div`
 const EyeButton = styled.button`
   position: absolute;
   right: 10px;
-  top: 50%;
+  top: 70%;
   transform: translateY(-50%);
   background: none;
   border: none;

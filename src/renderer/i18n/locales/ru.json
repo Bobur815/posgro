@@ -27,6 +27,8 @@
     "currency": "сум"
   },
   "auth": {
+    "showPassword": "Показать пароль",
+    "hidePassword": "Скрыть пароль",
     "login": "Войти",
     "logout": "Выйти",
     "phone": "Телефон",
