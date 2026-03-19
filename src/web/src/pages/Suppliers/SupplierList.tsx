@@ -15,7 +15,7 @@ import { useToast } from "@context/ToastContext";
 import { Supplier } from "@shared/types";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { ChevronDown, ChevronUp, PlusCircle, Eye, Edit, Trash } from "lucide-react";
-import { MobileCard, MobileCardList, DesktopOnly } from "@components/common/MobileCard";
+import { MobileCard, MobileCardList, DesktopOnly } from "../../components/common/MobileCard";
 
 const Container = styled.div`
   display: flex;

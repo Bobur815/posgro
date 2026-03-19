@@ -9,7 +9,7 @@ import { formatDate } from '../../utils/formatters';
 import { users as usersApi } from '../../api/client';
 import type { UserListItem } from '@shared/types';
 import { Edit, UserCheck, UserX, PlusCircle } from 'lucide-react';
-import { MobileCard, MobileCardList, DesktopOnly } from '@components/common/MobileCard';
+import { MobileCard, MobileCardList, DesktopOnly } from '../../components/common/MobileCard';
 
 const Container = styled.div`
   display: flex;
