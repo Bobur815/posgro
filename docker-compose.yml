@@ -41,10 +41,10 @@ services:
       DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/grocery_pos"
       PYTHON_OCR_URL: "http://ocr-python:8001"
       NODE_ENV: "production"
-      PORT: "3000"
+      PORT: "3001"
       RUN_MIGRATIONS: "true"
     ports:
-      - "3000:3000"
+      - "3001:3001"
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,13 +1,13 @@
-import axios from 'axios';
+import axios from "axios";
 
-const baseURL = import.meta.env.VITE_API_URL ?? '/api';
+const baseURL = import.meta.env.VITE_API_URL ?? "/api";
 
 export const axiosInstance = axios.create({ baseURL });
 
 // Request interceptor: inject JWT
 axiosInstance.interceptors.request.use((config) => {
   // Lazy-import to avoid circular deps; read directly from localStorage
-  const raw = localStorage.getItem('auth-storage');
+  const raw = localStorage.getItem("auth-storage");
   if (raw) {
     try {
       const parsed = JSON.parse(raw);
@@ -28,11 +28,15 @@ axiosInstance.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       // Clear auth state
-      localStorage.removeItem('auth-storage');
-      window.location.href = '/web/login';
+      localStorage.removeItem("auth-storage");
+      window.location.href = "/web/login";
     }
-    return Promise.reject(error instanceof Error ? error : new Error(error.response?.data?.message ?? String(error)));
-  }
+    return Promise.reject(
+      error instanceof Error
+        ? error
+        : new Error(error.response?.data?.message ?? String(error)),
+    );
+  },
 );
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
@@ -41,18 +45,25 @@ export const auth = {
   login: async (phone: string, password: string, storeId?: string) => {
     const body: Record<string, string> = { phone, password };
     if (storeId) body.storeId = storeId;
-    const { data } = await axiosInstance.post('/auth/login', body);
+    const { data } = await axiosInstance.post("/auth/login", body);
     return data as { token: string; user: unknown };
   },
   logout: async () => {
-    try { await axiosInstance.post('/auth/logout'); } catch { /* ignore */ }
+    try {
+      await axiosInstance.post("/auth/logout");
+    } catch {
+      /* ignore */
+    }
   },
   getProfile: async () => {
-    const { data } = await axiosInstance.get('/auth/profile');
+    const { data } = await axiosInstance.get("/auth/profile");
     return data;
   },
   changePassword: async (currentPassword: string, newPassword: string) => {
-    const { data } = await axiosInstance.post('/auth/change-password', { currentPassword, newPassword });
+    const { data } = await axiosInstance.post("/auth/change-password", {
+      currentPassword,
+      newPassword,
+    });
     return data;
   },
 };
@@ -61,7 +72,7 @@ export const auth = {
 
 export const products = {
   getAll: async (filters?: Record<string, unknown>) => {
-    const { data } = await axiosInstance.get('/products', { params: filters });
+    const { data } = await axiosInstance.get("/products", { params: filters });
     return data;
   },
   getById: async (id: string) => {
@@ -73,11 +84,13 @@ export const products = {
     return data;
   },
   findByInternalCode: async (internalCode: string) => {
-    const { data } = await axiosInstance.get(`/products/internal-code/${internalCode}`);
+    const { data } = await axiosInstance.get(
+      `/products/internal-code/${internalCode}`,
+    );
     return data;
   },
   create: async (productData: unknown) => {
-    const { data } = await axiosInstance.post('/products', productData);
+    const { data } = await axiosInstance.post("/products", productData);
     return data;
   },
   update: async (id: string, productData: unknown) => {
@@ -89,17 +102,28 @@ export const products = {
     return data;
   },
   search: async (query: string) => {
-    const { data } = await axiosInstance.get('/products', { params: { query } });
+    const { data } = await axiosInstance.get("/products", {
+      params: { query },
+    });
     return data;
   },
   getTopSelling: async (limit?: number) => {
-    const { data } = await axiosInstance.get('/products/top-selling', { params: { limit } });
+    const { data } = await axiosInstance.get("/products/top-selling", {
+      params: { limit },
+    });
     return data;
   },
-  getAnalytics: async (productId: number, startDate?: string, endDate?: string) => {
-    const { data } = await axiosInstance.get(`/products/${productId}/analytics`, {
-      params: { startDate, endDate },
-    });
+  getAnalytics: async (
+    productId: number,
+    startDate?: string,
+    endDate?: string,
+  ) => {
+    const { data } = await axiosInstance.get(
+      `/products/${productId}/analytics`,
+      {
+        params: { startDate, endDate },
+      },
+    );
     return data;
   },
 };
@@ -108,11 +132,11 @@ export const products = {
 
 export const categories = {
   getAll: async () => {
-    const { data } = await axiosInstance.get('/categories');
+    const { data } = await axiosInstance.get("/categories");
     return data;
   },
   create: async (categoryData: unknown) => {
-    const { data } = await axiosInstance.post('/categories', categoryData);
+    const { data } = await axiosInstance.post("/categories", categoryData);
     return data;
   },
   update: async (id: string, categoryData: unknown) => {
@@ -129,15 +153,20 @@ export const categories = {
 
 export const inventory = {
   createArrival: async (arrivalData: unknown) => {
-    const { data } = await axiosInstance.post('/inventory/arrivals', arrivalData);
+    const { data } = await axiosInstance.post(
+      "/inventory/arrivals",
+      arrivalData,
+    );
     return data;
   },
   getArrivals: async (filters?: { productId?: string }) => {
-    const { data } = await axiosInstance.get('/inventory/arrivals', { params: filters });
+    const { data } = await axiosInstance.get("/inventory/arrivals", {
+      params: filters,
+    });
     return data;
   },
   getLowStock: async () => {
-    const { data } = await axiosInstance.get('/inventory/low-stock');
+    const { data } = await axiosInstance.get("/inventory/low-stock");
     return data;
   },
 };
@@ -146,7 +175,7 @@ export const inventory = {
 
 export const suppliers = {
   getAll: async (includeInactive?: boolean) => {
-    const { data } = await axiosInstance.get('/suppliers', {
+    const { data } = await axiosInstance.get("/suppliers", {
       params: { includeInactive },
     });
     return data;
@@ -156,7 +185,7 @@ export const suppliers = {
     return data;
   },
   create: async (supplierData: unknown) => {
-    const { data } = await axiosInstance.post('/suppliers', supplierData);
+    const { data } = await axiosInstance.post("/suppliers", supplierData);
     return data;
   },
   update: async (id: string, supplierData: unknown) => {
@@ -168,27 +197,42 @@ export const suppliers = {
     return data;
   },
   getTransactions: async (filters?: unknown) => {
-    const { data } = await axiosInstance.get('/suppliers/transactions', { params: filters as Record<string, unknown> });
+    const { data } = await axiosInstance.get("/suppliers/transactions", {
+      params: filters as Record<string, unknown>,
+    });
     return data;
   },
   createTransaction: async (transactionData: unknown) => {
-    const { data } = await axiosInstance.post('/suppliers/transactions', transactionData);
+    const { data } = await axiosInstance.post(
+      "/suppliers/transactions",
+      transactionData,
+    );
     return data;
   },
   updateTransaction: async (id: string, transactionData: unknown) => {
-    const { data } = await axiosInstance.put(`/suppliers/transactions/${id}`, transactionData);
+    const { data } = await axiosInstance.put(
+      `/suppliers/transactions/${id}`,
+      transactionData,
+    );
     return data;
   },
   deleteTransaction: async (id: string) => {
-    const { data } = await axiosInstance.delete(`/suppliers/transactions/${id}`);
+    const { data } = await axiosInstance.delete(
+      `/suppliers/transactions/${id}`,
+    );
     return data;
   },
   getBalance: async (supplierId: string) => {
-    const { data } = await axiosInstance.get(`/suppliers/${supplierId}/balance`);
+    const { data } = await axiosInstance.get(
+      `/suppliers/${supplierId}/balance`,
+    );
     return data;
   },
   recordPayment: async (paymentData: unknown) => {
-    const { data } = await axiosInstance.post('/suppliers/payments', paymentData);
+    const { data } = await axiosInstance.post(
+      "/suppliers/payments",
+      paymentData,
+    );
     return data;
   },
 };
@@ -197,7 +241,7 @@ export const suppliers = {
 
 export const sales = {
   getAll: async (filters?: { startDate?: string; endDate?: string }) => {
-    const { data } = await axiosInstance.get('/sales', { params: filters });
+    const { data } = await axiosInstance.get("/sales", { params: filters });
     return data;
   },
   getById: async (id: string) => {
@@ -205,7 +249,7 @@ export const sales = {
     return data;
   },
   create: async (saleData: unknown) => {
-    const { data } = await axiosInstance.post('/sales', saleData);
+    const { data } = await axiosInstance.post("/sales", saleData);
     return data;
   },
   update: async (id: string, saleData: unknown) => {
@@ -217,7 +261,7 @@ export const sales = {
     return data;
   },
   getTodaySummary: async () => {
-    const { data } = await axiosInstance.get('/sales/today/summary');
+    const { data } = await axiosInstance.get("/sales/today/summary");
     return data;
   },
 };
@@ -226,7 +270,7 @@ export const sales = {
 
 export const users = {
   getAll: async () => {
-    const { data } = await axiosInstance.get('/users');
+    const { data } = await axiosInstance.get("/users");
     return data;
   },
   getById: async (id: string) => {
@@ -234,7 +278,7 @@ export const users = {
     return data;
   },
   create: async (userData: unknown) => {
-    const { data } = await axiosInstance.post('/users', userData);
+    const { data } = await axiosInstance.post("/users", userData);
     return data;
   },
   update: async (id: string, userData: unknown) => {
@@ -251,7 +295,7 @@ export const users = {
 
 export const settings = {
   getAll: async () => {
-    const { data } = await axiosInstance.get('/settings');
+    const { data } = await axiosInstance.get("/settings");
     return data;
   },
   get: async (key: string) => {
@@ -268,15 +312,20 @@ export const settings = {
 
 export const receipt = {
   scan: async (imageData: string, mimeType?: string) => {
-    const { data } = await axiosInstance.post('/invoice/scan', { imageBase64: imageData, mimeType });
+    const { data } = await axiosInstance.post("/invoice/scan", {
+      imageBase64: imageData,
+      mimeType,
+    });
     return data;
   },
   matchProducts: async (items: unknown[]) => {
-    const { data } = await axiosInstance.post('/invoice/match-products', { items });
+    const { data } = await axiosInstance.post("/invoice/match-products", {
+      items,
+    });
     return data;
   },
   getPlan: async (): Promise<{ plan: string; balance_usd: number | null }> => {
-    const { data } = await axiosInstance.get('/invoice/plan');
+    const { data } = await axiosInstance.get("/invoice/plan");
     return data;
   },
 };
@@ -307,7 +356,7 @@ export interface StoreStats {
 
 export const stores = {
   getAll: async (): Promise<StoreRecord[]> => {
-    const { data } = await axiosInstance.get('/stores');
+    const { data } = await axiosInstance.get("/stores");
     return data;
   },
   getById: async (id: string): Promise<StoreRecord> => {
@@ -318,11 +367,24 @@ export const stores = {
     const { data } = await axiosInstance.get(`/stores/${id}/stats`);
     return data;
   },
-  create: async (payload: { name: string; address?: string; phone?: string }): Promise<StoreRecord> => {
-    const { data } = await axiosInstance.post('/stores', payload);
+  create: async (payload: {
+    name: string;
+    address?: string;
+    phone?: string;
+  }): Promise<StoreRecord> => {
+    const { data } = await axiosInstance.post("/stores", payload);
     return data;
   },
-  update: async (id: string, payload: Partial<{ name: string; address: string; phone: string; active: boolean; plan: string }>): Promise<StoreRecord> => {
+  update: async (
+    id: string,
+    payload: Partial<{
+      name: string;
+      address: string;
+      phone: string;
+      active: boolean;
+      plan: string;
+    }>,
+  ): Promise<StoreRecord> => {
     const { data } = await axiosInstance.patch(`/stores/${id}`, payload);
     return data;
   },
@@ -344,7 +406,9 @@ export const stores = {
 
 export const analytics = {
   getData: async (filters: { startDate: string; endDate: string }) => {
-    const { data } = await axiosInstance.get('/analytics/data', { params: filters });
+    const { data } = await axiosInstance.get("/analytics/data", {
+      params: filters,
+    });
     return data;
   },
 };

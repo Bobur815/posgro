@@ -43,7 +43,7 @@ function loadConfig(): AppConfig {
     terminalId: process.env.TERMINAL_ID || 'T1',
 
     // VPS API connection
-    vpsApiUrl: process.env.VPS_API_URL || 'http://localhost:3000/api',
+    vpsApiUrl: process.env.VPS_API_URL || 'http://localhost:3001/api',
 
     // Sync settings (default: 5 minutes)
     syncIntervalMs: parseInt(process.env.SYNC_INTERVAL_MS || '300000', 10),
@@ -81,7 +81,7 @@ export function validateEnvironment(): string[] {
   }
 
   if (!process.env.VPS_API_URL) {
-    errors.push('VPS_API_URL is not set (using default: http://localhost:3000/api)');
+    errors.push('VPS_API_URL is not set (using default: http://localhost:3001/api)');
   }
 
   return errors;

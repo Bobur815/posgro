@@ -90,7 +90,7 @@ class ApiClient {
 
 // Create singleton instance
 const apiClient = new ApiClient(
-  process.env.VPS_API_URL || 'http://localhost:3000/api'
+  process.env.VPS_API_URL || 'http://localhost:3001/api'
 );
 
 export { apiClient, ApiClient };
