@@ -38,9 +38,9 @@ COPY --from=builder --chown=node:node /app/prisma ./prisma
 # Web assets are already in dist/web (built above)
 
 USER node
-EXPOSE 3000
+EXPOSE 3001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/health || exit 1
 
 CMD ["node", "dist/server/main.js"]
