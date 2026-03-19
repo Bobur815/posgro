@@ -124,7 +124,7 @@ export function BarcodeScannerModal({ onScan, onClose }: BarcodeScannerModalProp
   }, []);
 
   return (
-    <Modal title={t("scanner.scanBarcode") || "Scan Barcode"} onClose={onClose}>
+    <Modal title={t("scanner.title") || "Scan Barcode"} onClose={onClose}>
       {error ? (
         <ErrorMsg>{error}</ErrorMsg>
       ) : (

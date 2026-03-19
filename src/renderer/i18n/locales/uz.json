@@ -508,6 +508,15 @@
     "testSent": "Test sahifa yuborildi",
     "testFailed": "Test chop etishda xato"
   },
+  "scanner":{
+    "title": "Shtrix-kod skaneri",
+    "description": "Mahsulot qo'shish uchun shtrix-kodni skanerlang",
+    "scanning": "Skanerlanmoqda...",
+    "productFound": "Mahsulot topildi: {{name}}",
+    "productNotFound": "Mahsulot topilmadi",
+    "error": "Skanerda xato yuz berdi",
+    "pointCamera": "Kamerani mahsulot shtrix-kodiga qarating"
+  },
   "receiptScan": {
     "scanReceipt": "Chekni skanerlash",
     "uploadImage": "Faylni yuklash",

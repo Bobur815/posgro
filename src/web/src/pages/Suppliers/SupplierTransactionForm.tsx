@@ -4,6 +4,7 @@ import styled from 'styled-components';
 import { Button } from '@components/common/Button';
 import { Input } from '@components/common/Input';
 import { DateInput } from '@components/common/DateInput';
+import { Modal } from '@components/common/Modal';
 import {
   SupplierTransaction,
   SupplierTransactionType,
@@ -14,33 +15,6 @@ import {
   SUPPLIER_PAYMENT_METHOD_I18N_KEYS,
 } from '@shared/constants/payment-methods';
 
-const Overlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-`;
-
-const ModalBox = styled.div`
-  background-color: ${({ theme }) => theme.colors.surface};
-  border-radius: ${({ theme }) => theme.borderRadius};
-  padding: ${({ theme }) => theme.spacing.lg};
-  min-width: 400px;
-  max-width: 500px;
-  max-height: 90vh;
-  overflow-y: auto;
-`;
-
-const Title = styled.h2`
-  margin: 0 0 ${({ theme }) => theme.spacing.md};
-  color: ${({ theme }) => theme.colors.text};
-`;
 
 const Form = styled.form`
   display: flex;
@@ -190,12 +164,10 @@ export function SupplierTransactionForm({
 
 
   return (
-    <Overlay onClick={onCancel}>
-      <ModalBox onClick={(e) => e.stopPropagation()}>
-        <Title>
-          {isEdit ? t('suppliers.editTransaction') : t('suppliers.addTransaction')}
-        </Title>
-
+    <Modal
+      title={isEdit ? t('suppliers.editTransaction') : t('suppliers.addTransaction')}
+      onClose={onCancel}
+    >
         <Form onSubmit={handleSubmit}>
           <FormGroup>
             <Label>{t('suppliers.transactionType')}</Label>
@@ -261,7 +233,6 @@ export function SupplierTransactionForm({
             </Button>
           </Actions>
         </Form>
-      </ModalBox>
-    </Overlay>
+    </Modal>
   );
 }

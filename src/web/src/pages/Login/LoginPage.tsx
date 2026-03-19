@@ -8,6 +8,7 @@ import { Button } from "@components/common/Button";
 import { Input } from "@components/common/Input";
 import { UzbekPhoneInput } from "@components/common/UzbekPhoneInput";
 import { isUzPhoneComplete } from "@shared/utils/phone";
+import { Eye, EyeOff } from "lucide-react";
 
 const Container = styled.div`
   display: flex;
@@ -52,6 +53,10 @@ const ErrorMessage = styled.div`
   color: ${({ theme }) => theme.colors.error};
   font-size: 14px;
   min-height: 20px;
+  padding: ${({ theme }) => theme.spacing.sm};
+  background-color: ${({ theme }) => theme.colors.error}10;
+  border: 1px solid ${({ theme }) => theme.colors.error}30;
+  border-radius: ${({ theme }) => theme.borderRadius};
 `;
 
 const LangRow = styled.div`
@@ -77,6 +82,28 @@ const LangButton = styled.button<{ $active?: boolean }>`
   }
 `;
 
+const PasswordWrapper = styled.div`
+  position: relative;
+`;
+
+const EyeButton = styled.button`
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  display: flex;
+  align-items: center;
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.text};
+  }
+`;
+
 const ENV_STORE_ID = import.meta.env.VITE_STORE_ID as string | undefined;
 
 export function LoginPage() {
@@ -87,6 +114,7 @@ export function LoginPage() {
 
   const [phoneDigits, setPhoneDigits] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [storeId, setStoreId] = useState(
     ENV_STORE_ID ?? localStorage.getItem("last_store_id") ?? ""
   );
@@ -128,15 +156,26 @@ export function LoginPage() {
             onEnter={() => passwordRef.current?.focus()}
           />
 
-          <Input
-            label={t("auth.password")}
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={t("auth.password")}
-            ref={passwordRef}
-            required
-          />
+          <PasswordWrapper>
+            <Input
+              label={t("auth.password")}
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={t("auth.password")}
+              ref={passwordRef}
+              required
+              style={{ paddingRight: "40px" }}
+            />
+            <EyeButton
+              type="button"
+              tabIndex={-1}
+              onClick={() => setShowPassword((v) => !v)}
+              title={showPassword ? t("auth.hidePassword") || "Hide" : t("auth.showPassword") || "Show"}
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </EyeButton>
+          </PasswordWrapper>
 
           {!ENV_STORE_ID && (
             <>
@@ -150,17 +189,17 @@ export function LoginPage() {
                 </button>
               ) : (
                 <Input
-                  label="Store ID"
+                  label="ID"
                   value={storeId}
                   onChange={(e) => setStoreId(e.target.value)}
-                  placeholder="e.g. default-store (leave empty for super admin)"
+                  placeholder="e.g. 1234"
                 />
               )}
             </>
           )}
 
           {error && (
-            <ErrorMessage>{t(error, { defaultValue: error })}</ErrorMessage>
+            <ErrorMessage>{t(error, { defaultValue: t("auth.errors.login_failed") })}</ErrorMessage>
           )}
 
           <Button

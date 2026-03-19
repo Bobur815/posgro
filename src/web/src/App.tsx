@@ -7,7 +7,6 @@ import { ProductList } from './pages/Products/ProductList';
 import { ProductDetails } from './pages/Products/ProductDetails';
 import { StockManagement } from './pages/Products/StockManagement';
 import { SupplierList } from './pages/Suppliers/SupplierList';
-import { SupplierForm } from './pages/Suppliers/SupplierForm';
 import { SupplierDetails } from './pages/Suppliers/SupplierDetails';
 import { DailySummary } from './pages/Reports/DailySummary';
 import { MonthlyReport } from './pages/Reports/MonthlyReport';
@@ -77,9 +76,9 @@ export function App() {
 
           {/* Suppliers (not for super admin) */}
           <Route path="suppliers" element={<PrivateRoute excludeSuperAdmin><SupplierList /></PrivateRoute>} />
-          <Route path="suppliers/new" element={<PrivateRoute excludeSuperAdmin><SupplierForm /></PrivateRoute>} />
           <Route path="suppliers/:id" element={<PrivateRoute excludeSuperAdmin><SupplierDetails /></PrivateRoute>} />
-          <Route path="suppliers/:id/edit" element={<PrivateRoute excludeSuperAdmin><SupplierForm /></PrivateRoute>} />
+          <Route path="suppliers/new" element={<Navigate to="/suppliers" replace />} />
+          <Route path="suppliers/:id/edit" element={<Navigate to="/suppliers" replace />} />
 
           {/* Reports (not for super admin) */}
           <Route path="reports/daily" element={<PrivateRoute excludeSuperAdmin><DailySummary /></PrivateRoute>} />

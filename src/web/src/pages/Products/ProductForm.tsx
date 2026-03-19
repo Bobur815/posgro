@@ -558,7 +558,7 @@ export function ProductForm({
                         variant="secondary"
                         size="small"
                         onClick={() => setShowScanner(true)}
-                        title={t("scanner.scanBarcode") || "Scan barcode"}
+                        title={t("scanner.title") || "Scan barcode"}
                         style={{ flexShrink: 0 }}
                       >
                         <Camera size={16} />

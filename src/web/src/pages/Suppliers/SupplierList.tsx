@@ -9,6 +9,7 @@ import {
   SupplierFilters,
   SupplierFilterParams,
 } from "@components/suppliers/SupplierFilters";
+import { SupplierForm } from "./SupplierForm";
 import { useSuppliers } from "../../hooks/useSuppliers";
 import { useProducts } from "../../hooks/useProducts";
 import { useToast } from "@context/ToastContext";
@@ -75,9 +76,9 @@ export function SupplierList() {
   const { suppliers, isLoading, loadSuppliers, deleteSupplier, error } =
     useSuppliers();
   const { products, categories, loadProducts, loadCategories } = useProducts();
-  const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(
-    null,
-  );
+  const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
+  const [showSupplierForm, setShowSupplierForm] = useState(false);
+  const [editSupplierId, setEditSupplierId] = useState<string | null>(null);
   const [filters, setFilters] = useState<SupplierFilterParams>({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
@@ -178,7 +179,7 @@ export function SupplierList() {
           <Button size="small" variant="secondary" tooltip={t("suppliers.viewDetails")} onClick={() => navigate(`/suppliers/${supplier.id}`)}>
             <Eye size={16} />
           </Button>
-          <Button size="small" variant="secondary" tooltip={t("common.edit")} onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}>
+          <Button size="small" variant="secondary" tooltip={t("common.edit")} onClick={() => setEditSupplierId(supplier.id)}>
             <Edit size={16} />
           </Button>
           <Button size="small" variant="danger" tooltip={t("common.delete")} onClick={() => setSupplierToDelete(supplier)}>
@@ -204,7 +205,7 @@ export function SupplierList() {
           </Button>
         </div>
         <HeaderActions>
-          <Button onClick={() => navigate("/suppliers/new")}>
+          <Button onClick={() => setShowSupplierForm(true)}>
             <PlusCircle size={24} /> {t("suppliers.addSupplier")}
           </Button>
         </HeaderActions>
@@ -250,7 +251,7 @@ export function SupplierList() {
                 <Button size="small" variant="secondary" tooltip={t("suppliers.viewDetails")} onClick={() => navigate(`/suppliers/${supplier.id}`)}>
                   <Eye size={16} />
                 </Button>
-                <Button size="small" variant="secondary" tooltip={t("common.edit")} onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}>
+                <Button size="small" variant="secondary" tooltip={t("common.edit")} onClick={() => setEditSupplierId(supplier.id)}>
                   <Edit size={16} />
                 </Button>
                 <Button size="small" variant="danger" tooltip={t("common.delete")} onClick={() => setSupplierToDelete(supplier)}>
@@ -280,6 +281,21 @@ export function SupplierList() {
           variant="danger"
           onConfirm={() => handleDelete(supplierToDelete)}
           onCancel={() => setSupplierToDelete(null)}
+        />
+      )}
+
+      {showSupplierForm && (
+        <SupplierForm
+          onClose={() => setShowSupplierForm(false)}
+          onSuccess={() => { setShowSupplierForm(false); loadSuppliers(true); }}
+        />
+      )}
+
+      {editSupplierId && (
+        <SupplierForm
+          supplierId={editSupplierId}
+          onClose={() => setEditSupplierId(null)}
+          onSuccess={() => { setEditSupplierId(null); loadSuppliers(true); }}
         />
       )}
     </Container>

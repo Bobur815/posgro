@@ -32,24 +32,34 @@ const Header = styled.div`
   justify-content: space-between;
   align-items: center;
   margin-bottom: ${({ theme }) => theme.spacing.lg};
-`;
 
-const BackButton = styled(Button)`
-  margin-right: ${({ theme }) => theme.spacing.md};
+  @media (max-width: 768px) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: ${({ theme }) => theme.spacing.sm};
+  }
 `;
 
 const HeaderLeft = styled.div`
+  display: flex;
   align-items: center;
+  gap: ${({ theme }) => theme.spacing.sm};
+  flex-wrap: wrap;
 `;
 
 const Title = styled.h1`
   margin: 0;
   color: ${({ theme }) => theme.colors.text};
+
+  @media (max-width: 768px) {
+    font-size: 22px;
+  }
 `;
 
 const Actions = styled.div`
   display: flex;
   gap: ${({ theme }) => theme.spacing.sm};
+  flex-wrap: wrap;
 `;
 
 const Grid = styled.div`
@@ -120,6 +130,7 @@ const DateRangeRow = styled.div`
   gap: ${({ theme }) => theme.spacing.md};
   align-items: flex-end;
   margin-bottom: ${({ theme }) => theme.spacing.md};
+  flex-wrap: wrap;
 `;
 
 const StatsGrid = styled.div`
@@ -293,13 +304,13 @@ export function ProductDetails() {
     <Container>
       <Header>
         <HeaderLeft>
-          <BackButton
+          <Button
             variant="secondary"
             size="small"
             onClick={() => navigate("/products")}
           >
             <ArrowLeft size={20} />
-          </BackButton>
+          </Button>
           <Title>{`${getProductName()} (№ ${product.id})`}</Title>
         </HeaderLeft>
         {isAdmin && (

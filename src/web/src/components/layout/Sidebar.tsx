@@ -25,13 +25,17 @@ const SIDEBAR_WIDTH = 220;
 const MINI_SIDEBAR_WIDTH = 70;
 
 const Container = styled.aside<{ $collapsed: boolean }>`
-  width: ${({ $collapsed }) => $collapsed ? MINI_SIDEBAR_WIDTH : SIDEBAR_WIDTH}px;
-  min-width: ${({ $collapsed }) => $collapsed ? MINI_SIDEBAR_WIDTH : SIDEBAR_WIDTH}px;
+  width: ${({ $collapsed }) =>
+    $collapsed ? MINI_SIDEBAR_WIDTH : SIDEBAR_WIDTH}px;
+  min-width: ${({ $collapsed }) =>
+    $collapsed ? MINI_SIDEBAR_WIDTH : SIDEBAR_WIDTH}px;
   background-color: ${({ theme }) => theme.colors.surface};
   border-right: 1px solid ${({ theme }) => theme.colors.border};
   display: flex;
   flex-direction: column;
-  transition: width 0.3s ease, min-width 0.3s ease;
+  transition:
+    width 0.3s ease,
+    min-width 0.3s ease;
   overflow: hidden;
 
   @media (max-width: 767px) {
@@ -74,19 +78,37 @@ const MobileNavItem = styled(NavLink)`
   }
 `;
 
+const MobileNavButton = styled.button`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 4px;
+  gap: 2px;
+  color: ${({ theme }) => theme.colors.error};
+  background: none;
+  border: none;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.2s;
+`;
+
 const LogoSection = styled.div<{ $collapsed: boolean }>`
   padding: ${({ theme }) => theme.spacing.lg};
-  padding-right: ${({ theme, $collapsed }) => $collapsed ? theme.spacing.lg : theme.spacing.sm};
+  padding-right: ${({ theme, $collapsed }) =>
+    $collapsed ? theme.spacing.lg : theme.spacing.sm};
   display: flex;
   align-items: center;
-  justify-content: ${({ $collapsed }) => $collapsed ? "center" : "space-between"};
+  justify-content: ${({ $collapsed }) =>
+    $collapsed ? "center" : "space-between"};
   border-bottom: 1px solid ${({ theme }) => theme.colors.border};
   min-height: 60px;
   position: relative;
 `;
 
 const Logo = styled.div<{ $collapsed: boolean }>`
-  font-size: ${({ $collapsed }) => $collapsed ? "16px" : "20px"};
+  font-size: ${({ $collapsed }) => ($collapsed ? "16px" : "20px")};
   font-weight: bold;
   color: ${({ theme }) => theme.colors.primary};
   white-space: nowrap;
@@ -133,7 +155,10 @@ const SectionTitle = styled.div<{ $collapsed: boolean }>`
   overflow: hidden;
   opacity: ${({ $collapsed }) => ($collapsed ? 0 : 1)};
   max-height: ${({ $collapsed }) => ($collapsed ? "0" : "20px")};
-  transition: opacity 0.2s ease, max-height 0.3s ease, margin-bottom 0.3s ease;
+  transition:
+    opacity 0.2s ease,
+    max-height 0.3s ease,
+    margin-bottom 0.3s ease;
 `;
 
 const StyledNavLink = styled(NavLink)<{ $collapsed: boolean }>`
@@ -145,7 +170,8 @@ const StyledNavLink = styled(NavLink)<{ $collapsed: boolean }>`
   color: ${({ theme }) => theme.colors.text};
   text-decoration: none;
   transition: all 0.2s;
-  justify-content: ${({ $collapsed }) => $collapsed ? "center" : "flex-start"};
+  justify-content: ${({ $collapsed }) =>
+    $collapsed ? "center" : "flex-start"};
 
   &:hover {
     background-color: ${({ theme }) => theme.colors.background};
@@ -171,7 +197,9 @@ const NavText = styled.span<{ $collapsed: boolean }>`
   font-size: 15px;
   opacity: ${({ $collapsed }) => ($collapsed ? 0 : 1)};
   max-width: ${({ $collapsed }) => ($collapsed ? "0" : "180px")};
-  transition: opacity 0.2s ease, max-width 0.3s ease;
+  transition:
+    opacity 0.2s ease,
+    max-width 0.3s ease;
 `;
 
 const Tooltip = styled.span`
@@ -213,7 +241,8 @@ const UserSection = styled.div<{ $collapsed: boolean }>`
   align-items: center;
   gap: ${({ theme }) => theme.spacing.sm};
   padding: ${({ theme }) => theme.spacing.sm};
-  justify-content: ${({ $collapsed }) => ($collapsed ? "center" : "flex-start")};
+  justify-content: ${({ $collapsed }) =>
+    $collapsed ? "center" : "flex-start"};
 `;
 
 const UserName = styled.span`
@@ -241,7 +270,9 @@ const UserDetails = styled.div<{ $collapsed: boolean }>`
   overflow: hidden;
   opacity: ${({ $collapsed }) => ($collapsed ? 0 : 1)};
   max-width: ${({ $collapsed }) => ($collapsed ? "0" : "180px")};
-  transition: opacity 0.2s ease, max-width 0.3s ease;
+  transition:
+    opacity 0.2s ease,
+    max-width 0.3s ease;
 `;
 
 const LogoutButton = styled.button<{ $collapsed: boolean }>`
@@ -256,7 +287,8 @@ const LogoutButton = styled.button<{ $collapsed: boolean }>`
   color: ${({ theme }) => theme.colors.error};
   cursor: pointer;
   transition: all 0.2s;
-  justify-content: ${({ $collapsed }) => ($collapsed ? "center" : "flex-start")};
+  justify-content: ${({ $collapsed }) =>
+    $collapsed ? "center" : "flex-start"};
 
   &:hover {
     background-color: ${({ theme }) => theme.colors.error}10;
@@ -299,13 +331,15 @@ export function Sidebar() {
   );
 
   const mobileNavItems = isSuperAdmin
-    ? [{ to: "/admin/stores", icon: Store, label: "Stores" }]
+    ? [{ to: "/admin/stores", icon: Store }]
     : [
-        { to: "/products", icon: Package, label: t("nav.products") },
-        { to: "/suppliers", icon: Truck, label: t("suppliers.title") },
-        { to: "/reports/daily", icon: BarChart3, label: t("nav.reports") },
-        ...(isAdmin ? [{ to: "/users", icon: Users, label: t("nav.users") }] : []),
-        { to: "/settings", icon: Settings, label: t("nav.settings") },
+        { to: "/products", icon: Package },
+        { to: "/suppliers", icon: Truck },
+        { to: "/reports/daily", icon: BarChart3 },
+        ...(isAdmin
+          ? [{ to: "/users", icon: Users }]
+          : []),
+        { to: "/settings", icon: Settings },
       ];
 
   return (
@@ -320,7 +354,11 @@ export function Sidebar() {
             onClick={toggleSidebar}
             title={isCollapsed ? t("nav.expand") : t("nav.collapse")}
           >
-            {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+            {isCollapsed ? (
+              <ChevronRight size={18} />
+            ) : (
+              <ChevronLeft size={18} />
+            )}
           </ToggleButton>
         </LogoSection>
 
@@ -328,25 +366,47 @@ export function Sidebar() {
           {!isSuperAdmin && (
             <>
               <NavSection>
-                <SectionTitle $collapsed={isCollapsed}>{t("nav.main")}</SectionTitle>
+                <SectionTitle $collapsed={isCollapsed}>
+                  {t("nav.main")}
+                </SectionTitle>
                 {renderNavItem("/products", Package, t("nav.products"))}
               </NavSection>
 
               <NavSection>
-                <SectionTitle $collapsed={isCollapsed}>{t("nav.reports")}</SectionTitle>
-                {renderNavItem("/reports/daily", BarChart3, t("nav.dailySummary"))}
+                <SectionTitle $collapsed={isCollapsed}>
+                  {t("nav.reports")}
+                </SectionTitle>
+                {renderNavItem(
+                  "/reports/daily",
+                  BarChart3,
+                  t("nav.dailySummary"),
+                )}
                 {isAdmin && (
                   <>
-                    {renderNavItem("/reports/monthly", TrendingUp, t("nav.monthlyReport"))}
-                    {renderNavItem("/reports/analytics", LineChart, t("nav.analytics"))}
+                    {renderNavItem(
+                      "/reports/monthly",
+                      TrendingUp,
+                      t("nav.monthlyReport"),
+                    )}
+                    {renderNavItem(
+                      "/reports/analytics",
+                      LineChart,
+                      t("nav.analytics"),
+                    )}
                   </>
                 )}
               </NavSection>
 
               {isAdmin && (
                 <NavSection>
-                  <SectionTitle $collapsed={isCollapsed}>{t("nav.management")}</SectionTitle>
-                  {renderNavItem("/products/stock", ClipboardList, t("nav.inventory"))}
+                  <SectionTitle $collapsed={isCollapsed}>
+                    {t("nav.management")}
+                  </SectionTitle>
+                  {renderNavItem(
+                    "/products/stock",
+                    ClipboardList,
+                    t("nav.inventory"),
+                  )}
                   {renderNavItem("/suppliers", Truck, t("suppliers.title"))}
                   {renderNavItem("/users", Users, t("nav.users"))}
                   {renderNavItem("/settings", Settings, t("nav.settings"))}
@@ -355,7 +415,9 @@ export function Sidebar() {
 
               {!isAdmin && (
                 <NavSection>
-                  <SectionTitle $collapsed={isCollapsed}>{t("nav.settings")}</SectionTitle>
+                  <SectionTitle $collapsed={isCollapsed}>
+                    {t("nav.settings")}
+                  </SectionTitle>
                   {renderNavItem("/settings/user", User, t("nav.userSettings"))}
                 </NavSection>
               )}
@@ -380,7 +442,11 @@ export function Sidebar() {
                 <UserDetails $collapsed={isCollapsed}>
                   <UserName>{getUserName()}</UserName>
                   <UserRole>
-                    {user.role === "SUPER_ADMIN" ? "Super Admin" : user.role === "ADMIN" ? t("users.admin") : t("users.cashier")}
+                    {user.role === "SUPER_ADMIN"
+                      ? "Super Admin"
+                      : user.role === "ADMIN"
+                        ? t("users.admin")
+                        : t("users.cashier")}
                   </UserRole>
                 </UserDetails>
               </UserSection>
@@ -401,12 +467,14 @@ export function Sidebar() {
 
       {/* Mobile bottom nav */}
       <MobileBottomNav>
-        {mobileNavItems.map(({ to, icon: Icon, label }) => (
+        {mobileNavItems.map(({ to, icon: Icon }) => (
           <MobileNavItem key={to} to={to}>
             <Icon size={22} />
-            <span>{label}</span>
           </MobileNavItem>
         ))}
+        <MobileNavButton onClick={handleLogout}>
+          <LogOut size={22} />
+        </MobileNavButton>
       </MobileBottomNav>
     </>
   );

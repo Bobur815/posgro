@@ -105,6 +105,15 @@
     "cashInsufficient": "Недостаточно",
     "clearAmount": "Сбросить"
   },
+  "scanner":{
+    "title": "Штрих-код сканер",
+    "description": "Сканируйте штрих-код для добавления товара",
+    "scanning": "Сканирование...",
+    "productFound": "Товар найден: {{name}}",
+    "productNotFound": "Товар не найден",
+    "error": "Ошибка сканера",
+    "pointCamera": "Наведите камеру на штрих-код товара"
+  },
   "products": {
     "title": "Товары",
     "name": "Название",

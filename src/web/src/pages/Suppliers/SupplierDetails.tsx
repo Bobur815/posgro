@@ -6,6 +6,7 @@ import { Button } from '@components/common/Button';
 import { Table } from '@components/common/Table';
 import { ConfirmDialog } from '@components/common/ConfirmDialog';
 import { SupplierTransactionForm } from './SupplierTransactionForm';
+import { SupplierForm } from './SupplierForm';
 import { useSuppliers } from '../../hooks/useSuppliers';
 import { useAuthStore } from '../../store/auth-store';
 import { useToast } from '@context/ToastContext';
@@ -17,7 +18,8 @@ import {
 import { SUPPLIER_PAYMENT_METHOD_I18N_KEYS } from '@shared/constants/payment-methods';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 import { formatDate } from '../../utils/formatters';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Trash } from 'lucide-react';
+import { MobileCard, MobileCardList, DesktopOnly } from '@components/common/MobileCard';
 
 const Container = styled.div`
   display: flex;
@@ -30,25 +32,42 @@ const Header = styled.div`
   justify-content: space-between;
   align-items: flex-start;
   padding-top: 5px;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    gap: ${({ theme }) => theme.spacing.sm};
+  }
 `;
 
-const BackButton = styled(Button)`
-  margin-right: ${({ theme }) => theme.spacing.md};
+const HeaderLeft = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.sm};
+  flex-wrap: wrap;
 `;
 
 const Title = styled.h1`
   margin: 0;
   color: ${({ theme }) => theme.colors.text};
+
+  @media (max-width: 768px) {
+    font-size: 22px;
+  }
 `;
 
 const SupplierInfo = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: ${({ theme }) => theme.spacing.md};
   padding: ${({ theme }) => theme.spacing.lg};
   background-color: ${({ theme }) => theme.colors.surface};
   border-radius: ${({ theme }) => theme.borderRadius};
   border: 1px solid ${({ theme }) => theme.colors.border};
+
+  @media (max-width: 768px) {
+    padding: ${({ theme }) => theme.spacing.md};
+    grid-template-columns: 1fr 1fr;
+  }
 `;
 
 const InfoItem = styled.div`
@@ -102,6 +121,12 @@ const SectionHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: ${({ theme }) => theme.spacing.sm};
+  }
 `;
 
 const SectionTitle = styled.h2`
@@ -160,6 +185,7 @@ export function SupplierDetails() {
   } = useSuppliers();
 
   const [showTransactionForm, setShowTransactionForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
   const [transactionToDelete, setTransactionToDelete] =
     useState<SupplierTransaction | null>(null);
 
@@ -264,7 +290,7 @@ export function SupplierDetails() {
           variant="danger"
           onClick={() => setTransactionToDelete(tx)}
         >
-          {t('common.delete')}
+          <Trash size={16} />
         </Button>
       ),
     },
@@ -276,17 +302,13 @@ export function SupplierDetails() {
   return (
     <Container>
       <Header>
-        <div>
-          <BackButton
-            variant="secondary"
-            size="small"
-            onClick={() => navigate("/suppliers")}
-          >
+        <HeaderLeft>
+          <Button variant="secondary" size="small" onClick={() => navigate("/suppliers")}>
             <ArrowLeft size={20} />
-          </BackButton>
+          </Button>
           <Title>{supplierName}</Title>
-        </div>
-        <Button onClick={() => navigate(`/suppliers/${id}/edit`)}>
+        </HeaderLeft>
+        <Button onClick={() => setShowEditForm(true)}>
           {t('common.edit')}
         </Button>
       </Header>
@@ -302,9 +324,7 @@ export function SupplierDetails() {
         </InfoItem>
         <InfoItem>
           <InfoLabel>{t('common.createdAt')}</InfoLabel>
-          <InfoValue>
-            {formatDate(selectedSupplier.createdAt)}
-          </InfoValue>
+          <InfoValue>{formatDate(selectedSupplier.createdAt)}</InfoValue>
         </InfoItem>
         <InfoItem>
           <InfoLabel>{t('suppliers.status') || 'Status'}</InfoLabel>
@@ -332,12 +352,41 @@ export function SupplierDetails() {
           </Button>
         </SectionHeader>
 
-        <Table
-          columns={columns}
-          data={selectedSupplier.transactions || []}
-          loading={isLoading}
-          emptyMessage={t('suppliers.noTransactions')}
-        />
+        <MobileCardList>
+          {(selectedSupplier.transactions || []).map((tx: SupplierTransaction) => (
+            <MobileCard
+              key={tx.id}
+              title={getTransactionTypeLabel(tx.type)}
+              subtitle={formatDate(tx.createdAt)}
+              fields={[
+                { label: t('suppliers.paymentMethod'), value: getPaymentMethodLabel(tx.paymentMethod) },
+                {
+                  label: t('suppliers.amount'),
+                  value: (
+                    <AmountCell $negative={tx.amount < 0}>
+                      {tx.amount < 0 ? '-' : '+'}{formatCurrency(Math.abs(tx.amount))}
+                    </AmountCell>
+                  ),
+                },
+                { label: t('suppliers.description'), value: tx.description || '-' },
+              ]}
+              actions={
+                <Button size="small" variant="danger" onClick={() => setTransactionToDelete(tx)}>
+                  <Trash size={16} />
+                </Button>
+              }
+            />
+          ))}
+        </MobileCardList>
+
+        <DesktopOnly>
+          <Table
+            columns={columns}
+            data={selectedSupplier.transactions || []}
+            loading={isLoading}
+            emptyMessage={t('suppliers.noTransactions')}
+          />
+        </DesktopOnly>
       </Section>
 
       {showTransactionForm && id && (
@@ -346,6 +395,14 @@ export function SupplierDetails() {
           onSubmit={handleCreateTransaction}
           onCancel={() => setShowTransactionForm(false)}
           currentUserId={user?.id || ''}
+        />
+      )}
+
+      {showEditForm && id && (
+        <SupplierForm
+          supplierId={id}
+          onClose={() => setShowEditForm(false)}
+          onSuccess={() => { setShowEditForm(false); getById(id); }}
         />
       )}
 
