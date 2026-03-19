@@ -19,7 +19,7 @@ import { SUPPLIER_PAYMENT_METHOD_I18N_KEYS } from '@shared/constants/payment-met
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 import { formatDate } from '../../utils/formatters';
 import { ArrowLeft, Trash } from 'lucide-react';
-import { MobileCard, MobileCardList, DesktopOnly } from '@components/common/MobileCard';
+import { MobileCard, MobileCardList, DesktopOnly } from '../../components/common/MobileCard';
 
 const Container = styled.div`
   display: flex;
