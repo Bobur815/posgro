@@ -14,7 +14,8 @@ import { useProducts } from "../../hooks/useProducts";
 import { useToast } from "@context/ToastContext";
 import { Supplier } from "@shared/types";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
-import { ChevronDown, ChevronUp, PlusCircle } from "lucide-react";
+import { ChevronDown, ChevronUp, PlusCircle, Eye, Edit, Trash } from "lucide-react";
+import { MobileCard, MobileCardList, DesktopOnly } from "@components/common/MobileCard";
 
 const Container = styled.div`
   display: flex;
@@ -25,6 +26,11 @@ const Container = styled.div`
 const Header = styled.div`
   display: flex;
   justify-content: space-between;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    gap: ${({ theme }) => theme.spacing.sm};
+  }
 `;
 
 const Title = styled.h1`
@@ -169,26 +175,14 @@ export function SupplierList() {
       header: "",
       render: (supplier: Supplier) => (
         <div style={{ display: "flex", gap: "8px" }}>
-          <Button
-            size="small"
-            variant="secondary"
-            onClick={() => navigate(`/suppliers/${supplier.id}`)}
-          >
-            {t("suppliers.viewDetails")}
+          <Button size="small" variant="secondary" tooltip={t("suppliers.viewDetails")} onClick={() => navigate(`/suppliers/${supplier.id}`)}>
+            <Eye size={16} />
           </Button>
-          <Button
-            size="small"
-            variant="secondary"
-            onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}
-          >
-            {t("common.edit")}
+          <Button size="small" variant="secondary" tooltip={t("common.edit")} onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}>
+            <Edit size={16} />
           </Button>
-          <Button
-            size="small"
-            variant="danger"
-            onClick={() => setSupplierToDelete(supplier)}
-          >
-            {t("common.delete")}
+          <Button size="small" variant="danger" tooltip={t("common.delete")} onClick={() => setSupplierToDelete(supplier)}>
+            <Trash size={16} />
           </Button>
         </div>
       ),
@@ -223,12 +217,59 @@ export function SupplierList() {
         isOpen={isFilterOpen}
       />
 
-      <Table
-        columns={columns}
-        data={filteredSuppliers}
-        loading={isLoading}
-        emptyMessage={t("suppliers.noSuppliers")}
-      />
+      <MobileCardList>
+        {filteredSuppliers.map((supplier) => (
+          <MobileCard
+            key={supplier.id}
+            title={i18n.language === "uz" ? supplier.nameUz : supplier.nameRu}
+            subtitle={supplier.phone || undefined}
+            fields={[
+              {
+                label: t("suppliers.balance"),
+                value: (
+                  <BalanceBadge $positive={supplier.balance >= 0}>
+                    {supplier.balance < 0
+                      ? `${t("suppliers.weOwe")}: ${formatCurrency(Math.abs(supplier.balance))}`
+                      : supplier.balance > 0
+                        ? `${t("suppliers.theyOwe")}: ${formatCurrency(supplier.balance)}`
+                        : formatCurrency(0)}
+                  </BalanceBadge>
+                ),
+              },
+              {
+                label: t("users.status"),
+                value: (
+                  <Badge $active={supplier.active}>
+                    {supplier.active ? t("suppliers.active") : t("suppliers.inactive")}
+                  </Badge>
+                ),
+              },
+            ]}
+            actions={
+              <>
+                <Button size="small" variant="secondary" tooltip={t("suppliers.viewDetails")} onClick={() => navigate(`/suppliers/${supplier.id}`)}>
+                  <Eye size={16} />
+                </Button>
+                <Button size="small" variant="secondary" tooltip={t("common.edit")} onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}>
+                  <Edit size={16} />
+                </Button>
+                <Button size="small" variant="danger" tooltip={t("common.delete")} onClick={() => setSupplierToDelete(supplier)}>
+                  <Trash size={16} />
+                </Button>
+              </>
+            }
+          />
+        ))}
+      </MobileCardList>
+
+      <DesktopOnly>
+        <Table
+          columns={columns}
+          data={filteredSuppliers}
+          loading={isLoading}
+          emptyMessage={t("suppliers.noSuppliers")}
+        />
+      </DesktopOnly>
 
       {supplierToDelete && (
         <ConfirmDialog

@@ -25,7 +25,7 @@ import { useProducts } from "../../hooks/useProducts";
 import { useToast } from "../../context/ToastContext";
 import { Supplier } from "@shared/types";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
-import { ChevronDown, ChevronUp, CirclePlus, Keyboard, X } from "lucide-react";
+import { ChevronDown, ChevronUp, CirclePlus, Keyboard, X, Eye, Edit, Trash } from "lucide-react";
 
 const Container = styled.div`
   display: flex;
@@ -225,26 +225,14 @@ export function SupplierList() {
       header: "",
       render: (supplier: Supplier) => (
         <div style={{ display: "flex", gap: "8px" }}>
-          <Button
-            size="small"
-            variant="secondary"
-            onClick={() => navigate(`/suppliers/${supplier.id}`)}
-          >
-            {t("suppliers.viewDetails")}
+          <Button size="small" variant="secondary" tooltip={t("suppliers.viewDetails")} onClick={() => navigate(`/suppliers/${supplier.id}`)}>
+            <Eye size={16} />
           </Button>
-          <Button
-            size="small"
-            variant="secondary"
-            onClick={() => setModalState({ open: true, view: "form", supplier })}
-          >
-            {t("common.edit")}
+          <Button size="small" variant="secondary" tooltip={t("common.edit")} onClick={() => setModalState({ open: true, view: "form", supplier })}>
+            <Edit size={16} />
           </Button>
-          <Button
-            size="small"
-            variant="danger"
-            onClick={() => setSupplierToDelete(supplier)}
-          >
-            {t("common.delete")}
+          <Button size="small" variant="danger" tooltip={t("common.delete")} onClick={() => setSupplierToDelete(supplier)}>
+            <Trash size={16} />
           </Button>
         </div>
       ),

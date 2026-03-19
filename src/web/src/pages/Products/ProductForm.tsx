@@ -132,6 +132,11 @@ const ProfitBadge = styled.span<{ $negative?: boolean }>`
     $negative ? theme.colors.error : theme.colors.success};
 `;
 
+const Req = styled.span`
+  color: ${({ theme }) => theme.colors.error};
+  margin-left: 2px;
+`;
+
 const PriceChangeSection = styled.div`
   display: flex;
   flex-direction: column;
@@ -519,7 +524,7 @@ export function ProductForm({
     });
   };
 
-  const title = isEdit ? t("products.editProduct") : t("products.addProduct");
+  const title = isEdit ? t("products.edit") : t("products.add");
 
   return (
     <>
@@ -533,7 +538,7 @@ export function ProductForm({
               onChange={(e) => handleChange("mxik", e.target.value)}
             />
             <FormGroup>
-              <Label>{t("products.barcode")}</Label>
+              <Label>{t("products.barcode")} <Req>*</Req></Label>
               <div
                 style={{ display: "flex", flexDirection: "row", gap: "8px" }}
               >
@@ -577,13 +582,13 @@ export function ProductForm({
 
           <Row>
             <Input
-              label={t("products.nameUz")}
+              label={<>{t("products.nameUz")} <Req>*</Req></>}
               value={formData.nameUz}
               onChange={(e) => handleNameUzChange(e.target.value)}
               required
             />
             <Input
-              label={t("products.nameRu")}
+              label={<>{t("products.nameRu")} <Req>*</Req></>}
               value={formData.nameRu}
               onChange={(e) => handleNameRuChange(e.target.value)}
               required
@@ -592,7 +597,7 @@ export function ProductForm({
 
           <Row>
             <Input
-              label={`${t("products.price")}${formProfitMargin !== null ? ` (${formProfitMargin}%)` : ""}`}
+              label={<>{t("products.price")}{formProfitMargin !== null ? ` (${formProfitMargin}%)` : ""} <Req>*</Req></>}
               type="number"
               value={formData.price}
               onChange={(e) => handleChange("price", e.target.value)}
@@ -636,7 +641,7 @@ export function ProductForm({
               </Select>
             </FormGroup>
             <FormGroup>
-              <Label>{t("products.category")}</Label>
+              <Label>{t("products.category")} <Req>*</Req></Label>
               <div style={{ display: "flex", gap: "8px" }}>
                 <Select
                   value={formData.categoryId}
@@ -839,7 +844,7 @@ export function ProductForm({
 
           <ArrivalForm>
             <Input
-              label={t("inventory.quantity")}
+              label={<>{t("inventory.quantity")} <Req>*</Req></>}
               type="number"
               autoFocus
               min="0"
@@ -857,7 +862,7 @@ export function ProductForm({
             <FlexRow>
               <div>
                 <Input
-                  label={t("inventory.costPerUnit")}
+                  label={<>{t("inventory.costPerUnit")} <Req>*</Req></>}
                   type="number"
                   min="0"
                   step="0.01"

@@ -32,6 +32,9 @@ const ModalContainer = styled.div<{ $width?: string }>`
 `;
 
 const Header = styled.div`
+  position: sticky;
+  top: 0;
+  background-color: ${({ theme }) => theme.colors.surface};
   display: flex;
   justify-content: space-between;
   align-items: center;

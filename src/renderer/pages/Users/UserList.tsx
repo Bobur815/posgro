@@ -7,6 +7,7 @@ import { Button } from '../../components/common/Button';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { formatDate } from '../../utils/formatters';
 import type { UserListItem } from '@shared/types';
+import { Edit, UserCheck, UserX } from 'lucide-react';
 
 const Container = styled.div`
   display: flex;
@@ -111,19 +112,11 @@ export function UserList() {
       header: '',
       render: (user: UserListItem) => (
         <div style={{ display: 'flex', gap: '8px' }}>
-          <Button
-            size="small"
-            variant="secondary"
-            onClick={() => navigate(`/users/${user.id}/edit`)}
-          >
-            {t('common.edit')}
+          <Button size="small" variant="secondary" tooltip={t('common.edit')} onClick={() => navigate(`/users/${user.id}/edit`)}>
+            <Edit size={16} />
           </Button>
-          <Button
-            size="small"
-            variant={user.active ? 'danger' : 'primary'}
-            onClick={() => setUserToToggle(user)}
-          >
-            {user.active ? t('users.deactivate') : t('users.activate')}
+          <Button size="small" variant={user.active ? 'danger' : 'primary'} tooltip={user.active ? t('users.deactivate') : t('users.activate')} onClick={() => setUserToToggle(user)}>
+            {user.active ? <UserX size={16} /> : <UserCheck size={16} />}
           </Button>
         </div>
       ),

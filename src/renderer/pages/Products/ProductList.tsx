@@ -201,7 +201,8 @@ export function ProductList() {
           : "-",
     },
   ];
-
+  console.log(products);
+  
   if (isAdmin) {
     columns.push({
       key: "actions",
@@ -250,7 +251,7 @@ export function ProductList() {
             style={{ fontSize: "26px" }}
             onClick={() => setFormModal({ open: true })}
           >
-            <CirclePlus size={24} /> {t("products.addProduct")}
+            <CirclePlus size={24} /> {t("products.add")}
           </Button>
         )}
       </Header>

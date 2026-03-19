@@ -23,7 +23,7 @@ export class ProductsService {
 
     return this.prisma.product.findMany({
       where,
-      include: { category: true },
+      include: { category: true, supplier: true },
       orderBy: { nameRu: "asc" },
     });
   }
@@ -31,7 +31,7 @@ export class ProductsService {
   async findById(id: number, storeId: string) {
     const product = await this.prisma.product.findUnique({
       where: { id },
-      include: { category: true },
+      include: { category: true, supplier: true },
     });
 
     if (!product || product.storeId !== storeId) {
@@ -44,7 +44,7 @@ export class ProductsService {
   async findByBarcode(storeId: string, barcode: string) {
     return this.prisma.product.findUnique({
       where: { storeId_barcode: { storeId, barcode } },
-      include: { category: true },
+      include: { category: true, supplier: true },
     });
   }
 
@@ -61,7 +61,7 @@ export class ProductsService {
           { nameUz: { contains: searchQuery, mode: "insensitive" } },
         ],
       },
-      include: { category: true },
+      include: { category: true, supplier: true },
       take: 20,
     });
   }

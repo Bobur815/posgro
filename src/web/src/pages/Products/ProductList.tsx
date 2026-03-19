@@ -25,6 +25,7 @@ import {
 import { formatDate } from "../../utils/formatters";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { debounce } from "../../utils/helpers";
+import { MobileCard, MobileCardList, DesktopOnly } from "../../components/common/MobileCard";
 
 const Container = styled.div`
   display: flex;
@@ -37,6 +38,12 @@ const Header = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: ${({ theme }) => theme.spacing.sm};
+  }
 `;
 
 const Title = styled.h1`
@@ -211,7 +218,7 @@ export function ProductList() {
             style={{ fontSize: "26px" }}
             onClick={() => setShowProductForm(true)}
           >
-            <PlusCircle size={24} /> {t("products.addProduct")}
+            <PlusCircle size={24} /> {t("products.add")}
           </Button>
         )}
       </Header>
@@ -266,23 +273,77 @@ export function ProductList() {
         isOpen={isFilterOpen}
       />
 
-      <Table<Product>
-        columns={columns}
-        data={pageData}
-        loading={isLoading}
-        emptyMessage={t("products.noProducts")}
-        footer={
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={totalItems}
-            pageSize={pageSize}
-            pageSizeOptions={pageSizeOptions}
-            onPageChange={goToPage}
-            onPageSizeChange={setPageSize}
+      <MobileCardList>
+        {pageData.map((product) => (
+          <MobileCard
+            key={product.id}
+            title={i18n.language === "uz" ? product.nameUz : product.nameRu}
+            subtitle={product.barcode}
+            fields={[
+              { label: t("products.price"), value: formatCurrency(product.price) },
+              {
+                label: t("products.stock"),
+                value: (
+                  <span style={{ color: product.stock <= product.minStock ? "#f44336" : "inherit" }}>
+                    {product.stock} {product.unit}
+                  </span>
+                ),
+              },
+              {
+                label: t("products.supplier"),
+                value: product.supplier
+                  ? (i18n.language === "uz" ? product.supplier.nameUz : product.supplier.nameRu)
+                  : "-",
+              },
+              {
+                label: t("products.category"),
+                value: product.category
+                  ? (i18n.language === "uz" ? product.category.nameUz : product.category.nameRu)
+                  : "-",
+              },
+              {
+                label: t("products.expiryDate"),
+                value: product.expiryDate ? formatDate(product.expiryDate) : "-",
+              },
+            ]}
+            actions={
+              isAdmin ? (
+                <>
+                  <Button variant="secondary" size="small" tooltip={t("common.edit")} onClick={() => setEditProductId(String(product.id))}>
+                    <Edit size={16} />
+                  </Button>
+                  <Button variant="danger" size="small" tooltip={t("common.delete")} onClick={() => navigate(`/products/${product.id}/delete`)}>
+                    <Trash size={16} />
+                  </Button>
+                  <Button variant="primary" size="small" tooltip={t("products.viewDetails")} onClick={() => navigate(`/products/${product.id}`)}>
+                    <List size={16} />
+                  </Button>
+                </>
+              ) : undefined
+            }
           />
-        }
-      />
+        ))}
+      </MobileCardList>
+
+      <DesktopOnly>
+        <Table<Product>
+          columns={columns}
+          data={pageData}
+          loading={isLoading}
+          emptyMessage={t("products.noProducts")}
+          footer={
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              pageSize={pageSize}
+              pageSizeOptions={pageSizeOptions}
+              onPageChange={goToPage}
+              onPageSizeChange={setPageSize}
+            />
+          }
+        />
+      </DesktopOnly>
 
       {showProductForm && (
         <ProductForm

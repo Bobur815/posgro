@@ -870,7 +870,7 @@ export function ReceiptScanModal({
                               type="button"
                               variant="secondary"
                               size="small"
-                              title={t("products.addProduct")}
+                              title={t("products.add")}
                               style={{ flexShrink: 0, padding: "4px 6px" }}
                               onClick={() => setAddingForRowIdx(idx)}
                             >

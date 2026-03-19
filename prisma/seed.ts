@@ -12,14 +12,14 @@ async function main() {
     where: { id: "default-store" },
     update: {},
     create: {
-      id: "default-store",
-      name: "Grocery Store",
+      id: "1234",
+      name: "Yangi asr market",
       address: "Fergana, Uzbekistan",
       phone: "+998 90 166 27 14",
       active: true,
       settings: JSON.stringify({
         taxRate: 0,
-        receiptHeader: "Grocery Store",
+        receiptHeader: "Yangi asr market",
         receiptFooter: "Xaridingiz uchun rahmat!\nSpasibo za pokupku!",
         currency: "UZS",
       }),

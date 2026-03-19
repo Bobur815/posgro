@@ -142,6 +142,11 @@ const RadioDescription = styled.div`
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
+const Req = styled.span`
+  color: ${({ theme }) => theme.colors.error};
+  margin-left: 2px;
+`;
+
 const ProfitBadge = styled.span<{ $negative?: boolean }>`
   font-size: 13px;
   font-weight: 600;
@@ -314,7 +319,7 @@ export function NewArrivalModal({
         )}
 
         <Input
-          label={t("inventory.quantity")}
+          label={<>{t("inventory.quantity")} <Req>*</Req></>}
           type="number"
           autoFocus
           value={arrivalData.quantity}
@@ -327,7 +332,7 @@ export function NewArrivalModal({
         <FlexRow>
           <div>
             <Input
-              label={t("inventory.costPerUnit")}
+              label={<>{t("inventory.costPerUnit")} <Req>*</Req></>}
               type="number"
               value={arrivalData.cost}
               onChange={(e) =>

@@ -8,6 +8,8 @@ import { ConfirmDialog } from '@components/common/ConfirmDialog';
 import { formatDate } from '../../utils/formatters';
 import { users as usersApi } from '../../api/client';
 import type { UserListItem } from '@shared/types';
+import { Edit, UserCheck, UserX, PlusCircle } from 'lucide-react';
+import { MobileCard, MobileCardList, DesktopOnly } from '@components/common/MobileCard';
 
 const Container = styled.div`
   display: flex;
@@ -19,6 +21,12 @@ const Header = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: ${({ theme }) => theme.spacing.sm};
+  }
 `;
 
 const Title = styled.h1`
@@ -85,9 +93,11 @@ export function UserList() {
     { key: 'createdAt', header: t('users.createdAt'), render: (user: UserListItem) => formatDate(user.createdAt) },
     { key: 'actions', header: '', render: (user: UserListItem) => (
       <div style={{ display: 'flex', gap: '8px' }}>
-        <Button size="small" variant="secondary" onClick={() => navigate(`/users/${user.id}/edit`)}>{t('common.edit')}</Button>
-        <Button size="small" variant={user.active ? 'danger' : 'primary'} onClick={() => setUserToToggle(user)}>
-          {user.active ? t('users.deactivate') : t('users.activate')}
+        <Button size="small" variant="secondary" tooltip={t('common.edit')} onClick={() => navigate(`/users/${user.id}/edit`)}>
+          <Edit size={16} />
+        </Button>
+        <Button size="small" variant={user.active ? 'danger' : 'primary'} tooltip={user.active ? t('users.deactivate') : t('users.activate')} onClick={() => setUserToToggle(user)}>
+          {user.active ? <UserX size={16} /> : <UserCheck size={16} />}
         </Button>
       </div>
     )},
@@ -97,9 +107,37 @@ export function UserList() {
     <Container>
       <Header>
         <Title>{t('users.title')}</Title>
-        <Button onClick={() => navigate('/users/new')}>{t('users.addUser')}</Button>
+        <Button onClick={() => navigate('/users/new')}><PlusCircle size={20} /> {t('users.addUser')}</Button>
       </Header>
-      <Table columns={columns} data={users} loading={isLoading} emptyMessage={t('users.noUsers')} />
+
+      <MobileCardList>
+        {users.map((user) => (
+          <MobileCard
+            key={user.id}
+            title={i18n.language === 'uz' ? user.nameUz : user.nameRu}
+            subtitle={user.phone}
+            fields={[
+              { label: t('users.role'), value: <RoleBadge $role={user.role}>{user.role === 'ADMIN' ? t('users.admin') : t('users.cashier')}</RoleBadge> },
+              { label: t('users.status'), value: <Badge $active={user.active}>{user.active ? t('users.active') : t('users.inactive')}</Badge> },
+              { label: t('users.createdAt'), value: formatDate(user.createdAt) },
+            ]}
+            actions={
+              <>
+                <Button size="small" variant="secondary" tooltip={t('common.edit')} onClick={() => navigate(`/users/${user.id}/edit`)}>
+                  <Edit size={16} />
+                </Button>
+                <Button size="small" variant={user.active ? 'danger' : 'primary'} tooltip={user.active ? t('users.deactivate') : t('users.activate')} onClick={() => setUserToToggle(user)}>
+                  {user.active ? <UserX size={16} /> : <UserCheck size={16} />}
+                </Button>
+              </>
+            }
+          />
+        ))}
+      </MobileCardList>
+
+      <DesktopOnly>
+        <Table columns={columns} data={users} loading={isLoading} emptyMessage={t('users.noUsers')} />
+      </DesktopOnly>
       {userToToggle && (
         <ConfirmDialog
           title={userToToggle.active ? t('users.deactivate') : t('users.activate')}
