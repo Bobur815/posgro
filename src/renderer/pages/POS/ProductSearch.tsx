@@ -11,8 +11,6 @@ import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { ChevronDown, ChevronUp, Keyboard, X } from "lucide-react";
 import { VirtualKeyboard } from "../../components/common/VirtualKeyboard";
 import { SearchInputWrapper, InputControls, ClearButton, KbToggle } from "../../components/common/SearchControls";
-import { Pagination } from "../../components/common/Pagination";
-import { usePagination } from "../../hooks/usePagination";
 import { debounce } from "../../utils/helpers";
 
 const Container = styled.div`
@@ -230,17 +228,6 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
       ? (products as unknown as Product[])
       : topSelling;
 
-  const {
-    pageData,
-    currentPage,
-    totalPages,
-    totalItems,
-    pageSize,
-    pageSizeOptions,
-    goToPage,
-    setPageSize,
-  } = usePagination(displayProducts, { defaultPageSize: 24, pageSizeOptions: [12, 24, 48, 96] });
-
   return (
     <Container>
       <SearchHeader>
@@ -296,7 +283,7 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
         ) : displayProducts.length === 0 ? (
           <NoResults>{t("products.noResults")}</NoResults>
         ) : (
-          pageData.map((product) => (
+          displayProducts.map((product) => (
             <ProductCard
               key={product.id}
               onClick={() => onSelect(product)}
@@ -314,18 +301,6 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
           ))
         )}
       </ProductsGrid>
-
-      {totalPages > 1 && (
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalItems={totalItems}
-          pageSize={pageSize}
-          pageSizeOptions={pageSizeOptions}
-          onPageChange={goToPage}
-          onPageSizeChange={setPageSize}
-        />
-      )}
 
       {keyboardOpen && (
         <VirtualKeyboard

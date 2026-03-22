@@ -1,175 +1,192 @@
-import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 
 // Expose protected methods to the renderer process
-contextBridge.exposeInMainWorld('electronAPI', {
+contextBridge.exposeInMainWorld("electronAPI", {
   // Authentication
   auth: {
     login: (phone: string, password: string) =>
-      ipcRenderer.invoke('auth:login', phone, password),
-    loginWithPin: (pin: string) =>
-      ipcRenderer.invoke('auth:loginWithPin', pin),
-    logout: () => ipcRenderer.invoke('auth:logout'),
-    getProfile: () => ipcRenderer.invoke('auth:getProfile'),
+      ipcRenderer.invoke("auth:login", phone, password),
+    loginWithPin: (pin: string) => ipcRenderer.invoke("auth:loginWithPin", pin),
+    logout: () => ipcRenderer.invoke("auth:logout"),
+    getProfile: () => ipcRenderer.invoke("auth:getProfile"),
     restoreSession: (token: string) =>
-      ipcRenderer.invoke('auth:restoreSession', token),
+      ipcRenderer.invoke("auth:restoreSession", token),
     changePassword: (currentPassword: string, newPassword: string) =>
-      ipcRenderer.invoke('auth:changePassword', currentPassword, newPassword),
+      ipcRenderer.invoke("auth:changePassword", currentPassword, newPassword),
   },
 
   // Products
   products: {
     getAll: (filters?: { categoryId?: string; active?: boolean }) =>
-      ipcRenderer.invoke('products:getAll', filters),
-    getById: (id: string) => ipcRenderer.invoke('products:getById', id),
+      ipcRenderer.invoke("products:getAll", filters),
+    getById: (id: string) => ipcRenderer.invoke("products:getById", id),
     getByBarcode: (barcode: string) =>
-      ipcRenderer.invoke('products:getByBarcode', barcode),
+      ipcRenderer.invoke("products:getByBarcode", barcode),
     findByInternalCode: (internalCode: string) =>
-      ipcRenderer.invoke('products:findByInternalCode', internalCode),
-    create: (data: unknown) => ipcRenderer.invoke('products:create', data),
+      ipcRenderer.invoke("products:findByInternalCode", internalCode),
+    create: (data: unknown) => ipcRenderer.invoke("products:create", data),
     update: (id: string, data: unknown) =>
-      ipcRenderer.invoke('products:update', id, data),
-    delete: (id: string) => ipcRenderer.invoke('products:delete', id),
-    search: (query: string) => ipcRenderer.invoke('products:search', query),
-    getTopSelling: (limit?: number) => ipcRenderer.invoke('products:getTopSelling', limit),
+      ipcRenderer.invoke("products:update", id, data),
+    delete: (id: string) => ipcRenderer.invoke("products:delete", id),
+    search: (query: string) => ipcRenderer.invoke("products:search", query),
+    getTopSelling: (limit?: number) =>
+      ipcRenderer.invoke("products:getTopSelling", limit),
     getAnalytics: (productId: number, startDate?: string, endDate?: string) =>
-      ipcRenderer.invoke('products:getAnalytics', productId, startDate, endDate),
+      ipcRenderer.invoke(
+        "products:getAnalytics",
+        productId,
+        startDate,
+        endDate,
+      ),
   },
 
   // Sales
   sales: {
-    create: (data: unknown) => ipcRenderer.invoke('sales:create', data),
+    create: (data: unknown) => ipcRenderer.invoke("sales:create", data),
     update: (id: string, data: unknown) =>
-      ipcRenderer.invoke('sales:update', id, data),
-    delete: (id: string) => ipcRenderer.invoke('sales:delete', id),
+      ipcRenderer.invoke("sales:update", id, data),
+    delete: (id: string) => ipcRenderer.invoke("sales:delete", id),
     getAll: (filters?: { startDate?: string; endDate?: string }) =>
-      ipcRenderer.invoke('sales:getAll', filters),
-    getById: (id: string) => ipcRenderer.invoke('sales:getById', id),
-    getTodaySummary: () => ipcRenderer.invoke('sales:getTodaySummary'),
+      ipcRenderer.invoke("sales:getAll", filters),
+    getById: (id: string) => ipcRenderer.invoke("sales:getById", id),
+    getTodaySummary: () => ipcRenderer.invoke("sales:getTodaySummary"),
   },
 
   // Users (Admin only)
   users: {
-    getAll: () => ipcRenderer.invoke('users:getAll'),
-    create: (data: unknown) => ipcRenderer.invoke('users:create', data),
+    getAll: () => ipcRenderer.invoke("users:getAll"),
+    create: (data: unknown) => ipcRenderer.invoke("users:create", data),
     update: (id: string, data: unknown) =>
-      ipcRenderer.invoke('users:update', id, data),
-    delete: (id: string) => ipcRenderer.invoke('users:delete', id),
+      ipcRenderer.invoke("users:update", id, data),
+    delete: (id: string) => ipcRenderer.invoke("users:delete", id),
   },
 
   // Categories
   categories: {
-    getAll: () => ipcRenderer.invoke('categories:getAll'),
-    create: (data: unknown) => ipcRenderer.invoke('categories:create', data),
+    getAll: () => ipcRenderer.invoke("categories:getAll"),
+    create: (data: unknown) => ipcRenderer.invoke("categories:create", data),
     update: (id: string, data: unknown) =>
-      ipcRenderer.invoke('categories:update', id, data),
-    delete: (id: string) => ipcRenderer.invoke('categories:delete', id),
+      ipcRenderer.invoke("categories:update", id, data),
+    delete: (id: string) => ipcRenderer.invoke("categories:delete", id),
   },
 
   // Inventory
   inventory: {
     createArrival: (data: unknown) =>
-      ipcRenderer.invoke('inventory:createArrival', data),
+      ipcRenderer.invoke("inventory:createArrival", data),
     getArrivals: (filters?: { productId?: string }) =>
-      ipcRenderer.invoke('inventory:getArrivals', filters),
-    getLowStock: () => ipcRenderer.invoke('inventory:getLowStock'),
+      ipcRenderer.invoke("inventory:getArrivals", filters),
+    getLowStock: () => ipcRenderer.invoke("inventory:getLowStock"),
   },
 
   // Suppliers
   suppliers: {
     getAll: (includeInactive?: boolean) =>
-      ipcRenderer.invoke('suppliers:getAll', includeInactive),
-    getById: (id: string) => ipcRenderer.invoke('suppliers:getById', id),
-    create: (data: unknown) => ipcRenderer.invoke('suppliers:create', data),
+      ipcRenderer.invoke("suppliers:getAll", includeInactive),
+    getById: (id: string) => ipcRenderer.invoke("suppliers:getById", id),
+    create: (data: unknown) => ipcRenderer.invoke("suppliers:create", data),
     update: (id: string, data: unknown) =>
-      ipcRenderer.invoke('suppliers:update', id, data),
-    delete: (id: string) => ipcRenderer.invoke('suppliers:delete', id),
+      ipcRenderer.invoke("suppliers:update", id, data),
+    delete: (id: string) => ipcRenderer.invoke("suppliers:delete", id),
     getTransactions: (filters?: unknown) =>
-      ipcRenderer.invoke('suppliers:getTransactions', filters),
+      ipcRenderer.invoke("suppliers:getTransactions", filters),
     createTransaction: (data: unknown) =>
-      ipcRenderer.invoke('suppliers:createTransaction', data),
+      ipcRenderer.invoke("suppliers:createTransaction", data),
     updateTransaction: (id: string, data: unknown) =>
-      ipcRenderer.invoke('suppliers:updateTransaction', id, data),
+      ipcRenderer.invoke("suppliers:updateTransaction", id, data),
     deleteTransaction: (id: string) =>
-      ipcRenderer.invoke('suppliers:deleteTransaction', id),
+      ipcRenderer.invoke("suppliers:deleteTransaction", id),
     getBalance: (supplierId: string) =>
-      ipcRenderer.invoke('suppliers:getBalance', supplierId),
+      ipcRenderer.invoke("suppliers:getBalance", supplierId),
     recordPayment: (data: unknown) =>
-      ipcRenderer.invoke('suppliers:recordPayment', data),
+      ipcRenderer.invoke("suppliers:recordPayment", data),
   },
 
   // Sync
   sync: {
-    trigger: () => ipcRenderer.invoke('sync:trigger'),
-    getStatus: () => ipcRenderer.invoke('sync:getStatus'),
+    trigger: () => ipcRenderer.invoke("sync:trigger"),
+    getStatus: () => ipcRenderer.invoke("sync:getStatus"),
     onCompleted: (callback: () => void) => {
-      ipcRenderer.on('sync:completed', callback);
-      return () => ipcRenderer.removeListener('sync:completed', callback);
+      ipcRenderer.on("sync:completed", callback);
+      return () => ipcRenderer.removeListener("sync:completed", callback);
     },
     onFailed: (callback: (error: { message: string }) => void) => {
-      const handler = (_event: IpcRendererEvent, error: { message: string }) => callback(error);
-      ipcRenderer.on('sync:failed', handler);
-      return () => ipcRenderer.removeListener('sync:failed', handler);
+      const handler = (_event: IpcRendererEvent, error: { message: string }) =>
+        callback(error);
+      ipcRenderer.on("sync:failed", handler);
+      return () => ipcRenderer.removeListener("sync:failed", handler);
     },
   },
 
   // Printer
   printer: {
     printReceipt: (saleId: string) =>
-      ipcRenderer.invoke('printer:printReceipt', saleId),
-    testPrint: () => ipcRenderer.invoke('printer:testPrint'),
-    getAvailablePrinters: () => ipcRenderer.invoke('printer:getAvailable'),
+      ipcRenderer.invoke("printer:printReceipt", saleId),
+    testPrint: () => ipcRenderer.invoke("printer:testPrint"),
+    getAvailablePrinters: () => ipcRenderer.invoke("printer:getAvailable"),
     printPriceTags: (html: string, widthMm: number, heightMm: number) =>
-      ipcRenderer.invoke('printer:printPriceTags', html, widthMm, heightMm),
+      ipcRenderer.invoke("printer:printPriceTags", html, widthMm, heightMm),
     printWeightedLabel: (data: unknown) =>
-      ipcRenderer.invoke('printer:printWeightedLabel', data),
+      ipcRenderer.invoke("printer:printWeightedLabel", data),
+    printPriceTagsTSPL: (req: unknown) =>
+      ipcRenderer.invoke("printer:printPriceTagsTSPL", req),
   },
 
   // Pre-weighed items
   weighedItems: {
-    create: (data: unknown) => ipcRenderer.invoke('weighedItems:create', data),
+    create: (data: unknown) => ipcRenderer.invoke("weighedItems:create", data),
     findByBarcode: (barcode: string) =>
-      ipcRenderer.invoke('weighedItems:findByBarcode', barcode),
+      ipcRenderer.invoke("weighedItems:findByBarcode", barcode),
     markAsSold: (id: string, saleId?: string) =>
-      ipcRenderer.invoke('weighedItems:markAsSold', id, saleId),
+      ipcRenderer.invoke("weighedItems:markAsSold", id, saleId),
     getAvailable: (productId: number) =>
-      ipcRenderer.invoke('weighedItems:getAvailable', productId),
+      ipcRenderer.invoke("weighedItems:getAvailable", productId),
     getAll: (filters?: unknown) =>
-      ipcRenderer.invoke('weighedItems:getAll', filters),
-    delete: (id: string) => ipcRenderer.invoke('weighedItems:delete', id),
+      ipcRenderer.invoke("weighedItems:getAll", filters),
+    delete: (id: string) => ipcRenderer.invoke("weighedItems:delete", id),
   },
 
   // Settings
   settings: {
-    get: (key: string) => ipcRenderer.invoke('settings:get', key),
+    get: (key: string) => ipcRenderer.invoke("settings:get", key),
     set: (key: string, value: string) =>
-      ipcRenderer.invoke('settings:set', key, value),
-    getAll: () => ipcRenderer.invoke('settings:getAll'),
+      ipcRenderer.invoke("settings:set", key, value),
+    getAll: () => ipcRenderer.invoke("settings:getAll"),
   },
 
   // Receipt scanning
   receipt: {
     scan: (imageBase64: string, mimeType: string) =>
-      ipcRenderer.invoke('receipt:scan', imageBase64, mimeType),
+      ipcRenderer.invoke("receipt:scan", imageBase64, mimeType),
     matchProducts: (items: { name: string; mxik?: string | null }[]) =>
-      ipcRenderer.invoke('receipt:matchProducts', items),
-    getPlan: () =>
-      ipcRenderer.invoke('receipt:getPlan'),
-    getScanUsage: () =>
-      ipcRenderer.invoke('receipt:getScanUsage'),
+      ipcRenderer.invoke("receipt:matchProducts", items),
+    getPlan: () => ipcRenderer.invoke("receipt:getPlan"),
+    getScanUsage: () => ipcRenderer.invoke("receipt:getScanUsage"),
   },
 
   // Analytics
   analytics: {
     getData: (filters: { startDate: string; endDate: string }) =>
-      ipcRenderer.invoke('analytics:getData', filters),
+      ipcRenderer.invoke("analytics:getData", filters),
   },
 
   // App info
   app: {
-    getVersion: () => ipcRenderer.invoke('app:getVersion'),
-    getTerminalId: () => ipcRenderer.invoke('app:getTerminalId'),
-    getStoreInfo: () => ipcRenderer.invoke('app:getStoreInfo'),
-    quit: () => ipcRenderer.invoke('app:quit'),
+    getVersion: () => ipcRenderer.invoke("app:getVersion"),
+    getTerminalId: () => ipcRenderer.invoke("app:getTerminalId"),
+    getStoreInfo: () => ipcRenderer.invoke("app:getStoreInfo"),
+    quit: () => ipcRenderer.invoke("app:quit"),
+  },
+
+  // Local config (VPS connection settings)
+  config: {
+    getLocalConfig: () => ipcRenderer.invoke("config:getLocalConfig"),
+    updateLocalConfig: (data: {
+      storeId?: string;
+      apiUrl?: string;
+      storeName?: string;
+      terminalId?: string;
+    }) => ipcRenderer.invoke("config:updateLocalConfig", data),
   },
 });
 
@@ -183,7 +200,10 @@ declare global {
         logout: () => Promise<void>;
         getProfile: () => Promise<unknown>;
         restoreSession: (token: string) => Promise<unknown>;
-        changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
+        changePassword: (
+          currentPassword: string,
+          newPassword: string,
+        ) => Promise<boolean>;
       };
       products: {
         getAll: (filters?: unknown) => Promise<unknown[]>;
@@ -195,7 +215,11 @@ declare global {
         delete: (id: string) => Promise<boolean>;
         search: (query: string) => Promise<unknown[]>;
         getTopSelling: (limit?: number) => Promise<unknown[]>;
-        getAnalytics: (productId: number, startDate?: string, endDate?: string) => Promise<unknown>;
+        getAnalytics: (
+          productId: number,
+          startDate?: string,
+          endDate?: string,
+        ) => Promise<unknown>;
       };
       sales: {
         create: (data: unknown) => Promise<unknown>;
@@ -239,14 +263,21 @@ declare global {
         trigger: () => Promise<void>;
         getStatus: () => Promise<unknown>;
         onCompleted: (callback: () => void) => () => void;
-        onFailed: (callback: (error: { message: string }) => void) => () => void;
+        onFailed: (
+          callback: (error: { message: string }) => void,
+        ) => () => void;
       };
       printer: {
         printReceipt: (saleId: string) => Promise<boolean>;
         testPrint: () => Promise<boolean>;
         getAvailablePrinters: () => Promise<string[]>;
-        printPriceTags: (html: string, widthMm: number, heightMm: number) => Promise<boolean>;
+        printPriceTags: (
+          html: string,
+          widthMm: number,
+          heightMm: number,
+        ) => Promise<boolean>;
         printWeightedLabel: (data: unknown) => Promise<boolean>;
+        printPriceTagsTSPL: (req: unknown) => Promise<boolean>;
       };
       weighedItems: {
         create: (data: unknown) => Promise<unknown>;
@@ -263,18 +294,37 @@ declare global {
       };
       receipt: {
         scan: (imageBase64: string, mimeType: string) => Promise<unknown>;
-        matchProducts: (items: { name: string; mxik?: string | null }[]) => Promise<unknown[]>;
+        matchProducts: (
+          items: { name: string; mxik?: string | null }[],
+        ) => Promise<unknown[]>;
         getPlan: () => Promise<{ plan: string; balance_usd: number | null }>;
         getScanUsage: () => Promise<{ balance_usd: number | null }>;
       };
       analytics: {
-        getData: (filters: { startDate: string; endDate: string }) => Promise<unknown>;
+        getData: (filters: {
+          startDate: string;
+          endDate: string;
+        }) => Promise<unknown>;
       };
       app: {
         getVersion: () => Promise<string>;
         getTerminalId: () => Promise<string>;
         getStoreInfo: () => Promise<{ storeId: string; storeName: string }>;
         quit: () => Promise<void>;
+      };
+      config: {
+        getLocalConfig: () => Promise<{
+          storeId: string;
+          apiUrl: string;
+          storeName: string;
+          terminalId: string;
+        } | null>;
+        updateLocalConfig: (data: {
+          storeId?: string;
+          apiUrl?: string;
+          storeName?: string;
+          terminalId?: string;
+        }) => Promise<unknown>;
       };
     };
   }

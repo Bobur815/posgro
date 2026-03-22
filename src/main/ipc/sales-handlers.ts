@@ -199,7 +199,7 @@ export function setupSalesHandlers(): void {
       take: 100,
     });
 
-    const salesWithMargin = sales.map((sale) => {
+    const salesWithMargin = (sales as Array<Sale & { items: Array<PrismaSaleItem & { product: { cost: unknown } | null }> }>).map((sale) => {
       const totalCost = sale.items.reduce((sum, item) => {
         const cost = item.product?.cost ? Number(item.product.cost) : 0;
         return sum + cost * Number(item.quantity);

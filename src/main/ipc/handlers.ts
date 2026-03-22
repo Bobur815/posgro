@@ -666,6 +666,22 @@ function setupAppHandlers(): void {
   ipcMain.handle("app:quit", () => {
     app.quit();
   });
+
+  ipcMain.handle("config:getLocalConfig", async () => {
+    const prisma = getPrismaClient();
+    return prisma.localConfig.findUnique({ where: { id: "config" } });
+  });
+
+  ipcMain.handle(
+    "config:updateLocalConfig",
+    async (_event, data: { storeId?: string; apiUrl?: string; storeName?: string; terminalId?: string }) => {
+      const prisma = getPrismaClient();
+      return prisma.localConfig.update({
+        where: { id: "config" },
+        data,
+      });
+    },
+  );
 }
 
 function setupReceiptHandlers(): void {

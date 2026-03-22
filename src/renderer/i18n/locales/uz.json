@@ -31,6 +31,7 @@
     "hidePassword": "Parolni yashirish",
     "login": "Kirish",
     "logout": "Chiqish",
+    "logoutConfirm": "Haqiqatan ham chiqmoqchimisiz?",
     "phone": "Telefon",
     "password": "Parol",
     "enterPin": "PIN-kodni kiriting",
@@ -283,6 +284,8 @@
     "noUsers": "Foydalanuvchilar topilmadi",
     "activate": "Faollashtirish",
     "deactivate": "O'chirish",
+    "deactivateConfirm":"Bu foydalanuvchini o'chirasizmi? Bu foydalanuvchi sistemaga kira olmaydi, ammo uning ma'lumotlari saqlanadi.",
+    "activateConfirm":"Bu foydalanuvchini faollashtirmoqchimisiz? Bu foydalanuvchi sistemaga kira oladi.",
     "passwordRequired": "Parol talab qilinadi",
     "leaveBlankToKeep": "Joriy parolni saqlash uchun bo'sh qoldiring"
   },
@@ -400,6 +403,7 @@
     "meter": "Metr"
   },
   "priceTags": {
+    "el_unit":"Birlik",
     "title": "Narx yorliqlari",
     "settingsDescription": "Narx yorliqlari shablonlari va chop etish",
     "createTemplate": "Shablon yaratish",

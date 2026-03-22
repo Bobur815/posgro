@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
-import styled from 'styled-components';
-import { RefreshCw } from 'lucide-react';
-import { PrintTagsModal } from './PrintTagsModal';
-import { generateId } from '../../utils/helpers';
-import { useToast } from '../../context/ToastContext';
+import React, { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
+import styled from "styled-components";
+import { RefreshCw } from "lucide-react";
+import { PrintTagsModal } from "./PrintTagsModal";
+import { generateId } from "../../utils/helpers";
+import { useToast } from "../../context/ToastContext";
 
 export interface PriceTagTemplate {
   id: string;
@@ -14,10 +14,9 @@ export interface PriceTagTemplate {
   elements: {
     name: boolean;
     price: boolean;
+    unit: boolean;
     barcode: boolean;
     articleId: boolean;
-    productionDate: boolean;
-    expiryDate: boolean;
     customText1: boolean;
     customText2: boolean;
   };
@@ -27,26 +26,25 @@ export interface PriceTagTemplate {
   fontWeight: number;
 }
 
-const STORAGE_KEY = 'price_tag_templates';
+const STORAGE_KEY = "price_tag_templates";
 
 function createDefaultTemplate(): PriceTagTemplate {
   return {
     id: generateId(),
-    name: '',
+    name: "",
     widthMm: 40,
     heightMm: 30,
     elements: {
       name: true,
       price: true,
+      unit: false,
       barcode: true,
       articleId: false,
-      productionDate: false,
-      expiryDate: false,
       customText1: false,
       customText2: false,
     },
-    customText1Value: '',
-    customText2Value: '',
+    customText1Value: "",
+    customText2Value: "",
     fontSize: 12,
     fontWeight: 400,
   };
@@ -71,7 +69,7 @@ const Title = styled.h1`
   color: ${({ theme }) => theme.colors.text};
 `;
 
-const Button = styled.button<{ $variant?: 'primary' | 'danger' | 'secondary' }>`
+const Button = styled.button<{ $variant?: "primary" | "danger" | "secondary" }>`
   padding: ${({ theme }) => `${theme.spacing.sm} ${theme.spacing.md}`};
   border: none;
   border-radius: ${({ theme }) => theme.borderRadius};
@@ -81,13 +79,13 @@ const Button = styled.button<{ $variant?: 'primary' | 'danger' | 'secondary' }>`
   transition: opacity 0.2s;
 
   background-color: ${({ theme, $variant }) =>
-    $variant === 'danger'
+    $variant === "danger"
       ? theme.colors.error
-      : $variant === 'secondary'
+      : $variant === "secondary"
         ? theme.colors.border
         : theme.colors.primary};
   color: ${({ $variant, theme }) =>
-    $variant === 'secondary' ? theme.colors.text : '#fff'};
+    $variant === "secondary" ? theme.colors.text : "#fff"};
 
   &:hover {
     opacity: 0.85;
@@ -120,7 +118,10 @@ const IconButton = styled.button`
   background: ${({ theme }) => theme.colors.surface};
   color: ${({ theme }) => theme.colors.textSecondary};
   cursor: pointer;
-  &:hover { color: ${({ theme }) => theme.colors.primary}; border-color: ${({ theme }) => theme.colors.primary}; }
+  &:hover {
+    color: ${({ theme }) => theme.colors.primary};
+    border-color: ${({ theme }) => theme.colors.primary};
+  }
 `;
 
 // --- List View ---
@@ -249,7 +250,12 @@ const PreviewContainer = styled.div`
   padding: ${({ theme }) => theme.spacing.lg};
 `;
 
-const PreviewTag = styled.div<{ $width: number; $height: number; $fontSize: number; $fontWeight: number }>`
+const PreviewTag = styled.div<{
+  $width: number;
+  $height: number;
+  $fontSize: number;
+  $fontWeight: number;
+}>`
   background: #fff;
   color: #000;
   border: 1px solid #ccc;
@@ -271,10 +277,9 @@ const PreviewLine = styled.div<{ $bold?: boolean; $small?: boolean }>`
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
-  font-weight: ${({ $bold }) => ($bold ? 700 : 'inherit')};
-  font-size: ${({ $small }) => ($small ? '0.75em' : 'inherit')};
+  font-weight: ${({ $bold }) => ($bold ? 700 : "inherit")};
+  font-size: ${({ $small }) => ($small ? "0.75em" : "inherit")};
 `;
-
 
 const SmallThumbnail = styled.div`
   display: inline-flex;
@@ -303,7 +308,7 @@ export function PriceTags() {
   const [printTemplateId, setPrintTemplateId] = useState<string | null>(null);
 
   // Printer settings
-  const [printerName, setPrinterName] = useState('');
+  const [printerName, setPrinterName] = useState("");
   const [availablePrinters, setAvailablePrinters] = useState<string[]>([]);
   const [printerSaving, setPrinterSaving] = useState(false);
 
@@ -325,15 +330,18 @@ export function PriceTags() {
           setTemplates(JSON.parse(raw));
         }
       } catch (err) {
-        console.error('Failed to load price tag templates:', err);
+        console.error("Failed to load price tag templates:", err);
       } finally {
         setLoading(false);
       }
     })();
 
-    window.electronAPI.settings.get('label_printer_name').then((v) => {
-      if (v) setPrinterName(v);
-    }).catch(() => {});
+    window.electronAPI.settings
+      .get("label_printer_name")
+      .then((v) => {
+        if (v) setPrinterName(v);
+      })
+      .catch(() => {});
 
     loadAvailablePrinters();
   }, [loadAvailablePrinters]);
@@ -341,10 +349,10 @@ export function PriceTags() {
   const handleSavePrinter = async () => {
     setPrinterSaving(true);
     try {
-      await window.electronAPI.settings.set('label_printer_name', printerName);
-      toast.success(t('common.saved'));
+      await window.electronAPI.settings.set("label_printer_name", printerName);
+      toast.success(t("common.saved"));
     } catch {
-      toast.error(t('common.error'));
+      toast.error(t("common.error"));
     } finally {
       setPrinterSaving(false);
     }
@@ -364,7 +372,7 @@ export function PriceTags() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('priceTags.confirmDelete'))) return;
+    if (!confirm(t("priceTags.confirmDelete"))) return;
     await saveTemplates(templates.filter((t) => t.id !== id));
   };
 
@@ -385,12 +393,15 @@ export function PriceTags() {
     setEditing(null);
   };
 
-  const updateField = <K extends keyof PriceTagTemplate>(key: K, value: PriceTagTemplate[K]) => {
+  const updateField = <K extends keyof PriceTagTemplate>(
+    key: K,
+    value: PriceTagTemplate[K],
+  ) => {
     if (!editing) return;
     setEditing({ ...editing, [key]: value });
   };
 
-  const toggleElement = (key: keyof PriceTagTemplate['elements']) => {
+  const toggleElement = (key: keyof PriceTagTemplate["elements"]) => {
     if (!editing) return;
     setEditing({
       ...editing,
@@ -399,7 +410,11 @@ export function PriceTags() {
   };
 
   if (loading) {
-    return <Container><Title>{t('common.loading')}</Title></Container>;
+    return (
+      <Container>
+        <Title>{t("common.loading")}</Title>
+      </Container>
+    );
   }
 
   // --- Editor View ---
@@ -408,88 +423,92 @@ export function PriceTags() {
     return (
       <Container>
         <EditorTopBar>
-          <Button $variant="secondary" onClick={handleBack}>&larr; {t('priceTags.back')}</Button>
+          <Button $variant="secondary" onClick={handleBack}>
+            &larr; {t("priceTags.back")}
+          </Button>
           <FieldGroup style={{ flex: 1 }}>
             <FieldInput
-              placeholder={t('priceTags.templateName')}
+              placeholder={t("priceTags.templateName")}
               value={editing.name}
-              onChange={(e) => updateField('name', e.target.value)}
+              onChange={(e) => updateField("name", e.target.value)}
             />
           </FieldGroup>
           <FieldGroup>
-            <FieldLabel>{t('priceTags.width')}</FieldLabel>
+            <FieldLabel>{t("priceTags.width")}</FieldLabel>
             <FieldInput
               type="number"
               style={{ width: 70 }}
               value={editing.widthMm}
-              min={20}
               max={200}
-              onChange={(e) => updateField('widthMm', Number(e.target.value) || 20)}
+              onChange={(e) => updateField("widthMm", Number(e.target.value))}
             />
           </FieldGroup>
           <FieldGroup>
-            <FieldLabel>{t('priceTags.height')}</FieldLabel>
+            <FieldLabel>{t("priceTags.height")}</FieldLabel>
             <FieldInput
               type="number"
               style={{ width: 70 }}
               value={editing.heightMm}
-              min={15}
               max={200}
-              onChange={(e) => updateField('heightMm', Number(e.target.value) || 15)}
+              onChange={(e) => updateField("heightMm", Number(e.target.value))}
             />
           </FieldGroup>
           <Button onClick={handleSave} disabled={!editing.name.trim()}>
-            {t('common.save')}
+            {t("common.save")}
           </Button>
         </EditorTopBar>
 
         <EditorLayout>
           {/* Left panel */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <Panel>
-              <PanelTitle>{t('priceTags.tagElements')}</PanelTitle>
-              {(Object.keys(editing.elements) as (keyof PriceTagTemplate['elements'])[]).map(
-                (key) => (
-                  <CheckboxRow key={key}>
-                    <input
-                      type="checkbox"
-                      checked={editing.elements[key]}
-                      onChange={() => toggleElement(key)}
-                    />
-                    {t(`priceTags.el_${key}`)}
-                  </CheckboxRow>
-                )
-              )}
+              <PanelTitle>{t("priceTags.tagElements")}</PanelTitle>
+              {(["name", "price", "unit", "barcode", "articleId", "customText1", "customText2"] as (keyof PriceTagTemplate["elements"])[]).map((key) => (
+                <CheckboxRow key={key}>
+                  <input
+                    type="checkbox"
+                    checked={editing.elements[key]}
+                    onChange={() => toggleElement(key)}
+                  />
+                  {t(`priceTags.el_${key}`)}
+                </CheckboxRow>
+              ))}
 
               {editing.elements.customText1 && (
                 <FieldGroup style={{ marginTop: 8 }}>
-                  <FieldLabel>{t('priceTags.el_customText1')}</FieldLabel>
+                  <FieldLabel>{t("priceTags.el_customText1")}</FieldLabel>
                   <FieldInput
                     value={editing.customText1Value}
-                    onChange={(e) => updateField('customText1Value', e.target.value)}
-                    placeholder={t('priceTags.customTextPlaceholder')}
+                    onChange={(e) =>
+                      updateField("customText1Value", e.target.value)
+                    }
+                    placeholder={t("priceTags.customTextPlaceholder")}
                   />
                 </FieldGroup>
               )}
               {editing.elements.customText2 && (
                 <FieldGroup style={{ marginTop: 8 }}>
-                  <FieldLabel>{t('priceTags.el_customText2')}</FieldLabel>
+                  <FieldLabel>{t("priceTags.el_customText2")}</FieldLabel>
                   <FieldInput
                     value={editing.customText2Value}
-                    onChange={(e) => updateField('customText2Value', e.target.value)}
-                    placeholder={t('priceTags.customTextPlaceholder')}
+                    onChange={(e) =>
+                      updateField("customText2Value", e.target.value)
+                    }
+                    placeholder={t("priceTags.customTextPlaceholder")}
                   />
                 </FieldGroup>
               )}
             </Panel>
 
             <Panel>
-              <PanelTitle>{t('priceTags.fontSettings')}</PanelTitle>
+              <PanelTitle>{t("priceTags.fontSettings")}</PanelTitle>
               <FieldGroup>
-                <FieldLabel>{t('priceTags.fontSize')}</FieldLabel>
+                <FieldLabel>{t("priceTags.fontSize")}</FieldLabel>
                 <FieldSelect
                   value={editing.fontSize}
-                  onChange={(e) => updateField('fontSize', Number(e.target.value))}
+                  onChange={(e) =>
+                    updateField("fontSize", Number(e.target.value))
+                  }
                 >
                   {[8, 9, 10, 11, 12, 14, 16, 18, 20, 24].map((s) => (
                     <option key={s} value={s}>
@@ -499,10 +518,12 @@ export function PriceTags() {
                 </FieldSelect>
               </FieldGroup>
               <FieldGroup style={{ marginTop: 8 }}>
-                <FieldLabel>{t('priceTags.fontWeight')}</FieldLabel>
+                <FieldLabel>{t("priceTags.fontWeight")}</FieldLabel>
                 <FieldSelect
                   value={editing.fontWeight}
-                  onChange={(e) => updateField('fontWeight', Number(e.target.value))}
+                  onChange={(e) =>
+                    updateField("fontWeight", Number(e.target.value))
+                  }
                 >
                   {[300, 400, 500, 600, 700, 800, 900].map((w) => (
                     <option key={w} value={w}>
@@ -516,7 +537,7 @@ export function PriceTags() {
 
           {/* Right panel — Preview */}
           <Panel>
-            <PanelTitle>{t('priceTags.preview')}</PanelTitle>
+            <PanelTitle>{t("priceTags.preview")}</PanelTitle>
             <PreviewContainer>
               <TagPreview template={editing} />
             </PreviewContainer>
@@ -534,44 +555,50 @@ export function PriceTags() {
   return (
     <Container>
       <TopBar>
-        <Title>{t('priceTags.title')}</Title>
-        <Button onClick={handleCreate}>{t('priceTags.createTemplate')}</Button>
+        <Title>{t("priceTags.title")}</Title>
+        <Button onClick={handleCreate}>{t("priceTags.createTemplate")}</Button>
       </TopBar>
 
       {/* Printer selector */}
       <Panel>
-        <PanelTitle>{t('scaleSettings.labelPrinterName')}</PanelTitle>
+        <PanelTitle>{t("scaleSettings.labelPrinterName")}</PanelTitle>
         <PrinterRow>
           <FieldSelect
             style={{ flex: 1 }}
             value={printerName}
             onChange={(e) => setPrinterName(e.target.value)}
           >
-            <option value="">{t('printer.availablePrinters')}</option>
+            <option value="">{t("printer.availablePrinters")}</option>
             {availablePrinters.map((p) => (
-              <option key={p} value={p}>{p}</option>
+              <option key={p} value={p}>
+                {p}
+              </option>
             ))}
           </FieldSelect>
-          <IconButton type="button" onClick={loadAvailablePrinters} title={t('common.refresh')}>
+          <IconButton
+            type="button"
+            onClick={loadAvailablePrinters}
+            title={t("common.refresh")}
+          >
             <RefreshCw size={16} />
           </IconButton>
           <Button onClick={handleSavePrinter} disabled={printerSaving}>
-            {printerSaving ? t('common.saving') : t('common.save')}
+            {printerSaving ? t("common.saving") : t("common.save")}
           </Button>
         </PrinterRow>
       </Panel>
 
       {templates.length === 0 ? (
-        <EmptyState>{t('priceTags.noTemplates')}</EmptyState>
+        <EmptyState>{t("priceTags.noTemplates")}</EmptyState>
       ) : (
         <Table>
           <thead>
             <tr>
               <Th>#</Th>
-              <Th>{t('priceTags.preview')}</Th>
-              <Th>{t('priceTags.templateName')}</Th>
-              <Th>{t('priceTags.dimensions')}</Th>
-              <Th>{t('common.actions')}</Th>
+              <Th>{t("priceTags.preview")}</Th>
+              <Th>{t("priceTags.templateName")}</Th>
+              <Th>{t("priceTags.dimensions")}</Th>
+              <Th>{t("common.actions")}</Th>
             </tr>
           </thead>
           <tbody>
@@ -586,18 +613,27 @@ export function PriceTags() {
                 </Td>
                 <Td>{tpl.name}</Td>
                 <Td>
-                  {tpl.widthMm} x {tpl.heightMm} {t('priceTags.mm')}
+                  {tpl.widthMm} x {tpl.heightMm} {t("priceTags.mm")}
                 </Td>
                 <Td>
                   <ButtonGroup>
-                    <Button $variant="secondary" onClick={() => handleEdit(tpl)}>
-                      {t('common.edit')}
+                    <Button
+                      $variant="secondary"
+                      onClick={() => handleEdit(tpl)}
+                    >
+                      {t("common.edit")}
                     </Button>
-                    <Button $variant="primary" onClick={() => setPrintTemplateId(tpl.id)}>
-                      {t('priceTags.print')}
+                    <Button
+                      $variant="primary"
+                      onClick={() => setPrintTemplateId(tpl.id)}
+                    >
+                      {t("priceTags.print")}
                     </Button>
-                    <Button $variant="danger" onClick={() => handleDelete(tpl.id)}>
-                      {t('common.delete')}
+                    <Button
+                      $variant="danger"
+                      onClick={() => handleDelete(tpl.id)}
+                    >
+                      {t("common.delete")}
                     </Button>
                   </ButtonGroup>
                 </Td>
@@ -620,7 +656,6 @@ export function PriceTags() {
 // --- Tag Preview Sub-component ---
 
 function TagPreview({ template }: { template: PriceTagTemplate }) {
-  const { t } = useTranslation();
   const el = template.elements;
 
   return (
@@ -631,45 +666,53 @@ function TagPreview({ template }: { template: PriceTagTemplate }) {
       $fontWeight={template.fontWeight}
     >
       {el.customText1 && template.customText1Value && (
-        <PreviewLine $small style={{ textAlign: 'center' }}>{template.customText1Value}</PreviewLine>
+        <PreviewLine $small>{template.customText1Value}</PreviewLine>
       )}
 
-      {/* Row 1: name */}
       {el.name && (
-        <PreviewLine $bold style={{ textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {t('priceTags.sampleName')}
+        <PreviewLine $bold style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          Молоко Nestle 1л
         </PreviewLine>
       )}
 
-      {/* Row 2: qty | price/unit */}
-      {el.price && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: '0.85em' }}>
-          <span>1 шт</span>
-          <span>12 500 {t('common.currency')}/шт</span>
+      {el.unit && (
+        <PreviewLine $small>1.5 кг</PreviewLine>
+      )}
+
+      {(el.price || el.articleId) && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+          {el.articleId && <span style={{ fontSize: "0.7em" }}>KOD: 00123</span>}
+          {el.price && <span style={{ marginLeft: "auto" }}>4 667 so'm/кг</span>}
         </div>
       )}
 
-      {/* Row 3: barcode placeholder | total */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', width: '100%', gap: 4 }}>
-        {el.barcode ? (
-          <div style={{ flex: 1, background: '#e8e8e8', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2px 0' }}>
-            <span style={{ fontSize: '0.6em', color: '#555', letterSpacing: 1 }}>||| ||| |||</span>
+      {/* Barcode left + total right (weighted layout) */}
+      <div style={{ display: "flex", alignItems: "center", gap: 4, width: "100%" }}>
+        {el.barcode && (
+          <div
+            style={{
+              flex: 1,
+              background: "#e8e8e8",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "3px 0",
+            }}
+          >
+            <span style={{ fontSize: "0.55em", color: "#444", letterSpacing: 2 }}>
+              ||| ||| |||
+            </span>
           </div>
-        ) : (
-          <div style={{ flex: 1 }} />
         )}
         {el.price && (
-          <span style={{ fontWeight: 700, fontSize: '0.85em', whiteSpace: 'nowrap' }}>
-            12 500 {t('common.currency')}
+          <span style={{ fontWeight: 700, fontSize: "0.85em", whiteSpace: "nowrap" }}>
+            7 000 so'm
           </span>
         )}
       </div>
 
-      {el.articleId && <PreviewLine $small style={{ textAlign: 'center' }}>ID: 00123</PreviewLine>}
-      {el.productionDate && <PreviewLine $small style={{ textAlign: 'center' }}>01.01.2025</PreviewLine>}
-      {el.expiryDate && <PreviewLine $small style={{ textAlign: 'center' }}>01.06.2025</PreviewLine>}
       {el.customText2 && template.customText2Value && (
-        <PreviewLine $small style={{ textAlign: 'center' }}>{template.customText2Value}</PreviewLine>
+        <PreviewLine $small>{template.customText2Value}</PreviewLine>
       )}
     </PreviewTag>
   );

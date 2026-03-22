@@ -1,7 +1,7 @@
 import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import styled from "styled-components";
+import styled, { keyframes } from "styled-components";
 import {
   ShoppingCart,
   Package,
@@ -20,6 +20,7 @@ import {
   Scale,
   type LucideIcon,
   ReceiptText,
+  RefreshCw,
 } from "lucide-react";
 import { useAuthStore } from "../../store/auth-store";
 import { useSidebar } from "../../context/SidebarContext";
@@ -68,8 +69,8 @@ const ToggleButton = styled.button`
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 18px;
-  padding: 4px;
+  font-size: 24px;
+  padding: 6px;
   color: ${({ theme }) => theme.colors.textSecondary};
   display: flex;
   align-items: center;
@@ -162,12 +163,47 @@ const BottomSection = styled.div<{ $collapsed: boolean }>`
 const SyncStatus = styled.div<{ $syncing?: boolean; $collapsed: boolean }>`
   display: flex;
   align-items: center;
-  justify-content: ${({ $collapsed }) => ($collapsed ? "center" : "flex-start")};
+  justify-content: ${({ $collapsed }) =>
+    $collapsed ? "center" : "flex-start"};
   gap: ${({ theme }) => theme.spacing.xs};
   font-size: 11px;
   color: ${({ theme, $syncing }) =>
     $syncing ? theme.colors.warning : theme.colors.success};
   padding: 0 ${({ theme }) => theme.spacing.sm};
+`;
+
+const spin = keyframes`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+`;
+
+const SyncButton = styled.button<{ $syncing?: boolean }>`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  border-radius: ${({ theme }) => theme.borderRadius};
+  background: none;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  cursor: ${({ $syncing }) => ($syncing ? "default" : "pointer")};
+  flex-shrink: 0;
+  transition:
+    color 0.2s,
+    transform 0.1s;
+
+  &:hover:not(:disabled) {
+    color: ${({ theme }) => theme.colors.primary};
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.85);
+  }
+
+  svg {
+    animation: ${({ $syncing }) => ($syncing ? spin : "none")} 1s linear
+      infinite;
+  }
 `;
 
 const SyncText = styled.span<{ $collapsed: boolean }>`
@@ -176,7 +212,9 @@ const SyncText = styled.span<{ $collapsed: boolean }>`
   text-overflow: ellipsis;
   opacity: ${({ $collapsed }) => ($collapsed ? 0 : 1)};
   max-width: ${({ $collapsed }) => ($collapsed ? "0" : "180px")};
-  transition: opacity 0.2s ease, max-width 0.3s ease;
+  transition:
+    opacity 0.2s ease,
+    max-width 0.3s ease;
 `;
 
 const UserSection = styled.div<{ $collapsed: boolean }>`
@@ -184,7 +222,8 @@ const UserSection = styled.div<{ $collapsed: boolean }>`
   align-items: center;
   gap: ${({ theme }) => theme.spacing.sm};
   padding: ${({ theme }) => theme.spacing.sm};
-  justify-content: ${({ $collapsed }) => ($collapsed ? "center" : "flex-start")};
+  justify-content: ${({ $collapsed }) =>
+    $collapsed ? "center" : "flex-start"};
 `;
 
 const UserName = styled.span`
@@ -212,7 +251,9 @@ const UserDetails = styled.div<{ $collapsed: boolean }>`
   overflow: hidden;
   opacity: ${({ $collapsed }) => ($collapsed ? 0 : 1)};
   max-width: ${({ $collapsed }) => ($collapsed ? "0" : "180px")};
-  transition: opacity 0.2s ease, max-width 0.3s ease;
+  transition:
+    opacity 0.2s ease,
+    max-width 0.3s ease;
 `;
 
 const LoginButton = styled.button<{ $collapsed: boolean }>`
@@ -247,7 +288,8 @@ const LogoutButton = styled.button<{ $collapsed: boolean }>`
   color: ${({ theme }) => theme.colors.error};
   cursor: pointer;
   transition: all 0.2s;
-  justify-content: ${({ $collapsed }) => ($collapsed ? "center" : "flex-start")};
+  justify-content: ${({ $collapsed }) =>
+    $collapsed ? "center" : "flex-start"};
 
   &:hover {
     background-color: ${({ theme }) => theme.colors.error}10;
@@ -285,12 +327,21 @@ export function Sidebar() {
   const navigate = useNavigate();
   const { user, isPinLogin, logout } = useAuthStore();
   const { isCollapsed, toggleSidebar } = useSidebar();
-  const { status } = useSync();
+  const { status, refreshStatus } = useSync();
   const isAdmin = user?.role === "ADMIN";
 
   const handleLogin = async () => {
     await logout();
     navigate("/login");
+  };
+
+  const handleSyncNow = async () => {
+    try {
+      await window.electronAPI.sync.trigger();
+      await refreshStatus();
+    } catch (err) {
+      console.error("Sync failed:", err);
+    }
   };
 
   const handleLogout = async () => {
@@ -322,14 +373,12 @@ export function Sidebar() {
   return (
     <Container $collapsed={isCollapsed}>
       <LogoSection $collapsed={isCollapsed}>
-        <Logo $collapsed={isCollapsed}>
-          {isCollapsed ? "YA" : "Yangi Asr"}
-        </Logo>
+        <Logo $collapsed={isCollapsed}>{isCollapsed ? "YA" : "Yangi Asr"}</Logo>
         <ToggleButton
           onClick={toggleSidebar}
           title={isCollapsed ? t("nav.expand") : t("nav.collapse")}
         >
-          {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          {isCollapsed ? <ChevronRight size={24} /> : <ChevronLeft size={24} />}
         </ToggleButton>
       </LogoSection>
 
@@ -371,7 +420,11 @@ export function Sidebar() {
               ClipboardList,
               t("nav.inventory"),
             )}
-            {renderNavItem("/inventory/weighed", Scale, t("inventory.preWeighed"))}
+            {renderNavItem(
+              "/inventory/weighed",
+              Scale,
+              t("inventory.preWeighed"),
+            )}
             {renderNavItem("/suppliers", Truck, t("suppliers.title"))}
             {renderNavItem("/users", Users, t("nav.users"))}
             {renderNavItem("/settings", Settings, t("nav.settings"))}
@@ -395,9 +448,17 @@ export function Sidebar() {
             {status.isSyncing
               ? t("sync.syncing")
               : status.lastSyncTime
-              ? `${t("sync.lastSync")}: ${new Date(status.lastSyncTime).toLocaleTimeString()}`
-              : t("sync.notSynced")}
+                ? `${t("sync.lastSync")}: ${new Date(status.lastSyncTime).toLocaleTimeString()}`
+                : t("sync.notSynced")}
           </SyncText>
+          <SyncButton
+            $syncing={status.isSyncing}
+            disabled={status.isSyncing}
+            onClick={handleSyncNow}
+            title={t("settings.syncNow")}
+          >
+            <RefreshCw size={18} />
+          </SyncButton>
         </SyncStatus>
 
         {isPinLogin ? (
@@ -421,7 +482,9 @@ export function Sidebar() {
                   <UserDetails $collapsed={isCollapsed}>
                     <UserName>{getUserName()}</UserName>
                     <UserRole>
-                      {user.role === "ADMIN" ? t("users.admin") : t("users.cashier")}
+                      {user.role === "ADMIN"
+                        ? t("users.admin")
+                        : t("users.cashier")}
                     </UserRole>
                   </UserDetails>
                 </UserSection>

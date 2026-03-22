@@ -190,7 +190,7 @@ export function ProductList() {
             tooltip={t("common.edit")}
             onClick={() => setEditProductId(String(product.id))}
           >
-            <Edit size={16} />
+            <Edit size={18} />
           </Button>
           <Button
             variant="danger"
@@ -198,7 +198,7 @@ export function ProductList() {
             tooltip={t("common.delete")}
             onClick={() => navigate(`/products/${product.id}/delete`)}
           >
-            <Trash size={16} />
+            <Trash size={18} />
           </Button>
           <Button
             variant="primary"
@@ -206,7 +206,7 @@ export function ProductList() {
             tooltip={t("products.viewDetails")}
             onClick={() => navigate(`/products/${product.id}`)}
           >
-            <Eye size={16} />
+            <Eye size={18} />
           </Button>
         </div>
       ),

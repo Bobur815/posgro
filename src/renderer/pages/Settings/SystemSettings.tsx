@@ -105,7 +105,7 @@ export function SystemSettings() {
     syncInterval: "5",
   });
 
-  const [syncStatus, setSyncStatus] = useState<{
+const [syncStatus, setSyncStatus] = useState<{
     isSyncing: boolean;
     lastSyncTime: string | null;
   }>({ isSyncing: false, lastSyncTime: null });

@@ -24,7 +24,7 @@ export class ProductsService {
     return this.prisma.product.findMany({
       where,
       include: { category: true, supplier: true },
-      orderBy: { nameRu: "asc" },
+      orderBy: { createdAt: "desc" },
     });
   }
 

@@ -57,7 +57,7 @@ const PageWrapper = styled.div`
 
 const Container = styled.div`
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: 1fr 0.8fr;
   grid-template-rows: 1fr;
   gap: ${({ theme }) => theme.spacing.md};
   flex: 1;

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../../store/auth-store";
 import { useSidebar } from "@context/SidebarContext";
+import { ConfirmDialog } from "@components/common/ConfirmDialog";
 
 const SIDEBAR_WIDTH = 220;
 const MINI_SIDEBAR_WIDTH = 70;
@@ -303,6 +304,8 @@ export function Sidebar() {
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
   const handleLogout = async () => {
     await logout();
     navigate("/login");
@@ -336,9 +339,7 @@ export function Sidebar() {
         { to: "/products", icon: Package },
         { to: "/suppliers", icon: Truck },
         { to: "/reports/daily", icon: BarChart3 },
-        ...(isAdmin
-          ? [{ to: "/users", icon: Users }]
-          : []),
+        ...(isAdmin ? [{ to: "/users", icon: Users }] : []),
         { to: "/settings", icon: Settings },
       ];
 
@@ -472,10 +473,22 @@ export function Sidebar() {
             <Icon size={24} />
           </MobileNavItem>
         ))}
-        <MobileNavButton onClick={handleLogout}>
+        <MobileNavButton onClick={() => setShowLogoutConfirm(true)}>
           <LogOut size={24} />
         </MobileNavButton>
       </MobileBottomNav>
+
+      {showLogoutConfirm && (
+        <ConfirmDialog
+          title={t("auth.logout")}
+          message={t("auth.logoutConfirm")}
+          confirmLabel={t("auth.logout")}
+          cancelLabel={t("common.cancel")}
+          variant="danger"
+          onConfirm={handleLogout}
+          onCancel={() => setShowLogoutConfirm(false)}
+        />
+      )}
     </>
   );
 }

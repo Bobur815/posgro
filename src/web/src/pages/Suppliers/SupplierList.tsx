@@ -286,7 +286,7 @@ export function SupplierList() {
                   tooltip={t("suppliers.viewDetails")}
                   onClick={() => navigate(`/suppliers/${supplier.id}`)}
                 >
-                  <Eye size={16} />
+                  <Eye size={18} />
                 </Button>
                 <Button
                   size="small"
@@ -294,7 +294,7 @@ export function SupplierList() {
                   tooltip={t("common.edit")}
                   onClick={() => setEditSupplierId(supplier.id)}
                 >
-                  <Edit size={16} />
+                  <Edit size={18} />
                 </Button>
                 <Button
                   size="small"
@@ -302,7 +302,7 @@ export function SupplierList() {
                   tooltip={t("common.delete")}
                   onClick={() => setSupplierToDelete(supplier)}
                 >
-                  <Trash size={16} />
+                  <Trash size={18} />
                 </Button>
               </>
             }

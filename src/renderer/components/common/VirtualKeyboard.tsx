@@ -1,25 +1,99 @@
 import { useState } from "react";
 import styled from "styled-components";
-import { Delete, X } from "lucide-react";
+import { Delete, Globe, X } from "lucide-react";
 
 /* ── layout definitions ─────────────────────────────────── */
 
-type KeyDef = string | { key: string; label?: string; width?: number; active?: boolean };
+type KeyDef =
+  | string
+  | { key: string; label?: string; width?: number; active?: boolean };
 
 const QWERTY_NORMAL: KeyDef[][] = [
   ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
   ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
   ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
-  [{ key: "SHIFT", label: "⇧", width: 2 }, "z", "x", "c", "v", "b", "n", "m", { key: "BACKSPACE", width: 2 }],
-  [{ key: "SPACE", label: " ", width: 6 }, { key: "ENTER", label: "⏎", width: 2 }],
+  [
+    { key: "SHIFT", label: "⇧", width: 2 },
+    "z",
+    "x",
+    "c",
+    "v",
+    "b",
+    "n",
+    "m",
+    { key: "BACKSPACE", width: 2 },
+  ],
+  [
+    { key: "GLOBE", width: 1 },
+    { key: "SPACE", label: " ", width: 5 },
+    { key: "ENTER", label: "⏎", width: 2 },
+  ],
 ];
 
 const QWERTY_SHIFT: KeyDef[][] = [
   ["!", "@", "#", "$", "%", "^", "&", "*", "(", ")"],
   ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
   ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
-  [{ key: "SHIFT", label: "⇧", width: 2, active: true }, "Z", "X", "C", "V", "B", "N", "M", { key: "BACKSPACE", width: 2 }],
-  [{ key: "SPACE", label: " ", width: 6 }],
+  [
+    { key: "SHIFT", label: "⇧", width: 2, active: true },
+    "Z",
+    "X",
+    "C",
+    "V",
+    "B",
+    "N",
+    "M",
+    { key: "BACKSPACE", width: 2 },
+  ],
+  [
+    { key: "GLOBE", width: 1 },
+    { key: "SPACE", label: " ", width: 5 },
+  ],
+];
+
+const CYRILLIC_NORMAL: KeyDef[][] = [
+  ["й", "ц", "у", "к", "е", "н", "г", "ш", "щ", "з", "х", "ъ"],
+  ["ф", "ы", "в", "а", "п", "р", "о", "л", "д", "ж", "э"],
+  [
+    { key: "SHIFT", label: "⇧", width: 2 },
+    "я",
+    "ч",
+    "с",
+    "м",
+    "и",
+    "т",
+    "ь",
+    "б",
+    "ю",
+    { key: "BACKSPACE", width: 2 },
+  ],
+  [
+    { key: "GLOBE", width: 1 },
+    { key: "SPACE", label: " ", width: 5 },
+    { key: "ENTER", label: "⏎", width: 2 },
+  ],
+];
+
+const CYRILLIC_SHIFT: KeyDef[][] = [
+  ["Й", "Ц", "У", "К", "Е", "Н", "Г", "Ш", "Щ", "З", "Х", "Ъ"],
+  ["Ф", "Ы", "В", "А", "П", "Р", "О", "Л", "Д", "Ж", "Э"],
+  [
+    { key: "SHIFT", label: "⇧", width: 2, active: true },
+    "Я",
+    "Ч",
+    "С",
+    "М",
+    "И",
+    "Т",
+    "Ь",
+    "Б",
+    "Ю",
+    { key: "BACKSPACE", width: 2 },
+  ],
+  [
+    { key: "GLOBE", width: 1 },
+    { key: "SPACE", label: " ", width: 5 },
+  ],
 ];
 
 /* ── types ──────────────────────────────────────────────── */
@@ -48,17 +122,17 @@ function isActive(def: KeyDef) {
   return typeof def !== "string" && def.active;
 }
 
-const SPECIAL_KEYS = new Set(["SHIFT", "BACKSPACE", "SPACE", "ENTER"]);
+const SPECIAL_KEYS = new Set(["SHIFT", "BACKSPACE", "SPACE", "ENTER", "GLOBE"]);
 
 function isLetterKey(key: string) {
   if (SPECIAL_KEYS.has(key)) return false;
-  return /^[a-zA-Z]$/.test(key);
+  return /^[a-zA-Zа-яА-ЯёЁ]$/.test(key);
 }
 
 function isSymbolKey(key: string) {
   if (SPECIAL_KEYS.has(key)) return false;
   if (/^[0-9]$/.test(key)) return false;
-  if (/^[a-zA-Z]$/.test(key)) return false;
+  if (/^[a-zA-Zа-яА-ЯёЁ]$/.test(key)) return false;
   return true;
 }
 
@@ -73,8 +147,12 @@ const Overlay = styled.div<{ $fixed?: boolean }>`
   animation: slideUp 0.2s ease;
 
   @keyframes slideUp {
-    from { transform: translateY(100%); }
-    to { transform: translateY(0); }
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
   }
 `;
 
@@ -120,7 +198,12 @@ const Row = styled.div`
   }
 `;
 
-const Key = styled.button<{ $w: number; $active?: boolean; $special?: boolean; $disabled?: boolean }>`
+const Key = styled.button<{
+  $w: number;
+  $active?: boolean;
+  $special?: boolean;
+  $disabled?: boolean;
+}>`
   flex: ${({ $w }) => $w};
   height: 56px;
   padding: 0;
@@ -160,16 +243,34 @@ const Key = styled.button<{ $w: number; $active?: boolean; $special?: boolean; $
 
 /* ── component ──────────────────────────────────────────── */
 
-export function VirtualKeyboard({ numbersOnly = false, fixed = false, onKeyPress, onClose }: VirtualKeyboardProps) {
+export function VirtualKeyboard({
+  numbersOnly = false,
+  fixed = false,
+  onKeyPress,
+  onClose,
+}: VirtualKeyboardProps) {
   const [shifted, setShifted] = useState(false);
+  const [cyrillic, setCyrillic] = useState(false);
 
-  const layout = shifted ? QWERTY_SHIFT : QWERTY_NORMAL;
+  const layout = cyrillic
+    ? shifted
+      ? CYRILLIC_SHIFT
+      : CYRILLIC_NORMAL
+    : shifted
+      ? QWERTY_SHIFT
+      : QWERTY_NORMAL;
 
   const handleClick = (key: string, disabled: boolean) => {
     if (disabled) return;
 
     if (key === "SHIFT") {
       setShifted((s) => !s);
+      return;
+    }
+
+    if (key === "GLOBE") {
+      setCyrillic((c) => !c);
+      setShifted(false);
       return;
     }
 
@@ -200,20 +301,32 @@ export function VirtualKeyboard({ numbersOnly = false, fixed = false, onKeyPress
               const width = getWidth(def);
               const active = isActive(def);
               const special = SPECIAL_KEYS.has(key);
-              const disabled = numbersOnly && (isLetterKey(key) || isSymbolKey(key) || key === "SHIFT" || key === "SPACE");
+              const disabled =
+                numbersOnly &&
+                (isLetterKey(key) ||
+                  isSymbolKey(key) ||
+                  key === "SHIFT" ||
+                  key === "SPACE" ||
+                  key === "GLOBE");
 
               return (
                 <Key
                   key={key}
                   $w={width}
-                  $active={active}
+                  $active={active || (key === "GLOBE" && cyrillic)}
                   $special={special}
                   $disabled={disabled}
                   type="button"
                   tabIndex={-1}
                   onClick={() => handleClick(key, disabled)}
                 >
-                  {key === "BACKSPACE" ? <Delete size={22} /> : label}
+                  {key === "BACKSPACE" ? (
+                    <Delete size={22} />
+                  ) : key === "GLOBE" ? (
+                    <Globe size={18} />
+                  ) : (
+                    label
+                  )}
                 </Key>
               );
             })}

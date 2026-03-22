@@ -94,10 +94,10 @@ export function UserList() {
     { key: 'actions', header: '', render: (user: UserListItem) => (
       <div style={{ display: 'flex', gap: '8px' }}>
         <Button size="small" variant="secondary" tooltip={t('common.edit')} onClick={() => navigate(`/users/${user.id}/edit`)}>
-          <Edit size={16} />
+          <Edit size={18} />
         </Button>
         <Button size="small" variant={user.active ? 'danger' : 'primary'} tooltip={user.active ? t('users.deactivate') : t('users.activate')} onClick={() => setUserToToggle(user)}>
-          {user.active ? <UserX size={16} /> : <UserCheck size={16} />}
+          {user.active ? <UserX size={18} /> : <UserCheck size={18} />}
         </Button>
       </div>
     )},
@@ -124,10 +124,10 @@ export function UserList() {
             actions={
               <>
                 <Button size="small" variant="secondary" tooltip={t('common.edit')} onClick={() => navigate(`/users/${user.id}/edit`)}>
-                  <Edit size={16} />
+                  <Edit size={18} />
                 </Button>
                 <Button size="small" variant={user.active ? 'danger' : 'primary'} tooltip={user.active ? t('users.deactivate') : t('users.activate')} onClick={() => setUserToToggle(user)}>
-                  {user.active ? <UserX size={16} /> : <UserCheck size={16} />}
+                  {user.active ? <UserX size={18} /> : <UserCheck size={18} />}
                 </Button>
               </>
             }

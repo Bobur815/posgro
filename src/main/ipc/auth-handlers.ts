@@ -58,10 +58,15 @@ export function setupAuthHandlers(): void {
 
     // Also login to the VPS server to get a server-issued token for API calls (invoice scan, etc.)
     try {
-      const serverRes = await fetch(`${config.vpsApiUrl}/auth/login`, {
+      // Use storeId from LocalConfig (authoritative) rather than env-based app-config
+      const localConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+      const storeId = localConfig?.storeId || config.storeId;
+      const vpsApiUrl = localConfig?.apiUrl || config.vpsApiUrl;
+
+      const serverRes = await fetch(`${vpsApiUrl}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId: config.storeId, phone, password }),
+        body: JSON.stringify({ storeId, phone, password }),
       });
       if (serverRes.ok) {
         const { token: sToken } = await serverRes.json() as { token: string };
@@ -72,9 +77,13 @@ export function setupAuthHandlers(): void {
           update: { value: sToken },
           create: { key: 'server_token', value: sToken },
         });
+      } else {
+        const text = await serverRes.text();
+        console.warn(`VPS login failed (${serverRes.status}): ${text} — storeId: ${storeId}`);
       }
-    } catch {
-      // Server unreachable — invoice scanning will be unavailable
+    } catch (err) {
+      // Server unreachable — sync will be unavailable
+      console.warn('VPS login error:', err);
     }
 
     // Set current user

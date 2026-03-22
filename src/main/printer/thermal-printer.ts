@@ -1,17 +1,22 @@
-import { ipcMain, BrowserWindow } from 'electron';
-import { getPrismaClient } from '../database/sqlite-client';
-import { buildReceiptHTML, buildTestReceiptHTML } from '../../shared/receipt-html';
-import type { ReceiptData, ReceiptSettings } from '../../shared/receipt-html';
+import { ipcMain, BrowserWindow } from "electron";
+import { getPrismaClient } from "../database/sqlite-client";
+import {
+  buildReceiptHTML,
+  buildTestReceiptHTML,
+} from "../../shared/receipt-html";
+import type { ReceiptData, ReceiptSettings } from "../../shared/receipt-html";
+import { printPriceTagsTSPL } from "./tspl-printer";
+import type { TsplPrintRequest } from "./tspl-printer";
 
 interface PrinterConfig {
   name: string;
-  type: 'thermal' | 'standard';
+  type: "thermal" | "standard";
   width: number; // characters per line
 }
 
 let printerConfig: PrinterConfig = {
-  name: process.env.PRINTER_NAME || '',
-  type: 'thermal',
+  name: process.env.PRINTER_NAME || "",
+  type: "thermal",
   width: 42, // Standard thermal printer width
 };
 
@@ -27,25 +32,39 @@ export interface WeightedLabelData {
 }
 
 export function setupPrinterHandlers(): void {
-  ipcMain.handle('printer:printReceipt', async (_event, saleId: string) => {
+  ipcMain.handle("printer:printReceipt", async (_event, saleId: string) => {
     return printReceipt(saleId);
   });
 
-  ipcMain.handle('printer:testPrint', async () => {
+  ipcMain.handle("printer:testPrint", async () => {
     return testPrint();
   });
 
-  ipcMain.handle('printer:getAvailable', async () => {
+  ipcMain.handle("printer:getAvailable", async () => {
     return getAvailablePrinters();
   });
 
-  ipcMain.handle('printer:printPriceTags', async (_event, html: string, widthMm: number, heightMm: number) => {
-    return printPriceTags(html, widthMm, heightMm);
-  });
+  ipcMain.handle(
+    "printer:printPriceTags",
+    async (_event, html: string, widthMm: number, heightMm: number) => {
+      return printPriceTags(html, widthMm, heightMm);
+    },
+  );
 
-  ipcMain.handle('printer:printWeightedLabel', async (_event, data: WeightedLabelData) => {
-    return printWeightedLabel(data);
-  });
+  ipcMain.handle(
+    "printer:printWeightedLabel",
+    async (_event, data: WeightedLabelData) => {
+      return printWeightedLabel(data);
+    },
+  );
+
+  ipcMain.handle(
+    "printer:printPriceTagsTSPL",
+    async (_event, req: TsplPrintRequest) => {
+      await printPriceTagsTSPL(req);
+      return true;
+    },
+  );
 }
 
 async function getAvailablePrinters(): Promise<string[]> {
@@ -64,31 +83,34 @@ async function loadReceiptSettings(): Promise<ReceiptSettings> {
     where: {
       key: {
         in: [
-          'store_name',
-          'store_address',
-          'store_phone',
-          'receipt_header',
-          'receipt_footer',
-          'receipt_width',
-          'receipt_language',
+          "store_name",
+          "store_address",
+          "store_phone",
+          "receipt_header",
+          "receipt_footer",
+          "receipt_width",
+          "receipt_language",
         ],
       },
     },
   });
 
   const map = rows.reduce(
-    (acc: Record<string, string>, s: { key: string; value: string }) => ({ ...acc, [s.key]: s.value }),
-    {} as Record<string, string>
+    (acc: Record<string, string>, s: { key: string; value: string }) => ({
+      ...acc,
+      [s.key]: s.value,
+    }),
+    {} as Record<string, string>,
   );
 
   return {
-    store_name: map.store_name || '',
-    store_address: map.store_address || '',
-    store_phone: map.store_phone || '',
-    receipt_header: map.receipt_header || '',
-    receipt_footer: map.receipt_footer || '',
-    receipt_width: (map.receipt_width as '80' | '58') || '80',
-    receipt_language: (map.receipt_language as 'ru' | 'uz') || 'ru',
+    store_name: map.store_name || "",
+    store_address: map.store_address || "",
+    store_phone: map.store_phone || "",
+    receipt_header: map.receipt_header || "",
+    receipt_footer: map.receipt_footer || "",
+    receipt_width: (map.receipt_width as "80" | "58") || "80",
+    receipt_language: (map.receipt_language as "ru" | "uz") || "ru",
   };
 }
 
@@ -97,11 +119,11 @@ async function printReceipt(saleId: string): Promise<boolean> {
 
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
-    include: { items: true },
+    include: { items: { include: { product: true } } },
   });
 
   if (!sale) {
-    throw new Error('Sale not found');
+    throw new Error("Sale not found");
   }
 
   const settings = await loadReceiptSettings();
@@ -110,12 +132,23 @@ async function printReceipt(saleId: string): Promise<boolean> {
     receiptNumber: sale.receiptNumber,
     createdAt: sale.createdAt.toISOString(),
     cashierName: sale.cashierName,
-    items: sale.items.map((item: { productName: string; quantity: unknown; unitPrice: unknown; subtotal: unknown }) => ({
-      productName: item.productName,
-      quantity: Number(item.quantity),
-      unitPrice: Number(item.unitPrice),
-      subtotal: Number(item.subtotal),
-    })),
+    items: sale.items.map(
+      (item: {
+        productName: string;
+        quantity: unknown;
+        unitPrice: unknown;
+        subtotal: unknown;
+        barcode: string;
+        product?: { mxik?: string | null };
+      }) => ({
+        productName: item.productName,
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice),
+        subtotal: Number(item.subtotal),
+        barcode: item.barcode,
+        mxik: item.product?.mxik || undefined,
+      }),
+    ),
     totalAmount: Number(sale.totalAmount),
     discountAmount: Number(sale.discountAmount),
     finalAmount: Number(sale.finalAmount),
@@ -130,26 +163,30 @@ async function printReceipt(saleId: string): Promise<boolean> {
 
 async function printHTML(html: string, widthMm: number): Promise<boolean> {
   if (!printerConfig.name) {
-    console.log('No printer configured. Receipt HTML generated.');
+    console.log("No printer configured. Receipt HTML generated.");
     return true;
   }
 
   const widthMicrons = widthMm * 1000;
 
-  // 1mm ≈ 3.78px at 96 DPI; add small buffer to avoid clipping
+  // Render at 4× scale (384 effective DPI) so the 203 DPI printer downsamples
+  // rather than upsamples — downsampling always produces sharper text than upscaling.
+  // Physical window width must also scale so CSS mm values lay out correctly.
+  const SCALE = 4;
   const printWindow = new BrowserWindow({
     show: false,
-    width: Math.round(widthMm * 3.78) + 20,
-    height: 900,
+    width: (Math.round(widthMm * 3.78) + 20) * SCALE,
+    height: 2400,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      deviceScaleFactor: SCALE,
     },
   });
 
   try {
     await printWindow.loadURL(
-      `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
+      `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
     );
 
     // Small delay for rendering
@@ -166,7 +203,7 @@ async function printHTML(html: string, widthMm: number): Promise<boolean> {
             height: 1000000, // auto-length roll paper
           },
           margins: {
-            marginType: 'custom',
+            marginType: "custom",
             top: 0,
             bottom: 0,
             left: 0,
@@ -179,7 +216,7 @@ async function printHTML(html: string, widthMm: number): Promise<boolean> {
           } else {
             reject(new Error(`Print failed: ${errorType}`));
           }
-        }
+        },
       );
     });
   } finally {
@@ -194,22 +231,29 @@ async function testPrint(): Promise<boolean> {
   return printHTML(html, widthMm);
 }
 
-async function printPriceTags(html: string, widthMm: number, heightMm: number): Promise<boolean> {
+async function printPriceTags(
+  html: string,
+  widthMm: number,
+  heightMm: number,
+): Promise<boolean> {
   // Load printer name from settings (same setting as weighted labels)
   const prisma = getPrismaClient();
   const rows = await prisma.systemSetting.findMany({
-    where: { key: { in: ['label_printer_name'] } },
+    where: { key: { in: ["label_printer_name"] } },
   });
   const map = rows.reduce(
-    (acc: Record<string, string>, s: { key: string; value: string }) => ({ ...acc, [s.key]: s.value }),
-    {} as Record<string, string>
+    (acc: Record<string, string>, s: { key: string; value: string }) => ({
+      ...acc,
+      [s.key]: s.value,
+    }),
+    {} as Record<string, string>,
   );
   const printerName = map.label_printer_name || printerConfig.name;
 
   // Always use portrait: swap page dimensions when template is landscape (widthMm > heightMm)
   const isLandscape = widthMm > heightMm;
-  const pageSizeWidth  = (isLandscape ? heightMm : widthMm) * 1000;
-  const pageSizeHeight = (isLandscape ? widthMm  : heightMm) * 1000;
+  const pageSizeWidth = (isLandscape ? heightMm : widthMm) * 1000;
+  const pageSizeHeight = (isLandscape ? widthMm : heightMm) * 1000;
 
   const maxSide = Math.max(widthMm, heightMm);
 
@@ -224,9 +268,11 @@ async function printPriceTags(html: string, widthMm: number, heightMm: number): 
       },
     });
 
-    printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    printWindow.loadURL(
+      `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
+    );
 
-    printWindow.webContents.on('did-finish-load', () => {
+    printWindow.webContents.on("did-finish-load", () => {
       setTimeout(() => {
         printWindow.webContents.print(
           {
@@ -238,7 +284,7 @@ async function printPriceTags(html: string, widthMm: number, heightMm: number): 
               height: pageSizeHeight,
             },
             margins: {
-              marginType: 'none',
+              marginType: "none",
             },
           } as Electron.WebContentsPrintOptions,
           (success, errorType) => {
@@ -248,7 +294,7 @@ async function printPriceTags(html: string, widthMm: number, heightMm: number): 
             } else {
               reject(new Error(`Price tag print failed: ${errorType}`));
             }
-          }
+          },
         );
       }, 200);
     });
@@ -258,20 +304,23 @@ async function printPriceTags(html: string, widthMm: number, heightMm: number): 
 async function printWeightedLabel(data: WeightedLabelData): Promise<boolean> {
   const prisma = getPrismaClient();
   const rows = await prisma.systemSetting.findMany({
-    where: { key: { in: ['label_printer_name', 'label_width_mm'] } },
+    where: { key: { in: ["label_printer_name", "label_width_mm"] } },
   });
   const map = rows.reduce(
-    (acc: Record<string, string>, s: { key: string; value: string }) => ({ ...acc, [s.key]: s.value }),
+    (acc: Record<string, string>, s: { key: string; value: string }) => ({
+      ...acc,
+      [s.key]: s.value,
+    }),
     {} as Record<string, string>,
   );
 
   const labelPrinterName = map.label_printer_name || printerConfig.name;
-  const widthMm = parseInt(map.label_width_mm || '58', 10) || 58;
+  const widthMm = parseInt(map.label_width_mm || "58", 10) || 58;
   const heightMm = 40;
 
   const formattedWeight = data.weightKg.toFixed(3);
-  const formattedPrice = Math.round(data.pricePerKg).toLocaleString('ru-RU');
-  const formattedTotal = Math.round(data.totalPrice).toLocaleString('ru-RU');
+  const formattedPrice = Math.round(data.pricePerKg).toLocaleString("ru-RU");
+  const formattedTotal = Math.round(data.totalPrice).toLocaleString("ru-RU");
 
   const html = `<!DOCTYPE html>
 <html>

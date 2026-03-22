@@ -6,20 +6,23 @@ import { useSales } from "../../hooks/useSales";
 import { useToast } from "../../context/ToastContext";
 import { Modal } from "../../components/common/Modal";
 import { Button } from "../../components/common/Button";
-import { formatCurrency as formatCurrencyBase } from '@shared/utils';
+import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 
-function parseSaleError(err: unknown, t: (key: string, params?: Record<string, unknown>) => string): string {
+function parseSaleError(
+  err: unknown,
+  t: (key: string, params?: Record<string, unknown>) => string,
+): string {
   const message = err instanceof Error ? err.message : String(err);
   try {
     const parsed = JSON.parse(message);
-    if (parsed.code === 'PRODUCT_NOT_FOUND') {
-      return t('errors.productNotFound', { id: parsed.productId });
+    if (parsed.code === "PRODUCT_NOT_FOUND") {
+      return t("errors.productNotFound", { id: parsed.productId });
     }
-    if (parsed.code === 'PRODUCT_INACTIVE') {
-      return t('errors.productInactive', { name: parsed.name });
+    if (parsed.code === "PRODUCT_INACTIVE") {
+      return t("errors.productInactive", { name: parsed.name });
     }
-    if (parsed.code === 'INSUFFICIENT_STOCK') {
-      return t('errors.insufficientStock', {
+    if (parsed.code === "INSUFFICIENT_STOCK") {
+      return t("errors.insufficientStock", {
         name: parsed.name,
         available: parsed.available,
         requested: parsed.requested,
@@ -28,7 +31,7 @@ function parseSaleError(err: unknown, t: (key: string, params?: Record<string, u
   } catch {
     // not JSON, fall through
   }
-  return t('common.error');
+  return t("common.error");
 }
 
 const Content = styled.div`
@@ -200,7 +203,11 @@ const ChangeColValue = styled.div<{ $positive?: boolean; $negative?: boolean }>`
   font-size: 20px;
   font-weight: 700;
   color: ${({ theme, $positive, $negative }) =>
-    $positive ? theme.colors.success : $negative ? theme.colors.error : theme.colors.text};
+    $positive
+      ? theme.colors.success
+      : $negative
+        ? theme.colors.error
+        : theme.colors.text};
 `;
 
 const ChangeDivider = styled.div`
@@ -247,7 +254,8 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   const change = givenAmount - total;
   const isInsufficient = givenAmount > 0 && change < 0;
 
-  const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
+  const formatCurrency = (amount: number) =>
+    formatCurrencyBase(amount, i18n.language as "ru" | "uz");
 
   const handlePaymentRef = useRef<() => void>();
 
@@ -288,7 +296,7 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
           try {
             await window.electronAPI.printer.printReceipt(sale.id);
           } catch (printErr) {
-            console.error('Receipt print failed:', printErr);
+            console.error("Receipt print failed:", printErr);
           }
         }
 
@@ -352,7 +360,10 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
           </PaymentButton>
           <PaymentButton
             $selected={paymentMethod === "card"}
-            onClick={() => { setPaymentMethod("card"); setGivenAmount(0); }}
+            onClick={() => {
+              setPaymentMethod("card");
+              setGivenAmount(0);
+            }}
           >
             <PaymentIcon>💳</PaymentIcon>
             <PaymentLabel>{t("pos.card")}</PaymentLabel>
@@ -361,13 +372,19 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
 
         {paymentMethod === "cash" && (
           <CashHelper>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
               <CashHelperLabel>{t("pos.cashReceived")}</CashHelperLabel>
-            {givenAmount > 0 && (
-              <ClearButton onClick={() => setGivenAmount(0)}>
+              {givenAmount > 0 && (
+                <ClearButton onClick={() => setGivenAmount(0)}>
                   {t("pos.clearAmount")} ×
                 </ClearButton>
-            )}
+              )}
             </div>
             <DenominationRow>
               {DENOMINATIONS.map((denom) => (
@@ -385,21 +402,27 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
                   <ChangeCol>
                     <ChangeColLabel>{t("pos.cashReceived")}</ChangeColLabel>
 
-                    <ChangeColValue>{formatCurrency(givenAmount)}</ChangeColValue>
+                    <ChangeColValue>
+                      {formatCurrency(givenAmount)}
+                    </ChangeColValue>
                   </ChangeCol>
                   <ChangeDivider />
                   <ChangeCol>
                     <ChangeColLabel>
-                      {isInsufficient ? t("pos.cashInsufficient") : t("pos.cashChange")}
+                      {isInsufficient
+                        ? t("pos.cashInsufficient")
+                        : t("pos.cashChange")}
                     </ChangeColLabel>
-                    <ChangeColValue $positive={change >= 0} $negative={isInsufficient}>
+                    <ChangeColValue
+                      $positive={change >= 0}
+                      $negative={isInsufficient}
+                    >
                       {isInsufficient
                         ? formatCurrency(Math.abs(change))
                         : formatCurrency(change)}
                     </ChangeColValue>
                   </ChangeCol>
                 </ChangeDisplay>
-                
               </>
             )}
           </CashHelper>

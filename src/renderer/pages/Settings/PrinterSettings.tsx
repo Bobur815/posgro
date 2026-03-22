@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import styled from 'styled-components';
-import { Button } from '../../components/common/Button';
-import { useToast } from '../../context/ToastContext';
-import { ArrowLeft, RefreshCcw, Printer, Check } from 'lucide-react';
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import styled from "styled-components";
+import { Button } from "../../components/common/Button";
+import { useToast } from "../../context/ToastContext";
+import { ArrowLeft, RefreshCcw, Printer, Check } from "lucide-react";
 
 const Container = styled.div`
   display: flex;
@@ -58,7 +58,7 @@ const PrinterItem = styled.div<{ $selected?: boolean }>`
       $selected ? theme.colors.primary : theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
   background-color: ${({ theme, $selected }) =>
-    $selected ? theme.colors.primary + '10' : theme.colors.background};
+    $selected ? theme.colors.primary + "10" : theme.colors.background};
   cursor: pointer;
   transition: all 0.15s;
 
@@ -107,7 +107,7 @@ export function PrinterSettings() {
   const toast = useToast();
 
   const [printers, setPrinters] = useState<string[]>([]);
-  const [selectedPrinter, setSelectedPrinter] = useState('');
+  const [selectedPrinter, setSelectedPrinter] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isTesting, setIsTesting] = useState(false);
 
@@ -116,12 +116,12 @@ export function PrinterSettings() {
     try {
       const [available, saved] = await Promise.all([
         window.electronAPI.printer.getAvailablePrinters(),
-        window.electronAPI.settings.get('printer_name'),
+        window.electronAPI.settings.get("printer_name"),
       ]);
       setPrinters(available || []);
-      setSelectedPrinter(saved || '');
+      setSelectedPrinter(saved || "");
     } catch (err) {
-      console.error('Failed to load printers:', err);
+      console.error("Failed to load printers:", err);
     } finally {
       setIsLoading(false);
     }
@@ -133,11 +133,11 @@ export function PrinterSettings() {
 
   const handleSelect = async (name: string) => {
     try {
-      await window.electronAPI.settings.set('printer_name', name);
+      await window.electronAPI.settings.set("printer_name", name);
       setSelectedPrinter(name);
-      toast.success(t('printer.saved'));
+      toast.success(t("printer.saved"));
     } catch (err) {
-      toast.error(t('common.error'));
+      toast.error(t("common.error"));
     }
   };
 
@@ -145,9 +145,9 @@ export function PrinterSettings() {
     setIsTesting(true);
     try {
       await window.electronAPI.printer.testPrint();
-      toast.success(t('printer.testSent'));
+      toast.success(t("printer.testSent"));
     } catch (err) {
-      toast.error(t('printer.testFailed'));
+      toast.error(t("printer.testFailed"));
     } finally {
       setIsTesting(false);
     }
@@ -159,32 +159,32 @@ export function PrinterSettings() {
         <BackButton
           variant="secondary"
           size="small"
-          onClick={() => navigate('/settings')}
+          onClick={() => navigate("/settings")}
         >
           <ArrowLeft size={20} />
         </BackButton>
-        <Title>{t('settings.printerSettings')}</Title>
+        <Title>{t("settings.printerSettings")}</Title>
       </Header>
 
       <Card>
         <CardTitle>
           <Printer size={20} />
-          {t('printer.availablePrinters')}
+          {t("printer.availablePrinters")}
           <Button
             variant="secondary"
             size="small"
             onClick={loadPrinters}
             disabled={isLoading}
-            style={{ marginLeft: 'auto' }}
+            style={{ marginLeft: "auto" }}
           >
             <RefreshCcw size={16} />
           </Button>
         </CardTitle>
 
         {isLoading ? (
-          <EmptyState>{t('common.loading')}</EmptyState>
+          <EmptyState>{t("common.loading")}</EmptyState>
         ) : printers.length === 0 ? (
-          <EmptyState>{t('printer.noPrintersFound')}</EmptyState>
+          <EmptyState>{t("printer.noPrintersFound")}</EmptyState>
         ) : (
           <PrinterList>
             {printers.map((name) => (
@@ -200,7 +200,7 @@ export function PrinterSettings() {
                 {name === selectedPrinter && (
                   <SelectedBadge>
                     <Check size={14} />
-                    {t('printer.selected')}
+                    {t("printer.selected")}
                   </SelectedBadge>
                 )}
               </PrinterItem>
@@ -215,7 +215,7 @@ export function PrinterSettings() {
           disabled={isTesting || !selectedPrinter}
         >
           <Printer size={18} />
-          {isTesting ? t('printer.testing') : t('printer.testPrint')}
+          {isTesting ? t("printer.testing") : t("printer.testPrint")}
         </Button>
       </Actions>
     </Container>
