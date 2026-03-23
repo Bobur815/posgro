@@ -117,6 +117,12 @@ const ItemsList = styled.div`
   padding: ${({ theme }) => theme.spacing.sm};
 `;
 
+const QuantityRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.sm};
+`;
+
 const CartItem = styled.div`
   display: flex;
   flex-direction: column;
@@ -354,13 +360,7 @@ export function Cart() {
                   </ItemPrice>
                 </ItemRow>
                 <QuantityControls>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
+                  <QuantityRow>
                     <QuantityButton
                       onClick={() =>
                         updateQuantity(
@@ -392,7 +392,7 @@ export function Cart() {
                       +
                     </QuantityButton>
                     x<ItemPrice>{formatCurrency(item.unitPrice)}</ItemPrice>
-                  </div>
+                  </QuantityRow>
                   <RemoveButton
                     onClick={() => removeItem(item.productId, item.unitPrice)}
                   >

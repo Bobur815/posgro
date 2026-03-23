@@ -1,5 +1,6 @@
 import base64
 import io
+import logging
 import re
 import traceback
 from typing import Optional
@@ -8,6 +9,14 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 app = FastAPI()
+
+
+class _HealthFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/health" not in record.getMessage()
+
+
+logging.getLogger("uvicorn.access").addFilter(_HealthFilter())
 
 
 class ScanRequest(BaseModel):

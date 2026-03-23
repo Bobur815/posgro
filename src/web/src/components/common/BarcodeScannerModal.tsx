@@ -30,9 +30,15 @@ const ScanLine = styled.div`
   animation: scan 2s ease-in-out infinite;
 
   @keyframes scan {
-    0%   { top: 20%; }
-    50%  { top: 80%; }
-    100% { top: 20%; }
+    0% {
+      top: 20%;
+    }
+    50% {
+      top: 80%;
+    }
+    100% {
+      top: 20%;
+    }
   }
 `;
 
@@ -62,7 +68,10 @@ interface BarcodeScannerModalProps {
   onClose: () => void;
 }
 
-export function BarcodeScannerModal({ onScan, onClose }: BarcodeScannerModalProps) {
+export function BarcodeScannerModal({
+  onScan,
+  onClose,
+}: BarcodeScannerModalProps) {
   const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -70,57 +79,89 @@ export function BarcodeScannerModal({ onScan, onClose }: BarcodeScannerModalProp
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!("BarcodeDetector" in window)) {
-      setError(
-        t("scanner.notSupported") ||
-          "Camera barcode scanning requires Chrome, Edge, or a modern Android browser.",
-      );
-      return;
-    }
+    const useBarcodeDetector = "BarcodeDetector" in window;
 
-    const detector = new (window as any).BarcodeDetector({
-      formats: ["ean_13", "ean_8", "code_128", "code_39", "upc_a", "upc_e"],
-    });
-
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: { ideal: "environment" } } })
-      .then((stream) => {
-        streamRef.current = stream;
-        const video = videoRef.current;
-        if (!video) return;
-        video.srcObject = stream;
-        video.play();
-
-        const tick = async () => {
-          if (!videoRef.current || videoRef.current.readyState < 2) {
-            rafRef.current = requestAnimationFrame(tick);
-            return;
-          }
-          try {
-            const results = await detector.detect(videoRef.current);
-            if (results.length > 0) {
-              onScan(results[0].rawValue);
-              return;
-            }
-          } catch {
-            // detection failed this frame — keep trying
-          }
-          rafRef.current = requestAnimationFrame(tick);
-        };
-
-        rafRef.current = requestAnimationFrame(tick);
-      })
-      .catch(() => {
-        setError(
-          t("scanner.cameraError") ||
-            "Could not access camera. Please allow camera permissions and try again.",
-        );
+    if (useBarcodeDetector) {
+      // Chrome, Edge, modern Android
+      const detector = new (window as any).BarcodeDetector({
+        formats: ["ean_13", "ean_8", "code_128", "code_39", "upc_a", "upc_e"],
       });
 
-    return () => {
-      cancelAnimationFrame(rafRef.current);
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-    };
+      navigator.mediaDevices
+        .getUserMedia({ video: { facingMode: { ideal: "environment" } } })
+        .then((stream) => {
+          streamRef.current = stream;
+          const video = videoRef.current;
+          if (!video) return;
+          video.srcObject = stream;
+          video.play();
+
+          const tick = async () => {
+            if (!videoRef.current || videoRef.current.readyState < 2) {
+              rafRef.current = requestAnimationFrame(tick);
+              return;
+            }
+            try {
+              const results = await detector.detect(videoRef.current);
+              if (results.length > 0) {
+                onScan(results[0].rawValue);
+                return;
+              }
+            } catch {
+              // detection failed this frame — keep trying
+            }
+            rafRef.current = requestAnimationFrame(tick);
+          };
+
+          rafRef.current = requestAnimationFrame(tick);
+        })
+        .catch(() => {
+          setError(
+            t("scanner.cameraError") ||
+              "Could not access camera. Please allow camera permissions and try again.",
+          );
+        });
+
+      return () => {
+        cancelAnimationFrame(rafRef.current);
+        streamRef.current?.getTracks().forEach((track) => track.stop());
+      };
+    } else {
+      // iOS Safari and other browsers without BarcodeDetector — use ZXing
+      let stopped = false;
+      let controlsStop: (() => void) | null = null;
+
+      import("@zxing/browser").then(({ BrowserMultiFormatReader }) => {
+        if (stopped) return;
+        const reader = new BrowserMultiFormatReader();
+
+        reader
+          .decodeFromVideoDevice(
+            undefined,
+            videoRef.current!,
+            (result, err) => {
+              if (result) {
+                onScan(result.getText());
+              }
+              // err is just "no barcode found this frame" — ignore
+            },
+          )
+          .then((controls) => {
+            controlsStop = () => controls.stop();
+          })
+          .catch(() => {
+            setError(
+              t("scanner.cameraError") ||
+                "Could not access camera. Please allow camera permissions and try again.",
+            );
+          });
+      });
+
+      return () => {
+        stopped = true;
+        controlsStop?.();
+      };
+    }
   }, []);
 
   return (

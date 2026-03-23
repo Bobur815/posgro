@@ -57,7 +57,7 @@ const PageWrapper = styled.div`
 
 const Container = styled.div`
   display: grid;
-  grid-template-columns: 1fr 0.8fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows: 1fr;
   gap: ${({ theme }) => theme.spacing.md};
   flex: 1;
@@ -66,7 +66,9 @@ const Container = styled.div`
 `;
 
 const LeftSection = styled.div`
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr minmax(0, 1fr);
+  grid-template-rows: 1fr;
   gap: ${({ theme }) => theme.spacing.md};
   min-height: 0;
   overflow: hidden;
@@ -111,11 +113,11 @@ const InputDisplay = styled.div<{ $active?: boolean }>`
 `;
 
 const NumberPadSection = styled.div`
-  min-width: 400px;
   background-color: ${({ theme }) => theme.colors.surface};
   border-radius: ${({ theme }) => theme.borderRadius};
   box-shadow: ${({ theme }) => theme.shadows.md};
   padding: ${({ theme }) => theme.spacing.md};
+
 `;
 
 const NumberPad = styled.div`
@@ -125,7 +127,7 @@ const NumberPad = styled.div`
 `;
 
 const NumButton = styled.button<{ $variant?: "action" | "clear" | "enter" }>`
-  height: 70px;
+  min-height: 56px;
   border-radius: ${({ theme }) => theme.borderRadius};
   border: 1px solid ${({ theme }) => theme.colors.border};
   background-color: ${({ theme }) => theme.colors.surface};
@@ -186,8 +188,8 @@ const NumButton = styled.button<{ $variant?: "action" | "clear" | "enter" }>`
 `;
 
 const ProductsSection = styled.div`
-  flex: 1;
   min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 `;
@@ -199,8 +201,7 @@ const CartSection = styled.div`
   border-radius: ${({ theme }) => theme.borderRadius};
   box-shadow: ${({ theme }) => theme.shadows.md};
   overflow: hidden;
-  height: 0;
-  min-height: 100%;
+  min-height: 0;
 `;
 
 const ErrorMessage = styled.div`
@@ -212,11 +213,24 @@ const ErrorMessage = styled.div`
   text-align: center;
 `;
 
+const InputColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.spacing.sm};
+  min-height: 0;
+  overflow-y: auto;
+`;
+
+const InputRow = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.sm};
+  flex: 1;
+`;
+
 const QuickPayRow = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: ${({ theme }) => theme.spacing.sm};
-  margin-top: ${({ theme }) => theme.spacing.sm};
 `;
 
 const QuickPayButton = styled.button<{ $variant: "cash" | "card" }>`
@@ -802,14 +816,7 @@ export function POSScreen() {
             <ProductSearch onSelect={handleProductSelect} />
           </ProductsSection>
 
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-              minHeight: 0,
-            }}
-          >
+          <InputColumn>
             <InputSection>
               <InputPanel>
                 <InputLabel>{t("pos.barcode")}</InputLabel>
@@ -821,7 +828,7 @@ export function POSScreen() {
                 </InputDisplay>
               </InputPanel>
 
-              <div style={{ display: "flex", gap: "8px", flex: 1 }}>
+              <InputRow>
                 <InputPanel>
                   <InputLabel>{t("pos.id")}</InputLabel>
                   <InputDisplay
@@ -841,7 +848,7 @@ export function POSScreen() {
                     {quantity}
                   </InputDisplay>
                 </InputPanel>
-              </div>
+              </InputRow>
             </InputSection>
 
             <NumberPadSection>
@@ -895,7 +902,6 @@ export function POSScreen() {
               fullWidth
               onClick={() => setShowCheckout(true)}
               disabled={items.length === 0}
-              style={{ marginTop: "8px" }}
             >
               {editingSaleId
                 ? t("pos.save")
@@ -922,7 +928,7 @@ export function POSScreen() {
                 <ShortcutHint>(F12)</ShortcutHint>
               </QuickPayButton>
             </QuickPayRow>
-          </div>
+          </InputColumn>
         </LeftSection>
 
         <CartSection>

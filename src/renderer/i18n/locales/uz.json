@@ -124,6 +124,8 @@
     "unit": "Birlik",
     "add": "Qo'shish",
     "edit": "Tahrirlash",
+    "addProduct": "Qo'shish",
+    "editProduct": "Tahrirlash",
     "noProducts": "Mahsulotlar topilmadi",
     "noResults": "Hech narsa topilmadi",
     "lowStock": "Kam",
@@ -366,6 +368,8 @@
     "noPromotion": "Aksiyasiz",
     "clearFilters": "Tozalash",
     "filters": "Filterlar",
+    "show": "Filterlar",
+    "hide": "Filterni yashirish",
     "supplier": "Yetkazib beruvchi",
     "discount": "Chegirma (%)",
     "expiryDate": "Yaroqlilik muddati",
@@ -521,6 +525,7 @@
     "productFound": "Mahsulot topildi: {{name}}",
     "productNotFound": "Mahsulot topilmadi",
     "error": "Skanerda xato yuz berdi",
+    "notSupported": "Bu qurilma shtrix-kod skanerini qo'llab-quvvatlamaydi",
     "pointCamera": "Kamerani mahsulot shtrix-kodiga qarating"
   },
   "receiptScan": {
