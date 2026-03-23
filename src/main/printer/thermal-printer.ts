@@ -180,7 +180,6 @@ async function printHTML(html: string, widthMm: number): Promise<boolean> {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      deviceScaleFactor: SCALE,
     },
   });
 
@@ -188,6 +187,9 @@ async function printHTML(html: string, widthMm: number): Promise<boolean> {
     await printWindow.loadURL(
       `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
     );
+
+    // Scale up rendering so the printer downsamples (sharper text)
+    printWindow.webContents.setZoomFactor(SCALE);
 
     // Small delay for rendering
     await new Promise((resolve) => setTimeout(resolve, 200));

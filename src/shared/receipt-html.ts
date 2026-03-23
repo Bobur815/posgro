@@ -93,7 +93,7 @@ function baseStyles(widthMm: number): string {
     body {
       font-family: 'Segoe UI', 'Arial', 'Liberation Sans', sans-serif;
       font-size: ${sm ? "13px" : "15px"};
-      font-weight: 600;
+      font-weight: 400;
       width: ${widthMm}mm;
       max-width: 100%;
       padding: 2mm 11mm 2mm 0 !important;
@@ -102,8 +102,8 @@ function baseStyles(widthMm: number): string {
       -webkit-print-color-adjust: exact;
     }
     .center { text-align: center; }
-    .brand { font-size: ${sm ? "17px" : "20px"}; font-weight: 900; margin-bottom: 2px; }
-    .sub { font-size: ${sm ? "12px" : "14px"}; font-weight: 600; color: #000; }
+    .brand { font-size: ${sm ? "17px" : "20px"}; font-weight: 700; margin-bottom: 2px; }
+    .sub { font-size: ${sm ? "12px" : "14px"}; font-weight: 400; color: #000; }
     hr {
       border: none;
       border-top: 1px dashed #000;
@@ -117,10 +117,10 @@ function baseStyles(widthMm: number): string {
       grid-template-columns: auto 1fr;
       gap: 1px 6px;
     }
-    .meta-grid .label { font-weight: 700; white-space: nowrap; }
+    .meta-grid .label { font-weight: 600; white-space: nowrap; }
     .meta-grid .value { text-align: right; }
     .item-row { margin: 3px 0; }
-    .item-name { font-weight: 800; font-size: ${sm ? "13px" : "15px"}; }
+    .item-name { font-weight: 600; font-size: ${sm ? "13px" : "15px"}; }
     .item-detail {
       display: flex;
       justify-content: space-between;
@@ -155,7 +155,7 @@ function baseStyles(widthMm: number): string {
     }
     .total-row.grand {
       font-size: ${sm ? "17px" : "20px"};
-      font-weight: 900;
+      font-weight: 700;
       margin: 4px 0;
     }
     .footer { margin-top: 6px; font-size: ${sm ? "12px" : "14px"}; color: #000; }
