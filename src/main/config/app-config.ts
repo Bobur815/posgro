@@ -36,7 +36,7 @@ export function getAppConfig(): AppConfig {
 function loadConfig(): AppConfig {
   return {
     // Store identification (for multi-tenant)
-    storeId: process.env.STORE_ID || 'default-store',
+    storeId: process.env.STORE_ID || '1234',
     storeName: process.env.STORE_NAME || 'Grocery Store',
 
     // Terminal identification

@@ -9,7 +9,7 @@ async function main() {
 
   // ==================== CREATE DEFAULT STORE ====================
   const store = await prisma.store.upsert({
-    where: { id: "default-store" },
+    where: { id: "1234" },
     update: {},
     create: {
       id: "1234",
