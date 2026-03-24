@@ -385,7 +385,6 @@ export async function printPriceTagsTSPL(req: TsplPrintRequest): Promise<void> {
   }
 
   const tspl = buildFullTSPL(req);
-  console.log("[TSPL] Sending to printer:\n", tspl);
   const buf = toCP1251(tspl);
   sendRawToPrinter(printerName, buf);
 }

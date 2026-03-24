@@ -317,6 +317,7 @@ export function setupProductsHandlers(): void {
         discountPercent: data.discountPercent ?? 0,
         isOnPromotion: data.isOnPromotion ?? false,
         mxik: data.mxik || null,
+        productType: data.productType || "REGULAR",
         active: true,
       },
       include: { category: true, supplier: true },
@@ -399,6 +400,9 @@ export function setupProductsHandlers(): void {
       }
       if (data.mxik !== undefined) {
         updateData.mxik = data.mxik || null;
+      }
+      if (data.productType !== undefined) {
+        updateData.productType = data.productType;
       }
 
       const product = await prisma.product.update({

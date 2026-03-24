@@ -42,39 +42,92 @@ export async function syncProducts(): Promise<void> {
 
     console.log(`Updating ${products.length} products...`);
 
-    // Upsert products by barcode (natural unique key) to avoid conflicts
-    // when local products have different auto-increment IDs than server products
     for (const product of products) {
-      await prisma.product.upsert({
+      // Check if a product with the same barcode already exists locally
+      const existing = await prisma.product.findUnique({
         where: { barcode: product.barcode },
-        update: {
-          nameRu: product.nameRu,
-          nameUz: product.nameUz,
-          price: product.price,
-          stock: product.stock,
-          minStock: product.minStock,
-          unit: product.unit,
-          categoryId: product.categoryId,
-          active: product.active,
-          mxik: product.mxik ?? null,
-          updatedAt: new Date(product.updatedAt),
-        },
-        create: {
-          barcode: product.barcode,
-          nameRu: product.nameRu,
-          nameUz: product.nameUz,
-          price: product.price,
-          cost: product.cost,
-          stock: product.stock,
-          minStock: product.minStock,
-          unit: product.unit,
-          categoryId: product.categoryId,
-          active: product.active,
-          mxik: product.mxik ?? null,
-          createdAt: new Date(product.createdAt),
-          updatedAt: new Date(product.updatedAt),
-        },
+        select: { id: true },
       });
+
+      if (existing && existing.id === product.id) {
+        // IDs match — just update fields
+        await prisma.product.update({
+          where: { id: existing.id },
+          data: {
+            nameRu: product.nameRu,
+            nameUz: product.nameUz,
+            price: product.price,
+            stock: product.stock,
+            minStock: product.minStock,
+            unit: product.unit,
+            categoryId: product.categoryId,
+            active: product.active,
+            mxik: product.mxik ?? null,
+            updatedAt: new Date(product.updatedAt),
+          },
+        });
+      } else if (existing && existing.id !== product.id) {
+        // ID mismatch — fix it if safe (no sales reference the old local ID)
+        const saleCount = await prisma.saleItem.count({ where: { productId: existing.id } });
+        if (saleCount === 0) {
+          await prisma.product.delete({ where: { id: existing.id } });
+          await prisma.product.create({
+            data: {
+              id: product.id,
+              barcode: product.barcode,
+              nameRu: product.nameRu,
+              nameUz: product.nameUz,
+              price: product.price,
+              cost: product.cost ?? null,
+              stock: product.stock,
+              minStock: product.minStock,
+              unit: product.unit,
+              categoryId: product.categoryId,
+              active: product.active,
+              mxik: product.mxik ?? null,
+              createdAt: new Date(product.createdAt),
+              updatedAt: new Date(product.updatedAt),
+            },
+          });
+        } else {
+          // Has sales — keep local ID, just update fields
+          await prisma.product.update({
+            where: { id: existing.id },
+            data: {
+              nameRu: product.nameRu,
+              nameUz: product.nameUz,
+              price: product.price,
+              stock: product.stock,
+              minStock: product.minStock,
+              unit: product.unit,
+              categoryId: product.categoryId,
+              active: product.active,
+              mxik: product.mxik ?? null,
+              updatedAt: new Date(product.updatedAt),
+            },
+          });
+        }
+      } else {
+        // No local product — create with VPS ID
+        await prisma.product.create({
+          data: {
+            id: product.id,
+            barcode: product.barcode,
+            nameRu: product.nameRu,
+            nameUz: product.nameUz,
+            price: product.price,
+            cost: product.cost ?? null,
+            stock: product.stock,
+            minStock: product.minStock,
+            unit: product.unit,
+            categoryId: product.categoryId,
+            active: product.active,
+            mxik: product.mxik ?? null,
+            createdAt: new Date(product.createdAt),
+            updatedAt: new Date(product.updatedAt),
+          },
+        });
+      }
     }
 
     // Update last sync timestamp
@@ -120,21 +173,40 @@ export async function syncCategories(): Promise<void> {
 
     console.log(`Syncing ${categories.length} categories...`);
 
-    for (const category of categories) {
-      await prisma.category.upsert({
-        where: { id: category.id },
-        update: {
-          nameRu: category.nameRu,
-          nameUz: category.nameUz,
-          active: category.active,
-        },
-        create: {
-          id: category.id,
-          nameRu: category.nameRu,
-          nameUz: category.nameUz,
-          active: category.active,
-        },
-      });
+    const productCount = await prisma.product.count();
+    if (productCount === 0) {
+      // No products yet — safe to fully replace categories with VPS IDs
+      await prisma.$executeRaw`PRAGMA foreign_keys = OFF`;
+      await prisma.$executeRaw`DELETE FROM categories`;
+      await prisma.$executeRaw`DELETE FROM sqlite_sequence WHERE name='categories'`;
+      await prisma.$executeRaw`PRAGMA foreign_keys = ON`;
+      for (const category of categories) {
+        await prisma.category.create({
+          data: {
+            id: category.id,
+            nameRu: category.nameRu,
+            nameUz: category.nameUz,
+            active: category.active,
+          },
+        });
+      }
+    } else {
+      // Products exist — match by nameUz to avoid breaking categoryId references
+      for (const category of categories) {
+        const existing = await prisma.category.findFirst({
+          where: { nameUz: category.nameUz },
+        });
+        if (existing) {
+          await prisma.category.update({
+            where: { id: existing.id },
+            data: { nameRu: category.nameRu, active: category.active },
+          });
+        } else {
+          await prisma.category.create({
+            data: { nameRu: category.nameRu, nameUz: category.nameUz, active: category.active },
+          });
+        }
+      }
     }
 
     console.log('Categories synced successfully');

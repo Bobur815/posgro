@@ -13,6 +13,7 @@ import { BarcodeScannerModal } from "../../components/common/BarcodeScannerModal
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import {
   Product,
+  ProductType,
   ProductUnit,
   Supplier,
   SupplierPaymentMethod,
@@ -247,6 +248,7 @@ export function ProductForm({
     isOnPromotion: false,
     active: true,
     mxik: initialData?.mxik || "",
+    productType: "REGULAR" as ProductType,
   });
 
   const [existingProduct, setExistingProduct] = useState<Product | null>(null);
@@ -448,6 +450,7 @@ export function ProductForm({
         isOnPromotion: product.isOnPromotion ?? false,
         active: product.isActive,
         mxik: product.mxik || "",
+        productType: product.productType || "REGULAR",
       });
     }
   };
@@ -474,6 +477,7 @@ export function ProductForm({
       isOnPromotion: formData.isOnPromotion,
       active: formData.active,
       mxik: formData.mxik || undefined,
+      productType: formData.productType,
     };
 
     let success = false;
@@ -626,7 +630,20 @@ export function ProductForm({
             />
           </Row>
 
-          <Row>
+          <Row style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+            <FormGroup>
+              <Label>{t("products.productType")}</Label>
+              <Select
+                value={formData.productType}
+                onChange={(e) =>
+                  handleChange("productType", e.target.value as ProductType)
+                }
+              >
+                <option value="REGULAR">{t("products.productTypeRegular")}</option>
+                <option value="BULK_WEIGHTED">{t("products.productTypeBulkWeighted")}</option>
+                <option value="PREPACKAGED">{t("products.productTypePrepackaged")}</option>
+              </Select>
+            </FormGroup>
             <FormGroup>
               <Label>{t("products.unit")}</Label>
               <Select

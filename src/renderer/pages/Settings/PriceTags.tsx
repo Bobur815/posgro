@@ -438,9 +438,11 @@ export function PriceTags() {
             <FieldInput
               type="number"
               style={{ width: 70 }}
-              value={editing.widthMm}
+              value={editing.widthMm || ""}
               max={200}
-              onChange={(e) => updateField("widthMm", Number(e.target.value))}
+              onChange={(e) =>
+                updateField("widthMm", e.target.value === "" ? 0 : Number(e.target.value))
+              }
             />
           </FieldGroup>
           <FieldGroup>
@@ -448,9 +450,11 @@ export function PriceTags() {
             <FieldInput
               type="number"
               style={{ width: 70 }}
-              value={editing.heightMm}
+              value={editing.heightMm || ""}
               max={200}
-              onChange={(e) => updateField("heightMm", Number(e.target.value))}
+              onChange={(e) =>
+                updateField("heightMm", e.target.value === "" ? 0 : Number(e.target.value))
+              }
             />
           </FieldGroup>
           <Button onClick={handleSave} disabled={!editing.name.trim()}>
@@ -463,7 +467,17 @@ export function PriceTags() {
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <Panel>
               <PanelTitle>{t("priceTags.tagElements")}</PanelTitle>
-              {(["name", "price", "unit", "barcode", "articleId", "customText1", "customText2"] as (keyof PriceTagTemplate["elements"])[]).map((key) => (
+              {(
+                [
+                  "name",
+                  "price",
+                  "unit",
+                  "barcode",
+                  "articleId",
+                  "customText1",
+                  "customText2",
+                ] as (keyof PriceTagTemplate["elements"])[]
+              ).map((key) => (
                 <CheckboxRow key={key}>
                   <input
                     type="checkbox"
@@ -670,24 +684,42 @@ function TagPreview({ template }: { template: PriceTagTemplate }) {
       )}
 
       {el.name && (
-        <PreviewLine $bold style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <PreviewLine
+          $bold
+          style={{
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
           Молоко Nestle 1л
         </PreviewLine>
       )}
 
-      {el.unit && (
-        <PreviewLine $small>1.5 кг</PreviewLine>
-      )}
+      {el.unit && <PreviewLine $small>1.5 кг</PreviewLine>}
 
       {(el.price || el.articleId) && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-          {el.articleId && <span style={{ fontSize: "0.7em" }}>KOD: 00123</span>}
-          {el.price && <span style={{ marginLeft: "auto" }}>4 667 so'm/кг</span>}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            width: "100%",
+          }}
+        >
+          {el.articleId && (
+            <span style={{ fontSize: "0.7em" }}>KOD: 00123</span>
+          )}
+          {el.price && (
+            <span style={{ marginLeft: "auto" }}>4 667 so'm/кг</span>
+          )}
         </div>
       )}
 
       {/* Barcode left + total right (weighted layout) */}
-      <div style={{ display: "flex", alignItems: "center", gap: 4, width: "100%" }}>
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 4, width: "100%" }}
+      >
         {el.barcode && (
           <div
             style={{
@@ -699,13 +731,21 @@ function TagPreview({ template }: { template: PriceTagTemplate }) {
               padding: "3px 0",
             }}
           >
-            <span style={{ fontSize: "0.55em", color: "#444", letterSpacing: 2 }}>
+            <span
+              style={{ fontSize: "0.55em", color: "#444", letterSpacing: 2 }}
+            >
               ||| ||| |||
             </span>
           </div>
         )}
         {el.price && (
-          <span style={{ fontWeight: 700, fontSize: "0.85em", whiteSpace: "nowrap" }}>
+          <span
+            style={{
+              fontWeight: 700,
+              fontSize: "0.85em",
+              whiteSpace: "nowrap",
+            }}
+          >
             7 000 so'm
           </span>
         )}

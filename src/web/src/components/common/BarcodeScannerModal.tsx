@@ -131,19 +131,24 @@ export function BarcodeScannerModal({
       let stopped = false;
       let controlsStop: (() => void) | null = null;
 
-      import("@zxing/browser").then(({ BrowserMultiFormatReader }) => {
+      Promise.all([
+        import("@zxing/browser"),
+        import("@zxing/library"),
+      ]).then(([{ BrowserMultiFormatReader }, { DecodeHintType }]) => {
         if (stopped) return;
-        const reader = new BrowserMultiFormatReader();
+
+        const hints = new Map();
+        hints.set(DecodeHintType.TRY_HARDER, true);
+        const reader = new BrowserMultiFormatReader(hints);
 
         reader
           .decodeFromVideoDevice(
             undefined,
             videoRef.current!,
-            (result, err) => {
+            (result, _err) => {
               if (result) {
                 onScan(result.getText());
               }
-              // err is just "no barcode found this frame" — ignore
             },
           )
           .then((controls) => {

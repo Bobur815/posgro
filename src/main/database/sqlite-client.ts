@@ -347,6 +347,36 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
     console.log('Migration completed: production_date column added to products');
   }
 
+  // Migration 10: Deduplicate categories (caused by sync using VPS IDs instead of nameUz)
+  const dupCount = await prisma.$queryRaw<{ cnt: number }[]>`
+    SELECT COUNT(*) as cnt FROM categories
+    WHERE id NOT IN (SELECT MAX(id) FROM categories GROUP BY name_uz)
+  `;
+  if (dupCount[0]?.cnt > 0) {
+    console.log(`Running migration: Removing ${dupCount[0].cnt} duplicate categories...`);
+    // Disable FK checks so we can remap products safely
+    await prisma.$executeRaw`PRAGMA foreign_keys = OFF`;
+    try {
+      // Remap products to the canonical (max/VPS) category ID
+      await prisma.$executeRaw`
+        UPDATE products
+        SET category_id = (
+          SELECT MAX(c2.id) FROM categories c2
+          WHERE c2.name_uz = (SELECT name_uz FROM categories WHERE id = products.category_id)
+        )
+        WHERE category_id IN (SELECT id FROM categories WHERE id NOT IN (SELECT MAX(id) FROM categories GROUP BY name_uz))
+      `;
+      // Delete the old local-seeded duplicate categories
+      await prisma.$executeRaw`
+        DELETE FROM categories
+        WHERE id NOT IN (SELECT MAX(id) FROM categories GROUP BY name_uz)
+      `;
+      console.log('Migration completed: duplicate categories removed');
+    } finally {
+      await prisma.$executeRaw`PRAGMA foreign_keys = ON`;
+    }
+  }
+
   // Migration 9: Create pre_weighed_items table
   try {
     await prisma.$queryRaw`SELECT 1 FROM pre_weighed_items LIMIT 1`;

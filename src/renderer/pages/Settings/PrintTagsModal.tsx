@@ -290,9 +290,9 @@ export function PrintTagsModal({ template, onClose }: PrintTagsModalProps) {
                         type="number"
                         min={0.001}
                         step={0.001}
-                        value={entry!.amount}
+                        value={entry!.amount || ""}
                         onChange={(e) =>
-                          updateAmount(p.id, parseFloat(e.target.value) || 1)
+                          updateAmount(p.id, e.target.value === "" ? 0 : parseFloat(e.target.value))
                         }
                       />
                     </LabeledInput>
@@ -304,9 +304,9 @@ export function PrintTagsModal({ template, onClose }: PrintTagsModalProps) {
                     <QtyInput
                       type="number"
                       min={1}
-                      value={entry!.quantity}
+                      value={entry!.quantity || ""}
                       onChange={(e) =>
-                        updateQuantity(p.id, parseInt(e.target.value) || 1)
+                        updateQuantity(p.id, e.target.value === "" ? 0 : parseInt(e.target.value))
                       }
                     />
                   </LabeledInput>
