@@ -4,6 +4,17 @@ import os from "os";
 import path from "path";
 import { getPrismaClient } from "../database/sqlite-client";
 
+/** Recalculates and fixes the EAN-13 check digit if the barcode is 13 digits. */
+function fixEan13CheckDigit(barcode: string): string {
+  if (!/^\d{13}$/.test(barcode)) return barcode;
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    sum += parseInt(barcode[i]) * (i % 2 === 0 ? 1 : 3);
+  }
+  const check = (10 - (sum % 10)) % 10;
+  return barcode.slice(0, 12) + check;
+}
+
 export interface TsplLabelItem {
   productNameRu: string;
   productNameUz: string;
@@ -140,7 +151,19 @@ function buildOneLabelTSPL(item: TsplLabelItem, req: TsplPrintRequest): string {
       : item.productNameRu || item.productNameUz;
 
   const rawUnit = item.unit || "шт";
-  const unitDisplay = lang === "uz" && rawUnit === "шт" ? "dona" : rawUnit;
+  const unitDisplay =
+    lang === "uz"
+      ? rawUnit === "шт"
+        ? "dona"
+        : rawUnit === "кг"
+          ? "kg"
+          : rawUnit === "л"
+            ? "l"
+            : rawUnit === "м"
+              ? "m"
+              : rawUnit
+      : rawUnit;
+  const hasRealUnit = rawUnit !== "шт" && rawUnit !== "dona";
 
   const dotsW = Math.round(widthMm * DOTS_PER_MM);
   const font = pickFont(heightMm);
@@ -171,21 +194,29 @@ function buildOneLabelTSPL(item: TsplLabelItem, req: TsplPrintRequest): string {
     item.productType === "BULK_WEIGHTED" ||
     item.productType === "PREPACKAGED";
 
-  if (elements.unit && isWeighted) {
-    const amountFormatted =
-      item.amount % 1 === 0
-        ? String(Math.round(item.amount))
-        : item.amount.toFixed(3).replace(/\.?0+$/, "");
-    const amountStr = `${amountFormatted} ${unitDisplay}`;
-    lines.push(
-      `TEXT ${marginDots},${y},"${smallFont.name}",0,1,1,"${escapeTSPL(amountStr)}"`,
-    );
-    y += smallFont.h + 2;
+  if (elements.unit) {
+    if (isWeighted) {
+      const amountFormatted =
+        item.amount % 1 === 0
+          ? String(Math.round(item.amount))
+          : item.amount.toFixed(3).replace(/\.?0+$/, "");
+      const amountStr = `${amountFormatted} ${unitDisplay}`;
+      lines.push(
+        `TEXT ${marginDots},${y},"${smallFont.name}",0,1,1,"${escapeTSPL(amountStr)}"`,
+      );
+      y += smallFont.h + 2;
+    } else if (hasRealUnit) {
+      lines.push(
+        `TEXT ${marginDots},${y},"${smallFont.name}",0,1,1,"${escapeTSPL(unitDisplay)}"`,
+      );
+      y += smallFont.h + 2;
+    }
+    y += 6; // gap after unit block
   }
 
   if (elements.price || (elements.articleId && item.articleId != null)) {
     const priceStr = elements.price
-      ? isWeighted
+      ? isWeighted || hasRealUnit
         ? `${fmtNum(item.price)} so'm/${unitDisplay}`
         : `${fmtNum(item.price)} so'm`
       : null;
@@ -214,13 +245,27 @@ function buildOneLabelTSPL(item: TsplLabelItem, req: TsplPrintRequest): string {
     y += font.h + 2;
   }
 
+  if (elements.customText2 && elements.customText2Value) {
+    const ct2y = dotsH - marginDots - smallFont.h;
+    lines.push(
+      `TEXT ${marginDots},${ct2y},"${smallFont.name}",0,1,1,"${escapeTSPL(elements.customText2Value)}"`,
+    );
+  }
+
   if (elements.barcode && item.barcode) {
-    const barcodeType = /^\d{13}$/.test(item.barcode) ? "EAN13" : "128";
-    const remainingH = dotsH - y - marginDots;
+    const fixedBarcode = fixEan13CheckDigit(item.barcode);
+    const barcodeType = /^\d{13}$/.test(fixedBarcode) ? "EAN13" : "128";
+    const reservedBottom =
+      elements.customText2 && elements.customText2Value
+        ? smallFont.h + 4
+        : 0;
+    const bottomY = dotsH - marginDots - reservedBottom;
+    const remainingH = bottomY - y;
     const barcodeH = Math.max(24, Math.min(80, Math.round(remainingH * 0.8)));
+    const barcodeY = bottomY - barcodeH - 24;
 
     lines.push(
-      `BARCODE ${marginDots},${y},"${barcodeType}",${barcodeH},1,0,2,2,"${item.barcode}"`,
+      `BARCODE ${marginDots},${barcodeY},"${barcodeType}",${barcodeH},1,0,2,2,"${fixedBarcode}"`,
     );
 
     if (isWeighted) {
@@ -228,20 +273,11 @@ function buildOneLabelTSPL(item: TsplLabelItem, req: TsplPrintRequest): string {
       const total = Math.round(item.amount * item.price);
       const totalStr = `${fmtNum(total)} so'm`;
       const totalX = Math.round(dotsW * 0.45);
-      const totalY = y + Math.round((barcodeH - font.h) / 2);
+      const totalY = barcodeY + Math.round((barcodeH - font.h) / 2);
       lines.push(
         `TEXT ${totalX},${totalY},"${font.name}",0,1,1,"${escapeTSPL(totalStr)}"`,
       );
     }
-
-    y += barcodeH + 4;
-  }
-
-  if (elements.customText2 && elements.customText2Value) {
-    const ct2y = dotsH - marginDots - smallFont.h;
-    lines.push(
-      `TEXT ${marginDots},${ct2y},"${smallFont.name}",0,1,1,"${escapeTSPL(elements.customText2Value)}"`,
-    );
   }
 
   lines.push(`PRINT ${item.copies},1`);

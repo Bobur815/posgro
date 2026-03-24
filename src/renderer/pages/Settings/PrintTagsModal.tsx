@@ -143,6 +143,7 @@ export function PrintTagsModal({ template, onClose }: PrintTagsModalProps) {
     new Map(),
   );
   const [printing, setPrinting] = useState(false);
+  console.log("Selected products:", Array.from(selected.values()));
   
   useEffect(() => {
     (async () => {

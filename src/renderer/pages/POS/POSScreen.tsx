@@ -117,7 +117,6 @@ const NumberPadSection = styled.div`
   border-radius: ${({ theme }) => theme.borderRadius};
   box-shadow: ${({ theme }) => theme.shadows.md};
   padding: ${({ theme }) => theme.spacing.md};
-
 `;
 
 const NumberPad = styled.div`
@@ -436,13 +435,17 @@ export function POSScreen() {
         setError("");
         addProductToCart(product, qty);
       } else {
-        setError(t("products.noResults"));
+        setBarcode("");
         setId("");
+        setQuantity("1");
+        setError(t("products.noResults"));
       }
     } catch (err) {
       console.error("Error looking up product by ID:", err);
-      setError(t("products.noResults"));
+      setBarcode("");
       setId("");
+      setQuantity("1");
+      setError(t("products.noResults"));
     }
   }, [id, quantity, getById, addProductToCart, t, i18n.language]);
 
@@ -532,6 +535,9 @@ export function POSScreen() {
               resetInputs();
             }
           } else {
+            setBarcode("");
+            setId("");
+            setQuantity("1");
             setError(t("products.noResults"));
           }
         }
@@ -561,6 +567,9 @@ export function POSScreen() {
           resetInputs();
         }
       } else {
+        setBarcode("");
+        setId("");
+        setQuantity("1");
         setError(t("products.noResults"));
       }
     } catch (err) {

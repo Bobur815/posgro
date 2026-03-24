@@ -62,13 +62,12 @@ export async function initializeDatabase(): Promise<void> {
 }
 
 async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
-  // Check if tables exist by trying to query one
-  try {
-    await prisma.$queryRaw`SELECT 1 FROM local_config LIMIT 1`;
-    return; // Tables already exist
-  } catch {
-    console.log('Creating database schema...');
-  }
+  // Check if tables exist using sqlite_master (no error thrown if missing)
+  const rows = await prisma.$queryRaw<{ name: string }[]>`
+    SELECT name FROM sqlite_master WHERE type='table' AND name='local_config'
+  `;
+  if (rows.length > 0) return; // Tables already exist
+  console.log('Creating database schema...');
 
   // Create all tables with updated schema
   await prisma.$executeRaw`
@@ -116,6 +115,7 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
       phone TEXT,
       address TEXT,
       active INTEGER DEFAULT 1,
+      balance REAL DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `;
@@ -134,6 +134,7 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
       unit TEXT DEFAULT 'шт',
       category_id INTEGER NOT NULL,
       supplier_id TEXT,
+      production_date DATETIME,
       expiry_date DATETIME,
       discount_percent REAL DEFAULT 0,
       is_on_promotion INTEGER DEFAULT 0,
@@ -142,7 +143,6 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
       mxik TEXT,
       product_type TEXT DEFAULT 'REGULAR',
       internal_code TEXT UNIQUE,
-      can_print_label INTEGER DEFAULT 0,
       bulk_quantity REAL DEFAULT 0,
       min_sale_qty REAL DEFAULT 0,
       max_sale_qty REAL DEFAULT 0,
@@ -322,7 +322,6 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
     console.log('Running migration: Adding weighted product fields...');
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN product_type TEXT DEFAULT 'REGULAR'`;
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN internal_code TEXT`;
-    await prisma.$executeRaw`ALTER TABLE products ADD COLUMN can_print_label INTEGER DEFAULT 0`;
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN bulk_quantity REAL DEFAULT 0`;
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN min_sale_qty REAL DEFAULT 0`;
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN max_sale_qty REAL DEFAULT 0`;
@@ -330,7 +329,25 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
     console.log('Migration completed: weighted product fields added');
   }
 
-  // Migration 6: Create pre_weighed_items table
+  // Migration 6: Add balance column to suppliers
+  try {
+    await prisma.$queryRaw`SELECT balance FROM suppliers LIMIT 1`;
+  } catch {
+    console.log('Running migration: Adding balance column to suppliers...');
+    await prisma.$executeRaw`ALTER TABLE suppliers ADD COLUMN balance REAL DEFAULT 0`;
+    console.log('Migration completed: balance column added to suppliers');
+  }
+
+  // Migration 7: Add production_date column to products
+  try {
+    await prisma.$queryRaw`SELECT production_date FROM products LIMIT 1`;
+  } catch {
+    console.log('Running migration: Adding production_date column to products...');
+    await prisma.$executeRaw`ALTER TABLE products ADD COLUMN production_date DATETIME`;
+    console.log('Migration completed: production_date column added to products');
+  }
+
+  // Migration 9: Create pre_weighed_items table
   try {
     await prisma.$queryRaw`SELECT 1 FROM pre_weighed_items LIMIT 1`;
   } catch {

@@ -65,7 +65,6 @@ function serializeProduct(product: any): Product | null {
     // Weighted fields
     productType: (product.productType || "REGULAR") as Product["productType"],
     internalCode: product.internalCode || undefined,
-    canPrintLabel: Boolean(product.canPrintLabel ?? false),
     bulkQuantity: toNumber(product.bulkQuantity),
     minSaleQty: toNumber(product.minSaleQty),
     maxSaleQty: toNumber(product.maxSaleQty),

@@ -86,7 +86,6 @@ model Product {
   // productType: REGULAR | BULK_WEIGHTED | PREPACKAGED
   productType   String  @default("REGULAR") @map("product_type")
   internalCode  String? @unique @map("internal_code") // 5-digit code for weighted products
-  canPrintLabel Boolean @default(false) @map("can_print_label")
   bulkQuantity  Decimal @default(0) @map("bulk_quantity")
   minSaleQty    Decimal @default(0) @map("min_sale_qty")
   maxSaleQty    Decimal @default(0) @map("max_sale_qty")

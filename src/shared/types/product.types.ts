@@ -36,7 +36,6 @@ export interface Product {
   // Weighted product fields
   productType?: ProductType;
   internalCode?: string;
-  canPrintLabel?: boolean;
   bulkQuantity?: number;
   minSaleQty?: number;
   maxSaleQty?: number;

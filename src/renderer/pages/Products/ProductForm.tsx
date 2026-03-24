@@ -11,6 +11,7 @@ import { Modal } from "../../components/common/Modal";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import {
   Product,
+  ProductType,
   ProductUnit,
   Supplier,
   SupplierPaymentMethod,
@@ -232,6 +233,7 @@ export function ProductForm({
     isOnPromotion: false,
     active: true,
     mxik: initialData?.mxik || "",
+    productType: "REGULAR" as ProductType,
   });
 
   const [existingProduct, setExistingProduct] = useState<Product | null>(null);
@@ -424,6 +426,7 @@ export function ProductForm({
         isOnPromotion: product.isOnPromotion ?? false,
         active: product.isActive,
         mxik: product.mxik || "",
+        productType: product.productType || "REGULAR",
       });
     }
   };
@@ -450,6 +453,7 @@ export function ProductForm({
       isOnPromotion: formData.isOnPromotion,
       active: formData.active,
       mxik: formData.mxik || undefined,
+      productType: formData.productType,
     };
 
     let success = false;
@@ -501,7 +505,7 @@ export function ProductForm({
   };
 
   const title = isEdit ? t("products.edit") : t("products.add");
-  
+
   return (
     <>
       <Modal title={title} onClose={onClose} width="750px">
@@ -514,7 +518,9 @@ export function ProductForm({
               onChange={(e) => handleChange("mxik", e.target.value)}
             />
             <FormGroup>
-              <Label>{t("products.barcode")} <Req>*</Req></Label>
+              <Label>
+                {t("products.barcode")} <Req>*</Req>
+              </Label>
               <div
                 style={{ display: "flex", flexDirection: "row", gap: "8px" }}
               >
@@ -544,13 +550,21 @@ export function ProductForm({
 
           <Row>
             <Input
-              label={<>{t("products.nameUz")} <Req>*</Req></>}
+              label={
+                <>
+                  {t("products.nameUz")} <Req>*</Req>
+                </>
+              }
               value={formData.nameUz}
               onChange={(e) => handleNameUzChange(e.target.value)}
               required
             />
             <Input
-              label={<>{t("products.nameRu")} <Req>*</Req></>}
+              label={
+                <>
+                  {t("products.nameRu")} <Req>*</Req>
+                </>
+              }
               value={formData.nameRu}
               onChange={(e) => handleNameRuChange(e.target.value)}
               required
@@ -559,7 +573,15 @@ export function ProductForm({
 
           <Row>
             <Input
-              label={<>{t("products.price")}{formProfitMargin !== null ? ` (${formProfitMargin}%)` : ""} <Req>*</Req></>}
+              label={
+                <>
+                  {t("products.price")}
+                  {formProfitMargin !== null
+                    ? ` (${formProfitMargin}%)`
+                    : ""}{" "}
+                  <Req>*</Req>
+                </>
+              }
               type="number"
               value={formData.price}
               onChange={(e) => handleChange("price", e.target.value)}
@@ -588,7 +610,26 @@ export function ProductForm({
             />
           </Row>
 
-          <Row>
+          <Row style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+            <FormGroup>
+              <Label>{t("products.productType")}</Label>
+              <Select
+                value={formData.productType}
+                onChange={(e) =>
+                  handleChange("productType", e.target.value as ProductType)
+                }
+              >
+                <option value="REGULAR">
+                  {t("products.productTypeRegular")}
+                </option>
+                <option value="BULK_WEIGHTED">
+                  {t("products.productTypeBulkWeighted")}
+                </option>
+                <option value="PREPACKAGED">
+                  {t("products.productTypePrepackaged")}
+                </option>
+              </Select>
+            </FormGroup>
             <FormGroup>
               <Label>{t("products.unit")}</Label>
               <Select
@@ -603,7 +644,9 @@ export function ProductForm({
               </Select>
             </FormGroup>
             <FormGroup>
-              <Label>{t("products.category")} <Req>*</Req></Label>
+              <Label>
+                {t("products.category")} <Req>*</Req>
+              </Label>
               <div style={{ display: "flex", gap: "8px" }}>
                 <Select
                   value={formData.categoryId}
@@ -799,7 +842,11 @@ export function ProductForm({
 
           <ArrivalForm>
             <Input
-              label={<>{t("inventory.quantity")} <Req>*</Req></>}
+              label={
+                <>
+                  {t("inventory.quantity")} <Req>*</Req>
+                </>
+              }
               type="number"
               autoFocus
               min="0"
@@ -817,7 +864,11 @@ export function ProductForm({
             <div style={{ display: "flex", gap: "16px" }}>
               <div style={{ flex: 1 }}>
                 <Input
-                  label={<>{t("inventory.costPerUnit")} <Req>*</Req></>}
+                  label={
+                    <>
+                      {t("inventory.costPerUnit")} <Req>*</Req>
+                    </>
+                  }
                   type="number"
                   min="0"
                   step="0.01"

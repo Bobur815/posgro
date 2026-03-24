@@ -56,7 +56,7 @@ const MobileBottomNav = styled.nav`
     background-color: ${({ theme }) => theme.colors.surface};
     border-top: 1px solid ${({ theme }) => theme.colors.border};
     z-index: 100;
-    padding: 4px 0;
+    padding: 6px 0;
     padding-bottom: env(safe-area-inset-bottom, 0);
   }
 `;

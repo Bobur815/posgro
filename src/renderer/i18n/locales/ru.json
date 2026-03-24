@@ -108,7 +108,7 @@
     "cashInsufficient": "Недостаточно",
     "clearAmount": "Сбросить"
   },
-  "scanner":{
+  "scanner": {
     "title": "Штрих-код сканер",
     "description": "Сканируйте штрих-код для добавления товара",
     "scanning": "Сканирование...",
@@ -119,6 +119,7 @@
     "pointCamera": "Наведите камеру на штрих-код товара"
   },
   "products": {
+    "add": "Добавить",
     "title": "Товары",
     "name": "Название",
     "nameRu": "Название (RU)",
@@ -132,6 +133,10 @@
     "barcode": "Штрих-код",
     "mxik": "MXIK код",
     "unit": "Единица",
+    "productType": "Тип товара",
+    "productTypeRegular": "Обычный",
+    "productTypeBulkWeighted": "Весовой",
+    "productTypePrepackaged": "Фасованный",
     "addProduct": "Добавить",
     "editProduct": "Редактировать",
     "noProducts": "Товары не найдены",
