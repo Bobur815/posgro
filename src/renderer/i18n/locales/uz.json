@@ -167,7 +167,7 @@
     "generateBarcode": "Shtrix-kod yaratish"
   },
   "inventory": {
-    "stockManagement": "Omborni boshqarish",
+    "stockManagement": "Ombor",
     "addArrival": "Kirim",
     "newArrival": "Yangi kirim",
     "quantity": "Miqdori",
@@ -530,7 +530,8 @@
     "productNotFound": "Mahsulot topilmadi",
     "error": "Skanerda xato yuz berdi",
     "notSupported": "Bu qurilma shtrix-kod skanerini qo'llab-quvvatlamaydi",
-    "pointCamera": "Kamerani mahsulot shtrix-kodiga qarating"
+    "pointCamera": "Kamerani mahsulot shtrix-kodiga qarating",
+    "cameraError": "Kameraga kirishda xatolik"
   },
   "receiptScan": {
     "scanReceipt": "Chekni skanerlash",

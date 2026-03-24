@@ -337,6 +337,7 @@ export function Sidebar() {
     ? [{ to: "/admin/stores", icon: Store }]
     : [
         { to: "/products", icon: Package },
+        { to: "/products/stock", icon: ClipboardList },
         { to: "/suppliers", icon: Truck },
         { to: "/reports/daily", icon: BarChart3 },
         ...(isAdmin ? [{ to: "/users", icon: Users }] : []),

@@ -5,17 +5,72 @@
 type ScriptType = "latin" | "cyrillic" | "unknown";
 
 const latinToCyrillicMap: Record<string, string> = {
-  a: "а", b: "б", d: "д", e: "е", f: "ф", g: "г", h: "ҳ", i: "и",
-  j: "ж", k: "к", l: "л", m: "м", n: "н", o: "о", p: "п", q: "қ",
-  r: "р", s: "с", t: "т", u: "у", v: "в", x: "х", y: "й", z: "з",
-  "o‘": "ў", "g‘": "ғ", sh: "ш", ch: "ч", ng: "нг", ya: "я", yo: "ё", yu: "ю",
+  a: "а",
+  b: "б",
+  d: "д",
+  e: "е",
+  f: "ф",
+  g: "г",
+  h: "ҳ",
+  i: "и",
+  j: "ж",
+  k: "к",
+  l: "л",
+  m: "м",
+  n: "н",
+  o: "о",
+  p: "п",
+  q: "қ",
+  r: "р",
+  s: "с",
+  t: "т",
+  u: "у",
+  v: "в",
+  x: "х",
+  y: "й",
+  z: "з",
+  "o‘": "ў",
+  "g‘": "ғ",
+  sh: "ш",
+  ch: "ч",
+  ng: "нг",
+  ya: "я",
+  yo: "ё",
+  yu: "ю",
 };
 
 const cyrillicToLatinMap: Record<string, string> = {
-  а: "a", б: "b", д: "d", е: "e", ф: "f", г: "g", ҳ: "h", и: "i",
-  ж: "j", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", қ: "q",
-  р: "r", с: "s", т: "t", у: "u", в: "v", х: "x", й: "y", з: "z",
-  ў: "o‘", ғ: "g‘", ш: "sh", ч: "ch", я: "ya", ё: "yo", ю: "yu",
+  а: "a",
+  б: "b",
+  д: "d",
+  е: "e",
+  ф: "f",
+  г: "g",
+  ҳ: "h",
+  и: "i",
+  ж: "j",
+  к: "k",
+  л: "l",
+  м: "m",
+  н: "n",
+  о: "o",
+  п: "p",
+  қ: "q",
+  р: "r",
+  с: "s",
+  т: "t",
+  у: "u",
+  в: "v",
+  х: "x",
+  й: "y",
+  з: "z",
+  ў: "o‘",
+  ғ: "g‘",
+  ш: "sh",
+  ч: "ch",
+  я: "ya",
+  ё: "yo",
+  ю: "yu",
 };
 
 const latinDigraphs = ["o‘", "g‘", "sh", "ch", "ng", "ya", "yo", "yu"];
@@ -45,7 +100,10 @@ function latinToCyrillic(word: string): string {
 }
 
 function cyrillicToLatin(word: string): string {
-  return word.replace(/[а-яўқғҳё]/g, (char) => cyrillicToLatinMap[char] || char);
+  return word.replace(
+    /[а-яўқғҳё]/g,
+    (char) => cyrillicToLatinMap[char] || char,
+  );
 }
 
 /**
@@ -55,12 +113,12 @@ function cyrillicToLatin(word: string): string {
  */
 export function convertUzbekText(
   text: string,
-  translateOnlyUzbekWords: boolean = false
+  translateOnlyUzbekWords: boolean = false,
 ): string {
   const script = detectScript(text);
   if (script === "unknown") return text;
 
-  return text
+  const result = text
     .split(/(\s+)/) // keep spaces
     .map((token) => {
       if (token.trim() === "") return token;
@@ -74,5 +132,6 @@ export function convertUzbekText(
         : cyrillicToLatin(token);
     })
     .join("");
-}
 
+  return result.charAt(0).toUpperCase() + result.slice(1);
+}

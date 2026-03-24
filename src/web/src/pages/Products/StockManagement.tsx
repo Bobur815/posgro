@@ -12,6 +12,7 @@ import { ProductFilters } from "@components/products/ProductFilters";
 import { Product, ProductFilterParams } from "@shared/types";
 import { useToast } from "@context/ToastContext";
 import {
+  Camera,
   ChevronDown,
   ChevronUp,
   ScanLine,
@@ -23,6 +24,12 @@ import { NewArrivalModal } from "./NewArrivalModal";
 import { ReceiptScanModal } from "./ReceiptScanModal";
 import { debounce } from "../../utils/helpers";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
+import {
+  MobileCard,
+  MobileCardList,
+  DesktopOnly,
+} from "../../components/common/MobileCard";
+import { BarcodeScannerModal } from "../../components/common/BarcodeScannerModal";
 
 const Container = styled.div`
   display: flex;
@@ -142,6 +149,12 @@ const ClearBtn = styled.button`
   padding: 4px;
 `;
 
+const StockCell = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+`;
+
 export function StockManagement() {
   const { t, i18n } = useTranslation();
   const {
@@ -167,12 +180,20 @@ export function StockManagement() {
   const [idInput, setIdInput] = useState("");
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showReceiptScan, setShowReceiptScan] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
 
   useEffect(() => {
     loadProducts();
     loadCategories();
     loadSuppliers();
   }, [loadProducts, loadCategories, loadSuppliers]);
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
 
   const debouncedSearch = useMemo(
     () =>
@@ -331,6 +352,19 @@ export function StockManagement() {
           )}
         </SearchWrapper>
 
+        {isMobile && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="medium"
+            style={{ padding: "10px 12px", flexShrink: 0 }}
+            onClick={() => setShowScanner(true)}
+            title={t("scanner.title") || "Scan barcode"}
+          >
+            <Camera size={16} />
+          </Button>
+        )}
+
         <Button
           size="medium"
           style={{ padding: "10px 12px" }}
@@ -389,23 +423,81 @@ export function StockManagement() {
         isOpen={isFilterOpen}
       />
 
-      <Table
-        columns={columns}
-        data={pageData}
-        loading={isLoading}
-        emptyMessage={t("products.noProducts")}
-        footer={
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={totalItems}
-            pageSize={pageSize}
-            pageSizeOptions={pageSizeOptions}
-            onPageChange={goToPage}
-            onPageSizeChange={setPageSize}
+      <MobileCardList>
+        {pageData.map((product) => (
+          <MobileCard
+            key={product.id}
+            title={i18n.language === "uz" ? product.nameUz : product.nameRu}
+            subtitle={product.barcode}
+            fields={[
+              {
+                label: t("products.stock"),
+                value: (
+                  <StockCell>
+                    <span
+                      style={{
+                        color:
+                          product.stock <= product.minStock
+                            ? "#f44336"
+                            : "inherit",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {product.stock} {product.unit}
+                    </span>
+                    {product.stock <= 0 ? (
+                      <OutOfStockBadge style={{ marginLeft: 0 }}>
+                        {t("products.outOfStock")}
+                      </OutOfStockBadge>
+                    ) : product.stock <= product.minStock ? (
+                      <LowStockBadge style={{ marginLeft: 0 }}>
+                        {t("products.lowStock")}
+                      </LowStockBadge>
+                    ) : null}
+                  </StockCell>
+                ),
+              },
+              {
+                label: t("products.minStock"),
+                value: `${product.minStock} ${product.unit}`,
+              },
+              {
+                label: t("products.price"),
+                value: formatCurrency(product.price),
+              },
+              {
+                label: t("products.cost"),
+                value: product.cost ? formatCurrency(product.cost) : "—",
+              },
+            ]}
+            actions={
+              <Button size="medium" onClick={() => handleAddArrival(product)}>
+                {t("inventory.addArrival")}
+              </Button>
+            }
           />
-        }
-      />
+        ))}
+      </MobileCardList>
+
+      <DesktopOnly>
+        <Table
+          columns={columns}
+          data={pageData}
+          loading={isLoading}
+          emptyMessage={t("products.noProducts")}
+          footer={
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              pageSize={pageSize}
+              pageSizeOptions={pageSizeOptions}
+              onPageChange={goToPage}
+              onPageSizeChange={setPageSize}
+            />
+          }
+        />
+      </DesktopOnly>
 
       {showArrival && selectedProduct && (
         <NewArrivalModal
@@ -425,6 +517,20 @@ export function StockManagement() {
         <SupplierManagementModal
           onClose={() => setShowSupplierModal(false)}
           onSupplierChanged={loadSuppliers}
+        />
+      )}
+      {showScanner && (
+        <BarcodeScannerModal
+          onScan={async (barcode) => {
+            setShowScanner(false);
+            const product = (await searchByBarcode(barcode)) as Product | null;
+            if (product) {
+              handleAddArrival(product);
+            } else {
+              toast.error(t("products.noResults"));
+            }
+          }}
+          onClose={() => setShowScanner(false)}
         />
       )}
       {showReceiptScan && (
