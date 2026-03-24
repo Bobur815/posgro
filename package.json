@@ -71,6 +71,9 @@
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
   },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "author": "Bobur",
   "license": "UNLICENSED"
 }
