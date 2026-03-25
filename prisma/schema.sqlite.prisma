@@ -82,6 +82,7 @@ model Product {
   mxik                  String?   @map("mxik")
   active                Boolean   @default(true)
 
+
   // Weighted product fields
   // productType: REGULAR | BULK_WEIGHTED | PREPACKAGED
   productType   String  @default("REGULAR") @map("product_type")
