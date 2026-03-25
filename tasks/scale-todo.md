@@ -17,7 +17,7 @@ create: { key: "scale_port", value: "8080" },  // ← same value
 ---
 
 ## 2. TCP Protocol / Packet Format
-**When:** After Wireshark capture (filter: `ip.addr == 192.168.1.87` while pushing one PLU via RLS1000 software)
+**When:** After Wireshark capture (filter: `ip.addr == 192.168.1.20` while pushing one PLU via RLS1000 software)
 **File:** `src/main/scale/scale-sync.service.ts`, function `buildPluPacket()` ~line 60
 
 This is the **only function** that needs replacing. Everything else (connection, retry, bulk sync) stays identical.
@@ -25,7 +25,7 @@ This is the **only function** that needs replacing. Everything else (connection,
 How to capture:
 1. Install RLS1000 software from rongtatech.com
 2. Connect PC and scale to same 192.168.1.x subnet
-3. Run Wireshark on the PC — filter: `ip.addr == 192.168.1.87`
+3. Run Wireshark on the PC — filter: `ip.addr == 192.168.1.20`
 4. Push one PLU via RLS1000 UI
 5. Inspect the TCP payload bytes — that is the protocol
 
@@ -55,16 +55,16 @@ How to verify:
 
 ---
 
-## 4. Test Barcodes in Unit Tests
+## 4. Recreate Unit Tests
 **When:** Same time as #3
-**File:** `src/shared/utils/weightBarcode.test.ts`
+**File:** recreate `src/shared/utils/weightBarcode.test.ts` (was deleted to fix CI)
 
-Replace the constructed test barcodes with real barcode numbers scanned from actual printed labels to guarantee the parser matches what the scale actually produces.
+Write tests using real barcode numbers scanned from actual printed labels to guarantee the parser matches what the scale actually produces.
 
 ---
 
 ## 5. Network Prerequisites
 Before any of the above is testable:
 - Router: 192.168.1.x subnet, WPA2-PSK/AES, SSID ≤ 15 chars, password ≤ 15 chars
-- Scale static IP: `192.168.1.87` (already configured)
-- Verify: `ping 192.168.1.87` replies from the POS PC
+- Scale static IP: `192.168.1.20` (already configured)
+- Verify: `ping 192.168.1.20` replies from the POS PC

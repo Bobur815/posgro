@@ -58,7 +58,7 @@ export function setupScaleHandlers(): void {
     });
     const map = Object.fromEntries(settings.map((s: { key: string; value: string }) => [s.key, s.value]));
     return {
-      ip: map["scale_ip"] ?? "192.168.1.87",
+      ip: map["scale_ip"] ?? "192.168.1.20",
       // ⚠️  VERIFY_LATER: default port
       port: parseInt(map["scale_port"] ?? "8080", 10),
     };

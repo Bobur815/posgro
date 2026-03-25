@@ -10,7 +10,7 @@ export interface ScaleConfig {
 }
 
 const DEFAULT_SCALE_CONFIG: ScaleConfig = {
-  ip: "192.168.1.87",
+  ip: "192.168.1.20",
   // ⚠️  VERIFY_LATER: correct port after running RLS1000 software + Wireshark
   // Common Rongta ports to try: 8080, 3000, 502 (Modbus), 4196
   port: 8080,
@@ -50,7 +50,7 @@ export interface ConnectionStatus {
  *
  * How to find the protocol:
  * 1. Install RLS1000 software from rongtatech.com
- * 2. Run Wireshark on your PC (filter: ip.addr == 192.168.1.87)
+ * 2. Run Wireshark on your PC (filter: ip.addr == 192.168.1.20)
  * 3. Push one PLU via the RLS1000 software UI
  * 4. Inspect the captured TCP packets — that byte sequence IS the protocol
  * 5. Replace the body of this function with what you find
@@ -65,7 +65,7 @@ function buildPluPacket(plu: ScalePlu): Buffer {
   //
   // Example if HTTP POST over TCP (most likely):
   //   const body = JSON.stringify({ plu: plu.pluCode, name: plu.nameRu, price: plu.pricePerKg });
-  //   const httpRequest = `POST /api/plu HTTP/1.1\r\nHost: 192.168.1.87\r\nContent-Type: application/json\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n${body}`;
+  //   const httpRequest = `POST /api/plu HTTP/1.1\r\nHost: 192.168.1.20\r\nContent-Type: application/json\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n${body}`;
   //   return Buffer.from(httpRequest);
   //
   // For now: return an identifiable stub so you can see it in Wireshark

@@ -64,7 +64,6 @@ temp/
 # TypeScript
 *.tsbuildinfo
 
-src/shared/utils/weightBarcode.test.ts
 # Electron Builder
 /release/
 
