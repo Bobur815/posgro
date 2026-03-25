@@ -106,7 +106,9 @@
     "cashReceived": "Qabul qilindi",
     "cashChange": "Qaytim",
     "cashInsufficient": "Yetarli emas",
-    "clearAmount": "Tozalash"
+    "clearAmount": "Tozalash",
+    "pluNotFound": "PLU {{plu}} li mahsulot topilmadi. Mahsulot sozlamalarini tekshiring.",
+    "zeroWeight": "Tarozi nol og'irlik qaytardi — qayta o'lchang"
   },
   "products": {
     "title": "Mahsulotlar",

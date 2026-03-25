@@ -146,6 +146,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
     delete: (id: string) => ipcRenderer.invoke("weighedItems:delete", id),
   },
 
+  // Label Scale (Rongta RLS)
+  scale: {
+    testConnection: () => ipcRenderer.invoke("scale:testConnection"),
+    syncProduct: (productId: number) =>
+      ipcRenderer.invoke("scale:syncProduct", productId),
+    syncAll: () => ipcRenderer.invoke("scale:syncAll"),
+    updateConfig: (ip: string, port: number) =>
+      ipcRenderer.invoke("scale:updateConfig", ip, port),
+    getConfig: () => ipcRenderer.invoke("scale:getConfig"),
+  },
+
   // Settings
   settings: {
     get: (key: string) => ipcRenderer.invoke("settings:get", key),

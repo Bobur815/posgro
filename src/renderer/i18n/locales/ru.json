@@ -106,7 +106,9 @@
     "cashReceived": "Получено",
     "cashChange": "Сдача",
     "cashInsufficient": "Недостаточно",
-    "clearAmount": "Сбросить"
+    "clearAmount": "Сбросить",
+    "pluNotFound": "Товар с PLU {{plu}} не найден. Проверьте настройки товара.",
+    "zeroWeight": "Весы вернули нулевой вес — повторите взвешивание"
   },
   "scanner": {
     "title": "Штрих-код сканер",

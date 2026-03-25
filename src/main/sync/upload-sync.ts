@@ -170,6 +170,11 @@ async function uploadProducts(
     unit: p.unit,
     categoryId: p.categoryId,
     active: p.active,
+    productType: p.productType,
+    internalCode: p.internalCode ?? undefined,
+    bulkQuantity: p.bulkQuantity ? Number(p.bulkQuantity) : undefined,
+    minSaleQty: p.minSaleQty ? Number(p.minSaleQty) : undefined,
+    maxSaleQty: p.maxSaleQty ? Number(p.maxSaleQty) : undefined,
   }));
 
   const res = await apiPost("/products/sync-bulk", token, {

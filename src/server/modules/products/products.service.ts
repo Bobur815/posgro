@@ -100,6 +100,11 @@ export class ProductsService {
         isOnPromotion: createProductDto.isOnPromotion ?? false,
         active: createProductDto.active ?? true,
         mxik: createProductDto.mxik,
+        productType: createProductDto.productType ?? 'REGULAR',
+        internalCode: createProductDto.internalCode,
+        bulkQuantity: createProductDto.bulkQuantity ?? 0,
+        minSaleQty: createProductDto.minSaleQty ?? 0,
+        maxSaleQty: createProductDto.maxSaleQty ?? 0,
       },
       include: { category: true },
     });
@@ -245,6 +250,11 @@ export class ProductsService {
       unit?: string;
       categoryId?: number;
       active?: boolean;
+      productType?: string;
+      internalCode?: string;
+      bulkQuantity?: number;
+      minSaleQty?: number;
+      maxSaleQty?: number;
     }>,
   ) {
     let created = 0,
@@ -267,6 +277,11 @@ export class ProductsService {
               ...(p.minStock !== undefined && { minStock: p.minStock }),
               ...(p.unit && { unit: p.unit }),
               ...(p.active !== undefined && { active: p.active }),
+              ...(p.productType && { productType: p.productType }),
+              ...(p.internalCode !== undefined && { internalCode: p.internalCode }),
+              ...(p.bulkQuantity !== undefined && { bulkQuantity: p.bulkQuantity }),
+              ...(p.minSaleQty !== undefined && { minSaleQty: p.minSaleQty }),
+              ...(p.maxSaleQty !== undefined && { maxSaleQty: p.maxSaleQty }),
             },
           });
           updated++;
@@ -284,6 +299,11 @@ export class ProductsService {
               unit: (p.unit as any) ?? "шт",
               categoryId: p.categoryId as any,
               active: p.active !== undefined ? p.active : true,
+              productType: p.productType ?? 'REGULAR',
+              internalCode: p.internalCode,
+              bulkQuantity: p.bulkQuantity ?? 0,
+              minSaleQty: p.minSaleQty ?? 0,
+              maxSaleQty: p.maxSaleQty ?? 0,
             },
           });
           created++;

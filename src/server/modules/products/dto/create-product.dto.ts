@@ -10,9 +10,10 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ProductUnit } from '../../../../shared/types/product.types';
+import { ProductType, ProductUnit } from '../../../../shared/types/product.types';
 
 const PRODUCT_UNITS: ProductUnit[] = ['шт', 'кг', 'л', 'м'];
+const PRODUCT_TYPES: ProductType[] = ['REGULAR', 'BULK_WEIGHTED', 'PREPACKAGED'];
 
 export class CreateProductDto {
   @ApiProperty({ example: '4780001234567', description: 'Product barcode' })
@@ -103,4 +104,35 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   mxik?: string;
+
+  @ApiPropertyOptional({ example: 'REGULAR', description: 'Product type (REGULAR, BULK_WEIGHTED, PREPACKAGED)' })
+  @IsOptional()
+  @IsIn(PRODUCT_TYPES)
+  productType?: ProductType;
+
+  @ApiPropertyOptional({ example: '000042', description: '6-digit PLU code for weighted products' })
+  @IsOptional()
+  @IsString()
+  internalCode?: string;
+
+  @ApiPropertyOptional({ example: 10, description: 'Bulk quantity' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  bulkQuantity?: number;
+
+  @ApiPropertyOptional({ example: 0.1, description: 'Minimum sale quantity (kg)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  minSaleQty?: number;
+
+  @ApiPropertyOptional({ example: 50, description: 'Maximum sale quantity (kg)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  maxSaleQty?: number;
 }

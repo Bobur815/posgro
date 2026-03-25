@@ -104,6 +104,11 @@ export interface ProductCreateInput {
   discountPercent?: number;
   isOnPromotion?: boolean;
   mxik?: string;
+  productType?: ProductType;
+  internalCode?: string;
+  bulkQuantity?: number;
+  minSaleQty?: number;
+  maxSaleQty?: number;
 }
 
 export interface ProductUpdateInput {
@@ -125,6 +130,11 @@ export interface ProductUpdateInput {
   discountPercent?: number;
   isOnPromotion?: boolean;
   mxik?: string;
+  productType?: ProductType;
+  internalCode?: string;
+  bulkQuantity?: number;
+  minSaleQty?: number;
+  maxSaleQty?: number;
 }
 
 export interface ProductSearchQuery {

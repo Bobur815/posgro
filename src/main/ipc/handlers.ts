@@ -3,6 +3,7 @@ import { setupAuthHandlers } from "./auth-handlers";
 import { setupProductsHandlers } from "./products-handlers";
 import { setupSalesHandlers } from "./sales-handlers";
 import { setupWeighedItemsHandlers } from "./weighed-items-handlers";
+import { setupScaleHandlers } from "./scale-handlers";
 import { getAppConfig } from "../config/app-config";
 import { getAuthToken, getServerToken } from "../sync/queue-manager";
 import { getPrismaClient } from "../database/sqlite-client";
@@ -18,6 +19,7 @@ export function setupIpcHandlers(): void {
   setupProductsHandlers();
   setupSalesHandlers();
   setupWeighedItemsHandlers();
+  setupScaleHandlers();
   setupCategoriesHandlers();
   setupInventoryHandlers();
   setupSuppliersHandlers();
