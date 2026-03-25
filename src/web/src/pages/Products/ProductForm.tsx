@@ -44,6 +44,14 @@ const Row = styled.div`
   }
 `;
 
+const ThreeColRow = styled(Row)`
+  grid-template-columns: 1fr 1fr 1fr;
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
 const Actions = styled.div`
   display: flex;
   gap: ${({ theme }) => theme.spacing.md};
@@ -198,6 +206,7 @@ interface ProductFormProps {
     mxik?: string;
     cost?: number;
     stock?: number;
+    internalCode?: string;
   };
   onClose: () => void;
   onSuccess: () => void;
@@ -249,6 +258,7 @@ export function ProductForm({
     active: true,
     mxik: initialData?.mxik || "",
     productType: "REGULAR" as ProductType,
+    internalCode: initialData?.internalCode || "",
   });
 
   const [existingProduct, setExistingProduct] = useState<Product | null>(null);
@@ -451,6 +461,7 @@ export function ProductForm({
         active: product.isActive,
         mxik: product.mxik || "",
         productType: product.productType || "REGULAR",
+        internalCode: product.internalCode || "",
       });
     }
   };
@@ -478,6 +489,7 @@ export function ProductForm({
       active: formData.active,
       mxik: formData.mxik || undefined,
       productType: formData.productType,
+      internalCode: formData.internalCode || undefined,
     };
 
     let success = false;
@@ -542,7 +554,9 @@ export function ProductForm({
               onChange={(e) => handleChange("mxik", e.target.value)}
             />
             <FormGroup>
-              <Label>{t("products.barcode")} <Req>*</Req></Label>
+              <Label>
+                {t("products.barcode")} <Req>*</Req>
+              </Label>
               <div
                 style={{ display: "flex", flexDirection: "row", gap: "8px" }}
               >
@@ -586,13 +600,21 @@ export function ProductForm({
 
           <Row>
             <Input
-              label={<>{t("products.nameUz")} <Req>*</Req></>}
+              label={
+                <>
+                  {t("products.nameUz")} <Req>*</Req>
+                </>
+              }
               value={formData.nameUz}
               onChange={(e) => handleNameUzChange(e.target.value)}
               required
             />
             <Input
-              label={<>{t("products.nameRu")} <Req>*</Req></>}
+              label={
+                <>
+                  {t("products.nameRu")} <Req>*</Req>
+                </>
+              }
               value={formData.nameRu}
               onChange={(e) => handleNameRuChange(e.target.value)}
               required
@@ -601,7 +623,15 @@ export function ProductForm({
 
           <Row>
             <Input
-              label={<>{t("products.price")}{formProfitMargin !== null ? ` (${formProfitMargin}%)` : ""} <Req>*</Req></>}
+              label={
+                <>
+                  {t("products.price")}
+                  {formProfitMargin !== null
+                    ? ` (${formProfitMargin}%)`
+                    : ""}{" "}
+                  <Req>*</Req>
+                </>
+              }
               type="number"
               value={formData.price}
               onChange={(e) => handleChange("price", e.target.value)}
@@ -630,7 +660,7 @@ export function ProductForm({
             />
           </Row>
 
-          <Row style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+          <ThreeColRow>
             <FormGroup>
               <Label>{t("products.productType")}</Label>
               <Select
@@ -639,9 +669,15 @@ export function ProductForm({
                   handleChange("productType", e.target.value as ProductType)
                 }
               >
-                <option value="REGULAR">{t("products.productTypeRegular")}</option>
-                <option value="BULK_WEIGHTED">{t("products.productTypeBulkWeighted")}</option>
-                <option value="PREPACKAGED">{t("products.productTypePrepackaged")}</option>
+                <option value="REGULAR">
+                  {t("products.productTypeRegular")}
+                </option>
+                <option value="BULK_WEIGHTED">
+                  {t("products.productTypeBulkWeighted")}
+                </option>
+                <option value="PREPACKAGED">
+                  {t("products.productTypePrepackaged")}
+                </option>
               </Select>
             </FormGroup>
             <FormGroup>
@@ -658,7 +694,9 @@ export function ProductForm({
               </Select>
             </FormGroup>
             <FormGroup>
-              <Label>{t("products.category")} <Req>*</Req></Label>
+              <Label>
+                {t("products.category")} <Req>*</Req>
+              </Label>
               <div style={{ display: "flex", gap: "8px" }}>
                 <Select
                   value={formData.categoryId}
@@ -684,7 +722,20 @@ export function ProductForm({
                 </Button>
               </div>
             </FormGroup>
-          </Row>
+          </ThreeColRow>
+
+          {formData.productType !== "REGULAR" && (
+            <Row>
+              <Input
+                label={t("products.internalCode")}
+                value={formData.internalCode}
+                placeholder="000001"
+                maxLength={6}
+                onChange={(e) => handleChange("internalCode", e.target.value)}
+              />
+              <div />
+            </Row>
+          )}
 
           <FormGroup>
             <Label>{t("filters.supplier")}</Label>
@@ -861,7 +912,11 @@ export function ProductForm({
 
           <ArrivalForm>
             <Input
-              label={<>{t("inventory.quantity")} <Req>*</Req></>}
+              label={
+                <>
+                  {t("inventory.quantity")} <Req>*</Req>
+                </>
+              }
               type="number"
               autoFocus
               min="0"
@@ -879,7 +934,11 @@ export function ProductForm({
             <FlexRow>
               <div>
                 <Input
-                  label={<>{t("inventory.costPerUnit")} <Req>*</Req></>}
+                  label={
+                    <>
+                      {t("inventory.costPerUnit")} <Req>*</Req>
+                    </>
+                  }
                   type="number"
                   min="0"
                   step="0.01"
