@@ -234,6 +234,7 @@ export function ProductForm({
     active: true,
     mxik: initialData?.mxik || "",
     productType: "REGULAR" as ProductType,
+    internalCode: "",
   });
 
   const [existingProduct, setExistingProduct] = useState<Product | null>(null);
@@ -261,6 +262,17 @@ export function ProductForm({
       loadProduct();
     }
   }, [productId, isEdit]);
+
+  useEffect(() => {
+    if (isEdit) return; // keep existing code when editing
+    if (formData.productType === "REGULAR") {
+      setFormData((prev) => ({ ...prev, internalCode: "" }));
+      return;
+    }
+    window.electronAPI.products.getNextInternalCode().then((code) => {
+      setFormData((prev) => ({ ...prev, internalCode: code }));
+    });
+  }, [formData.productType, isEdit]);
 
   const checkBarcode = useCallback(
     async (barcode: string) => {
@@ -427,6 +439,7 @@ export function ProductForm({
         active: product.isActive,
         mxik: product.mxik || "",
         productType: product.productType || "REGULAR",
+        internalCode: product.internalCode || "",
       });
     }
   };
@@ -454,6 +467,7 @@ export function ProductForm({
       active: formData.active,
       mxik: formData.mxik || undefined,
       productType: formData.productType,
+      internalCode: formData.internalCode || undefined,
     };
 
     let success = false;
@@ -673,6 +687,19 @@ export function ProductForm({
               </div>
             </FormGroup>
           </Row>
+
+          {formData.productType !== "REGULAR" && (
+            <Row>
+              <Input
+                label={t("products.internalCode")}
+                value={formData.internalCode}
+                readOnly
+                style={{ background: "var(--color-surface, #f5f5f5)", cursor: "default" }}
+                onChange={() => {}}
+              />
+              <div />
+            </Row>
+          )}
 
           <FormGroup>
             <Label>{t("filters.supplier")}</Label>

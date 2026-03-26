@@ -1,24 +1,22 @@
 /**
  * Weight Barcode Parser for Rongta RLS Label Scale
  *
- * Rongta RLS scales print EAN-13 barcodes starting with "2".
- * The barcode encodes both the product PLU and the weight.
+ * Rongta RLS scales print EAN-13 barcodes using Barcode Type 15.
+ * The barcode encodes the product LFCode (PLU) and the weight.
  *
- * Standard Format (EAN-13, 13 digits):
- * Position:  0   1 2 3 4 5 6   7 8 9 10 11   12
- * Content:  [2] [P P P P P P] [W W W  W  W] [CHK]
+ * Barcode Type 15 Format (EAN-13, 13 digits):
+ * Position:  0   1 2 3 4 5 6 7   8 9 10 11   12
+ * Content:  [2] [0 P P P P P P] [W W  W  W] [CHK]
  *
- * D0      = "2" (weight item flag)
- * D1–D6   = PLU code (6 digits, zero-padded)  → "000042"
- * D7–D11  = Weight value (5 digits)            → "01500" = 1500g = 1.500 kg
+ * D0      = "2" (dept code / weight item flag)
+ * D1–D7   = LFCode (7 digits) = "0" + 6-digit internalCode → e.g. "0000001"
+ * D8–D11  = Weight value (4 digits, W.WWW kg)  → "1250" = 1.250 kg
  * D12     = EAN-13 check digit (auto)
  *
- * Configure WEIGHT_DECIMAL_PLACES to match your scale's setting.
- * Rongta RLS default is 3 decimal places (grams precision).
+ * We extract internalCode from D2–D7 (skip D1 which is always "0").
  *
- * ⚠️  VERIFY_LATER: Confirm byte positions by printing a test label and
- * reading the 13-digit barcode. If PLU/weight are misread, adjust
- * PLU_END and WEIGHT_START constants below.
+ * Configure WEIGHT_DECIMAL_PLACES to match your scale's setting.
+ * Rongta RLS default is 3 decimal places (0.001 kg precision).
  */
 
 export type WeightUnit = "kg" | "g";
@@ -35,11 +33,11 @@ export interface WeightBarcodeConfig {
   outputUnit: WeightUnit;
 }
 
-// ⚠️  VERIFY_LATER: adjust these if real barcode shows different layout
-const PLU_START = 1;   // inclusive
-const PLU_END = 7;     // exclusive  → digits 1–6 = 6-char PLU ("000042")
-const WEIGHT_START = 7;
-const WEIGHT_END = 12; // exclusive  → digits 7–11 = 5-char weight ("01500")
+// Byte layout per Rongta RLS Barcode Type 15 spec
+const PLU_START = 2;   // inclusive — skip D0 ("2") and D1 (leading "0" of LFCode)
+const PLU_END = 8;     // exclusive → digits 2–7 = 6-char internalCode ("000001")
+const WEIGHT_START = 8;
+const WEIGHT_END = 12; // exclusive → digits 8–11 = 4-char weight ("1250" = 1.250 kg)
 
 export interface ParsedWeightBarcode {
   /** The raw 13-digit barcode string */
@@ -87,8 +85,10 @@ export function isWeightBarcode(barcode: string): boolean {
  * @returns ParsedWeightBarcode or null if the barcode is not a valid weight barcode
  *
  * @example
- * const result = parseWeightBarcode("2000042015001");
- * // result.pluCode    → "000042"
+ * const result = parseWeightBarcode("2000004215002");
+ * // Barcode: 2 | 0000042 | 1500 | 2
+ * //          ↑   LFCode   weight  check
+ * // result.pluCode    → "000042"   (internalCode in DB)
  * // result.pluNumber  → 42
  * // result.weight     → 1.500
  * // result.unit       → "kg"
@@ -100,16 +100,16 @@ export function parseWeightBarcode(
 ): ParsedWeightBarcode | null {
   if (!isWeightBarcode(barcode)) return null;
 
-  // D0 = "2", D1–D6 = PLU (6 chars), D7–D11 = weight (5 chars), D12 = check
-  const pluCode = barcode.substring(PLU_START, PLU_END);       // e.g. "000042"
-  const weightRaw = barcode.substring(WEIGHT_START, WEIGHT_END); // e.g. "01500"
+  // D0="2", D1–D7=LFCode(7), D8–D11=weight(4), D12=check
+  const pluCode = barcode.substring(PLU_START, PLU_END);         // e.g. "000042" (D2–D7)
+  const weightRaw = barcode.substring(WEIGHT_START, WEIGHT_END); // e.g. "1250" (D8–D11)
 
   const pluNumber = parseInt(pluCode, 10);
   const weightInt = parseInt(weightRaw, 10);
 
   if (isNaN(pluNumber) || isNaN(weightInt)) return null;
 
-  // e.g. 001250 with 3 decimal places → 1250 / 1000 = 1.250 kg
+  // e.g. "1250" with 3 decimal places → 1250 / 1000 = 1.250 kg
   const divisor = Math.pow(10, config.weightDecimalPlaces);
   let weight = weightInt / divisor;
 

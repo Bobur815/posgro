@@ -129,7 +129,6 @@
     "nameUz": "Название (UZ)",
     "price": "Цена",
     "cost": "Себестоимость",
-
     "stock": "Остаток",
     "minStock": "Мин. остаток",
     "category": "Категория",
@@ -141,6 +140,7 @@
     "productTypeRegular": "Обычный",
     "productTypeBulkWeighted": "Весовой",
     "productTypePrepackaged": "Фасованный",
+    "internalCode": "Внутренний код (PLU)",
     "addProduct": "Добавить",
     "editProduct": "Редактировать",
     "noProducts": "Товары не найдены",

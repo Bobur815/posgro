@@ -91,6 +91,13 @@ export class ProductsController {
     return this.productsService.findByBarcode(storeId, barcode);
   }
 
+  @Get('next-internal-code')
+  @ApiOperation({ summary: 'Get next auto-generated internalCode (PLU)' })
+  @ApiResponse({ status: 200, description: 'Next internalCode as string' })
+  async getNextInternalCode(@CurrentStore() storeId: string) {
+    return this.productsService.getNextInternalCode(storeId);
+  }
+
   @Post()
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)

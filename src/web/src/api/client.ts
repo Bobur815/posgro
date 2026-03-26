@@ -89,6 +89,10 @@ export const products = {
     );
     return data;
   },
+  getNextInternalCode: async (): Promise<string> => {
+    const { data } = await axiosInstance.get('/products/next-internal-code');
+    return data;
+  },
   create: async (productData: unknown) => {
     const { data } = await axiosInstance.post("/products", productData);
     return data;

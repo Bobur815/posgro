@@ -127,6 +127,11 @@ export function ProductList() {
     { key: "id", header: t("pos.id") },
     { key: "barcode", header: t("products.barcode") },
     {
+      key: "internalCode",
+      header: t("products.internalCode"),
+      render: (product: Product) => product.internalCode || "-",
+    },
+    {
       key: "name",
       header: t("products.name"),
       render: (product: Product) =>

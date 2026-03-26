@@ -343,6 +343,12 @@ export function ProductDetails() {
             <InfoLabel>{t("products.barcode")}</InfoLabel>
             <InfoValue>{product.barcode}</InfoValue>
           </InfoRow>
+          {product.internalCode && (
+            <InfoRow>
+              <InfoLabel>{t("products.internalCode")}</InfoLabel>
+              <InfoValue>{product.internalCode}</InfoValue>
+            </InfoRow>
+          )}
           <InfoRow>
             <InfoLabel>{t("products.nameRu")}</InfoLabel>
             <InfoValue>{product.nameRu}</InfoValue>

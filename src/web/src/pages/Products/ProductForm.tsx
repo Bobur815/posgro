@@ -26,7 +26,7 @@ import { convertUzbekText } from "@shared/utils/transliterator";
 import { Camera, RefreshCw, Settings } from "lucide-react";
 import { SupplierManagementModal } from "../Suppliers/SupplierManagementModal";
 import { CategoryManagementModal } from "./CategoryManagementModal";
-import { inventory } from "../../api/client";
+import { inventory, products as productsApi } from "../../api/client";
 
 const Form = styled.form`
   display: flex;
@@ -287,6 +287,17 @@ export function ProductForm({
       loadProduct();
     }
   }, [productId, isEdit]);
+
+  useEffect(() => {
+    if (isEdit) return;
+    if (formData.productType === "REGULAR") {
+      setFormData((prev) => ({ ...prev, internalCode: "" }));
+      return;
+    }
+    productsApi.getNextInternalCode().then((code) => {
+      setFormData((prev) => ({ ...prev, internalCode: code }));
+    });
+  }, [formData.productType, isEdit]);
 
   const checkBarcode = useCallback(
     async (barcode: string) => {
@@ -729,9 +740,9 @@ export function ProductForm({
               <Input
                 label={t("products.internalCode")}
                 value={formData.internalCode}
-                placeholder="000001"
-                maxLength={6}
-                onChange={(e) => handleChange("internalCode", e.target.value)}
+                readOnly
+                style={{ background: "var(--color-surface, #f5f5f5)", cursor: "default" }}
+                onChange={() => {}}
               />
               <div />
             </Row>

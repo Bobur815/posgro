@@ -318,6 +318,7 @@ export function setupProductsHandlers(): void {
         isOnPromotion: data.isOnPromotion ?? false,
         mxik: data.mxik || null,
         productType: data.productType || "REGULAR",
+        internalCode: data.internalCode || null,
         active: true,
       },
       include: { category: true, supplier: true },
@@ -404,6 +405,9 @@ export function setupProductsHandlers(): void {
       if (data.productType !== undefined) {
         updateData.productType = data.productType;
       }
+      if (data.internalCode !== undefined) {
+        updateData.internalCode = data.internalCode || null;
+      }
 
       const product = await prisma.product.update({
         where: { id: numericId },
@@ -470,6 +474,19 @@ export function setupProductsHandlers(): void {
       return ipcSafe(serializeProduct(product));
     },
   );
+
+  ipcMain.handle("products:getNextInternalCode", async () => {
+    const prisma = getPrismaClient();
+    const rows = await prisma.product.findMany({
+      where: { internalCode: { not: null } },
+      select: { internalCode: true },
+    });
+    const max = rows.reduce((acc, r) => {
+      const n = parseInt(r.internalCode ?? "0", 10);
+      return n > acc ? n : acc;
+    }, 0);
+    return String(max + 1).padStart(6, "0");
+  });
 
   // Product analytics API
   ipcMain.handle(

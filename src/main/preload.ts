@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("products:getByBarcode", barcode),
     findByInternalCode: (internalCode: string) =>
       ipcRenderer.invoke("products:findByInternalCode", internalCode),
+    getNextInternalCode: () =>
+      ipcRenderer.invoke("products:getNextInternalCode"),
     create: (data: unknown) => ipcRenderer.invoke("products:create", data),
     update: (id: string, data: unknown) =>
       ipcRenderer.invoke("products:update", id, data),
@@ -221,6 +223,7 @@ declare global {
         getById: (id: string) => Promise<unknown>;
         getByBarcode: (barcode: string) => Promise<unknown>;
         findByInternalCode: (internalCode: string) => Promise<unknown>;
+        getNextInternalCode: () => Promise<string>;
         create: (data: unknown) => Promise<unknown>;
         update: (id: string, data: unknown) => Promise<unknown>;
         delete: (id: string) => Promise<boolean>;

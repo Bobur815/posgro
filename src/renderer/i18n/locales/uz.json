@@ -128,6 +128,7 @@
     "productTypeRegular": "Oddiy",
     "productTypeBulkWeighted": "Vazn bo'yicha",
     "productTypePrepackaged": "Qadoqlangan",
+    "internalCode": "Ichki kod (PLU)",
     "add": "Qo'shish",
     "edit": "Tahrirlash",
     "addProduct": "Qo'shish",

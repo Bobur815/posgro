@@ -21,6 +21,7 @@ export const products = {
   getByBarcode: (barcode: string) => ipc?.products.getByBarcode(barcode),
   findByInternalCode: (internalCode: string) =>
     ipc?.products.findByInternalCode(internalCode),
+  getNextInternalCode: () => ipc?.products.getNextInternalCode(),
   create: (data: unknown) => ipc?.products.create(data),
   update: (id: string, data: unknown) => ipc?.products.update(id, data),
   delete: (id: string) => ipc?.products.delete(id),

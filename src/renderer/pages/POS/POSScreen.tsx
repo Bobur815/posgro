@@ -497,7 +497,7 @@ export function POSScreen() {
           );
         } else {
           // No pre-weighed item — parse as Rongta RLS label scan
-          // (PLU in digits 1–5, weight in digits 6–11)
+          // (LFCode in digits 1–7, internalCode extracted from digits 2–7, weight in digits 8–11)
           const rongtaParsed = parseWeightBarcode(barcodeValue);
           if (!rongtaParsed) {
             setBarcode("");

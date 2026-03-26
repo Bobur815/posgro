@@ -48,6 +48,18 @@ export class ProductsService {
     });
   }
 
+  async getNextInternalCode(storeId: string): Promise<string> {
+    const rows = await this.prisma.product.findMany({
+      where: { storeId, internalCode: { not: null } },
+      select: { internalCode: true },
+    });
+    const max = rows.reduce((acc, r) => {
+      const n = parseInt(r.internalCode ?? '0', 10);
+      return n > acc ? n : acc;
+    }, 0);
+    return String(max + 1).padStart(6, '0');
+  }
+
   async search(storeId: string, query: string) {
     const searchQuery = query.toLowerCase();
 
