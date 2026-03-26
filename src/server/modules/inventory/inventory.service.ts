@@ -68,13 +68,33 @@ export class InventoryService {
       },
     });
 
-    // Update product stock and cost
+    // Build product update: always update stock and cost
+    const productUpdate: Record<string, unknown> = {
+      stock: { increment: createArrivalDto.quantity },
+      cost: createArrivalDto.cost,
+    };
+
+    if (createArrivalDto.productionDate) {
+      productUpdate.productionDate = new Date(createArrivalDto.productionDate);
+    }
+    if (createArrivalDto.expiryDate) {
+      productUpdate.expiryDate = new Date(createArrivalDto.expiryDate);
+    }
+
+    if (createArrivalDto.priceMode === 'immediate' && createArrivalDto.newPrice != null) {
+      productUpdate.price = createArrivalDto.newPrice;
+      // Clear any pending price since we're applying immediately
+      productUpdate.pendingPrice = null;
+      productUpdate.pendingPriceThreshold = null;
+    } else if (createArrivalDto.priceMode === 'deferred' && createArrivalDto.newPrice != null) {
+      // Price will apply after current stock sells down
+      productUpdate.pendingPrice = createArrivalDto.newPrice;
+      productUpdate.pendingPriceThreshold = product.stock;
+    }
+
     await this.prisma.product.update({
       where: { id: createArrivalDto.productId },
-      data: {
-        stock: { increment: createArrivalDto.quantity },
-        cost: createArrivalDto.cost,
-      },
+      data: productUpdate,
     });
 
     return arrival;

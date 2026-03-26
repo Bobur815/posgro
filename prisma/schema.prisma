@@ -102,10 +102,12 @@ model Product {
   supplier        Supplier? @relation("ProductSupplier", fields: [supplierId], references: [id])
   productionDate  DateTime? @map("production_date")
   expiryDate      DateTime? @map("expiry_date")
-  discountPercent Decimal?  @default(0) @db.Decimal(5, 2) @map("discount_percent")
-  isOnPromotion   Boolean   @default(false) @map("is_on_promotion")
-  mxik            String?   @map("mxik") // Uzbekistan national catalog code (nullable, non-unique — multiple products can share one MXIK)
-  active          Boolean  @default(true)
+  discountPercent        Decimal?  @default(0) @db.Decimal(5, 2) @map("discount_percent")
+  isOnPromotion          Boolean   @default(false) @map("is_on_promotion")
+  mxik                   String?   @map("mxik") // Uzbekistan national catalog code (nullable, non-unique — multiple products can share one MXIK)
+  active                 Boolean   @default(true)
+  pendingPrice           Decimal?  @db.Decimal(10, 2) @map("pending_price")
+  pendingPriceThreshold  Decimal?  @db.Decimal(10, 3) @map("pending_price_threshold")
 
   // Weighted product fields
   // productType: REGULAR | BULK_WEIGHTED | PREPACKAGED

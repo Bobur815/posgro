@@ -3,6 +3,7 @@ import {
   IsNumber,
   IsInt,
   IsOptional,
+  IsIn,
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -45,4 +46,26 @@ export class CreateArrivalDto {
   @IsOptional()
   @IsString()
   createdBy?: string;
+
+  @ApiPropertyOptional({ example: 29000, description: 'New selling price to apply' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  newPrice?: number;
+
+  @ApiPropertyOptional({ example: 'immediate', enum: ['immediate', 'deferred'], description: 'When to apply the new price' })
+  @IsOptional()
+  @IsIn(['immediate', 'deferred'])
+  priceMode?: 'immediate' | 'deferred';
+
+  @ApiPropertyOptional({ example: '2026-01-01', description: 'Production date (ISO string)' })
+  @IsOptional()
+  @IsString()
+  productionDate?: string;
+
+  @ApiPropertyOptional({ example: '2027-01-01', description: 'Expiry date (ISO string)' })
+  @IsOptional()
+  @IsString()
+  expiryDate?: string;
 }
