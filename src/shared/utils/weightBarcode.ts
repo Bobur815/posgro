@@ -1,22 +1,24 @@
 /**
  * Weight Barcode Parser for Rongta RLS Label Scale
  *
- * Rongta RLS scales print EAN-13 barcodes using Barcode Type 15.
- * The barcode encodes the product LFCode (PLU) and the weight.
+ * Confirmed layout from real labels:
+ *   "2500008903160" → product ID 89, weight 0.316 kg
+ *   "2500008522583" → product ID 85, weight 2.258 kg
  *
- * Barcode Type 15 Format (EAN-13, 13 digits):
- * Position:  0   1 2 3 4 5 6 7   8 9 10 11   12
- * Content:  [2] [0 P P P P P P] [W W  W  W] [CHK]
+ * EAN-13 format (13 digits):
+ * Position:  0   1   2 3 4 5 6 7   8 9 10 11   12
+ * Content:  [2] [S] [P P P P P P] [W W  W  W] [CHK]
  *
- * D0      = "2" (dept code / weight item flag)
- * D1–D7   = LFCode (7 digits) = "0" + 6-digit internalCode → e.g. "0000001"
- * D8–D11  = Weight value (4 digits, W.WWW kg)  → "1250" = 1.250 kg
- * D12     = EAN-13 check digit (auto)
+ * D0      = "2"   — weight-item flag (always 2)
+ * D1      = "S"   — section digit set in RLS1000 (0–9, varies)
+ * D2–D7   = "PPPPPP" — SQLite product ID, 6 digits zero-padded → "000089"
+ * D8–D11  = "WWWW"   — weight, 4 digits, W.WWW kg             → "0316" = 0.316 kg
+ * D12     = EAN-13 check digit
  *
- * We extract internalCode from D2–D7 (skip D1 which is always "0").
+ * In RLS1000: set Fresh Code = SQLite product ID (e.g. product 89 → Fresh Code 89).
+ * Lookup: productIdNum → products.getById(productIdNum)
  *
- * Configure WEIGHT_DECIMAL_PLACES to match your scale's setting.
- * Rongta RLS default is 3 decimal places (0.001 kg precision).
+ * Configure weightDecimalPlaces to match your scale setting (default: 3).
  */
 
 export type WeightUnit = "kg" | "g";
@@ -33,21 +35,21 @@ export interface WeightBarcodeConfig {
   outputUnit: WeightUnit;
 }
 
-// Byte layout per Rongta RLS Barcode Type 15 spec
-const PLU_START = 2;   // inclusive — skip D0 ("2") and D1 (leading "0" of LFCode)
-const PLU_END = 8;     // exclusive → digits 2–7 = 6-char internalCode ("000001")
+// Confirmed byte layout from real Rongta RLS label (barcode "2500008522583")
+const PLU_START = 2;   // inclusive — skip D0 (flag "2") and D1 (section digit)
+const PLU_END = 8;     // exclusive → digits 2–7 = 6-char goods code ("000085")
 const WEIGHT_START = 8;
-const WEIGHT_END = 12; // exclusive → digits 8–11 = 4-char weight ("1250" = 1.250 kg)
+const WEIGHT_END = 12; // exclusive → digits 8–11 = 4-char weight ("2258" = 2.258 kg)
 
 export interface ParsedWeightBarcode {
   /** The raw 13-digit barcode string */
   raw: string;
 
-  /** PLU code to look up in your products table (matches internalCode in DB) */
-  pluCode: string;
+  /** Product ID encoded in barcode (D2–D7), zero-padded, e.g. "000089" for product ID 89 */
+  productId: string;
 
-  /** Numeric PLU (without leading zeros) */
-  pluNumber: number;
+  /** Numeric product ID, e.g. 89 — use this to look up the product in the DB */
+  productIdNum: number;
 
   /** Weight in the configured output unit */
   weight: number;
@@ -85,14 +87,14 @@ export function isWeightBarcode(barcode: string): boolean {
  * @returns ParsedWeightBarcode or null if the barcode is not a valid weight barcode
  *
  * @example
- * const result = parseWeightBarcode("2000004215002");
- * // Barcode: 2 | 0000042 | 1500 | 2
- * //          ↑   LFCode   weight  check
- * // result.pluCode    → "000042"   (internalCode in DB)
- * // result.pluNumber  → 42
- * // result.weight     → 1.500
- * // result.unit       → "kg"
- * // result.weightDisplay → "1.500 kg"
+ * // Real label: goods code 85, section 5, weight 2.258 kg
+ * const result = parseWeightBarcode("2500008522583");
+ * // D0='2' D1='5' D2–D7='000085' D8–D11='2258' D12='3'
+ * // result.productId     → "000085"   (zero-padded product ID)
+ * // result.productIdNum  → 85        (use for DB lookup: products.getById(85))
+ * // result.weight        → 2.258
+ * // result.unit          → "kg"
+ * // result.weightDisplay → "2.258 kg"
  */
 export function parseWeightBarcode(
   barcode: string,
@@ -100,14 +102,14 @@ export function parseWeightBarcode(
 ): ParsedWeightBarcode | null {
   if (!isWeightBarcode(barcode)) return null;
 
-  // D0="2", D1–D7=LFCode(7), D8–D11=weight(4), D12=check
-  const pluCode = barcode.substring(PLU_START, PLU_END);         // e.g. "000042" (D2–D7)
-  const weightRaw = barcode.substring(WEIGHT_START, WEIGHT_END); // e.g. "1250" (D8–D11)
+  // D0="2"(flag), D1=section, D2–D7=goods code(6), D8–D11=weight(4), D12=check
+  const productId = barcode.substring(PLU_START, PLU_END);         // e.g. "000089" (D2–D7)
+  const weightRaw = barcode.substring(WEIGHT_START, WEIGHT_END);  // e.g. "0316" (D8–D11)
 
-  const pluNumber = parseInt(pluCode, 10);
+  const productIdNum = parseInt(productId, 10);
   const weightInt = parseInt(weightRaw, 10);
 
-  if (isNaN(pluNumber) || isNaN(weightInt)) return null;
+  if (isNaN(productIdNum) || isNaN(weightInt)) return null;
 
   // e.g. "1250" with 3 decimal places → 1250 / 1000 = 1.250 kg
   const divisor = Math.pow(10, config.weightDecimalPlaces);
@@ -124,8 +126,8 @@ export function parseWeightBarcode(
 
   return {
     raw: barcode,
-    pluCode,
-    pluNumber,
+    productId,
+    productIdNum,
     weight,
     unit: config.outputUnit,
     weightDisplay,
@@ -162,11 +164,15 @@ export function validateEan13CheckDigit(barcode: string): boolean {
 }
 
 /**
- * Formats a PLU number into a 6-digit zero-padded string
+ * Formats a goods code number into a 6-digit zero-padded string
  * matching the internalCode field in the products table.
  * @example
- * formatPlu(42) → "000042"
+ * formatGoodsCode(85) → "000085"
+ * formatGoodsCode(1)  → "000001"
  */
-export function formatPlu(plu: number): string {
-  return String(plu).padStart(6, "0");
+export function formatGoodsCode(code: number): string {
+  return String(code).padStart(6, "0");
 }
+
+/** @deprecated use formatGoodsCode */
+export const formatPlu = formatGoodsCode;

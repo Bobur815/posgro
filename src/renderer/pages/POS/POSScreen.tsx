@@ -497,7 +497,7 @@ export function POSScreen() {
           );
         } else {
           // No pre-weighed item — parse as Rongta RLS label scan
-          // (LFCode in digits 1–7, internalCode extracted from digits 2–7, weight in digits 8–11)
+          // D2–D7 = SQLite product ID, D8–D11 = weight (kg × 1000)
           const rongtaParsed = parseWeightBarcode(barcodeValue);
           if (!rongtaParsed) {
             setBarcode("");
@@ -515,8 +515,8 @@ export function POSScreen() {
             return;
           }
 
-          const product = (await window.electronAPI.products.findByInternalCode(
-            rongtaParsed.pluCode,
+          const product = (await window.electronAPI.products.getById(
+            String(rongtaParsed.productIdNum),
           )) as Product | null;
 
           if (product) {
@@ -539,7 +539,7 @@ export function POSScreen() {
             setBarcode("");
             setId("");
             setQuantity("1");
-            setError(t("pos.pluNotFound", { plu: rongtaParsed.pluCode }));
+            setError(t("pos.pluNotFound", { plu: rongtaParsed.productId }));
           }
         }
         return;

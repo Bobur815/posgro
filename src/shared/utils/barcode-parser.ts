@@ -1,14 +1,21 @@
 /**
- * EAN-13 weighted barcode parser and generator.
+ * EAN-13 barcode parser and generator for INTERNAL pre-weighed labels.
  *
- * Format (prefix 20–29 = weighted):
+ * ⚠️  This format is used only for labels printed by this app (BulkWeighModal).
+ *     Rongta RLS scale barcodes use a different layout — see weightBarcode.ts.
+ *
+ * Internal pre-weighed label format (prefix 20–29 = weighted):
  *   Digits 0–1:  prefix (e.g. "20")
  *   Digits 2–6:  5-digit internal product code
  *   Digits 7–11: 5-digit weight in grams (e.g. 01500 = 1.500 kg)
  *   Digit 12:    EAN-13 check digit
  *
- * Example: 2000001015000
- *   prefix=20, code=00001, weight=01500g (1.5kg)
+ * Scale barcode format (confirmed from real Rongta RLS label):
+ *   Digit  0:    "2" (weight flag)
+ *   Digit  1:    section digit (0–9)
+ *   Digits 2–7:  6-digit goods code (e.g. "000085")
+ *   Digits 8–11: 4-digit weight in 1/1000 kg (e.g. "2258" = 2.258 kg)
+ *   Digit 12:    EAN-13 check digit
  */
 
 export interface ParsedBarcode {

@@ -36,29 +36,30 @@ How to capture:
 
 ---
 
-## 3. Barcode Byte Positions
+## 3. Barcode Byte Positions ✅ RESOLVED
 
-**When:** After printing one real test label from the scale
-**File:** `src/shared/utils/weightBarcode.ts` ~line 40:
+**Confirmed** from real label: barcode `2500008522583` (goods code 85, section 5, 2.258 kg)
 
-```ts
-const PLU_START = 1; // ← adjust if PLU is at different position
-const PLU_END = 7; // ← adjust (currently assumes 6-digit PLU)
-const WEIGHT_START = 7; // ← adjust
-const WEIGHT_END = 12; // ← adjust (currently assumes 5-digit weight)
+```
+D0='2'  D1='5'  D2–D7='000085'  D8–D11='2258'  D12='3'
+flag    section  goods code       weight(kg)      check
 ```
 
-How to verify:
+Constants in `src/shared/utils/weightBarcode.ts`:
+```ts
+const PLU_START = 2;    // skip flag + section
+const PLU_END = 8;      // 6-digit goods code at D2–D7
+const WEIGHT_START = 8; // 4-digit weight at D8–D11
+const WEIGHT_END = 12;
+```
 
-1. Program PLU `000001` on the scale
-2. Put any item on the scale, print a label
-3. Read the 13-digit barcode number from the label
-4. The number should look like: `2` `000001` `WWWWW` `C`
-   - Position 0: `2`
-   - Positions 1–6: your PLU (`000001`)
-   - Positions 7–11: weight in grams (e.g. `01500` = 1.500 kg)
-   - Position 12: EAN-13 check digit
-5. If the layout is different, update the four constants above
+Rule: Fresh Code in RLS1000 = SQLite product ID (e.g. product ID 89 → Fresh Code 89).
+Barcode encodes the product ID, NOT internalCode or PLU hotkey number.
+Lookup: `products.getById(productIdNum)`
+
+Confirmed barcodes:
+  "2500008903160" → product ID 89 (Banan), weight 0.316 kg
+  "2500008522583" → product ID 85, weight 2.258 kg
 
 ---
 

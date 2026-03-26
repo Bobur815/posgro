@@ -72,6 +72,7 @@ export function ProductList() {
     loadProducts,
     loadCategories,
     loadSuppliers,
+    deleteProduct,
     isLoading,
   } = useProducts();
   const [searchQuery, setSearchQuery] = useState("");
@@ -117,6 +118,12 @@ export function ProductList() {
 
   const formatCurrency = (amount: number) =>
     formatCurrencyBase(amount, i18n.language as "ru" | "uz");
+
+  const handleDelete = async (product: Product) => {
+    if (!window.confirm(t("common.confirmDelete"))) return;
+    const success = await deleteProduct(String(product.id));
+    if (success) loadProducts();
+  };
 
   const columns = [
     {
@@ -201,7 +208,7 @@ export function ProductList() {
             variant="danger"
             size="small"
             tooltip={t("common.delete")}
-            onClick={() => navigate(`/products/${product.id}/delete`)}
+            onClick={() => handleDelete(product)}
           >
             <Trash size={18} />
           </Button>
@@ -346,7 +353,7 @@ export function ProductList() {
                     variant="danger"
                     size="small"
                     tooltip={t("common.delete")}
-                    onClick={() => navigate(`/products/${product.id}/delete`)}
+                    onClick={() => handleDelete(product)}
                   >
                     <Trash size={16} />
                   </Button>

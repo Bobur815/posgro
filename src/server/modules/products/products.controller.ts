@@ -76,14 +76,6 @@ export class ProductsController {
     return this.productsService.getAnalytics(id, storeId, start, end);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get product by ID' })
-  @ApiResponse({ status: 200, description: 'Product details' })
-  @ApiResponse({ status: 404, description: 'Product not found' })
-  async findOne(@CurrentStore() storeId: string, @Param('id', ParseIntPipe) id: number) {
-    return this.productsService.findById(id, storeId);
-  }
-
   @Get('barcode/:barcode')
   @ApiOperation({ summary: 'Get product by barcode' })
   @ApiResponse({ status: 200, description: 'Product details' })
@@ -96,6 +88,14 @@ export class ProductsController {
   @ApiResponse({ status: 200, description: 'Next internalCode as string' })
   async getNextInternalCode(@CurrentStore() storeId: string) {
     return this.productsService.getNextInternalCode(storeId);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get product by ID' })
+  @ApiResponse({ status: 200, description: 'Product details' })
+  @ApiResponse({ status: 404, description: 'Product not found' })
+  async findOne(@CurrentStore() storeId: string, @Param('id', ParseIntPipe) id: number) {
+    return this.productsService.findById(id, storeId);
   }
 
   @Post()
