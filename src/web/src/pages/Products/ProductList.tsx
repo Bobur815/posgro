@@ -297,6 +297,13 @@ export function ProductList() {
             subtitle={product.barcode}
             fields={[
               {
+                label: t("pos.id") + " (kod)",
+                value: product.id,
+              },
+              ...(product.internalCode
+                ? [{ label: t("products.internalCode") + " (PLU)", value: product.internalCode }]
+                : []),
+              {
                 label: t("products.price"),
                 value: formatCurrency(product.price),
               },

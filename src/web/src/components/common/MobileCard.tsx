@@ -1,5 +1,5 @@
-import React from 'react';
-import styled from 'styled-components';
+import React from "react";
+import styled from "styled-components";
 
 export interface MobileCardField {
   label: string;
@@ -69,7 +69,12 @@ const CardActions = styled.div`
   flex-wrap: wrap;
 `;
 
-export function MobileCard({ title, subtitle, fields, actions }: MobileCardProps) {
+export function MobileCard({
+  title,
+  subtitle,
+  fields,
+  actions,
+}: MobileCardProps) {
   return (
     <Card>
       <CardTitle>{title}</CardTitle>
