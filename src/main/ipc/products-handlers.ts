@@ -374,7 +374,7 @@ export function setupProductsHandlers(): void {
       if (data.nameRu !== undefined) updateData.nameRu = data.nameRu;
       if (data.price !== undefined) updateData.price = data.price;
       if (data.cost !== undefined) updateData.cost = data.cost;
-      if (data.stock !== undefined) updateData.stock = data.stock;
+      if (data.stock !== undefined) updateData.stock = data.stock ?? 0;
       if (data.minStock !== undefined) updateData.minStock = data.minStock;
       if (data.unit !== undefined) updateData.unit = data.unit;
       if (data.categoryId !== undefined)

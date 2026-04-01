@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
@@ -12,6 +14,15 @@ const Container = styled.div`
   flex-direction: column;
   gap: ${({ theme }) => theme.spacing.lg};
 `;
+
+const Header = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.md};
+  padding-left: 25px;
+`;
+
+const BackButton = styled(Button)``;
 
 const Title = styled.h1`
   margin: 0;
@@ -86,6 +97,7 @@ const Actions = styled.div`
 
 export function ReceiptSettings() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   const [settings, setSettings] = useState<ReceiptSettingsType>({
     receipt_width: '80',
@@ -150,7 +162,12 @@ export function ReceiptSettings() {
 
   return (
     <Container>
-      <Title>{t('receipt.title')}</Title>
+      <Header>
+        <BackButton variant="secondary" size="small" onClick={() => navigate('/settings')}>
+          <ArrowLeft size={20} />
+        </BackButton>
+        <Title>{t('receipt.title')}</Title>
+      </Header>
 
       <ContentLayout>
         {/* Left panel — Settings */}

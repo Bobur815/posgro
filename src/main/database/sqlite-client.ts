@@ -3,7 +3,9 @@ import path from 'path';
 import { app } from 'electron';
 import fs from 'fs';
 
-// Resolve prisma client path relative to app root
+// Resolve prisma client path relative to app root.
+// In production the JS files live inside app.asar; the .node binary is unpacked to
+// app.asar.unpacked/ via asarUnpack and Electron redirects require() transparently.
 const prismaClientPath = path.join(app.getAppPath(), 'src', 'generated', 'prisma-sqlite');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { PrismaClient } = require(prismaClientPath);
@@ -30,7 +32,6 @@ export async function initializeDatabase(): Promise<void> {
     fs.mkdirSync(dbDir, { recursive: true });
   }
 
-  console.log(`Initializing database at: ${dbPath}`);
 
   // Set environment variable for Prisma
   process.env.DATABASE_URL = `file:${dbPath}`;
@@ -48,7 +49,6 @@ export async function initializeDatabase(): Promise<void> {
   // Test connection and create schema
   try {
     await prisma.$connect();
-    console.log(`Database connected: ${dbPath}`);
 
     // Create tables if they don't exist
     await createSchemaIfNeeded(prisma);
@@ -67,7 +67,6 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
     SELECT name FROM sqlite_master WHERE type='table' AND name='local_config'
   `;
   if (rows.length > 0) return; // Tables already exist
-  console.log('Creating database schema...');
 
   // Create all tables with updated schema
   await prisma.$executeRaw`
@@ -270,7 +269,6 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_sync_queue_entity ON sync_queue(entity)`;
 
-  console.log('Database schema created');
 }
 
 async function runMigrations(prisma: PrismaClientType): Promise<void> {
@@ -278,73 +276,59 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   try {
     await prisma.$queryRaw`SELECT store_pin FROM local_config LIMIT 1`;
   } catch {
-    console.log('Running migration: Adding store_pin column to local_config table...');
     await prisma.$executeRaw`ALTER TABLE local_config ADD COLUMN store_pin TEXT`;
-    console.log('Migration completed: store_pin column added');
   }
 
   // Migration 2: Add new product fields if they don't exist
   try {
     await prisma.$queryRaw`SELECT supplier_id FROM products LIMIT 1`;
   } catch {
-    console.log('Running migration: Adding new product fields...');
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN supplier_id TEXT`;
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN expiry_date DATETIME`;
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN discount_percent REAL DEFAULT 0`;
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN is_on_promotion INTEGER DEFAULT 0`;
-    console.log('Migration completed: New product fields added');
   }
 
   // Migration 3: Add pending price fields for deferred price changes
   try {
     await prisma.$queryRaw`SELECT pending_price FROM products LIMIT 1`;
   } catch {
-    console.log('Running migration: Adding pending price fields...');
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN pending_price REAL`;
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN pending_price_threshold REAL`;
-    console.log('Migration completed: Pending price fields added');
   }
 
   // Migration 4: Add mxik column for tax classification code
   try {
     await prisma.$queryRaw`SELECT mxik FROM products LIMIT 1`;
   } catch {
-    console.log('Running migration: Adding mxik column to products...');
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN mxik TEXT`;
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_products_mxik ON products(mxik)`;
-    console.log('Migration completed: mxik column added');
   }
 
   // Migration 5: Add weighted product fields
   try {
     await prisma.$queryRaw`SELECT product_type FROM products LIMIT 1`;
   } catch {
-    console.log('Running migration: Adding weighted product fields...');
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN product_type TEXT DEFAULT 'REGULAR'`;
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN internal_code TEXT`;
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN bulk_quantity REAL DEFAULT 0`;
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN min_sale_qty REAL DEFAULT 0`;
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN max_sale_qty REAL DEFAULT 0`;
     await prisma.$executeRaw`CREATE UNIQUE INDEX IF NOT EXISTS idx_products_internal_code ON products(internal_code)`;
-    console.log('Migration completed: weighted product fields added');
   }
 
   // Migration 6: Add balance column to suppliers
   try {
     await prisma.$queryRaw`SELECT balance FROM suppliers LIMIT 1`;
   } catch {
-    console.log('Running migration: Adding balance column to suppliers...');
     await prisma.$executeRaw`ALTER TABLE suppliers ADD COLUMN balance REAL DEFAULT 0`;
-    console.log('Migration completed: balance column added to suppliers');
   }
 
   // Migration 7: Add production_date column to products
   try {
     await prisma.$queryRaw`SELECT production_date FROM products LIMIT 1`;
   } catch {
-    console.log('Running migration: Adding production_date column to products...');
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN production_date DATETIME`;
-    console.log('Migration completed: production_date column added to products');
   }
 
   // Migration 10: Deduplicate categories (caused by sync using VPS IDs instead of nameUz)
@@ -353,7 +337,6 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
     WHERE id NOT IN (SELECT MAX(id) FROM categories GROUP BY name_uz)
   `;
   if (dupCount[0]?.cnt > 0) {
-    console.log(`Running migration: Removing ${dupCount[0].cnt} duplicate categories...`);
     // Disable FK checks so we can remap products safely
     await prisma.$executeRaw`PRAGMA foreign_keys = OFF`;
     try {
@@ -371,7 +354,6 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
         DELETE FROM categories
         WHERE id NOT IN (SELECT MAX(id) FROM categories GROUP BY name_uz)
       `;
-      console.log('Migration completed: duplicate categories removed');
     } finally {
       await prisma.$executeRaw`PRAGMA foreign_keys = ON`;
     }
@@ -381,7 +363,6 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   try {
     await prisma.$queryRaw`SELECT 1 FROM pre_weighed_items LIMIT 1`;
   } catch {
-    console.log('Running migration: Creating pre_weighed_items table...');
     await prisma.$executeRaw`
       CREATE TABLE IF NOT EXISTS pre_weighed_items (
         id TEXT PRIMARY KEY,
@@ -400,7 +381,6 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
     `;
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_pre_weighed_barcode ON pre_weighed_items(barcode)`;
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_pre_weighed_status ON pre_weighed_items(status)`;
-    console.log('Migration completed: pre_weighed_items table created');
   }
 }
 
@@ -408,7 +388,6 @@ export async function closeDatabase(): Promise<void> {
   if (prisma) {
     await prisma.$disconnect();
     prisma = null;
-    console.log('Database connection closed');
   }
 }
 

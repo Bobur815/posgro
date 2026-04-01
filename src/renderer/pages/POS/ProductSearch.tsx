@@ -8,9 +8,14 @@ import { ProductFilters } from "../../components/products/ProductFilters";
 import { Product, ProductFilterParams } from "@shared/types";
 import { formatQuantity } from "../../utils/formatters";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
-import { ChevronDown, ChevronUp, Keyboard, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Keyboard, ListFilterPlus, X } from "lucide-react";
 import { VirtualKeyboard } from "../../components/common/VirtualKeyboard";
-import { SearchInputWrapper, InputControls, ClearButton, KbToggle } from "../../components/common/SearchControls";
+import {
+  SearchInputWrapper,
+  InputControls,
+  ClearButton,
+  KbToggle,
+} from "../../components/common/SearchControls";
 import { debounce } from "../../utils/helpers";
 
 const Container = styled.div`
@@ -25,7 +30,7 @@ const Container = styled.div`
 `;
 
 const SearchHeader = styled.div`
-  padding: ${({ theme }) => theme.spacing.md};
+  padding: ${({ theme }) => theme.spacing.sm};
   border-bottom: 1px solid ${({ theme }) => theme.colors.border};
   display: flex;
   flex-direction: column;
@@ -42,7 +47,8 @@ const FilterDropdown = styled.div`
   background-color: ${({ theme }) => theme.colors.surface};
   border: 1px solid ${({ theme }) => theme.colors.border};
   border-top: none;
-  border-radius: 0 0 ${({ theme }) => theme.borderRadius} ${({ theme }) => theme.borderRadius};
+  border-radius: 0 0 ${({ theme }) => theme.borderRadius}
+    ${({ theme }) => theme.borderRadius};
   padding: ${({ theme }) => theme.spacing.md};
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 `;
@@ -55,73 +61,71 @@ const SearchRow = styled.div`
 
 const ProductsGrid = styled.div`
   flex: 1;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(140px, 1fr));
-  align-content: start;
-  gap: ${({ theme }) => theme.spacing.sm};
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   overflow-y: auto;
   padding: ${({ theme }) => theme.spacing.sm};
 `;
 
 const ProductCard = styled.button<{ $lowStock?: boolean }>`
   display: flex;
-  flex-direction: column;
   align-items: center;
-  padding: ${({ theme }) => theme.spacing.md};
+  gap: 8px;
+  padding: 6px 10px;
   background-color: ${({ theme }) => theme.colors.background};
-  border: 1px solid ${({ theme }) => theme.colors.border};
+  border: 1px solid
+    ${({ theme, $lowStock }) =>
+      $lowStock ? theme.colors.warning : theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s;
+  text-align: left;
+  width: 100%;
+  min-height: 42px;
+  flex-shrink: 0;
 
   &:hover {
     border-color: ${({ theme }) => theme.colors.primary};
-    box-shadow: ${({ theme }) => theme.shadows.sm};
-    transform: translateY(-2px);
+    background-color: ${({ theme }) => theme.colors.primary}08;
   }
 
   &:active {
-    transform: translateY(0);
+    background-color: ${({ theme }) => theme.colors.primary}18;
   }
 
   &:disabled {
-    opacity: 0.5;
+    opacity: 0.45;
     cursor: not-allowed;
-    transform: none;
   }
-
-  ${({ $lowStock, theme }) =>
-    $lowStock &&
-    `
-    border-color: ${theme.colors.warning};
-  `}
 `;
 
 const ProductName = styled.span`
+  flex: 1;
   font-weight: 500;
-  text-align: center;
   color: ${({ theme }) => theme.colors.text};
-  margin-bottom: ${({ theme }) => theme.spacing.xs};
-  font-size: 15px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  font-size: 13px;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
   line-height: 1.3;
-  min-height: 34px;
+  min-width: 0;
 `;
 
 const ProductPrice = styled.span`
   color: ${({ theme }) => theme.colors.primary};
   font-weight: bold;
-  font-size: 15px;
+  font-size: 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
 `;
 
 const ProductStock = styled.span<{ $low?: boolean }>`
   font-size: 11px;
   color: ${({ theme, $low }) =>
     $low ? theme.colors.warning : theme.colors.textSecondary};
-  margin-top: ${({ theme }) => theme.spacing.xs};
+  white-space: nowrap;
+  flex-shrink: 0;
 `;
 
 const NoResults = styled.div`
@@ -173,21 +177,23 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
     (filters.promotionStatus && filters.promotionStatus !== "all");
 
   const debouncedSearch = useMemo(
-    () => debounce((query: string, f: ProductFilterParams, active: boolean) => {
-      if (query.trim() || active) {
-        const params: ProductFilterParams = { ...f };
-        if (query.trim()) {
-          params.query = query;
+    () =>
+      debounce((query: string, f: ProductFilterParams, active: boolean) => {
+        if (query.trim() || active) {
+          const params: ProductFilterParams = { ...f };
+          if (query.trim()) {
+            params.query = query;
+          }
+          loadProducts(params);
         }
-        loadProducts(params);
-      }
-    }, 300),
+      }, 300),
     [loadProducts],
   );
 
   useEffect(() => {
     debouncedSearch(searchQuery, filters, !!hasActiveFilters);
   }, [searchQuery, filters, hasActiveFilters, debouncedSearch]);
+
 
   // Refresh products when stock changes (after sale/edit/delete)
   useEffect(() => {
@@ -205,6 +211,7 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
     return () => window.removeEventListener("stock-updated", refresh);
   }, [getTopSelling, searchQuery, hasActiveFilters, filters, loadProducts]);
 
+
   const formatCurrency = (amount: number) =>
     formatCurrencyBase(amount, i18n.language as "ru" | "uz");
 
@@ -217,9 +224,7 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
       setSearchQuery((prev) => prev.slice(0, -1));
       return;
     }
-    if (key === "ENTER") {
-      return;
-    }
+    if (key === "ENTER") return;
     setSearchQuery((prev) => prev + key);
   };
 
@@ -254,12 +259,16 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
                 onClick={() => setKeyboardOpen((prev) => !prev)}
               >
                 <Keyboard size={18} />
-                {keyboardOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                {keyboardOpen ? (
+                  <ChevronUp size={14} />
+                ) : (
+                  <ChevronDown size={14} />
+                )}
               </KbToggle>
             </InputControls>
           </SearchInputWrapper>
           <Button size="medium" onClick={() => setIsFilterOpen(!isFilterOpen)}>
-            {t("filters.filters")}{" "}
+            <ListFilterPlus />
             {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
           </Button>
         </SearchRow>
@@ -291,12 +300,16 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
               $lowStock={product.stock <= product.minStock && product.stock > 0}
             >
               <ProductName>{getProductName(product)}</ProductName>
-              <ProductPrice>{formatCurrency(product.price)}</ProductPrice>
               <ProductStock $low={product.stock <= product.minStock}>
                 {product.stock <= 0
                   ? t("products.outOfStock")
-                  : `${t("products.stock")}: ${formatQuantity(product.stock, product.unit || "шт", i18n.language as "ru" | "uz")}`}
+                  : formatQuantity(
+                      product.stock,
+                      product.unit || "шт",
+                      i18n.language as "ru" | "uz",
+                    )}
               </ProductStock>
+              <ProductPrice>{formatCurrency(product.price)}</ProductPrice>
             </ProductCard>
           ))
         )}
@@ -304,6 +317,7 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
 
       {keyboardOpen && (
         <VirtualKeyboard
+          fixed
           onKeyPress={handleVirtualKeyPress}
           onClose={() => setKeyboardOpen(false)}
         />

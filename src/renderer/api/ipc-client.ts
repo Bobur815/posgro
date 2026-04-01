@@ -89,6 +89,7 @@ export const printer = {
   testPrint: () => ipc?.printer.testPrint(),
   getAvailablePrinters: () => ipc?.printer.getAvailablePrinters(),
   printWeightedLabel: (data: unknown) => ipc?.printer.printWeightedLabel(data),
+  openCashDrawer: () => ipc?.printer.openCashDrawer(),
 };
 
 export const weighedItems = {

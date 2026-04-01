@@ -37,6 +37,7 @@ const Container = styled.div`
 const Header = styled.div`
   display: flex;
   justify-content: space-between;
+  padding-left: 25px;
 `;
 
 const Title = styled.h1`
@@ -250,7 +251,7 @@ export function SupplierList() {
             style={{ fontSize: "26px" }}
             onClick={() => setModalState({ open: true, view: "form" })}
           >
-            <CirclePlus size={24} /> {t("suppliers.addSupplier")}
+            <CirclePlus size={24} /> {t("suppliers.add")}
           </Button>
         </HeaderActions>
       </Header>

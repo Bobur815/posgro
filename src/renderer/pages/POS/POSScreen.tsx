@@ -59,7 +59,7 @@ const Container = styled.div`
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows: 1fr;
-  gap: ${({ theme }) => theme.spacing.md};
+  gap: ${({ theme }) => theme.spacing.sm};
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -69,7 +69,7 @@ const LeftSection = styled.div`
   display: grid;
   grid-template-columns: 1fr minmax(0, 1fr);
   grid-template-rows: 1fr;
-  gap: ${({ theme }) => theme.spacing.md};
+  gap: ${({ theme }) => theme.spacing.sm};
   min-height: 0;
   overflow: hidden;
 `;
@@ -77,7 +77,7 @@ const LeftSection = styled.div`
 const InputSection = styled.div`
   display: flex;
   flex-direction: column;
-  gap: ${({ theme }) => theme.spacing.md};
+  gap: ${({ theme }) => theme.spacing.sm};
 `;
 
 const InputPanel = styled.div`
@@ -96,7 +96,7 @@ const InputLabel = styled.div`
 `;
 
 const InputDisplay = styled.div<{ $active?: boolean }>`
-  font-size: 24px;
+  font-size: 18px;
   font-weight: bold;
   color: ${({ theme }) => theme.colors.text};
   padding: ${({ theme }) => theme.spacing.sm};
@@ -105,7 +105,7 @@ const InputDisplay = styled.div<{ $active?: boolean }>`
     ${({ theme, $active }) =>
       $active ? theme.colors.primary : theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
-  min-height: 48px;
+  min-height: 40px;
   display: flex;
   align-items: center;
   cursor: pointer;
@@ -117,21 +117,27 @@ const NumberPadSection = styled.div`
   border-radius: ${({ theme }) => theme.borderRadius};
   box-shadow: ${({ theme }) => theme.shadows.md};
   padding: ${({ theme }) => theme.spacing.md};
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 `;
 
 const NumberPad = styled.div`
   display: grid;
   grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
   gap: ${({ theme }) => theme.spacing.sm};
+  flex: 1;
 `;
 
 const NumButton = styled.button<{ $variant?: "action" | "clear" | "enter" }>`
-  min-height: 56px;
+  min-height: 0;
   border-radius: ${({ theme }) => theme.borderRadius};
   border: 1px solid ${({ theme }) => theme.colors.border};
   background-color: ${({ theme }) => theme.colors.surface};
   color: ${({ theme }) => theme.colors.text};
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -217,7 +223,7 @@ const InputColumn = styled.div`
   flex-direction: column;
   gap: ${({ theme }) => theme.spacing.sm};
   min-height: 0;
-  overflow-y: auto;
+  height: 100%;
 `;
 
 const InputRow = styled.div`
@@ -233,7 +239,7 @@ const QuickPayRow = styled.div`
 `;
 
 const QuickPayButton = styled.button<{ $variant: "cash" | "card" }>`
-  height: 56px;
+  height: 44px;
   border-radius: ${({ theme }) => theme.borderRadius};
   border: 1px solid
     ${({ theme, $variant }) =>
@@ -241,7 +247,7 @@ const QuickPayButton = styled.button<{ $variant: "cash" | "card" }>`
   background-color: ${({ theme, $variant }) =>
     $variant === "cash" ? theme.colors.success : theme.colors.primary};
   color: white;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -790,7 +796,6 @@ export function POSScreen() {
     setShowCheckout(false);
   };
 
-
   return (
     <PageWrapper>
       <PosTabBar />
@@ -844,7 +849,7 @@ export function POSScreen() {
                   </NumButton>
                 ))}
                 <NumButton $variant="clear" onClick={handleClear}>
-                  <Trash size={30} />
+                  <Trash size={20} />
                 </NumButton>
 
                 {["4", "5", "6"].map((num) => (
@@ -853,7 +858,7 @@ export function POSScreen() {
                   </NumButton>
                 ))}
                 <NumButton $variant="action" onClick={handleBackspace}>
-                  <Delete size={30} />
+                  <Delete size={20} />
                 </NumButton>
 
                 {["1", "2", "3"].map((num) => (
@@ -878,7 +883,7 @@ export function POSScreen() {
                 <NumButton onClick={() => handleNumberClick("0")}>0</NumButton>
                 <NumButton onClick={() => handleNumberClick(".")}>.</NumButton>
                 <NumButton $variant="enter" onClick={handleBarcodeSubmit}>
-                  <SendHorizontal size={30} />
+                  <SendHorizontal size={20} />
                 </NumButton>
               </NumberPad>
             </NumberPadSection>
@@ -898,7 +903,7 @@ export function POSScreen() {
                 onClick={() => handleQuickPay("cash")}
                 disabled={items.length === 0 || isPayingLoading}
               >
-                <Banknote size={24} />
+                <Banknote size={18} />
                 {t("pos.cash")}
                 <ShortcutHint>(F11)</ShortcutHint>
               </QuickPayButton>
@@ -907,7 +912,7 @@ export function POSScreen() {
                 onClick={() => handleQuickPay("card")}
                 disabled={items.length === 0 || isPayingLoading}
               >
-                <CreditCard size={24} />
+                <CreditCard size={18} />
                 {t("pos.card")}
                 <ShortcutHint>(F12)</ShortcutHint>
               </QuickPayButton>
@@ -925,7 +930,6 @@ export function POSScreen() {
             onCancel={() => setShowCheckout(false)}
           />
         )}
-
       </Container>
     </PageWrapper>
   );

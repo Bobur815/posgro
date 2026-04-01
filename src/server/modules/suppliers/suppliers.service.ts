@@ -8,6 +8,13 @@ import { SupplierFilters, SupplierWhereInput } from './types/supplier.types';
 export class SuppliersService {
   constructor(private prisma: PrismaService) {}
 
+  async findByPhoneAnyStore(phone: string) {
+    return this.prisma.supplier.findFirst({
+      where: { phone, active: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   async findAll(storeId: string, filters?: SupplierFilters) {
     const where: SupplierWhereInput = { storeId };
 
@@ -43,6 +50,10 @@ export class SuppliersService {
         transactions: {
           orderBy: { createdAt: 'desc' },
           take: 100,
+        },
+        products: {
+          where: { active: true },
+          orderBy: { nameRu: 'asc' },
         },
       },
     });

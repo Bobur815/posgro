@@ -5,7 +5,6 @@ import styled, { keyframes } from "styled-components";
 import {
   ShoppingCart,
   Package,
-  BarChart3,
   TrendingUp,
   LineChart,
   ClipboardList,
@@ -17,7 +16,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Truck,
-  Scale,
   type LucideIcon,
   ReceiptText,
   RefreshCw,
@@ -26,62 +24,86 @@ import { useAuthStore } from "../../store/auth-store";
 import { useSidebar } from "../../context/SidebarContext";
 import { useSync } from "../../hooks/useSync";
 
-const SIDEBAR_WIDTH = 260;
-const MINI_SIDEBAR_WIDTH = 70;
+const SIDEBAR_WIDTH = 240;
 
-const Container = styled.aside<{ $collapsed: boolean }>`
-  width: ${({ $collapsed }) =>
-    $collapsed ? MINI_SIDEBAR_WIDTH : SIDEBAR_WIDTH}px;
-  min-width: ${({ $collapsed }) =>
-    $collapsed ? MINI_SIDEBAR_WIDTH : SIDEBAR_WIDTH}px;
+const Backdrop = styled.div<{ $visible: boolean }>`
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  background: rgba(0, 0, 0, 0.4);
+  opacity: ${({ $visible }) => ($visible ? 1 : 0)};
+  pointer-events: ${({ $visible }) => ($visible ? "auto" : "none")};
+  transition: opacity 0.25s ease;
+`;
+
+// Fixed shell — always occupies left edge, out of layout flow
+const Container = styled.aside`
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: ${SIDEBAR_WIDTH}px;
+  z-index: 100;
+  pointer-events: none;
+  overflow: visible;
+`;
+
+// Drawer panel — slides in/out via transform
+const SidebarInner = styled.div<{ $collapsed: boolean }>`
+  width: ${SIDEBAR_WIDTH}px;
+  height: 100%;
   background-color: ${({ theme }) => theme.colors.surface};
   border-right: 1px solid ${({ theme }) => theme.colors.border};
   display: flex;
   flex-direction: column;
-  transition:
-    width 0.3s ease,
-    min-width 0.3s ease;
   overflow: hidden;
+  pointer-events: auto;
+  transform: translateX(${({ $collapsed }) => ($collapsed ? "-100%" : "0")});
+  transition: transform 0.25s ease;
+  box-shadow: ${({ $collapsed }) =>
+    $collapsed ? "none" : "4px 0 24px rgba(0,0,0,0.18)"};
 `;
 
-const LogoSection = styled.div<{ $collapsed: boolean }>`
-  padding: ${({ theme }) => theme.spacing.lg};
-  padding-right: ${({ theme, $collapsed }) =>
-    $collapsed ? theme.spacing.lg : theme.spacing.sm};
-  display: flex;
-  align-items: center;
-  justify-content: ${({ $collapsed }) =>
-    $collapsed ? "center" : "space-between"};
-  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
-  min-height: 60px;
-  position: relative;
-`;
-
-const Logo = styled.div<{ $collapsed: boolean }>`
-  font-size: ${({ $collapsed }) => ($collapsed ? "16px" : "20px")};
-  font-weight: bold;
-  color: ${({ theme }) => theme.colors.primary};
-  white-space: nowrap;
-  overflow: hidden;
-`;
-
-const ToggleButton = styled.button`
-  background: none;
-  border: none;
+// Tab that sticks out from the right edge of the drawer
+const ToggleTab = styled.button<{$collapsed: boolean}>`
+  position: absolute;
+  right: ${({ $collapsed }) => ($collapsed ? "215px" : "-26px")};
+  top: 5px;
+  width: 26px;
+  height: 52px;
+  background-color: ${({ theme }) => theme.colors.surface};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-left: none;
+  border-radius: 0 8px 8px 0;
   cursor: pointer;
-  font-size: 24px;
-  padding: 6px;
-  color: ${({ theme }) => theme.colors.textSecondary};
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  pointer-events: auto;
+  box-shadow: 3px 0 8px rgba(0, 0, 0, 0.08);
+  color: ${({ theme }) => theme.colors.textSecondary};
   transition: all 0.2s;
 
   &:hover {
-    background-color: ${({ theme }) => theme.colors.background};
-    color: ${({ theme }) => theme.colors.text};
+    background-color: ${({ theme }) => theme.colors.primary}12;
+    color: ${({ theme }) => theme.colors.primary};
+    border-color: ${({ theme }) => theme.colors.primary}60;
   }
+`;
+
+const LogoSection = styled.div`
+  padding: ${({ theme }) => theme.spacing.md} ${({ theme }) => theme.spacing.lg};
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
+  min-height: 56px;
+`;
+
+const Logo = styled.div`
+  font-size: 18px;
+  font-weight: bold;
+  color: ${({ theme }) => theme.colors.primary};
+  white-space: nowrap;
 `;
 
 const Nav = styled.nav`
@@ -95,23 +117,17 @@ const NavSection = styled.div`
   margin-bottom: ${({ theme }) => theme.spacing.md};
 `;
 
-const SectionTitle = styled.div<{ $collapsed: boolean }>`
-  font-size: 12px;
+const SectionTitle = styled.div`
+  font-size: 11px;
   color: ${({ theme }) => theme.colors.textSecondary};
   text-transform: uppercase;
-  margin-bottom: ${({ $collapsed }) => ($collapsed ? "0" : "8px")};
+  margin-bottom: 6px;
   padding: 0 ${({ theme }) => theme.spacing.sm};
   white-space: nowrap;
-  overflow: hidden;
-  opacity: ${({ $collapsed }) => ($collapsed ? 0 : 1)};
-  max-height: ${({ $collapsed }) => ($collapsed ? "0" : "20px")};
-  transition:
-    opacity 0.2s ease,
-    max-height 0.3s ease,
-    margin-bottom 0.3s ease;
+  letter-spacing: 0.05em;
 `;
 
-const StyledNavLink = styled(NavLink)<{ $collapsed: boolean }>`
+const StyledNavLink = styled(NavLink)`
   display: flex;
   align-items: center;
   gap: ${({ theme }) => theme.spacing.sm};
@@ -120,8 +136,6 @@ const StyledNavLink = styled(NavLink)<{ $collapsed: boolean }>`
   color: ${({ theme }) => theme.colors.text};
   text-decoration: none;
   transition: all 0.2s;
-  justify-content: ${({ $collapsed }) =>
-    $collapsed ? "center" : "flex-start"};
 
   &:hover {
     background-color: ${({ theme }) => theme.colors.background};
@@ -135,24 +149,18 @@ const StyledNavLink = styled(NavLink)<{ $collapsed: boolean }>`
 
 const IconWrapper = styled.span`
   flex-shrink: 0;
-  width: 24px;
+  width: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
 `;
 
-const NavText = styled.span<{ $collapsed: boolean }>`
+const NavText = styled.span`
   white-space: nowrap;
-  overflow: hidden;
-  font-size: 18px;
-  opacity: ${({ $collapsed }) => ($collapsed ? 0 : 1)};
-  max-width: ${({ $collapsed }) => ($collapsed ? "0" : "180px")};
-  transition:
-    opacity 0.2s ease,
-    max-width 0.3s ease;
+  font-size: 15px;
 `;
 
-const BottomSection = styled.div<{ $collapsed: boolean }>`
+const BottomSection = styled.div`
   padding: ${({ theme }) => theme.spacing.md};
   border-top: 1px solid ${({ theme }) => theme.colors.border};
   display: flex;
@@ -160,11 +168,9 @@ const BottomSection = styled.div<{ $collapsed: boolean }>`
   gap: ${({ theme }) => theme.spacing.sm};
 `;
 
-const SyncStatus = styled.div<{ $syncing?: boolean; $collapsed: boolean }>`
+const SyncStatus = styled.div<{ $syncing?: boolean }>`
   display: flex;
   align-items: center;
-  justify-content: ${({ $collapsed }) =>
-    $collapsed ? "center" : "flex-start"};
   gap: ${({ theme }) => theme.spacing.xs};
   font-size: 11px;
   color: ${({ theme, $syncing }) =>
@@ -188,9 +194,8 @@ const SyncButton = styled.button<{ $syncing?: boolean }>`
   color: ${({ theme }) => theme.colors.textSecondary};
   cursor: ${({ $syncing }) => ($syncing ? "default" : "pointer")};
   flex-shrink: 0;
-  transition:
-    color 0.2s,
-    transform 0.1s;
+  margin-left: auto;
+  transition: color 0.2s, transform 0.1s;
 
   &:hover:not(:disabled) {
     color: ${({ theme }) => theme.colors.primary};
@@ -201,29 +206,22 @@ const SyncButton = styled.button<{ $syncing?: boolean }>`
   }
 
   svg {
-    animation: ${({ $syncing }) => ($syncing ? spin : "none")} 1s linear
-      infinite;
+    animation: ${({ $syncing }) => ($syncing ? spin : "none")} 1s linear infinite;
   }
 `;
 
-const SyncText = styled.span<{ $collapsed: boolean }>`
+const SyncText = styled.span`
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  opacity: ${({ $collapsed }) => ($collapsed ? 0 : 1)};
-  max-width: ${({ $collapsed }) => ($collapsed ? "0" : "180px")};
-  transition:
-    opacity 0.2s ease,
-    max-width 0.3s ease;
+  flex: 1;
 `;
 
-const UserSection = styled.div<{ $collapsed: boolean }>`
+const UserSection = styled.div`
   display: flex;
   align-items: center;
   gap: ${({ theme }) => theme.spacing.sm};
   padding: ${({ theme }) => theme.spacing.sm};
-  justify-content: ${({ $collapsed }) =>
-    $collapsed ? "center" : "flex-start"};
 `;
 
 const UserName = styled.span`
@@ -244,19 +242,15 @@ const UserRole = styled.span`
   white-space: nowrap;
 `;
 
-const UserDetails = styled.div<{ $collapsed: boolean }>`
+const UserDetails = styled.div`
   display: flex;
   flex-direction: column;
   gap: 2px;
   overflow: hidden;
-  opacity: ${({ $collapsed }) => ($collapsed ? 0 : 1)};
-  max-width: ${({ $collapsed }) => ($collapsed ? "0" : "180px")};
-  transition:
-    opacity 0.2s ease,
-    max-width 0.3s ease;
+  min-width: 0;
 `;
 
-const LoginButton = styled.button<{ $collapsed: boolean }>`
+const LoginButton = styled.button`
   width: 100%;
   display: flex;
   align-items: center;
@@ -276,7 +270,7 @@ const LoginButton = styled.button<{ $collapsed: boolean }>`
   }
 `;
 
-const LogoutButton = styled.button<{ $collapsed: boolean }>`
+const LogoutButton = styled.button`
   width: 100%;
   display: flex;
   align-items: center;
@@ -288,37 +282,9 @@ const LogoutButton = styled.button<{ $collapsed: boolean }>`
   color: ${({ theme }) => theme.colors.error};
   cursor: pointer;
   transition: all 0.2s;
-  justify-content: ${({ $collapsed }) =>
-    $collapsed ? "center" : "flex-start"};
 
   &:hover {
     background-color: ${({ theme }) => theme.colors.error}10;
-  }
-`;
-
-const Tooltip = styled.span`
-  position: absolute;
-  left: 100%;
-  top: 50%;
-  transform: translateY(-50%);
-  margin-left: 8px;
-  padding: 4px 8px;
-  background-color: ${({ theme }) => theme.colors.text};
-  color: ${({ theme }) => theme.colors.surface};
-  font-size: 12px;
-  border-radius: 4px;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s;
-  z-index: 1000;
-`;
-
-const NavItemWrapper = styled.div`
-  position: relative;
-
-  &:hover ${Tooltip} {
-    opacity: 1;
   }
 `;
 
@@ -326,7 +292,7 @@ export function Sidebar() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { user, isPinLogin, logout } = useAuthStore();
-  const { isCollapsed, toggleSidebar } = useSidebar();
+  const { isCollapsed, toggleSidebar, collapseSidebar } = useSidebar();
   const { status, refreshStatus } = useSync();
   const isAdmin = user?.role === "ADMIN";
 
@@ -359,127 +325,114 @@ export function Sidebar() {
     label: string,
     end?: boolean,
   ) => (
-    <NavItemWrapper>
-      <StyledNavLink to={to} $collapsed={isCollapsed} end={end}>
-        <IconWrapper>
-          <IconComponent size={18} />
-        </IconWrapper>
-        <NavText $collapsed={isCollapsed}>{label}</NavText>
-      </StyledNavLink>
-      {isCollapsed && <Tooltip>{label}</Tooltip>}
-    </NavItemWrapper>
+    <StyledNavLink to={to} end={end} onClick={collapseSidebar}>
+      <IconWrapper>
+        <IconComponent size={17} />
+      </IconWrapper>
+      <NavText>{label}</NavText>
+    </StyledNavLink>
   );
 
   return (
-    <Container $collapsed={isCollapsed}>
-      <LogoSection $collapsed={isCollapsed}>
-        <Logo $collapsed={isCollapsed}>{isCollapsed ? "YA" : "Yangi Asr"}</Logo>
-        <ToggleButton
-          onClick={toggleSidebar}
-          title={isCollapsed ? t("nav.expand") : t("nav.collapse")}
-        >
-          {isCollapsed ? <ChevronRight size={24} /> : <ChevronLeft size={24} />}
-        </ToggleButton>
-      </LogoSection>
+    <>
+      <Backdrop $visible={!isCollapsed} onClick={collapseSidebar} />
+      <Container>
+      {/* Toggle tab — always visible regardless of collapsed state */}
+      <ToggleTab $collapsed={isCollapsed}
+        onClick={toggleSidebar}
+        title={isCollapsed ? t("nav.expand") : t("nav.collapse")}
+      >
+        {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+      </ToggleTab>
 
-      <Nav>
-        <NavSection>
-          <SectionTitle $collapsed={isCollapsed}>{t("nav.main")}</SectionTitle>
-          {renderNavItem("/", ShoppingCart, t("nav.pos"), true)}
-          {renderNavItem("/products", Package, t("nav.products"))}
-        </NavSection>
+      <SidebarInner $collapsed={isCollapsed}>
+        <LogoSection>
+          <Logo>Yangi Asr</Logo>
+        </LogoSection>
 
-        <NavSection>
-          <SectionTitle $collapsed={isCollapsed}>
-            {t("nav.reports")}
-          </SectionTitle>
-          {renderNavItem("/reports/daily", ReceiptText, t("nav.receipts"))}
+        <Nav>
+          <NavSection>
+            <SectionTitle>{t("nav.main")}</SectionTitle>
+            {renderNavItem("/", ShoppingCart, t("nav.pos"), true)}
+            {renderNavItem("/products", Package, t("nav.products"))}
+          </NavSection>
+
+          <NavSection>
+            <SectionTitle>{t("nav.reports")}</SectionTitle>
+            {renderNavItem("/reports/daily", ReceiptText, t("nav.receipts"))}
+            {isAdmin && (
+              <>
+                {renderNavItem(
+                  "/reports/monthly",
+                  TrendingUp,
+                  t("nav.monthlyReport"),
+                )}
+                {renderNavItem(
+                  "/reports/analytics",
+                  LineChart,
+                  t("nav.analytics"),
+                )}
+              </>
+            )}
+          </NavSection>
+
           {isAdmin && (
-            <>
+            <NavSection>
+              <SectionTitle>{t("nav.management")}</SectionTitle>
               {renderNavItem(
-                "/reports/monthly",
-                TrendingUp,
-                t("nav.monthlyReport"),
+                "/products/stock",
+                ClipboardList,
+                t("nav.inventory"),
               )}
-              {renderNavItem(
-                "/reports/analytics",
-                LineChart,
-                t("nav.analytics"),
-              )}
-            </>
+              {renderNavItem("/suppliers", Truck, t("suppliers.title"))}
+              {renderNavItem("/users", Users, t("nav.users"))}
+              {renderNavItem("/settings", Settings, t("nav.settings"))}
+            </NavSection>
           )}
-        </NavSection>
 
-        {isAdmin && (
-          <NavSection>
-            <SectionTitle $collapsed={isCollapsed}>
-              {t("nav.management")}
-            </SectionTitle>
-            {renderNavItem(
-              "/products/stock",
-              ClipboardList,
-              t("nav.inventory"),
-            )}
-            {renderNavItem(
-              "/inventory/weighed",
-              Scale,
-              t("inventory.preWeighed"),
-            )}
-            {renderNavItem("/suppliers", Truck, t("suppliers.title"))}
-            {renderNavItem("/users", Users, t("nav.users"))}
-            {renderNavItem("/settings", Settings, t("nav.settings"))}
-          </NavSection>
-        )}
+          {!isAdmin && (
+            <NavSection>
+              <SectionTitle>{t("nav.settings")}</SectionTitle>
+              {renderNavItem("/settings/user", User, t("nav.userSettings"))}
+            </NavSection>
+          )}
+        </Nav>
 
-        {!isAdmin && (
-          <NavSection>
-            <SectionTitle $collapsed={isCollapsed}>
-              {t("nav.settings")}
-            </SectionTitle>
-            {renderNavItem("/settings/user", User, t("nav.userSettings"))}
-          </NavSection>
-        )}
-      </Nav>
+        <BottomSection>
+          <SyncStatus $syncing={status.isSyncing}>
+            <span>{status.isSyncing ? "🔄" : "✓"}</span>
+            <SyncText>
+              {status.isSyncing
+                ? t("sync.syncing")
+                : status.lastSyncTime
+                  ? `${t("sync.lastSync")}: ${new Date(status.lastSyncTime).toLocaleTimeString()}`
+                  : t("sync.notSynced")}
+            </SyncText>
+            <SyncButton
+              $syncing={status.isSyncing}
+              disabled={status.isSyncing}
+              onClick={handleSyncNow}
+              title={t("settings.syncNow")}
+            >
+              <RefreshCw size={15} />
+            </SyncButton>
+          </SyncStatus>
 
-      <BottomSection $collapsed={isCollapsed}>
-        <SyncStatus $syncing={status.isSyncing} $collapsed={isCollapsed}>
-          <span>{status.isSyncing ? "🔄" : "✓"}</span>
-          <SyncText $collapsed={isCollapsed}>
-            {status.isSyncing
-              ? t("sync.syncing")
-              : status.lastSyncTime
-                ? `${t("sync.lastSync")}: ${new Date(status.lastSyncTime).toLocaleTimeString()}`
-                : t("sync.notSynced")}
-          </SyncText>
-          <SyncButton
-            $syncing={status.isSyncing}
-            disabled={status.isSyncing}
-            onClick={handleSyncNow}
-            title={t("settings.syncNow")}
-          >
-            <RefreshCw size={18} />
-          </SyncButton>
-        </SyncStatus>
-
-        {isPinLogin ? (
-          <NavItemWrapper>
-            <LoginButton $collapsed={isCollapsed} onClick={handleLogin}>
+          {isPinLogin ? (
+            <LoginButton onClick={handleLogin}>
               <IconWrapper>
-                <LogIn size={20} />
+                <LogIn size={17} />
               </IconWrapper>
-              <NavText $collapsed={isCollapsed}>{t("auth.login")}</NavText>
+              <NavText>{t("auth.login")}</NavText>
             </LoginButton>
-            {isCollapsed && <Tooltip>{t("auth.login")}</Tooltip>}
-          </NavItemWrapper>
-        ) : (
-          <>
-            {user && (
-              <NavItemWrapper>
-                <UserSection $collapsed={isCollapsed}>
+          ) : (
+            <>
+              {user && (
+                <UserSection>
                   <IconWrapper>
-                    <User size={18} />
+                    <User size={17} />
                   </IconWrapper>
-                  <UserDetails $collapsed={isCollapsed}>
+                  <UserDetails>
                     <UserName>{getUserName()}</UserName>
                     <UserRole>
                       {user.role === "ADMIN"
@@ -488,21 +441,18 @@ export function Sidebar() {
                     </UserRole>
                   </UserDetails>
                 </UserSection>
-                {isCollapsed && <Tooltip>{getUserName()}</Tooltip>}
-              </NavItemWrapper>
-            )}
-            <NavItemWrapper>
-              <LogoutButton $collapsed={isCollapsed} onClick={handleLogout}>
+              )}
+              <LogoutButton onClick={handleLogout}>
                 <IconWrapper>
-                  <LogOut size={18} />
+                  <LogOut size={17} />
                 </IconWrapper>
-                <NavText $collapsed={isCollapsed}>{t("auth.logout")}</NavText>
+                <NavText>{t("auth.logout")}</NavText>
               </LogoutButton>
-              {isCollapsed && <Tooltip>{t("auth.logout")}</Tooltip>}
-            </NavItemWrapper>
-          </>
-        )}
-      </BottomSection>
+            </>
+          )}
+        </BottomSection>
+      </SidebarInner>
     </Container>
+    </>
   );
 }

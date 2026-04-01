@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import { getPrismaClient } from '../database/sqlite-client';
 import { setAuthToken, clearAuthToken, setServerToken, clearServerToken } from '../sync/queue-manager';
@@ -271,7 +271,7 @@ export function setupAuthHandlers(): void {
       return currentUser;
     } catch (err) {
       // Token invalid or expired
-      console.log('Session restore failed:', err);
+      console.error('Session restore failed:', err);
       return null;
     }
   });

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { Button } from "../../components/common/Button";
 import { useToast } from "../../context/ToastContext";
-import { ArrowLeft, RefreshCcw, Printer, Check } from "lucide-react";
+import { ArrowLeft, RefreshCcw, Printer, Check, DoorOpen } from "lucide-react";
 
 const Container = styled.div`
   display: flex;
@@ -17,6 +17,7 @@ const Header = styled.div`
   display: flex;
   align-items: center;
   gap: ${({ theme }) => theme.spacing.md};
+  padding-left: 25px;
 `;
 
 const BackButton = styled(Button)``;
@@ -110,16 +111,20 @@ export function PrinterSettings() {
   const [selectedPrinter, setSelectedPrinter] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isTesting, setIsTesting] = useState(false);
+  const [drawerEnabled, setDrawerEnabled] = useState(false);
+  const [isOpeningDrawer, setIsOpeningDrawer] = useState(false);
 
   const loadPrinters = async () => {
     setIsLoading(true);
     try {
-      const [available, saved] = await Promise.all([
+      const [available, saved, drawerSetting] = await Promise.all([
         window.electronAPI.printer.getAvailablePrinters(),
         window.electronAPI.settings.get("printer_name"),
+        window.electronAPI.settings.get("cash_drawer_enabled"),
       ]);
       setPrinters(available || []);
       setSelectedPrinter(saved || "");
+      setDrawerEnabled(drawerSetting === "true");
     } catch (err) {
       console.error("Failed to load printers:", err);
     } finally {
@@ -138,6 +143,29 @@ export function PrinterSettings() {
       toast.success(t("printer.saved"));
     } catch (err) {
       toast.error(t("common.error"));
+    }
+  };
+
+  const handleDrawerToggle = async () => {
+    const newVal = !drawerEnabled;
+    try {
+      await window.electronAPI.settings.set("cash_drawer_enabled", String(newVal));
+      setDrawerEnabled(newVal);
+      toast.success(newVal ? t("printer.drawerEnabled") : t("printer.drawerDisabled"));
+    } catch {
+      toast.error(t("common.error"));
+    }
+  };
+
+  const handleOpenDrawer = async () => {
+    setIsOpeningDrawer(true);
+    try {
+      await window.electronAPI.printer.testOpenCashDrawer();
+      toast.success(t("printer.drawerOpened"));
+    } catch {
+      toast.error(t("printer.drawerFailed"));
+    } finally {
+      setIsOpeningDrawer(false);
     }
   };
 
@@ -209,6 +237,29 @@ export function PrinterSettings() {
         )}
       </Card>
 
+      <Card>
+        <CardTitle>
+          <DoorOpen size={20} />
+          {t("printer.cashDrawer")}
+        </CardTitle>
+        <PrinterItem
+          $selected={drawerEnabled}
+          onClick={handleDrawerToggle}
+          style={{ cursor: "pointer" }}
+        >
+          <PrinterName>
+            <DoorOpen size={18} />
+            {t("printer.openDrawerOnCashSale")}
+          </PrinterName>
+          {drawerEnabled && (
+            <SelectedBadge>
+              <Check size={14} />
+              {t("printer.enabled")}
+            </SelectedBadge>
+          )}
+        </PrinterItem>
+      </Card>
+
       <Actions>
         <Button
           onClick={handleTestPrint}
@@ -216,6 +267,14 @@ export function PrinterSettings() {
         >
           <Printer size={18} />
           {isTesting ? t("printer.testing") : t("printer.testPrint")}
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={handleOpenDrawer}
+          disabled={isOpeningDrawer || !selectedPrinter}
+        >
+          <DoorOpen size={18} />
+          {isOpeningDrawer ? t("common.loading") : t("printer.openDrawer")}
         </Button>
       </Actions>
     </Container>

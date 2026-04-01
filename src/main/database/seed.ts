@@ -1,11 +1,10 @@
 // src/main/database/seed.ts
 import { getPrismaClient } from './sqlite-client';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 
 export async function seedLocalDatabase(): Promise<void> {
   const prisma = getPrismaClient();
 
-  console.log('Seeding local database...');
 
   // ==================== LOCAL CONFIG ====================
   const existingConfig = await prisma.localConfig.findUnique({
@@ -25,14 +24,12 @@ export async function seedLocalDatabase(): Promise<void> {
         storePin: hashedStorePin,
       },
     });
-    console.log('Local config created (Store PIN: 1234)');
   } else if (!existingConfig.storePin) {
     const hashedStorePin = await bcrypt.hash('1234', 10);
     await prisma.localConfig.update({
       where: { id: 'config' },
       data: { storePin: hashedStorePin },
     });
-    console.log('Store PIN set to: 1234');
   }
 
   // ==================== USERS ====================
@@ -52,7 +49,6 @@ export async function seedLocalDatabase(): Promise<void> {
         active: true,
       },
     });
-    console.log('Admin user created (phone: 998932144774, password: 123456)');
   }
 
   const cashierExists = await prisma.user.findUnique({
@@ -71,7 +67,6 @@ export async function seedLocalDatabase(): Promise<void> {
         active: true,
       },
     });
-    console.log('Cashier user created (phone: 998911234602, password: 123456)');
   }
 
   // ==================== CATEGORIES ====================
@@ -102,7 +97,6 @@ export async function seedLocalDatabase(): Promise<void> {
     for (const category of categories) {
       await prisma.category.create({ data: category });
     }
-    console.log(`${categories.length} categories created`);
   }
 
   // ==================== SYSTEM SETTINGS ====================
@@ -131,20 +125,6 @@ export async function seedLocalDatabase(): Promise<void> {
       create: setting,
     });
   }
-  console.log('System settings configured');
 
-  console.log('\nLocal database seeding completed!');
-  console.log('\n=== Login Credentials ===');
-  console.log('Admin:   998932144774 / 123456');
-  console.log('Cashier: 998911234602 / 123456');
 }
 
-// Run if executed directly
-if (require.main === module) {
-  seedLocalDatabase()
-    .then(() => process.exit(0))
-    .catch((error) => {
-      console.error('Seeding failed:', error);
-      process.exit(1);
-    });
-}

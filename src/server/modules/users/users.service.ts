@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { USER_ROLES } from '@shared/constants';
 import { UserRole } from '@prisma/client';
 
@@ -66,6 +66,13 @@ export class UsersService {
     }
 
     return user;
+  }
+
+  async findByPhoneAnyStore(phone: string) {
+    return this.prisma.user.findFirst({
+      where: { phone, active: true },
+      orderBy: { createdAt: 'asc' },
+    });
   }
 
   async findByPhoneAndStore(phone: string, storeId?: string) {

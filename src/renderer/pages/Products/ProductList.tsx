@@ -46,6 +46,7 @@ const Header = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding-left: 25px;
 `;
 
 const Title = styled.h1`
@@ -206,7 +207,6 @@ export function ProductList() {
           : "-",
     },
   ];
-  console.log(products);
   
   if (isAdmin) {
     columns.push({

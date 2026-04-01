@@ -23,6 +23,7 @@ const Container = styled.div`
 const Title = styled.h1`
   margin: 0;
   color: ${({ theme }) => theme.colors.text};
+  padding-left: 25px;
 `;
 
 const SettingsGrid = styled.div`
@@ -103,22 +104,16 @@ export function SettingsPage() {
       path: "/settings/price-tags",
     },
     {
-      icon: <Users size={32} />,
-      title: t("settings.userManagement"),
-      description: t("settings.userManagementDescription"),
-      path: "/users",
-    },
-    {
-      icon: <Package size={32} />,
-      title: t("settings.inventorySettings"),
-      description: t("settings.inventorySettingsDescription"),
-      path: "/products/stock",
-    },
-    {
       icon: <Scale size={32} />,
       title: t("scaleSettings.title"),
       description: t("scaleSettings.description"),
       path: "/settings/scale",
+    },
+    {
+      icon: <Scale size={32} />,
+      title: t("inventory.preWeighed"),
+      description: t("bulkWeigh.preWeighedInventory"),
+      path: "/settings/weighed",
     },
   ];
 

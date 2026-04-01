@@ -259,6 +259,7 @@ export function buildReceiptHTML(
   <hr>
 
   <div class="center footer">${escapeHtml(footerText)}</div>
+
 </body></html>`;
 }
 

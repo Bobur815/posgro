@@ -1,4 +1,5 @@
 import { ipcMain, BrowserWindow } from "electron";
+import { spawn } from "child_process";
 import { getPrismaClient } from "../database/sqlite-client";
 import {
   buildReceiptHTML,
@@ -57,6 +58,21 @@ export function setupPrinterHandlers(): void {
       return printWeightedLabel(data);
     },
   );
+
+  ipcMain.handle("printer:openCashDrawer", async () => {
+    await openCashDrawer();
+    return true;
+  });
+
+  // Test handler — bypasses cash_drawer_enabled check, uses saved printer_name directly
+  ipcMain.handle("printer:testOpenCashDrawer", async () => {
+    const prisma = getPrismaClient();
+    const row = await prisma.systemSetting.findFirst({ where: { key: "printer_name" } });
+    const name = row?.value || printerConfig.name;
+    if (!name) throw new Error("No printer configured");
+    await openCashDrawerRaw(name);
+    return true;
+  });
 
   ipcMain.handle(
     "printer:printPriceTagsTSPL",
@@ -158,12 +174,19 @@ async function printReceipt(saleId: string): Promise<boolean> {
   const html = buildReceiptHTML(receiptData, settings);
   const widthMm = Number(settings.receipt_width) || 80;
 
-  return printHTML(html, widthMm);
+  const result = await printHTML(html, widthMm);
+
+  if (sale.paymentMethod === "cash" || sale.paymentMethod === "mixed") {
+    openCashDrawer().catch((err) =>
+      console.error("[Printer] Cash drawer error:", err)
+    );
+  }
+
+  return result;
 }
 
 async function printHTML(html: string, widthMm: number): Promise<boolean> {
   if (!printerConfig.name) {
-    console.log("No printer configured. Receipt HTML generated.");
     return true;
   }
 
@@ -200,19 +223,15 @@ async function printHTML(html: string, widthMm: number): Promise<boolean> {
           silent: true,
           printBackground: true,
           deviceName: printerConfig.name,
-          pageSize: {
-            width: widthMicrons,
-            height: 1000000, // auto-length roll paper
-          },
+          // No custom pageSize — let the Windows driver use its configured paper size.
+          // Overriding pageSize confuses thermal GDI drivers (job queues but printer blinks/ignores).
+          // Configure 58mm roll paper once in Windows → Devices and Printers → XP-58 → Printing Preferences.
           margins: {
-            marginType: "custom",
-            top: 0,
-            bottom: 0,
-            left: 0,
-            right: 0,
+            marginType: "none",
           },
         } as Electron.WebContentsPrintOptions,
         (success, errorType) => {
+          if (!success) console.error(`[Printer] failed: errorType=${errorType} printer="${printerConfig.name}"`);
           if (success) {
             resolve(true);
           } else {
@@ -373,6 +392,76 @@ async function printWeightedLabel(data: WeightedLabelData): Promise<boolean> {
   }
 
   return printHTML(html, widthMm);
+}
+
+// Sends ESC/POS cash drawer kick command via Windows raw print API (no extra npm packages).
+// Works with any USB printer that has a driver installed — bypasses the spooler's GDI pipeline.
+async function openCashDrawerRaw(printerName: string): Promise<void> {
+  // ESC p 0 t1 t2 — kick drawer port 2, on=50ms, off=500ms
+  const kickBytes = "0x1B,0x70,0x00,0x19,0xFA";
+
+  const psScript = `
+Add-Type -TypeDefinition @"
+using System;using System.Runtime.InteropServices;
+public class RawPrint{
+  [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]
+  public struct DOCINFO{[MarshalAs(UnmanagedType.LPWStr)]public string pDocName;[MarshalAs(UnmanagedType.LPWStr)]public string pOutputFile;[MarshalAs(UnmanagedType.LPWStr)]public string pDataType;}
+  [DllImport("winspool.drv",CharSet=CharSet.Unicode,SetLastError=true)]public static extern bool OpenPrinter(string n,out IntPtr h,IntPtr d);
+  [DllImport("winspool.drv",SetLastError=true)]public static extern bool ClosePrinter(IntPtr h);
+  [DllImport("winspool.drv",CharSet=CharSet.Unicode,SetLastError=true)]public static extern int StartDocPrinter(IntPtr h,int l,ref DOCINFO d);
+  [DllImport("winspool.drv",SetLastError=true)]public static extern bool EndDocPrinter(IntPtr h);
+  [DllImport("winspool.drv",SetLastError=true)]public static extern bool StartPagePrinter(IntPtr h);
+  [DllImport("winspool.drv",SetLastError=true)]public static extern bool EndPagePrinter(IntPtr h);
+  [DllImport("winspool.drv",SetLastError=true)]public static extern bool WritePrinter(IntPtr h,IntPtr b,int c,out int w);
+  public static bool Send(string name,byte[] data){
+    IntPtr h;if(!OpenPrinter(name,out h,IntPtr.Zero))return false;
+    var d=new DOCINFO{pDocName="Drawer",pOutputFile=null,pDataType="RAW"};
+    if(StartDocPrinter(h,1,ref d)<=0){ClosePrinter(h);return false;}
+    StartPagePrinter(h);
+    IntPtr b=Marshal.AllocCoTaskMem(data.Length);Marshal.Copy(data,0,b,data.Length);int w;
+    WritePrinter(h,b,data.Length,out w);Marshal.FreeCoTaskMem(b);
+    EndPagePrinter(h);EndDocPrinter(h);ClosePrinter(h);return w==data.Length;}
+}
+"@
+$ok = [RawPrint]::Send('${printerName.replace(/'/g, "''")}', [byte[]](${kickBytes}))
+if (-not $ok) { Write-Error "OpenPrinter/WritePrinter failed for '${'${printerName}'}'" ; exit 1 }
+`;
+
+  return new Promise((resolve, reject) => {
+    const ps = spawn("powershell", [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      psScript,
+    ]);
+    let stderr = "";
+    ps.stderr?.on("data", (d) => { stderr += d.toString(); });
+    ps.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`Cash drawer command failed (exit ${code}): ${stderr.trim()}`));
+    });
+    ps.on("error", reject);
+  });
+}
+
+export async function openCashDrawer(): Promise<void> {
+  const prisma = getPrismaClient();
+  const rows = await prisma.systemSetting.findMany({
+    where: { key: { in: ["cash_drawer_enabled", "printer_name"] } },
+  });
+  const map = rows.reduce(
+    (acc: Record<string, string>, s: { key: string; value: string }) => ({
+      ...acc,
+      [s.key]: s.value,
+    }),
+    {} as Record<string, string>
+  );
+
+  if (map.cash_drawer_enabled !== "true") { console.log("[Drawer] disabled, skipping"); return; }
+  const name = map.printer_name || printerConfig.name;
+  if (!name) { console.log("[Drawer] no printer name configured"); return; }
+
+  await openCashDrawerRaw(name);
 }
 
 export function setPrinterConfig(config: Partial<PrinterConfig>): void {

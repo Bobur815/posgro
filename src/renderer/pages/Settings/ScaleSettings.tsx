@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Scale } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import { Button } from '../../components/common/Button';
 import { useToast } from '../../context/ToastContext';
 
 const Container = styled.div`
@@ -12,24 +13,15 @@ const Container = styled.div`
   max-width: 600px;
 `;
 
-const BackButton = styled.button`
+const Header = styled.div`
   display: flex;
   align-items: center;
-  gap: ${({ theme }) => theme.spacing.xs};
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: ${({ theme }) => theme.colors.primary};
-  font-size: 14px;
-  padding: 0;
-  &:hover { text-decoration: underline; }
+  gap: ${({ theme }) => theme.spacing.md};
+  padding-left: 25px;
 `;
 
 const Title = styled.h1`
   margin: 0;
-  display: flex;
-  align-items: center;
-  gap: ${({ theme }) => theme.spacing.sm};
   color: ${({ theme }) => theme.colors.text};
 `;
 
@@ -82,19 +74,6 @@ const ButtonRow = styled.div`
   gap: ${({ theme }) => theme.spacing.sm};
 `;
 
-const Button = styled.button<{ $variant?: 'primary' | 'secondary' }>`
-  padding: ${({ theme }) => theme.spacing.sm} ${({ theme }) => theme.spacing.lg};
-  border-radius: ${({ theme }) => theme.borderRadius};
-  border: none;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.15s;
-  ${({ $variant, theme }) =>
-    $variant === 'primary'
-      ? `background: ${theme.colors.primary}; color: white; &:hover { opacity: 0.9; }`
-      : `background: ${theme.colors.background}; color: ${theme.colors.text}; border: 1px solid ${theme.colors.border};`}
-`;
 
 export function ScaleSettings() {
   const { t } = useTranslation();
@@ -149,15 +128,12 @@ export function ScaleSettings() {
 
   return (
     <Container>
-      <BackButton onClick={() => navigate('/settings')}>
-        <ChevronLeft size={16} />
-        {t('settings.title')}
-      </BackButton>
-
-      <Title>
-        <Scale size={24} />
-        {t('scaleSettings.title')}
-      </Title>
+      <Header>
+        <Button variant="secondary" size="small" onClick={() => navigate('/settings')}>
+          <ArrowLeft size={20} />
+        </Button>
+        <Title>{t('scaleSettings.title')}</Title>
+      </Header>
 
       <Card>
         <Field>
@@ -179,10 +155,10 @@ export function ScaleSettings() {
         </Field>
 
         <ButtonRow>
-          <Button $variant="primary" onClick={handleSave} disabled={saving}>
+          <Button variant="primary" onClick={handleSave} disabled={saving}>
             {saving ? t('common.saving') : t('common.save')}
           </Button>
-          <Button onClick={handleTestPrint} disabled={testing}>
+          <Button variant="secondary" onClick={handleTestPrint} disabled={testing}>
             {testing ? t('common.processing') : t('scaleSettings.testPrint')}
           </Button>
         </ButtonRow>

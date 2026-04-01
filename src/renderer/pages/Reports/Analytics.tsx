@@ -119,6 +119,7 @@ const Header = styled.div`
   justify-content: space-between;
   flex-wrap: wrap;
   gap: ${({ theme }) => theme.spacing.md};
+  padding-left: 25px;
 `;
 
 const Title = styled.h1`

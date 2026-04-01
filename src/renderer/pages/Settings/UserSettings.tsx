@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
+import { ArrowLeft } from 'lucide-react';
 import { useSettingsStore } from '../../store/settings-store';
 import { useTheme } from '../../theme/ThemeProvider';
 import { Button } from '../../components/common/Button';
@@ -12,8 +14,17 @@ const Container = styled.div`
   max-width: 600px;
 `;
 
+const Header = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.md};
+  padding-left: 25px;
+`;
+
+const BackButton = styled(Button)``;
+
 const Title = styled.h1`
-  margin: 0 0 ${({ theme }) => theme.spacing.lg};
+  margin: 0;
   color: ${({ theme }) => theme.colors.text};
 `;
 
@@ -62,6 +73,7 @@ const Form = styled.form`
 
 export function UserSettings() {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const { mode, toggleTheme } = useTheme();
   const { language, setLanguage } = useSettingsStore();
   const toast = useToast();
@@ -106,7 +118,12 @@ export function UserSettings() {
 
   return (
     <Container>
-      <Title>{t('settings.userSettings')}</Title>
+      <Header>
+        <BackButton variant="secondary" size="small" onClick={() => navigate('/settings')}>
+          <ArrowLeft size={20} />
+        </BackButton>
+        <Title>{t('settings.userSettings')}</Title>
+      </Header>
 
       <Section>
         <SectionTitle>{t('settings.appearance')}</SectionTitle>

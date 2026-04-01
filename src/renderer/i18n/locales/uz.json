@@ -24,7 +24,10 @@
     "createdAt": "Yaratilgan",
     "updatedAt": "Yangilangan",
     "confirmDelete": "O'chirishni tasdiqlaysizmi?",
-    "currency": "so'm"
+    "currency": "so'm",
+    "exitApp": "Dasturdan chiqish",
+    "exitAppConfirm": "Dasturni yopmoqchimisiz?",
+    "exit": "Chiqish"
   },
   "auth": {
     "showPassword": "Parolni ko'rsatish",
@@ -128,7 +131,7 @@
     "productTypeRegular": "Oddiy",
     "productTypeBulkWeighted": "Vazn bo'yicha",
     "productTypePrepackaged": "Qadoqlangan",
-    "internalCode": "Ichki kod (PLU)",
+    "internalCode": "PLU",
     "add": "Qo'shish",
     "edit": "Tahrirlash",
     "addProduct": "Qo'shish",
@@ -288,7 +291,7 @@
     "cashier": "Kassir",
     "active": "Faol",
     "inactive": "Nofaol",
-    "addUser": "Foydalanuvchi qo'shish",
+    "addUser": "Qo'shish",
     "editUser": "Foydalanuvchini tahrirlash",
     "noUsers": "Foydalanuvchilar topilmadi",
     "activate": "Faollashtirish",
@@ -449,6 +452,7 @@
     "back": "Orqaga"
   },
   "suppliers": {
+    "add":"Qo'shish",
     "title": "Yetkazib beruvchilar",
     "supplier": "Yetkazib beruvchi",
     "nameRu": "Nomi (RU)",
@@ -523,7 +527,15 @@
     "testPrint": "Test chop etish",
     "testing": "Chop etilmoqda...",
     "testSent": "Test sahifa yuborildi",
-    "testFailed": "Test chop etishda xato"
+    "testFailed": "Test chop etishda xato",
+    "cashDrawer": "Kassa tortmasi",
+    "openDrawerOnCashSale": "Naqd to'lovda ochish",
+    "enabled": "Yoqilgan",
+    "drawerEnabled": "Kassa tortmasi yoqildi",
+    "drawerDisabled": "Kassa tortmasi o'chirildi",
+    "openDrawer": "Tortmani ochish",
+    "drawerOpened": "Tortma ochildi",
+    "drawerFailed": "Tortmani ochib bo'lmadi"
   },
   "scanner":{
     "title": "Shtrix-kod skaneri",

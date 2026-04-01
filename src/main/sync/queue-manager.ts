@@ -19,7 +19,6 @@ export async function setAuthToken(token: string): Promise<void> {
       // Fallback to memory storage (less secure)
       memoryToken = token;
     }
-    console.log('Auth token stored');
   } catch (error) {
     console.error('Failed to store auth token:', error);
     // Fallback to memory
@@ -54,7 +53,6 @@ export async function getAuthToken(): Promise<string | null> {
  */
 export async function clearAuthToken(): Promise<void> {
   memoryToken = null;
-  console.log('Auth token cleared');
 }
 
 /**
@@ -125,7 +123,6 @@ export function queueOperation(type: 'sale' | 'inventory', data: unknown): strin
     createdAt: new Date(),
     retryCount: 0,
   });
-  console.log(`Operation queued: ${id}`);
   return id;
 }
 
@@ -137,7 +134,6 @@ export function removeFromQueue(id: string): void {
   const index = operationQueue.findIndex((op) => op.id === id);
   if (index !== -1) {
     operationQueue.splice(index, 1);
-    console.log(`Operation removed from queue: ${id}`);
   }
 }
 

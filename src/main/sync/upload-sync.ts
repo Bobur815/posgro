@@ -52,9 +52,6 @@ export async function uploadLocalData(): Promise<void> {
   }
 
   const since = await getLastUploadTime(prisma);
-  console.log(
-    `Uploading local data created/updated after ${since.toISOString()}...`,
-  );
 
   await uploadCategories(prisma, token, since);
   await uploadSuppliers(prisma, token, since);
@@ -62,7 +59,6 @@ export async function uploadLocalData(): Promise<void> {
   await uploadArrivals(prisma, token, since);
 
   await setLastUploadTime(prisma);
-  console.log("Upload sync completed");
 }
 
 async function uploadCategories(
@@ -75,11 +71,9 @@ async function uploadCategories(
   const categories = await prisma.category.findMany({});
 
   if (categories.length === 0) {
-    console.log("No categories to upload");
     return;
   }
 
-  console.log(`Uploading ${categories.length} categories...`);
   const payload = categories.map((c: Category) => ({
     nameUz: c.nameUz,
     nameRu: c.nameRu,
@@ -98,9 +92,6 @@ async function uploadCategories(
     updated: number;
     errors: number;
   };
-  console.log(
-    `Categories uploaded: ${result.created} created, ${result.updated} updated, ${result.errors} errors`,
-  );
 }
 
 async function uploadSuppliers(
@@ -113,11 +104,9 @@ async function uploadSuppliers(
   });
 
   if (suppliers.length === 0) {
-    console.log("No new suppliers to upload");
     return;
   }
 
-  console.log(`Uploading ${suppliers.length} suppliers...`);
   const payload = suppliers.map((s: Supplier) => ({
     id: s.id,
     nameUz: s.nameUz,
@@ -139,9 +128,6 @@ async function uploadSuppliers(
     updated: number;
     errors: number;
   };
-  console.log(
-    `Suppliers uploaded: ${result.created} created, ${result.updated} updated, ${result.errors} errors`,
-  );
 }
 
 async function uploadProducts(
@@ -154,11 +140,9 @@ async function uploadProducts(
   });
 
   if (products.length === 0) {
-    console.log("No new/updated products to upload");
     return;
   }
 
-  console.log(`Uploading ${products.length} products...`);
   const payload = products.map((p: Product) => ({
     barcode: p.barcode,
     nameUz: p.nameUz,
@@ -189,9 +173,6 @@ async function uploadProducts(
     updated: number;
     errors: number;
   };
-  console.log(
-    `Products uploaded: ${result.created} created, ${result.updated} updated, ${result.errors} errors`,
-  );
 }
 
 async function uploadArrivals(
@@ -205,11 +186,9 @@ async function uploadArrivals(
   });
 
   if (arrivals.length === 0) {
-    console.log("No new arrivals to upload");
     return;
   }
 
-  console.log(`Uploading ${arrivals.length} inventory arrivals...`);
   const payload = arrivals.map(
     (a: InventoryArrival & { product: Product }) => ({
       id: a.id,
@@ -235,7 +214,4 @@ async function uploadArrivals(
     skipped: number;
     errors: number;
   };
-  console.log(
-    `Arrivals uploaded: ${result.created} created, ${result.skipped} skipped, ${result.errors} errors`,
-  );
 }

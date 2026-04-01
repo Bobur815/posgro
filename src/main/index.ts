@@ -20,7 +20,6 @@ async function bootstrap() {
   try {
     // Initialize local SQLite database
     await initializeDatabase();
-    console.log("Database initialized");
 
     // Seed database with initial data if needed
     await seedLocalDatabase();
@@ -61,7 +60,6 @@ async function bootstrap() {
       await syncService?.triggerSync();
     });
 
-    console.log("Application started successfully");
   } catch (error) {
     console.error("Failed to start application:", error);
     app.quit();

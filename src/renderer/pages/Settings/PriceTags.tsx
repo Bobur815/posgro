@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
-import { RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw } from "lucide-react";
+import { Button as CommonButton } from "../../components/common/Button";
 import { PrintTagsModal } from "./PrintTagsModal";
 import { generateId } from "../../utils/helpers";
 import { useToast } from "../../context/ToastContext";
@@ -63,6 +65,15 @@ const TopBar = styled.div`
   justify-content: space-between;
   align-items: center;
 `;
+
+const Header = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.md};
+  padding-left: 25px;
+`;
+
+const BackButton = styled(CommonButton)``;
 
 const Title = styled.h1`
   margin: 0;
@@ -301,6 +312,7 @@ const SmallThumbnail = styled.div`
 
 export function PriceTags() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const toast = useToast();
   const [templates, setTemplates] = useState<PriceTagTemplate[]>([]);
   const [editing, setEditing] = useState<PriceTagTemplate | null>(null);
@@ -569,7 +581,12 @@ export function PriceTags() {
   return (
     <Container>
       <TopBar>
-        <Title>{t("priceTags.title")}</Title>
+        <Header>
+          <BackButton variant="secondary" size="small" onClick={() => navigate("/settings")}>
+            <ArrowLeft size={20} />
+          </BackButton>
+          <Title>{t("priceTags.title")}</Title>
+        </Header>
         <Button onClick={handleCreate}>{t("priceTags.createTemplate")}</Button>
       </TopBar>
 

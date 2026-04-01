@@ -31,6 +31,7 @@ const Header = styled.div`
   justify-content: space-between;
   align-items: flex-start;
   padding-top: 5px;
+  padding-left: 25px;
 `;
 
 const BackButton = styled(Button)`

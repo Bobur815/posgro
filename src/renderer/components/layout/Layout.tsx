@@ -5,7 +5,6 @@ import { Sidebar } from './Sidebar';
 import { SidebarProvider } from '../../context/SidebarContext';
 
 const Container = styled.div`
-  display: flex;
   min-height: 100vh;
 `;
 

@@ -17,7 +17,6 @@ export async function syncProducts(): Promise<void> {
   });
   const lastSync = lastSyncSetting?.value || new Date(0).toISOString();
 
-  console.log(`Fetching products updated after ${lastSync}...`);
 
   try {
     const response = await fetch(
@@ -36,11 +35,9 @@ export async function syncProducts(): Promise<void> {
     const products = await response.json();
 
     if (!Array.isArray(products) || products.length === 0) {
-      console.log('No product updates');
       return;
     }
 
-    console.log(`Updating ${products.length} products...`);
 
     for (const product of products) {
       // Check if a product with the same barcode already exists locally
@@ -137,7 +134,6 @@ export async function syncProducts(): Promise<void> {
       create: { key: 'last_product_sync', value: new Date().toISOString() },
     });
 
-    console.log('Products updated successfully');
   } catch (error) {
     console.error('Failed to sync products:', error);
     throw error;
@@ -167,11 +163,9 @@ export async function syncCategories(): Promise<void> {
     const categories = await response.json();
 
     if (!Array.isArray(categories) || categories.length === 0) {
-      console.log('No categories to sync');
       return;
     }
 
-    console.log(`Syncing ${categories.length} categories...`);
 
     const productCount = await prisma.product.count();
     if (productCount === 0) {
@@ -209,7 +203,6 @@ export async function syncCategories(): Promise<void> {
       }
     }
 
-    console.log('Categories synced successfully');
   } catch (error) {
     console.error('Failed to sync categories:', error);
     throw error;

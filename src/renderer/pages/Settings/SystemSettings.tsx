@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
-import { RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw } from "lucide-react";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
 
@@ -9,8 +10,17 @@ const Container = styled.div`
   max-width: 800px;
 `;
 
+const Header = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.md};
+  padding-left: 25px;
+`;
+
+const BackButton = styled(Button)``;
+
 const Title = styled.h1`
-  margin: 0 0 ${({ theme }) => theme.spacing.lg};
+  margin: 0;
   color: ${({ theme }) => theme.colors.text};
 `;
 
@@ -96,6 +106,7 @@ const StatValue = styled.span`
 
 export function SystemSettings() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   const [settings, setSettings] = useState({
     storeName: "",
@@ -191,7 +202,12 @@ const [syncStatus, setSyncStatus] = useState<{
 
   return (
     <Container>
-      <Title>{t("settings.systemSettings")}</Title>
+      <Header>
+        <BackButton variant="secondary" size="small" onClick={() => navigate("/settings")}>
+          <ArrowLeft size={20} />
+        </BackButton>
+        <Title>{t("settings.systemSettings")}</Title>
+      </Header>
 
       <Section>
         <SectionTitle>{t("settings.storeInformation")}</SectionTitle>

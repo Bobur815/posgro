@@ -132,6 +132,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("printer:printWeightedLabel", data),
     printPriceTagsTSPL: (req: unknown) =>
       ipcRenderer.invoke("printer:printPriceTagsTSPL", req),
+    openCashDrawer: () => ipcRenderer.invoke("printer:openCashDrawer"),
+    testOpenCashDrawer: () => ipcRenderer.invoke("printer:testOpenCashDrawer"),
   },
 
   // Pre-weighed items
@@ -189,6 +191,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getTerminalId: () => ipcRenderer.invoke("app:getTerminalId"),
     getStoreInfo: () => ipcRenderer.invoke("app:getStoreInfo"),
     quit: () => ipcRenderer.invoke("app:quit"),
+    onCloseRequested: (callback: () => void) => {
+      ipcRenderer.on("app:close-requested", callback);
+      return () => ipcRenderer.removeListener("app:close-requested", callback);
+    },
+    confirmClose: () => ipcRenderer.send("app:confirm-close"),
   },
 
   // Local config (VPS connection settings)
@@ -292,6 +299,8 @@ declare global {
         ) => Promise<boolean>;
         printWeightedLabel: (data: unknown) => Promise<boolean>;
         printPriceTagsTSPL: (req: unknown) => Promise<boolean>;
+        openCashDrawer: () => Promise<void>;
+        testOpenCashDrawer: () => Promise<boolean>;
       };
       weighedItems: {
         create: (data: unknown) => Promise<unknown>;
@@ -325,6 +334,8 @@ declare global {
         getTerminalId: () => Promise<string>;
         getStoreInfo: () => Promise<{ storeId: string; storeName: string }>;
         quit: () => Promise<void>;
+        onCloseRequested: (callback: () => void) => () => void;
+        confirmClose: () => void;
       };
       config: {
         getLocalConfig: () => Promise<{

@@ -25,7 +25,7 @@ import { formatDate as formatDateUtil } from "../../utils/formatters";
 import { DateInput } from "../../components/common/DateInput";
 
 const Container = styled.div`
-  min-width: 1000px;
+  min-width: 0;
 `;
 
 const Header = styled.div`
@@ -33,6 +33,7 @@ const Header = styled.div`
   justify-content: space-between;
   align-items: center;
   margin-bottom: ${({ theme }) => theme.spacing.lg};
+  padding-left: 25px;
 `;
 
 const BackButton = styled(Button)`
@@ -73,7 +74,7 @@ const Card = styled.div`
 const CardTitle = styled.h2`
   margin: 0 0 ${({ theme }) => theme.spacing.md};
   color: ${({ theme }) => theme.colors.text};
-  font-size: 24px;
+  font-size: 18px;
   display: flex;
   align-items: center;
   gap: ${({ theme }) => theme.spacing.sm};
@@ -92,13 +93,13 @@ const InfoRow = styled.div`
 
 const InfoLabel = styled.span`
   color: ${({ theme }) => theme.colors.textSecondary};
-  font-size: 24px;
+  font-size: 16px;
 `;
 
 const InfoValue = styled.span`
   color: ${({ theme }) => theme.colors.text};
   font-weight: 500;
-  font-size: 24px;
+  font-size: 16px;
 `;
 
 const ProfitBadge = styled.span<{ $positive?: boolean }>`
@@ -108,7 +109,7 @@ const ProfitBadge = styled.span<{ $positive?: boolean }>`
     $positive ? theme.colors.success : theme.colors.error};
   padding: 2px 8px;
   border-radius: 12px;
-  font-size: 24px;
+  font-size: 16px;
   font-weight: 600;
 `;
 
@@ -141,13 +142,13 @@ const StatCard = styled.div`
 `;
 
 const StatValue = styled.div`
-  font-size: 24px;
+  font-size: 18px;
   font-weight: bold;
   color: ${({ theme }) => theme.colors.primary};
 `;
 
 const StatLabel = styled.div`
-  font-size: 16px;
+  font-size: 13px;
   color: ${({ theme }) => theme.colors.textSecondary};
   margin-top: ${({ theme }) => theme.spacing.xs};
 `;

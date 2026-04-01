@@ -13,7 +13,6 @@ export class SyncService {
   private lastError: string | null = null;
 
   start(): void {
-    console.log('Sync service started');
 
     // Initial sync after a short delay (faster in dev/local mode)
     const config = getAppConfig();
@@ -33,12 +32,10 @@ export class SyncService {
       clearInterval(this.syncInterval);
       this.syncInterval = null;
     }
-    console.log('Sync service stopped');
   }
 
   async sync(): Promise<void> {
     if (this.isSyncing) {
-      console.log('Sync already in progress, skipping...');
       return;
     }
 
@@ -49,11 +46,9 @@ export class SyncService {
       // Check internet connectivity
       const isOnline = await this.checkConnectivity();
       if (!isOnline) {
-        console.log('No internet connection, skipping sync');
         return;
       }
 
-      console.log('Starting sync...');
 
       // Upload locally-created categories, suppliers, products, and arrivals to VPS
       try {
@@ -75,7 +70,6 @@ export class SyncService {
       await this.syncStoreConfig();
 
       this.lastSyncTime = new Date();
-      console.log('Sync completed successfully');
 
       // Notify renderer process
       this.notifyRenderer('sync:completed');

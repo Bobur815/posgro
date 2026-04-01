@@ -1,4 +1,4 @@
-import { BrowserWindow, screen, Menu, globalShortcut } from 'electron';
+import { BrowserWindow, screen, Menu, globalShortcut, ipcMain } from 'electron';
 import path from 'path';
 
 export function createWindow(): BrowserWindow {
@@ -49,16 +49,25 @@ export function createWindow(): BrowserWindow {
   if (process.env.NODE_ENV === 'development') {
     // Development: load from Vite dev server
     mainWindow.loadURL('http://localhost:5174');
-    mainWindow.webContents.openDevTools();
   } else {
     // Production: load from built files
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../../dist-renderer/index.html'));
   }
 
-  // Handle window close
-  mainWindow.on('closed', () => {
-    // Dereference the window object
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    console.error(`[Window] did-fail-load: code=${code} desc=${desc} url=${url}`);
   });
+
+  // Intercept close to show confirmation in renderer
+  mainWindow.on('close', (e) => {
+    e.preventDefault();
+    mainWindow.webContents.send('app:close-requested');
+  });
+
+  // Confirm close from renderer — destroy window (bypasses close event)
+  const onConfirmClose = () => mainWindow.destroy();
+  ipcMain.on('app:confirm-close', onConfirmClose);
+  mainWindow.on('closed', () => ipcMain.removeListener('app:confirm-close', onConfirmClose));
 
   return mainWindow;
 }

@@ -85,6 +85,28 @@ npm run build:pos
 npm run build:server
 ```
 
+## Production Build Notes
+
+### Environment Variables
+Edit `.env.pos` before building — values are baked into the bundle at build time (not read at runtime):
+
+| Variable | Description |
+|---|---|
+| `STORE_ID` | Store identifier on the server |
+| `TERMINAL_ID` | Unique terminal ID (e.g. `T1`, `T2`) |
+| `VPS_API_URL` | Backend API URL |
+| `JWT_SECRET` | Secret key for local auth tokens |
+| `STORE_NAME` | Initial store name (also configurable in app Settings) |
+
+### Packaging
+The installer is built with `electron-builder` (NSIS for Windows). Key decisions:
+
+- **`asar: false`** — disabled asar packaging because Chromium's ES module loader cannot read from `.asar` virtual filesystems. Files are installed as plain directories under `resources/app/`.
+- **`HashRouter`** — React Router uses `HashRouter` instead of `BrowserRouter` because `BrowserRouter` navigates to `file:///C:/` on `file://` protocol, breaking the app.
+- **Prisma client** — included via `files: ['src/generated/prisma-sqlite/**/*']`. The native `.node` query engine is in a plain directory so `require()` loads it correctly.
+- **Static images** — placed in `public/images/` so Vite copies them to `dist-renderer/images/` during build.
+- **Receipt printer** — configure paper size to `58×297mm` in Windows → Devices and Printers → XP-58 → Printing Preferences. Printer name is saved via app Settings → Printer Settings.
+
 ## Documentation
 
 See [GROCERY_POS_DOCUMENTATION.md](./GROCERY_POS_DOCUMENTATION.md) for complete documentation.

@@ -28,7 +28,6 @@ export function setupIpcHandlers(): void {
   setupAppHandlers();
   setupReceiptHandlers();
 
-  console.log("IPC handlers initialized");
 }
 
 function setupCategoriesHandlers(): void {

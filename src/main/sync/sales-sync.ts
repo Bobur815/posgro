@@ -17,11 +17,9 @@ export async function syncSales(): Promise<void> {
   });
 
   if (unsyncedSales.length === 0) {
-    console.log('No sales to sync');
     return;
   }
 
-  console.log(`Syncing ${unsyncedSales.length} sales...`);
 
   const token = getServerToken();
   if (!token) {
@@ -72,7 +70,6 @@ export async function syncSales(): Promise<void> {
           },
         });
         successCount++;
-        console.log(`Sale ${sale.receiptNumber} synced successfully`);
       } else {
         const errorText = await response.text();
         console.error(`Failed to sync sale ${sale.receiptNumber}:`, errorText);
@@ -85,7 +82,6 @@ export async function syncSales(): Promise<void> {
     }
   }
 
-  console.log(`Sales sync completed: ${successCount} success, ${failCount} failed`);
 
   // Update last sync timestamp
   await prisma.systemSetting.upsert({

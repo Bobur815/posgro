@@ -1,9 +1,11 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Layout } from "./components/layout/Layout";
 import { ProtectedRoute } from "./components/protected/ProtectedRoute";
 import { RoleGuard } from "./components/protected/RoleGuard";
 import { useAuthStore } from "./store/auth-store";
+import { ConfirmDialog } from "./components/common/ConfirmDialog";
 
 // Pages
 import { PinLoginPage } from "./pages/Login/PinLoginPage";
@@ -29,8 +31,30 @@ import { SyncSettings } from "./pages/Settings/SyncSettings";
 
 function App() {
   const { isAuthenticated } = useAuthStore();
+  const { t } = useTranslation();
+  const [showQuitConfirm, setShowQuitConfirm] = useState(false);
+
+  useEffect(() => {
+    if (!window.electronAPI?.app?.onCloseRequested) return;
+    const unsubscribe = window.electronAPI.app.onCloseRequested(() => {
+      setShowQuitConfirm(true);
+    });
+    return unsubscribe;
+  }, []);
 
   return (
+    <>
+    {showQuitConfirm && (
+      <ConfirmDialog
+        title={t("common.exitApp")}
+        message={t("common.exitAppConfirm")}
+        confirmLabel={t("common.exit")}
+        cancelLabel={t("common.cancel")}
+        variant="danger"
+        onConfirm={() => window.electronAPI.app.confirmClose()}
+        onCancel={() => setShowQuitConfirm(false)}
+      />
+    )}
     <Routes>
       {/* Public routes - Login */}
       <Route
@@ -195,7 +219,7 @@ function App() {
 
         {/* Weighed Inventory (Admin only) */}
         <Route
-          path="inventory/weighed"
+          path="settings/weighed"
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
               <WeighedInventoryPage />
@@ -207,6 +231,7 @@ function App() {
       {/* Catch all - redirect to home */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }
 

@@ -24,7 +24,10 @@
     "createdAt": "Создан",
     "updatedAt": "Обновлен",
     "confirmDelete": "Вы уверены, что хотите удалить?",
-    "currency": "сум"
+    "currency": "сум",
+    "exitApp": "Выход из приложения",
+    "exitAppConfirm": "Вы уверены, что хотите закрыть приложение?",
+    "exit": "Выйти"
   },
   "auth": {
     "showPassword": "Показать пароль",
@@ -140,7 +143,7 @@
     "productTypeRegular": "Обычный",
     "productTypeBulkWeighted": "Весовой",
     "productTypePrepackaged": "Фасованный",
-    "internalCode": "Внутренний код (PLU)",
+    "internalCode": "PLU",
     "addProduct": "Добавить",
     "editProduct": "Редактировать",
     "noProducts": "Товары не найдены",
@@ -298,7 +301,7 @@
     "cashier": "Кассир",
     "active": "Активен",
     "inactive": "Неактивен",
-    "addUser": "Добавить пользователя",
+    "addUser": "Добавить",
     "editUser": "Редактировать пользователя",
     "noUsers": "Пользователи не найдены",
     "activate": "Активировать",
@@ -533,7 +536,15 @@
     "testPrint": "Тестовая печать",
     "testing": "Печать...",
     "testSent": "Тестовая страница отправлена",
-    "testFailed": "Ошибка тестовой печати"
+    "testFailed": "Ошибка тестовой печати",
+    "cashDrawer": "Денежный ящик",
+    "openDrawerOnCashSale": "Открывать при наличной оплате",
+    "enabled": "Включено",
+    "drawerEnabled": "Денежный ящик включён",
+    "drawerDisabled": "Денежный ящик отключён",
+    "openDrawer": "Открыть ящик",
+    "drawerOpened": "Ящик открыт",
+    "drawerFailed": "Не удалось открыть ящик"
   },
   "receiptScan": {
     "scanReceipt": "Сканировать чек",

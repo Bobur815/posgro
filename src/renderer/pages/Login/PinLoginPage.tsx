@@ -46,15 +46,15 @@ const RightPanel = styled.div`
 
 const LoginCard = styled.div<{ $kbOpen?: boolean }>`
   width: 100%;
-  max-width: 400px;
+  max-width: 360px;
   text-align: center;
-  margin-top: -100px;
-  transform: translateY(${({ $kbOpen }) => ($kbOpen ? "-80px" : "0")});
+  margin-top: -60px;
+  transform: translateY(${({ $kbOpen }) => ($kbOpen ? "-60px" : "0")});
   transition: transform 0.3s ease;
 `;
 
 const Logo = styled.h1`
-  font-size: 32px;
+  font-size: 26px;
   font-weight: bold;
   color: ${({ theme }) => theme.colors.primary};
   margin-bottom: ${({ theme }) => theme.spacing.sm};
@@ -63,7 +63,7 @@ const Logo = styled.h1`
 const Subtitle = styled.p`
   color: ${({ theme }) => theme.colors.textSecondary};
   margin-bottom: ${({ theme }) => theme.spacing.xl};
-  font-size: 26px;
+  font-size: 20px;
 `;
 
 const PinDisplay = styled.div`
@@ -92,13 +92,13 @@ const PinPad = styled.div`
 `;
 
 const PinButton = styled.button<{ $variant?: "clear" | "back" }>`
-  width: 80px;
-  height: 80px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   border: 2px solid ${({ theme }) => theme.colors.border};
   background-color: ${({ theme }) => theme.colors.surface};
   color: ${({ theme }) => theme.colors.text};
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;

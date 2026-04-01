@@ -17,7 +17,6 @@ export async function runMigrations(): Promise<void> {
   };
 
   try {
-    console.log('Running database migrations...');
 
     // Run Prisma migrate deploy
     const { stdout, stderr } = await execAsync('npx prisma migrate deploy', {
@@ -26,14 +25,12 @@ export async function runMigrations(): Promise<void> {
     });
 
     if (stdout) {
-      console.log('Migration output:', stdout);
     }
 
     if (stderr) {
       console.warn('Migration warnings:', stderr);
     }
 
-    console.log('Migrations completed successfully');
   } catch (error) {
     console.error('Migration failed:', error);
     throw error;
@@ -51,7 +48,6 @@ export async function resetDatabase(): Promise<void> {
   };
 
   try {
-    console.log('Resetting database...');
 
     // Run Prisma migrate reset (WARNING: This deletes all data!)
     const { stdout, stderr } = await execAsync('npx prisma migrate reset --force', {
@@ -60,14 +56,12 @@ export async function resetDatabase(): Promise<void> {
     });
 
     if (stdout) {
-      console.log('Reset output:', stdout);
     }
 
     if (stderr) {
       console.warn('Reset warnings:', stderr);
     }
 
-    console.log('Database reset completed');
   } catch (error) {
     console.error('Database reset failed:', error);
     throw error;

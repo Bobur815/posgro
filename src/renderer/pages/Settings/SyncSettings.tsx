@@ -1,15 +1,25 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
-import { RefreshCw, CheckCircle, XCircle, Clock } from "lucide-react";
+import { ArrowLeft, RefreshCw, CheckCircle, XCircle, Clock } from "lucide-react";
 import { Button } from "../../components/common/Button";
 
 const Container = styled.div`
   max-width: 600px;
 `;
 
+const Header = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.md};
+  padding-left: 25px;
+`;
+
+const BackButton = styled(Button)``;
+
 const Title = styled.h1`
-  margin: 0 0 ${({ theme }) => theme.spacing.lg};
+  margin: 0;
   color: ${({ theme }) => theme.colors.text};
 `;
 
@@ -94,6 +104,7 @@ interface SyncStatus {
 
 export function SyncSettings() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [status, setStatus] = useState<SyncStatus>({
     isSyncing: false,
     lastSyncTime: null,
@@ -173,7 +184,12 @@ export function SyncSettings() {
 
   return (
     <Container>
-      <Title>{t("settings.syncSettings")}</Title>
+      <Header>
+        <BackButton variant="secondary" size="small" onClick={() => navigate("/settings")}>
+          <ArrowLeft size={20} />
+        </BackButton>
+        <Title>{t("settings.syncSettings")}</Title>
+      </Header>
 
       <Section>
         <SectionTitle>{t("settings.syncStatus")}</SectionTitle>

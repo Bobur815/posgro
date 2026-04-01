@@ -14,6 +14,8 @@ const Container = styled.div`
 const Title = styled.h1`
   margin: 0;
   color: ${({ theme }) => theme.colors.text};
+  padding-left: 25px;
+
 `;
 
 const FilterRow = styled.div`

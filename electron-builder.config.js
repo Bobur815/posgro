@@ -12,9 +12,12 @@ module.exports = {
     buildResources: 'build'
   },
 
+  asar: false,
+
   files: [
     'dist-electron/**/*',
-    'dist-renderer/**/*'
+    'dist-renderer/**/*',
+    'src/generated/prisma-sqlite/**/*'
   ],
 
   extraResources: [
@@ -44,7 +47,8 @@ module.exports = {
     shortcutName: 'Grocery POS',
     installerIcon: 'build/icon.ico',
     uninstallerIcon: 'build/icon.ico',
-    installerHeaderIcon: 'build/icon.ico'
+    installerHeaderIcon: 'build/icon.ico',
+    runAfterFinish: false
   },
 
   mac: {
