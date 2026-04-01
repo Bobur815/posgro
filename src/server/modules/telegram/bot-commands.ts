@@ -20,6 +20,28 @@ function date(d: Date | string): string {
 
 // ─── Auth / Onboarding ────────────────────────────────────────────────────────
 
+export function msgWelcome(): string {
+  return (
+    '👋 Добро пожаловать в Yangi asr!\n\n' +
+    'Я помогу вам:\n' +
+    '📊 Смотреть продажи и аналитику за день\n' +
+    '📦 Проверять остатки на складе\n' +
+    '🔴 Следить за товарами с низким запасом\n' +
+    '👥 Просматривать список поставщиков (для администраторов)\n' +
+    '💰 Узнавать свой баланс и транзакции (для поставщиков)\n\n' +
+    '―――\n\n' +
+    '👋 Yangi asr botiga xush kelibsiz!\n\n' +
+    'Men sizga yordam beraman:\n' +
+    '📊 Kunlik sotuv va tahlilni ko\'rish\n' +
+    '📦 Ombor qoldiqlarini tekshirish\n' +
+    '🔴 Kam qolgan tovarlarni kuzatish\n' +
+    '👥 Ta\'minotchilar ro\'yxatini ko\'rish (adminlar uchun)\n' +
+    '💰 O\'z balans va tranzaksiyalarini bilish (ta\'minotchilar uchun)\n\n' +
+    '―――\n' +
+    '📱 Boshlash uchun telefon raqamingizni ulashing / Для начала поделитесь номером телефона:'
+  );
+}
+
 export function msgAskPhone(): string {
   return t(
     'Xush kelibsiz! 👋\n\nTizimga kirish uchun telefon raqamingizni ulashing.',

@@ -481,7 +481,7 @@ export function setupProductsHandlers(): void {
       where: { internalCode: { not: null } },
       select: { internalCode: true },
     });
-    const max = rows.reduce((acc, r) => {
+    const max = rows.reduce((acc: number, r: { internalCode: string | null }) => {
       const n = parseInt(r.internalCode ?? "0", 10);
       return n > acc ? n : acc;
     }, 0);

@@ -131,10 +131,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   // ─── Handler Registration ─────────────────────────────────────────────────
 
   private registerHandlers(bot: Telegraf) {
-    // /start — reset session, ask for phone
+    // /start — reset session, show welcome, ask for phone
     bot.start(async (ctx) => {
       this.sessions.delete(ctx.chat.id);
-      await ctx.reply(fmt.msgAskPhone(), this.kbAskPhone());
+      await ctx.reply(fmt.msgWelcome(), this.kbAskPhone());
     });
 
     // Contact shared — identify user
