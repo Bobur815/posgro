@@ -425,8 +425,24 @@ export const mxik = {
     return data;
   },
   searchByBarcode: async (barcode: string): Promise<{ code: string; name: string; nameRu: string; packageCode: string }> => {
-    const { data } = await axiosInstance.get(`/mxik/search/${encodeURIComponent(barcode)}`);
-    return data;
+    // Call tasnif directly from browser (VPS is geo-blocked; browser is in Uzbekistan)
+    const TASNIF = 'https://tasnif.soliq.uz/api/cls-api';
+    const searchRes = await fetch(`${TASNIF}/elasticsearch/search?lang=uz_cyrl&search=${encodeURIComponent(barcode)}&size=5&page=0`);
+    const searchJson = await searchRes.json();
+    if (!searchJson.success || !searchJson.data?.length) throw new Error('Not found');
+    const match = searchJson.data.find((d: any) => d.internationalCode === barcode) ?? searchJson.data[0];
+    const mxikCode: string = match.mxikCode;
+    const detailRes = await fetch(`${TASNIF}/integration-mxik/get/history/${mxikCode}`);
+    const detailJson = await detailRes.json();
+    if (!detailJson.success || !detailJson.data) throw new Error('Not found');
+    const d = detailJson.data;
+    const brand = d.brandName ? `${d.brandName} ` : '';
+    return {
+      code: d.mxikCode,
+      name: brand + (d.attributeNameUz ?? d.subPositionNameUz),
+      nameRu: brand + (d.attributeNameRu ?? d.subPositionNameRu),
+      packageCode: String(d.packageNames?.[0]?.code ?? '796'),
+    };
   },
 };
 
