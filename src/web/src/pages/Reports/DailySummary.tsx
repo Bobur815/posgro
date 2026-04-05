@@ -358,6 +358,7 @@ export function DailySummary() {
           <DateInput
             type="date"
             value={startDate}
+            onKeyDown={(e) => e.preventDefault()}
             onChange={(e) => setStartDate(e.target.value)}
           />
         </FilterGroup>
@@ -366,6 +367,7 @@ export function DailySummary() {
           <DateInput
             type="date"
             value={endDate}
+            onKeyDown={(e) => e.preventDefault()}
             onChange={(e) => setEndDate(e.target.value)}
           />
         </FilterGroup>

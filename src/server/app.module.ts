@@ -13,6 +13,7 @@ import { StoresModule } from './modules/stores/stores.module';
 import { InvoiceScannerModule } from './modules/invoice-scanner/invoice-scanner.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { MxikModule } from './modules/mxik/mxik.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { SettingsModule } from './modules/settings/settings.module';
     SuppliersModule,
     StoresModule,
     InvoiceScannerModule,
+    MxikModule,
   ],
 })
 export class AppModule {}

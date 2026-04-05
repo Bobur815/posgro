@@ -52,9 +52,12 @@ export class SalesService {
   }
 
   async syncFromTerminal(storeId: string, syncSaleDto: SyncSaleDto) {
-    // Check if sale already exists (idempotency)
-    const existing = await this.prisma.sale.findUnique({
-      where: { id: syncSaleDto.id },
+    // Check if sale already exists (idempotency).
+    // Use (storeId, receiptNumber) — not the terminal's local `id` — because the
+    // terminal's SQLite auto-increment ID can change after a DB reset/restore,
+    // causing the id-based lookup to miss an already-synced sale and crash on create.
+    const existing = await this.prisma.sale.findFirst({
+      where: { storeId, receiptNumber: syncSaleDto.receiptNumber },
     });
 
     if (existing) {

@@ -4,6 +4,7 @@ import styled from 'styled-components';
 import { useSales } from '../../hooks/useSales';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 import { Modal } from '../../components/common/Modal';
+import { Printer, Trash } from 'lucide-react';
 
 const Container = styled.div`
   display: flex;
@@ -346,6 +347,7 @@ export function ReceiptsSummary() {
           <DateInput
             type="date"
             value={startDate}
+            onKeyDown={(e) => e.preventDefault()}
             onChange={(e) => setStartDate(e.target.value)}
           />
         </FilterGroup>
@@ -354,6 +356,7 @@ export function ReceiptsSummary() {
           <DateInput
             type="date"
             value={endDate}
+            onKeyDown={(e) => e.preventDefault()}
             onChange={(e) => setEndDate(e.target.value)}
           />
         </FilterGroup>
@@ -463,13 +466,13 @@ export function ReceiptsSummary() {
                   </Td>
                   <Td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                     <ActionBtn onClick={() => handlePrint(sale.id)}>
-                      🖨️ {t('reports.print')}
+                      <Printer size={16} />
                     </ActionBtn>
                     <ActionBtn
                       $variant="danger"
                       onClick={() => setDeleteTargetId(sale.id)}
                     >
-                      {t('common.delete')}
+                      <Trash size={16} />
                     </ActionBtn>
                   </Td>
                 </Tr>

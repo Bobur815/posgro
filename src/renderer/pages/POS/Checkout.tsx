@@ -6,6 +6,7 @@ import { useSales } from "../../hooks/useSales";
 import { useToast } from "../../context/ToastContext";
 import { Modal } from "../../components/common/Modal";
 import { Button } from "../../components/common/Button";
+import { NumberPad } from "../../components/common/NumberPad";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 
 function parseSaleError(
@@ -35,6 +36,19 @@ function parseSaleError(
 }
 
 const Content = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: ${({ theme }) => theme.spacing.lg};
+  align-items: start;
+`;
+
+const LeftCol = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.spacing.md};
+`;
+
+const RightCol = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${({ theme }) => theme.spacing.md};
@@ -233,6 +247,34 @@ const ClearButton = styled.button`
   }
 `;
 
+const CustomAmountRow = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.sm};
+`;
+
+const CustomAmountInput = styled.input`
+  flex: 1;
+  padding: ${({ theme }) => `${theme.spacing.sm} ${theme.spacing.md}`};
+  border: 1.5px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  background-color: ${({ theme }) => theme.colors.surface};
+  color: ${({ theme }) => theme.colors.text};
+  font-size: 14px;
+  outline: none;
+
+  &:focus {
+    border-color: ${({ theme }) => theme.colors.primary};
+  }
+
+  &::-webkit-outer-spin-button,
+  &::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  -moz-appearance: textfield;
+`;
+
 const DENOMINATIONS = [20000, 50000, 100000, 200000];
 
 interface CheckoutProps {
@@ -250,12 +292,22 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">("cash");
   const [printCheck, setPrintCheck] = useState(total >= 10000);
   const [givenAmount, setGivenAmount] = useState(0);
+  const [customInput, setCustomInput] = useState("");
 
   const change = givenAmount - total;
-  const isInsufficient = givenAmount > 0 && change < 0;
+  const isDiscount = givenAmount > 0 && change < 0;
+  const discountFromUnderpayment = isDiscount ? Math.abs(change) : 0;
 
   const formatCurrency = (amount: number) =>
     formatCurrencyBase(amount, i18n.language as "ru" | "uz");
+
+  const addCustomAmount = () => {
+    const parsed = parseFloat(customInput.replace(/\s/g, "").replace(",", "."));
+    if (!isNaN(parsed) && parsed > 0) {
+      setGivenAmount((prev) => prev + parsed);
+      setCustomInput("");
+    }
+  };
 
   const handlePaymentRef = useRef<() => void>();
 
@@ -283,7 +335,7 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
           preWeighedItemId: item.preWeighedItemId,
         })),
         paymentMethod,
-        discountAmount: discount,
+        discountAmount: discount + discountFromUnderpayment,
       };
 
       const sale = editingSaleId
@@ -320,88 +372,127 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   handlePaymentRef.current = handlePayment;
 
   return (
-    <Modal title={t("pos.checkout")} onClose={onCancel}>
+    <Modal title={t("pos.checkout")} onClose={onCancel} width="860px">
       <Content>
-        <TotalSection>
-          <TotalLabel>{t("pos.totalToPay")}</TotalLabel>
-          <TotalAmount>{formatCurrency(total)}</TotalAmount>
-        </TotalSection>
+        <LeftCol>
+          <TotalSection>
+            <TotalLabel>{t("pos.totalToPay")}</TotalLabel>
+            <TotalAmount>{formatCurrency(total)}</TotalAmount>
+          </TotalSection>
 
-        <SummarySection>
-          <SummaryRow>
-            <span>{t("pos.subtotal")}</span>
-            <span>{formatCurrency(subtotal)}</span>
-          </SummaryRow>
-          {tax > 0 && (
+          <SummarySection>
             <SummaryRow>
-              <span>{t("pos.tax")}</span>
-              <span>{formatCurrency(tax)}</span>
+              <span>{t("pos.subtotal")}</span>
+              <span>{formatCurrency(subtotal)}</span>
             </SummaryRow>
-          )}
-          {discount > 0 && (
+            {tax > 0 && (
+              <SummaryRow>
+                <span>{t("pos.tax")}</span>
+                <span>{formatCurrency(tax)}</span>
+              </SummaryRow>
+            )}
+            {discount > 0 && (
+              <SummaryRow>
+                <span>{t("pos.discount")}</span>
+                <span>-{formatCurrency(discount)}</span>
+              </SummaryRow>
+            )}
             <SummaryRow>
-              <span>{t("pos.discount")}</span>
-              <span>-{formatCurrency(discount)}</span>
+              <span>{t("pos.itemsCount")}</span>
+              <span>{items.length}</span>
             </SummaryRow>
-          )}
-          <SummaryRow>
-            <span>{t("pos.itemsCount")}</span>
-            <span>{items.length}</span>
-          </SummaryRow>
-        </SummarySection>
+          </SummarySection>
 
-        <PaymentMethods>
-          <PaymentButton
-            $selected={paymentMethod === "cash"}
-            onClick={() => setPaymentMethod("cash")}
-          >
-            <PaymentIcon>💵</PaymentIcon>
-            <PaymentLabel>{t("pos.cash")}</PaymentLabel>
-          </PaymentButton>
-          <PaymentButton
-            $selected={paymentMethod === "card"}
-            onClick={() => {
-              setPaymentMethod("card");
-              setGivenAmount(0);
-            }}
-          >
-            <PaymentIcon>💳</PaymentIcon>
-            <PaymentLabel>{t("pos.card")}</PaymentLabel>
-          </PaymentButton>
-        </PaymentMethods>
-
-        {paymentMethod === "cash" && (
-          <CashHelper>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
+          <PaymentMethods>
+            <PaymentButton
+              $selected={paymentMethod === "cash"}
+              onClick={() => setPaymentMethod("cash")}
+            >
+              <PaymentIcon>💵</PaymentIcon>
+              <PaymentLabel>{t("pos.cash")}</PaymentLabel>
+            </PaymentButton>
+            <PaymentButton
+              $selected={paymentMethod === "card"}
+              onClick={() => {
+                setPaymentMethod("card");
+                setGivenAmount(0);
+                setCustomInput("");
               }}
             >
-              <CashHelperLabel>{t("pos.cashReceived")}</CashHelperLabel>
+              <PaymentIcon>💳</PaymentIcon>
+              <PaymentLabel>{t("pos.card")}</PaymentLabel>
+            </PaymentButton>
+          </PaymentMethods>
+
+          <Actions>
+            <Button variant="secondary" onClick={onCancel} fullWidth>
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={handlePayment} disabled={isLoading} fullWidth>
+              {isLoading ? t("common.processing") : t("pos.confirmPayment")}{" "}
+              <ShortcutHint>(F10)</ShortcutHint>
+            </Button>
+          </Actions>
+        </LeftCol>
+
+        <RightCol>
+          {paymentMethod === "cash" && (
+            <CashHelper>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <CashHelperLabel>{t("pos.cashReceived")}</CashHelperLabel>
+                {givenAmount > 0 && (
+                  <ClearButton onClick={() => setGivenAmount(0)}>
+                    {t("pos.clearAmount")} ×
+                  </ClearButton>
+                )}
+              </div>
+              <DenominationRow>
+                {DENOMINATIONS.map((denom) => (
+                  <DenomButton
+                    key={denom}
+                    onClick={() => setGivenAmount((prev) => prev + denom)}
+                  >
+                    {(denom / 1000).toLocaleString()}K
+                  </DenomButton>
+                ))}
+              </DenominationRow>
+              <CustomAmountRow>
+                <CustomAmountInput
+                  type="text"
+                  inputMode="none"
+                  placeholder={t("pos.customAmount")}
+                  value={customInput}
+                  onChange={(e) => setCustomInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addCustomAmount();
+                    }
+                  }}
+                />
+              </CustomAmountRow>
+              <NumberPad
+                onDigit={(d) =>
+                  setCustomInput((prev) => {
+                    if (d === "." && prev.includes(".")) return prev;
+                    if ((d === "0" || d === "00") && prev === "") return prev;
+                    return prev + d;
+                  })
+                }
+                onBackspace={() => setCustomInput((prev) => prev.slice(0, -1))}
+                onClear={() => setCustomInput("")}
+                onEnter={addCustomAmount}
+              />
               {givenAmount > 0 && (
-                <ClearButton onClick={() => setGivenAmount(0)}>
-                  {t("pos.clearAmount")} ×
-                </ClearButton>
-              )}
-            </div>
-            <DenominationRow>
-              {DENOMINATIONS.map((denom) => (
-                <DenomButton
-                  key={denom}
-                  onClick={() => setGivenAmount((prev) => prev + denom)}
-                >
-                  {(denom / 1000).toLocaleString()}K
-                </DenomButton>
-              ))}
-            </DenominationRow>
-            {givenAmount > 0 && (
-              <>
                 <ChangeDisplay>
                   <ChangeCol>
                     <ChangeColLabel>{t("pos.cashReceived")}</ChangeColLabel>
-
                     <ChangeColValue>
                       {formatCurrency(givenAmount)}
                     </ChangeColValue>
@@ -409,43 +500,26 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
                   <ChangeDivider />
                   <ChangeCol>
                     <ChangeColLabel>
-                      {isInsufficient
-                        ? t("pos.cashInsufficient")
-                        : t("pos.cashChange")}
+                      {isDiscount ? t("pos.cashDiscount") : t("pos.cashChange")}
                     </ChangeColLabel>
-                    <ChangeColValue
-                      $positive={change >= 0}
-                      $negative={isInsufficient}
-                    >
-                      {isInsufficient
-                        ? formatCurrency(Math.abs(change))
-                        : formatCurrency(change)}
+                    <ChangeColValue $positive={change >= 0} $negative={false}>
+                      {formatCurrency(Math.abs(change))}
                     </ChangeColValue>
                   </ChangeCol>
                 </ChangeDisplay>
-              </>
-            )}
-          </CashHelper>
-        )}
+              )}
+            </CashHelper>
+          )}
 
-        <PrintCheckRow>
-          <Checkbox
-            type="checkbox"
-            checked={printCheck}
-            onChange={(e) => setPrintCheck(e.target.checked)}
-          />
-          {t("pos.printReceipt")}
-        </PrintCheckRow>
-
-        <Actions>
-          <Button variant="secondary" onClick={onCancel} fullWidth>
-            {t("common.cancel")}
-          </Button>
-          <Button onClick={handlePayment} disabled={isLoading} fullWidth>
-            {isLoading ? t("common.processing") : t("pos.confirmPayment")}{" "}
-            <ShortcutHint>(F10)</ShortcutHint>
-          </Button>
-        </Actions>
+          <PrintCheckRow>
+            <Checkbox
+              type="checkbox"
+              checked={printCheck}
+              onChange={(e) => setPrintCheck(e.target.checked)}
+            />
+            {t("pos.printReceipt")}
+          </PrintCheckRow>
+        </RightCol>
       </Content>
     </Modal>
   );

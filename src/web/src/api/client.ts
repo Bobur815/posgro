@@ -417,6 +417,19 @@ export const analytics = {
   },
 };
 
+// ─── MXIK ────────────────────────────────────────────────────────────────────
+
+export const mxik = {
+  lookupCode: async (code: string): Promise<{ code: string; name: string; nameRu: string; packageCode: string }> => {
+    const { data } = await axiosInstance.get(`/mxik/code/${encodeURIComponent(code)}`);
+    return data;
+  },
+  searchByBarcode: async (barcode: string): Promise<{ code: string; name: string; nameRu: string; packageCode: string }> => {
+    const { data } = await axiosInstance.get(`/mxik/search/${encodeURIComponent(barcode)}`);
+    return data;
+  },
+};
+
 // ─── Combined export ─────────────────────────────────────────────────────────
 
 export const api = {
@@ -431,4 +444,5 @@ export const api = {
   receipt,
   stores,
   analytics,
+  mxik,
 };

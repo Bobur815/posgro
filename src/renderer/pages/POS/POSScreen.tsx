@@ -11,8 +11,10 @@ import { useSales } from "../../hooks/useSales";
 import { useToast } from "../../context/ToastContext";
 import {
   Banknote,
+  Barcode,
   CreditCard,
   Delete,
+  QrCode,
   SendHorizontal,
   Trash,
 } from "lucide-react";
@@ -796,6 +798,13 @@ export function POSScreen() {
     setShowCheckout(false);
   };
 
+  // Detect whether the current barcode field value looks like an EAN barcode or a QR code.
+  const barcodeType: "barcode" | "qr" | null = barcode
+    ? /^\d{8}$|^\d{12}$|^\d{13}$/.test(barcode)
+      ? "barcode"
+      : "qr"
+    : null;
+
   return (
     <PageWrapper>
       <PosTabBar />
@@ -808,7 +817,14 @@ export function POSScreen() {
           <InputColumn>
             <InputSection>
               <InputPanel>
-                <InputLabel>{t("pos.barcode")}</InputLabel>
+                <InputLabel style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  {barcodeType === "qr" ? (
+                    <QrCode size={12} />
+                  ) : (
+                    <Barcode size={12} />
+                  )}
+                  {barcodeType === "qr" ? t("pos.qrCode") : t("pos.barcode")}
+                </InputLabel>
                 <InputDisplay
                   $active={inputMode === "barcode"}
                   onClick={() => setInputMode("barcode")}

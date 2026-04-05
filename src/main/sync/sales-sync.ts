@@ -72,8 +72,23 @@ export async function syncSales(): Promise<void> {
         successCount++;
       } else {
         const errorText = await response.text();
-        console.error(`Failed to sync sale ${sale.receiptNumber}:`, errorText);
-        failCount++;
+        // If the server reports a unique constraint violation, the sale already
+        // exists on the server (a previous sync succeeded but the terminal never
+        // received the 200 due to a network drop). Treat this as success so we
+        // don't retry forever.
+        if (errorText.includes('Unique constraint failed') || response.status === 409) {
+          await prisma.sale.update({
+            where: { id: sale.id },
+            data: {
+              synced: true,
+              syncedAt: new Date(),
+            },
+          });
+          successCount++;
+        } else {
+          console.error(`Failed to sync sale ${sale.receiptNumber}:`, errorText);
+          failCount++;
+        }
       }
     } catch (error) {
       console.error(`Error syncing sale ${sale.receiptNumber}:`, error);

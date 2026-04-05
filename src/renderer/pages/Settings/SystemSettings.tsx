@@ -116,6 +116,8 @@ export function SystemSettings() {
     syncInterval: "5",
   });
 
+  const [terminalId, setTerminalId] = useState("");
+
 const [syncStatus, setSyncStatus] = useState<{
     isSyncing: boolean;
     lastSyncTime: string | null;
@@ -129,6 +131,7 @@ const [syncStatus, setSyncStatus] = useState<{
     loadSettings();
     loadSyncStatus();
     loadPlan();
+    loadTerminalId();
   }, []);
 
   const loadSettings = async () => {
@@ -171,6 +174,25 @@ const [syncStatus, setSyncStatus] = useState<{
       alert(t("common.saved"));
     } catch (error) {
       console.error("Failed to save settings:", error);
+    }
+  };
+
+  const loadTerminalId = async () => {
+    try {
+      const config = await window.electronAPI.config.getLocalConfig();
+      if (config) setTerminalId((config as { terminalId: string }).terminalId || "");
+    } catch (error) {
+      console.error("Failed to load terminal id:", error);
+    }
+  };
+
+  const handleSaveTerminalId = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await window.electronAPI.config.updateLocalConfig({ terminalId });
+      alert(t("common.saved"));
+    } catch (error) {
+      console.error("Failed to save terminal id:", error);
     }
   };
 
@@ -244,6 +266,21 @@ const [syncStatus, setSyncStatus] = useState<{
               }
             />
           </Row>
+          <Actions>
+            <Button type="submit">{t("common.save")}</Button>
+          </Actions>
+        </Form>
+      </Section>
+
+      <Section>
+        <SectionTitle>{t("settings.terminalId")}</SectionTitle>
+        <Form onSubmit={handleSaveTerminalId}>
+          <Input
+            label={t("settings.terminalId")}
+            value={terminalId}
+            onChange={(e) => setTerminalId(e.target.value)}
+          />
+          <InfoText>{t("settings.terminalIdHint")}</InfoText>
           <Actions>
             <Button type="submit">{t("common.save")}</Button>
           </Actions>

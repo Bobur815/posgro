@@ -209,7 +209,7 @@ export function ProductDetails() {
       loadProduct();
     }
   }, [id]);
-
+  
   useEffect(() => {
     if (id && isAdmin) {
       loadAnalytics();

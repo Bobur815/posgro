@@ -221,28 +221,19 @@ function buildOneLabelTSPL(item: TsplLabelItem, req: TsplPrintRequest): string {
         : `${fmtNum(item.price)} so'm`
       : null;
 
-    if (elements.articleId && item.articleId != null && priceStr) {
-      // articleId on the left, price on the right — same row
+    if (elements.articleId && item.articleId != null) {
       const idStr = `KOD: ${item.articleId}`;
-      const idY = y + Math.round((font.h - smallFont.h) / 2);
-      lines.push(
-        `TEXT ${marginDots},${idY},"${smallFont.name}",0,1,1,"${escapeTSPL(idStr)}"`,
-      );
-      const priceX = Math.round(dotsW * 0.45);
-      lines.push(
-        `TEXT ${priceX},${y},"${font.name}",0,1,1,"${escapeTSPL(priceStr)}"`,
-      );
-    } else if (priceStr) {
-      lines.push(
-        `TEXT ${marginDots},${y},"${font.name}",0,1,1,"${escapeTSPL(priceStr)}"`,
-      );
-    } else if (elements.articleId && item.articleId != null) {
-      const idStr = `ID: ${item.articleId}`;
       lines.push(
         `TEXT ${marginDots},${y},"${smallFont.name}",0,1,1,"${escapeTSPL(idStr)}"`,
       );
+      y += smallFont.h + 2;
     }
-    y += font.h + 2;
+    if (priceStr) {
+      lines.push(
+        `TEXT ${marginDots},${y},"${font.name}",0,1,1,"${escapeTSPL(priceStr)}"`,
+      );
+      y += font.h + 2;
+    }
   }
 
   if (elements.customText2 && elements.customText2Value) {

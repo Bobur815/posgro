@@ -63,14 +63,22 @@ const Hint = styled.p`
   margin: ${({ theme }) => theme.spacing.sm} 0 0;
 `;
 
+const DEFAULT_BARCODE_FORMATS = ["ean_13", "ean_8", "code_128", "code_39", "upc_a", "upc_e"];
+
 interface BarcodeScannerModalProps {
   onScan: (barcode: string) => void;
   onClose: () => void;
+  /** BarcodeDetector format list. Defaults to standard barcode formats. Pass ['qr_code','data_matrix'] for QR scanning. */
+  formats?: string[];
+  /** Override the modal title */
+  title?: string;
 }
 
 export function BarcodeScannerModal({
   onScan,
   onClose,
+  formats,
+  title,
 }: BarcodeScannerModalProps) {
   const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -84,7 +92,7 @@ export function BarcodeScannerModal({
     if (useBarcodeDetector) {
       // Chrome, Edge, modern Android
       const detector = new (window as any).BarcodeDetector({
-        formats: ["ean_13", "ean_8", "code_128", "code_39", "upc_a", "upc_e"],
+        formats: formats ?? DEFAULT_BARCODE_FORMATS,
       });
 
       navigator.mediaDevices
@@ -170,7 +178,7 @@ export function BarcodeScannerModal({
   }, []);
 
   return (
-    <Modal title={t("scanner.title") || "Scan Barcode"} onClose={onClose}>
+    <Modal title={title ?? (t("scanner.title") || "Scan Barcode")} onClose={onClose}>
       {error ? (
         <ErrorMsg>{error}</ErrorMsg>
       ) : (

@@ -26,7 +26,7 @@ import { convertUzbekText } from "@shared/utils/transliterator";
 import { Camera, RefreshCw, Settings } from "lucide-react";
 import { SupplierManagementModal } from "../Suppliers/SupplierManagementModal";
 import { CategoryManagementModal } from "./CategoryManagementModal";
-import { inventory, products as productsApi } from "../../api/client";
+import { inventory, products as productsApi, mxik as mxikApi } from "../../api/client";
 
 const Form = styled.form`
   display: flex;
@@ -299,6 +299,17 @@ export function ProductForm({
     });
   }, [formData.productType, isEdit]);
 
+  /** Extract EAN-13 from a GS1 DataMatrix QR payload, or return the value as-is. */
+  function extractEan13(raw: string): string {
+    const gs1 = raw.match(/\(01\)(\d{14})/) ?? raw.match(/^01(\d{14})/);
+    if (gs1) {
+      const gtin = gs1[1];
+      const ean13 = gtin.startsWith("0") ? gtin.slice(1) : gtin;
+      if (ean13.length === 13) return ean13;
+    }
+    return raw;
+  }
+
   const checkBarcode = useCallback(
     async (barcode: string) => {
       if (!barcode || barcode.length < 3 || isEdit) return;
@@ -320,6 +331,19 @@ export function ProductForm({
             ? product.expiryDate.split("T")[0]
             : "",
         }));
+      } else {
+        // Not in local DB — look up in tasnif registry using clean EAN-13
+        try {
+          const info = await mxikApi.searchByBarcode(extractEan13(barcode));
+          setFormData((prev) => ({
+            ...prev,
+            mxik: info.code,
+            nameUz: info.name,
+            nameRu: info.nameRu,
+          }));
+        } catch {
+          // Not found in tasnif either — user fills manually
+        }
       }
     },
     [searchByBarcode, isEdit],
@@ -348,8 +372,9 @@ export function ProductForm({
     }
   };
 
-  const handleScanResult = (barcode: string) => {
+  const handleScanResult = (raw: string) => {
     setShowScanner(false);
+    const barcode = extractEan13(raw);
     setFormData((prev) => ({ ...prev, barcode }));
     checkBarcode(barcode);
   };
@@ -523,6 +548,7 @@ export function ProductForm({
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+
   const handleNameUzChange = (value: string) => {
     setFormData((prev) => {
       const converted = convertUzbekText(value);
@@ -558,12 +584,17 @@ export function ProductForm({
       <Modal title={title} onClose={onClose} width="750px">
         <Form onSubmit={handleSubmit}>
           <Row>
-            <Input
-              label={t("products.mxik")}
-              value={formData.mxik}
-              placeholder="00000000000000000"
-              onChange={(e) => handleChange("mxik", e.target.value)}
-            />
+            <FormGroup>
+              <Label>{t("products.mxik")}</Label>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <Input
+                  value={formData.mxik}
+                  placeholder="00000000000000000"
+                  onChange={(e) => handleChange("mxik", e.target.value)}
+                  style={{ flex: 1 }}
+                />
+              </div>
+            </FormGroup>
             <FormGroup>
               <Label>
                 {t("products.barcode")} <Req>*</Req>
@@ -836,6 +867,7 @@ export function ProductForm({
           onClose={() => setShowScanner(false)}
         />
       )}
+
 
       {showArrivalModal && existingProduct && (
         <Modal
