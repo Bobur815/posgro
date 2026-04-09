@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { getPrismaClient } from '../database/sqlite-client';
 import { getCurrentUser } from './auth-handlers';
 import { getAppConfig } from '../config/app-config';
+import { getServerToken } from '../sync/queue-manager';
 import { format } from 'date-fns';
 import type { Sale, SaleItem as PrismaSaleItem } from '../../generated/prisma-sqlite';
 
@@ -190,6 +191,10 @@ export function setupSalesHandlers(): void {
 
     if (filters?.cashierId && currentUser.role === 'ADMIN') {
       where.cashierId = filters.cashierId;
+    }
+
+    if (filters?.terminalId && currentUser.role === 'ADMIN') {
+      where.terminalId = filters.terminalId;
     }
 
     const sales = await prisma.sale.findMany({
@@ -489,11 +494,17 @@ export function setupSalesHandlers(): void {
 ipcMain.handle('analytics:getData', async (_event, filters: {
   startDate: string;
   endDate: string;
+  terminalId?: string;
 }) => {
   const prisma = getPrismaClient();
   // Prisma/SQLite stores DateTime as integer milliseconds since epoch
   const startMs = new Date(filters.startDate).getTime();
   const endMs = new Date(filters.endDate).getTime();
+
+  // Build optional terminal filter clause for direct sales queries
+  const terminalClause = filters.terminalId ? ` AND terminal_id = '${filters.terminalId.replace(/'/g, "''")}'` : '';
+  // Same clause prefixed for join queries where sales table is aliased as 's'
+  const terminalClauseS = filters.terminalId ? ` AND s.terminal_id = '${filters.terminalId.replace(/'/g, "''")}'` : '';
 
   const [salesTrend, salesByCategory, hourlyDist, topProducts, cashierPerf, profitMargins, summary] = await Promise.all([
     prisma.$queryRawUnsafe(`
@@ -501,7 +512,7 @@ ipcMain.handle('analytics:getData', async (_event, filters: {
              CAST(SUM(final_amount) AS REAL) as revenue,
              CAST(COUNT(*) AS REAL) as count
       FROM sales
-      WHERE created_at >= ? AND created_at <= ?
+      WHERE created_at >= ? AND created_at <= ?${terminalClause}
       GROUP BY DATE(datetime(created_at/1000, 'unixepoch', 'localtime'))
       ORDER BY date ASC
     `, startMs, endMs),
@@ -515,7 +526,7 @@ ipcMain.handle('analytics:getData', async (_event, filters: {
       JOIN sales s ON si.sale_id = s.id
       JOIN products p ON si.product_id = p.id
       LEFT JOIN categories c ON p.category_id = c.id
-      WHERE s.created_at >= ? AND s.created_at <= ?
+      WHERE s.created_at >= ? AND s.created_at <= ?${terminalClauseS}
       GROUP BY c.id
       ORDER BY revenue DESC
       LIMIT 10
@@ -526,7 +537,7 @@ ipcMain.handle('analytics:getData', async (_event, filters: {
              CAST(SUM(final_amount) AS REAL) as revenue,
              CAST(COUNT(*) AS REAL) as count
       FROM sales
-      WHERE created_at >= ? AND created_at <= ?
+      WHERE created_at >= ? AND created_at <= ?${terminalClause}
       GROUP BY strftime('%H', datetime(created_at/1000, 'unixepoch', 'localtime'))
       ORDER BY hour ASC
     `, startMs, endMs),
@@ -537,7 +548,7 @@ ipcMain.handle('analytics:getData', async (_event, filters: {
              CAST(SUM(si.subtotal) AS REAL) as revenue
       FROM sale_items si
       JOIN sales s ON si.sale_id = s.id
-      WHERE s.created_at >= ? AND s.created_at <= ?
+      WHERE s.created_at >= ? AND s.created_at <= ?${terminalClauseS}
       GROUP BY si.product_id
       ORDER BY quantity DESC
       LIMIT 10
@@ -548,7 +559,7 @@ ipcMain.handle('analytics:getData', async (_event, filters: {
              CAST(SUM(final_amount) AS REAL) as revenue,
              CAST(COUNT(*) AS REAL) as count
       FROM sales
-      WHERE created_at >= ? AND created_at <= ?
+      WHERE created_at >= ? AND created_at <= ?${terminalClause}
       GROUP BY cashier_id
       ORDER BY revenue DESC
     `, startMs, endMs),
@@ -562,7 +573,7 @@ ipcMain.handle('analytics:getData', async (_event, filters: {
       JOIN sales s ON si.sale_id = s.id
       JOIN products p ON si.product_id = p.id
       LEFT JOIN categories c ON p.category_id = c.id
-      WHERE s.created_at >= ? AND s.created_at <= ?
+      WHERE s.created_at >= ? AND s.created_at <= ?${terminalClauseS}
       GROUP BY c.id
       ORDER BY revenue DESC
       LIMIT 10
@@ -574,7 +585,7 @@ ipcMain.handle('analytics:getData', async (_event, filters: {
              CAST(SUM(CASE WHEN payment_method = 'cash' THEN 1 ELSE 0 END) AS REAL) as cashSales,
              CAST(SUM(CASE WHEN payment_method = 'card' THEN 1 ELSE 0 END) AS REAL) as cardSales
       FROM sales
-      WHERE created_at >= ? AND created_at <= ?
+      WHERE created_at >= ? AND created_at <= ?${terminalClause}
     `, startMs, endMs),
   ]);
 
@@ -624,6 +635,34 @@ ipcMain.handle('analytics:getData', async (_event, filters: {
           : 0,
     },
   });
+});
+
+ipcMain.handle('terminals:getKnown', async () => {
+  const prisma = getPrismaClient();
+  const rows = await prisma.$queryRaw<{ terminal_id: string }[]>`
+    SELECT DISTINCT terminal_id FROM sales ORDER BY terminal_id
+  `;
+  return rows.map((r: { terminal_id: string }) => r.terminal_id);
+});
+
+ipcMain.handle('terminals:getStatus', async () => {
+  const config = getAppConfig();
+  const token = getServerToken();
+  if (!token) return [];
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(
+      `${config.vpsApiUrl}/terminals/status?storeId=${encodeURIComponent(config.storeId)}`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal }
+    );
+    clearTimeout(timeoutId);
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
 });
 
 async function generateReceiptNumber(terminalId: string): Promise<string> {

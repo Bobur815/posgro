@@ -175,10 +175,20 @@ export class ProductsService {
   async updateStock(id: number, storeId: string, quantity: number) {
     await this.findById(id, storeId);
 
-    return this.prisma.product.update({
+    const updated = await this.prisma.product.update({
       where: { id },
       data: { stock: { increment: quantity } },
     });
+
+    // Clamp to 0 if the increment pushed stock negative
+    if (Number(updated.stock) < 0) {
+      return this.prisma.product.update({
+        where: { id },
+        data: { stock: 0 },
+      });
+    }
+
+    return updated;
   }
 
   async getAnalytics(

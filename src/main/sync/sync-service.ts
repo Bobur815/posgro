@@ -64,15 +64,23 @@ export class SyncService {
       await syncCategories();
 
       // Sync products (download updated products from VPS)
-      await syncProducts();
+      const stockConflicts = await syncProducts();
 
       // Pull store config (AI token limit, etc.) from VPS
       await this.syncStoreConfig();
+
+      // Send heartbeat to VPS so admins can monitor all terminals
+      await this.sendHeartbeat();
 
       this.lastSyncTime = new Date();
 
       // Notify renderer process
       this.notifyRenderer('sync:completed');
+
+      // Warn if any products have negative stock after VPS overwrite
+      if (stockConflicts.length > 0) {
+        this.notifyRenderer('sync:stockConflict', stockConflicts);
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.lastError = errorMessage;
@@ -113,6 +121,33 @@ export class SyncService {
       }
     } catch {
       // Offline or endpoint not yet implemented — use cached limit
+    }
+  }
+
+  private async sendHeartbeat(): Promise<void> {
+    const config = getAppConfig();
+    const token = getServerToken();
+    if (!token) return;
+
+    try {
+      const prisma = getPrismaClient();
+      const unsyncedCount = await prisma.sale.count({ where: { synced: false } });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      await fetch(`${config.vpsApiUrl}/terminals/heartbeat`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          terminalId: config.terminalId,
+          storeId: config.storeId,
+          unsyncedCount,
+          lastSyncAt: new Date().toISOString(),
+        }),
+      });
+      clearTimeout(timeoutId);
+    } catch {
+      // Heartbeat is fire-and-forget — VPS endpoint may not exist yet
     }
   }
 

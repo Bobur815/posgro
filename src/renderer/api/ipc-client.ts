@@ -113,8 +113,8 @@ export const receipt = {
     ipc?.receipt.scan(imageBase64, mimeType),
   matchProducts: (items: { name: string; mxik?: string | null }[]) =>
     ipc?.receipt.matchProducts(items),
-  getTokenUsage: () =>
-    ipc?.receipt.getTokenUsage(),
+  getScanUsage: () =>
+    ipc?.receipt.getScanUsage(),
 };
 
 export const analytics = {

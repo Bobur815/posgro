@@ -449,11 +449,16 @@ export function POSScreen() {
       return handleIdSubmit();
     }
 
-    const barcodeValue = barcode.trim();
-    if (!barcodeValue) {
+    const rawValue = barcode.trim();
+    if (!rawValue) {
       setError(t("pos.enterBarcode"));
       return;
     }
+    // Extract EAN-13 from GS1 DataMatrix QR payload (e.g. 01GTIN-14 21serial 93check)
+    const gs1 = rawValue.match(/\(01\)(\d{14})/) ?? rawValue.match(/^01(\d{14})/);
+    const barcodeValue = gs1
+      ? (gs1[1].startsWith("0") ? gs1[1].slice(1) : gs1[1])
+      : rawValue;
 
     const resetInputs = () => {
       setBarcode("");

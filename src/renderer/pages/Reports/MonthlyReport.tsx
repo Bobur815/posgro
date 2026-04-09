@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
 import { Button } from '../../components/common/Button';
@@ -149,6 +149,12 @@ export function MonthlyReport() {
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [generated, setGenerated] = useState(false);
+  const [terminalId, setTerminalId] = useState('');
+  const [knownTerminals, setKnownTerminals] = useState<string[]>([]);
+
+  useEffect(() => {
+    window.electronAPI.terminals.getKnown().then(setKnownTerminals).catch(() => {});
+  }, []);
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
@@ -165,7 +171,7 @@ export function MonthlyReport() {
   const handleGenerateReport = async () => {
     const startDate = new Date(selectedYear, selectedMonth, 1);
     const endDate = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59, 999);
-    await loadSales({ startDate: startDate.toISOString(), endDate: endDate.toISOString() });
+    await loadSales({ startDate: startDate.toISOString(), endDate: endDate.toISOString(), terminalId: terminalId || undefined });
     setGenerated(true);
   };
 
@@ -202,6 +208,18 @@ export function MonthlyReport() {
             </option>
           ))}
         </Select>
+
+        {knownTerminals.length > 1 && (
+          <Select
+            value={terminalId}
+            onChange={(e) => { setTerminalId(e.target.value); setGenerated(false); }}
+          >
+            <option value="">{t('reports.allTerminals')}</option>
+            {knownTerminals.map((id) => (
+              <option key={id} value={id}>{id}</option>
+            ))}
+          </Select>
+        )}
 
         <Button onClick={handleGenerateReport} disabled={isLoading}>
           {isLoading ? t('common.loading') : t('reports.generateReport')}

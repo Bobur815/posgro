@@ -34,16 +34,14 @@ export function createWindow(): BrowserWindow {
     mainWindow.focus();
   });
 
-  // Register devtools shortcut in development
-  if (process.env.NODE_ENV === 'development') {
-    globalShortcut.register('CommandOrControl+Shift+I', () => {
-      mainWindow.webContents.toggleDevTools();
-    });
+  // Register devtools shortcut
+  globalShortcut.register('CommandOrControl+Shift+I', () => {
+    mainWindow.webContents.toggleDevTools();
+  });
 
-    mainWindow.on('closed', () => {
-      globalShortcut.unregister('CommandOrControl+Shift+I');
-    });
-  }
+  mainWindow.on('closed', () => {
+    globalShortcut.unregister('CommandOrControl+Shift+I');
+  });
 
   // Load the app
   if (process.env.NODE_ENV === 'development') {

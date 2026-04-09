@@ -229,9 +229,15 @@ export function Analytics() {
   const [customEnd, setCustomEnd] = useState('');
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  
+  const [terminalId, setTerminalId] = useState('');
+  const [knownTerminals, setKnownTerminals] = useState<string[]>([]);
+
   const lang = i18n.language as 'ru' | 'uz';
   const fmt = (amount: number) => formatCurrencyBase(amount, lang);
+
+  useEffect(() => {
+    window.electronAPI.terminals.getKnown().then(setKnownTerminals).catch(() => {});
+  }, []);
 
   const presetOptions = [
     { value: 'today', label: t('reports.today') },
@@ -252,6 +258,7 @@ export function Analytics() {
       const result = await window.electronAPI.analytics.getData({
         startDate: start.toISOString(),
         endDate: end.toISOString(),
+        terminalId: terminalId || undefined,
       });
       setData(result as AnalyticsData);
     } catch (err) {
@@ -259,7 +266,7 @@ export function Analytics() {
     } finally {
       setIsLoading(false);
     }
-  }, [preset, customStart, customEnd]);
+  }, [preset, customStart, customEnd, terminalId]);
 
   useEffect(() => {
     fetchData();
@@ -315,6 +322,16 @@ export function Analytics() {
                 onChange={(e) => setCustomEnd(e.target.value)}
               />
             </>
+          )}
+          {knownTerminals.length > 1 && (
+            <Select
+              options={[
+                { value: '', label: t('reports.allTerminals') },
+                ...knownTerminals.map((id) => ({ value: id, label: id })),
+              ]}
+              value={terminalId}
+              onChange={(e) => setTerminalId(e.target.value)}
+            />
           )}
         </FilterRow>
       </Header>

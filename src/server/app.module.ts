@@ -14,6 +14,7 @@ import { InvoiceScannerModule } from './modules/invoice-scanner/invoice-scanner.
 import { CategoriesModule } from './modules/categories/categories.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { MxikModule } from './modules/mxik/mxik.module';
+import { TerminalsModule } from './modules/terminals/terminals.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { MxikModule } from './modules/mxik/mxik.module';
     StoresModule,
     InvoiceScannerModule,
     MxikModule,
+    TerminalsModule,
   ],
 })
 export class AppModule {}

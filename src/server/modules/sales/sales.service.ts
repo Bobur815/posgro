@@ -103,15 +103,22 @@ export class SalesService {
       include: { items: true },
     });
 
-    // Update product stock using server-side product IDs
+    // Update product stock using server-side product IDs.
+    // Clamp to 0 — never let a terminal sale push VPS stock below zero,
+    // even if the terminal and VPS counts have drifted (e.g. manual admin edit).
     for (const item of syncSaleDto.items) {
       const serverId = productIdByBarcode.get(item.barcode);
       if (!serverId) continue;
-      await this.productsService.updateStock(
-        serverId,
-        storeId,
-        -parseFloat(item.quantity),
-      );
+      const decrement = parseFloat(item.quantity);
+      await this.prisma.product.updateMany({
+        where: { id: serverId, storeId, stock: { gt: 0 } },
+        data: { stock: { decrement } },
+      });
+      // If stock was already 0, floor it at 0 explicitly
+      await this.prisma.product.updateMany({
+        where: { id: serverId, storeId, stock: { lt: 0 } },
+        data: { stock: 0 },
+      });
     }
 
     return { id: sale.id, synced: true };

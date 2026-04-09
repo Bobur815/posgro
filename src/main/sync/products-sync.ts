@@ -2,7 +2,7 @@ import { getPrismaClient } from '../database/sqlite-client';
 import { getAppConfig } from '../config/app-config';
 import { getServerToken } from './queue-manager';
 
-export async function syncProducts(): Promise<void> {
+export async function syncProducts(): Promise<{ id: number; nameRu: string; stock: number }[]> {
   const prisma = getPrismaClient();
   const config = getAppConfig();
 
@@ -35,41 +35,107 @@ export async function syncProducts(): Promise<void> {
     const products = await response.json();
 
     if (!Array.isArray(products) || products.length === 0) {
-      return;
+      return [];
     }
 
 
     for (const product of products) {
+      // Never write negative stock from VPS to local DB — clamp to 0.
+      // Negative VPS stock indicates a drift between terminals/admin edits;
+      // local should show "out of stock" (0) rather than a nonsensical negative.
+      if (product.stock < 0) product.stock = 0;
+
+      // If this product has an internalCode, check whether another local product
+      // already owns it. If so, clear that conflict first to avoid a unique violation.
+      if (product.internalCode) {
+        const conflicting = await prisma.product.findFirst({
+          where: {
+            internalCode: String(product.internalCode),
+            NOT: { barcode: product.barcode },
+          },
+          select: { id: true },
+        });
+        if (conflicting) {
+          await prisma.product.update({
+            where: { id: conflicting.id },
+            data: { internalCode: null },
+          });
+        }
+      }
+
       // Check if a product with the same barcode already exists locally
       const existing = await prisma.product.findUnique({
         where: { barcode: product.barcode },
         select: { id: true },
       });
 
-      if (existing && existing.id === product.id) {
-        // IDs match — just update fields
-        await prisma.product.update({
-          where: { id: existing.id },
-          data: {
-            nameRu: product.nameRu,
-            nameUz: product.nameUz,
-            price: product.price,
-            stock: product.stock,
-            minStock: product.minStock,
-            unit: product.unit,
-            categoryId: product.categoryId,
-            active: product.active,
-            mxik: product.mxik ?? null,
-            productType: product.productType ?? 'REGULAR',
-            internalCode: product.internalCode ?? null,
-            updatedAt: new Date(product.updatedAt),
-          },
-        });
-      } else if (existing && existing.id !== product.id) {
-        // ID mismatch — fix it if safe (no sales reference the old local ID)
-        const saleCount = await prisma.saleItem.count({ where: { productId: existing.id } });
-        if (saleCount === 0) {
-          await prisma.product.delete({ where: { id: existing.id } });
+      try {
+        if (existing && existing.id === product.id) {
+          // IDs match — just update fields
+          await prisma.product.update({
+            where: { id: existing.id },
+            data: {
+              nameRu: product.nameRu,
+              nameUz: product.nameUz,
+              price: product.price,
+              stock: product.stock,
+              minStock: product.minStock,
+              unit: product.unit,
+              categoryId: product.categoryId,
+              active: product.active,
+              mxik: product.mxik ?? null,
+              productType: product.productType ?? 'REGULAR',
+              internalCode: product.internalCode ?? null,
+              updatedAt: new Date(product.updatedAt),
+            },
+          });
+        } else if (existing && existing.id !== product.id) {
+          // ID mismatch — fix it if safe (no sales reference the old local ID)
+          const saleCount = await prisma.saleItem.count({ where: { productId: existing.id } });
+          if (saleCount === 0) {
+            await prisma.product.delete({ where: { id: existing.id } });
+            await prisma.product.create({
+              data: {
+                id: product.id,
+                barcode: product.barcode,
+                nameRu: product.nameRu,
+                nameUz: product.nameUz,
+                price: product.price,
+                cost: product.cost ?? null,
+                stock: product.stock,
+                minStock: product.minStock,
+                unit: product.unit,
+                categoryId: product.categoryId,
+                active: product.active,
+                mxik: product.mxik ?? null,
+                productType: product.productType ?? 'REGULAR',
+                internalCode: product.internalCode ?? null,
+                createdAt: new Date(product.createdAt),
+                updatedAt: new Date(product.updatedAt),
+              },
+            });
+          } else {
+            // Has sales — keep local ID, just update fields
+            await prisma.product.update({
+              where: { id: existing.id },
+              data: {
+                nameRu: product.nameRu,
+                nameUz: product.nameUz,
+                price: product.price,
+                stock: product.stock,
+                minStock: product.minStock,
+                unit: product.unit,
+                categoryId: product.categoryId,
+                active: product.active,
+                mxik: product.mxik ?? null,
+                productType: product.productType ?? 'REGULAR',
+                internalCode: product.internalCode ?? null,
+                updatedAt: new Date(product.updatedAt),
+              },
+            });
+          }
+        } else {
+          // No local product — create with VPS ID
           await prisma.product.create({
             data: {
               id: product.id,
@@ -90,48 +156,10 @@ export async function syncProducts(): Promise<void> {
               updatedAt: new Date(product.updatedAt),
             },
           });
-        } else {
-          // Has sales — keep local ID, just update fields
-          await prisma.product.update({
-            where: { id: existing.id },
-            data: {
-              nameRu: product.nameRu,
-              nameUz: product.nameUz,
-              price: product.price,
-              stock: product.stock,
-              minStock: product.minStock,
-              unit: product.unit,
-              categoryId: product.categoryId,
-              active: product.active,
-              mxik: product.mxik ?? null,
-              productType: product.productType ?? 'REGULAR',
-              internalCode: product.internalCode ?? null,
-              updatedAt: new Date(product.updatedAt),
-            },
-          });
         }
-      } else {
-        // No local product — create with VPS ID
-        await prisma.product.create({
-          data: {
-            id: product.id,
-            barcode: product.barcode,
-            nameRu: product.nameRu,
-            nameUz: product.nameUz,
-            price: product.price,
-            cost: product.cost ?? null,
-            stock: product.stock,
-            minStock: product.minStock,
-            unit: product.unit,
-            categoryId: product.categoryId,
-            active: product.active,
-            mxik: product.mxik ?? null,
-            productType: product.productType ?? 'REGULAR',
-            internalCode: product.internalCode ?? null,
-            createdAt: new Date(product.createdAt),
-            updatedAt: new Date(product.updatedAt),
-          },
-        });
+      } catch (productError) {
+        // Log and skip — one bad product must not abort the entire sync
+        console.error(`Failed to sync product barcode=${product.barcode}:`, productError instanceof Error ? productError.message : productError);
       }
     }
 
@@ -141,6 +169,14 @@ export async function syncProducts(): Promise<void> {
       update: { value: new Date().toISOString() },
       create: { key: 'last_product_sync', value: new Date().toISOString() },
     });
+
+    // Detect stock conflicts: products that went negative after VPS overwrite
+    const conflicted = await prisma.product.findMany({
+      where: { stock: { lt: 0 } },
+      select: { id: true, nameRu: true, stock: true },
+    });
+
+    return conflicted.map((p: { id: number; nameRu: string; stock: unknown }) => ({ id: p.id, nameRu: p.nameRu, stock: Number(p.stock) }));
 
   } catch (error) {
     console.error('Failed to sync products:', error);

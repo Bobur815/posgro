@@ -25,6 +25,7 @@ export interface TsplLabelItem {
   copies: number;
   productType?: string; // 'BULK_WEIGHTED' | 'PREPACKAGED' | 'REGULAR'
   articleId?: string | number;
+  pluCode?: string;
 }
 
 export interface TsplPrintRequest {
@@ -39,6 +40,7 @@ export interface TsplPrintRequest {
     unit: boolean;
     barcode: boolean;
     articleId: boolean;
+    pluCode: boolean;
     customText1: boolean;
     customText2: boolean;
     customText1Value?: string;
@@ -143,6 +145,7 @@ function buildOneLabelTSPL(item: TsplLabelItem, req: TsplPrintRequest): string {
   lines.push(`SPEED 4`);
   lines.push(`DENSITY 8`);
   lines.push(`DIRECTION 0,0`);
+  lines.push(`CODEPAGE 1251`);
   lines.push(`CLS`);
 
   const name =
@@ -228,6 +231,13 @@ function buildOneLabelTSPL(item: TsplLabelItem, req: TsplPrintRequest): string {
       );
       y += smallFont.h + 2;
     }
+    if (elements.pluCode && item.pluCode) {
+      const pluStr = `PLU: ${item.pluCode}`;
+      lines.push(
+        `TEXT ${marginDots},${y},"${smallFont.name}",0,1,1,"${escapeTSPL(pluStr)}"`,
+      );
+      y += smallFont.h + 2;
+    }
     if (priceStr) {
       lines.push(
         `TEXT ${marginDots},${y},"${font.name}",0,1,1,"${escapeTSPL(priceStr)}"`,
@@ -263,7 +273,7 @@ function buildOneLabelTSPL(item: TsplLabelItem, req: TsplPrintRequest): string {
       // Total price alongside the barcode on the right
       const total = Math.round(item.amount * item.price);
       const totalStr = `${fmtNum(total)} so'm`;
-      const totalX = Math.round(dotsW * 0.45);
+      const totalX = Math.round(dotsW * 0.2);
       const totalY = barcodeY + Math.round((barcodeH - font.h) / 2);
       lines.push(
         `TEXT ${totalX},${totalY},"${font.name}",0,1,1,"${escapeTSPL(totalStr)}"`,

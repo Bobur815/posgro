@@ -4,7 +4,7 @@ import { setupProductsHandlers } from "./products-handlers";
 import { setupSalesHandlers } from "./sales-handlers";
 import { setupWeighedItemsHandlers } from "./weighed-items-handlers";
 import { setupScaleHandlers } from "./scale-handlers";
-import { getAppConfig } from "../config/app-config";
+import { getAppConfig, updateConfig } from "../config/app-config";
 import { getAuthToken, getServerToken } from "../sync/queue-manager";
 import { getPrismaClient } from "../database/sqlite-client";
 import {
@@ -677,10 +677,16 @@ function setupAppHandlers(): void {
     "config:updateLocalConfig",
     async (_event, data: { storeId?: string; apiUrl?: string; storeName?: string; terminalId?: string }) => {
       const prisma = getPrismaClient();
-      return prisma.localConfig.update({
+      const result = await prisma.localConfig.update({
         where: { id: "config" },
         data,
       });
+      // Keep in-memory AppConfig in sync so receipt numbers and terminalId
+      // on new sales reflect the change immediately without a restart.
+      if (data.terminalId) updateConfig({ terminalId: data.terminalId });
+      if (data.storeId) updateConfig({ storeId: data.storeId });
+      if (data.apiUrl) updateConfig({ vpsApiUrl: data.apiUrl });
+      return result;
     },
   );
 }

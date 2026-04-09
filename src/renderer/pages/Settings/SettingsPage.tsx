@@ -12,6 +12,7 @@ import {
   Users,
   Package,
   Scale,
+  Monitor,
 } from "lucide-react";
 
 const Container = styled.div`
@@ -114,6 +115,12 @@ export function SettingsPage() {
       title: t("inventory.preWeighed"),
       description: t("bulkWeigh.preWeighedInventory"),
       path: "/settings/weighed",
+    },
+    {
+      icon: <Monitor size={32} />,
+      title: t("settings.terminalStatus"),
+      description: t("settings.terminalStatusDescription"),
+      path: "/settings/terminals",
     },
   ];
 

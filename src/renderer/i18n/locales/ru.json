@@ -130,6 +130,7 @@
   },
   "products": {
     "add": "Добавить",
+    "edit":"Редактировать",
     "title": "Товары",
     "name": "Название",
     "nameRu": "Название (RU)",
@@ -288,7 +289,9 @@
     "custom": "Произвольный период",
     "revenue": "Продажа",
     "cost": "Себестоимость",
-    "period": "Период"
+    "period": "Период",
+    "allTerminals": "Все терминалы",
+    "terminal": "Терминал"
   },
   "users": {
     "title": "Пользователи",
@@ -326,6 +329,13 @@
     "printerSettingsDescription": "Выбор и настройка принтера",
     "syncSettings": "Синхронизация",
     "syncSettingsDescription": "Настройки синхронизации с сервером",
+    "terminalStatus": "Статус терминалов",
+    "terminalStatusDescription": "Мониторинг всех терминалов магазина",
+    "status": "Статус",
+    "unsyncedSales": "Несинхр. продажи",
+    "online": "Online",
+    "offline": "Offline",
+    "noTerminalData": "Нет данных. Убедитесь, что сервер поддерживает /terminals/heartbeat",
     "userManagement": "Управление пользователями",
     "userManagementDescription": "Добавление и редактирование пользователей",
     "inventorySettings": "Управление складом",
@@ -449,6 +459,7 @@
     "el_price": "Цена",
     "el_barcode": "Штрих-код",
     "el_articleId": "Артикул (ID)",
+    "el_pluCode": "PLU-код",
     "el_productionDate": "Дата производства",
     "el_expiryDate": "Срок годности",
     "el_customText1": "Текст 1",

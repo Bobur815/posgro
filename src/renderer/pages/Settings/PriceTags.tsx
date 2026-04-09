@@ -19,6 +19,7 @@ export interface PriceTagTemplate {
     unit: boolean;
     barcode: boolean;
     articleId: boolean;
+    pluCode: boolean;
     customText1: boolean;
     customText2: boolean;
   };
@@ -42,6 +43,7 @@ function createDefaultTemplate(): PriceTagTemplate {
       unit: false,
       barcode: true,
       articleId: false,
+      pluCode: false,
       customText1: false,
       customText2: false,
     },
@@ -486,6 +488,7 @@ export function PriceTags() {
                   "unit",
                   "barcode",
                   "articleId",
+                  "pluCode",
                   "customText1",
                   "customText2",
                 ] as (keyof PriceTagTemplate["elements"])[]
@@ -714,6 +717,10 @@ function TagPreview({ template }: { template: PriceTagTemplate }) {
       )}
 
       {el.unit && <PreviewLine $small>1.5 кг</PreviewLine>}
+
+      {el.pluCode && (
+        <PreviewLine $small>PLU: 00042</PreviewLine>
+      )}
 
       {(el.price || el.articleId) && (
         <div

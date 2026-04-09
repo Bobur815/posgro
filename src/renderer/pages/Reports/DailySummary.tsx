@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
-import styled from 'styled-components';
-import { useSales } from '../../hooks/useSales';
-import { formatCurrency as formatCurrencyBase } from '@shared/utils';
-import { Modal } from '../../components/common/Modal';
-import { Printer, Trash } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import styled from "styled-components";
+import { useSales } from "../../hooks/useSales";
+import { useAuthStore } from "../../store/auth-store";
+import { formatCurrency as formatCurrencyBase } from "@shared/utils";
+import { Modal } from "../../components/common/Modal";
+import { Printer, Trash } from "lucide-react";
 
 const Container = styled.div`
   display: flex;
@@ -17,7 +18,6 @@ const HeaderRow = styled.div`
   align-items: center;
   justify-content: space-between;
   padding-left: 25px;
-
 `;
 
 const Title = styled.h1`
@@ -186,9 +186,11 @@ const PaymentBadge = styled.span<{ $method: string }>`
   padding: 2px 8px;
   border-radius: 12px;
   background-color: ${({ theme, $method }) =>
-    $method === 'cash' ? theme.colors.success + '20' : theme.colors.primary + '20'};
+    $method === "cash"
+      ? theme.colors.success + "20"
+      : theme.colors.primary + "20"};
   color: ${({ theme, $method }) =>
-    $method === 'cash' ? theme.colors.success : theme.colors.primary};
+    $method === "cash" ? theme.colors.success : theme.colors.primary};
   font-weight: 500;
 `;
 
@@ -198,23 +200,23 @@ const EmptyCell = styled.div`
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
-const ActionBtn = styled.button<{ $variant?: 'danger' }>`
+const ActionBtn = styled.button<{ $variant?: "danger" }>`
   padding: 4px 10px;
   font-size: 13px;
   border-radius: ${({ theme }) => theme.borderRadius};
   border: 1px solid
     ${({ theme, $variant }) =>
-      $variant === 'danger' ? theme.colors.error : theme.colors.border};
+      $variant === "danger" ? theme.colors.error : theme.colors.border};
   background: none;
   color: ${({ theme, $variant }) =>
-    $variant === 'danger' ? theme.colors.error : theme.colors.textSecondary};
+    $variant === "danger" ? theme.colors.error : theme.colors.textSecondary};
   cursor: pointer;
 
   &:hover {
     background-color: ${({ theme, $variant }) =>
-      $variant === 'danger' ? theme.colors.error + '15' : theme.colors.border};
+      $variant === "danger" ? theme.colors.error + "15" : theme.colors.border};
     color: ${({ theme, $variant }) =>
-      $variant === 'danger' ? theme.colors.error : theme.colors.text};
+      $variant === "danger" ? theme.colors.error : theme.colors.text};
   }
 
   & + & {
@@ -239,16 +241,16 @@ const ModalActions = styled.div`
   gap: ${({ theme }) => theme.spacing.sm};
 `;
 
-const ModalBtn = styled.button<{ $variant?: 'danger' }>`
+const ModalBtn = styled.button<{ $variant?: "danger" }>`
   padding: 8px 18px;
   border-radius: ${({ theme }) => theme.borderRadius};
   border: none;
   font-size: 14px;
   cursor: pointer;
   background-color: ${({ theme, $variant }) =>
-    $variant === 'danger' ? theme.colors.error : theme.colors.border};
+    $variant === "danger" ? theme.colors.error : theme.colors.border};
   color: ${({ theme, $variant }) =>
-    $variant === 'danger' ? '#fff' : theme.colors.text};
+    $variant === "danger" ? "#fff" : theme.colors.text};
 
   &:hover {
     opacity: 0.85;
@@ -258,22 +260,44 @@ const ModalBtn = styled.button<{ $variant?: 'danger' }>`
 export function ReceiptsSummary() {
   const { t, i18n } = useTranslation();
   const { loadSales, deleteSale, sales, isLoading } = useSales();
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === "ADMIN";
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = new Date().toISOString().split("T")[0];
   const [startDate, setStartDate] = useState(todayStr);
   const [endDate, setEndDate] = useState(todayStr);
-  const [paymentFilter, setPaymentFilter] = useState<'all' | 'cash' | 'card'>('all');
+  const [paymentFilter, setPaymentFilter] = useState<"all" | "cash" | "card">(
+    "all",
+  );
+  const [terminalId, setTerminalId] = useState("");
+  const [knownTerminals, setKnownTerminals] = useState<string[]>([]);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  console.log(knownTerminals, sales);
+  
+  useEffect(() => { 
+    if (isAdmin) {
+      window.electronAPI.terminals
+        .getKnown()
+        .then(setKnownTerminals)
+        .catch(() => {});
+    }
+  }, [isAdmin]);
 
   const formatCurrency = (amount: number) =>
-    formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
+    formatCurrencyBase(amount, i18n.language as "ru" | "uz");
 
   const formatDateTime = (iso: string) => {
     const d = new Date(iso);
     return (
-      d.toLocaleDateString(i18n.language, { day: '2-digit', month: '2-digit' }) +
-      ' ' +
-      d.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' })
+      d.toLocaleDateString(i18n.language, {
+        day: "2-digit",
+        month: "2-digit",
+      }) +
+      " " +
+      d.toLocaleTimeString(i18n.language, {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
     );
   };
 
@@ -282,27 +306,41 @@ export function ReceiptsSummary() {
     start.setHours(0, 0, 0, 0);
     const end = new Date(endDate);
     end.setHours(23, 59, 59, 999);
-    loadSales({ startDate: start.toISOString(), endDate: end.toISOString() });
-  }, [startDate, endDate]);
+    loadSales({
+      startDate: start.toISOString(),
+      endDate: end.toISOString(),
+      terminalId: terminalId || undefined,
+    });
+  }, [startDate, endDate, terminalId]);
 
   const filteredSales = useMemo(
     () =>
-      paymentFilter === 'all'
+      paymentFilter === "all"
         ? sales
         : sales.filter((s) => s.paymentMethod === paymentFilter),
-    [sales, paymentFilter]
+    [sales, paymentFilter],
   );
 
   const summary = useMemo(() => {
     if (!filteredSales.length) return null;
     const totalRevenue = filteredSales.reduce(
       (sum, s) => sum + Number(s.finalAmount),
-      0
+      0,
     );
-    const totalItems = filteredSales.reduce((sum, s) => sum + s.items.length, 0);
-    const cashSales = filteredSales.filter((s) => s.paymentMethod === 'cash').length;
-    const cardSales = filteredSales.filter((s) => s.paymentMethod === 'card').length;
-    const totalCost = filteredSales.reduce((sum, s) => sum + (s.totalCost ?? 0), 0);
+    const totalItems = filteredSales.reduce(
+      (sum, s) => sum + s.items.length,
+      0,
+    );
+    const cashSales = filteredSales.filter(
+      (s) => s.paymentMethod === "cash",
+    ).length;
+    const cardSales = filteredSales.filter(
+      (s) => s.paymentMethod === "card",
+    ).length;
+    const totalCost = filteredSales.reduce(
+      (sum, s) => sum + (s.totalCost ?? 0),
+      0,
+    );
     const avgMargin =
       totalRevenue > 0 ? ((totalRevenue - totalCost) / totalRevenue) * 100 : 0;
     return {
@@ -319,7 +357,7 @@ export function ReceiptsSummary() {
     try {
       await window.electronAPI.printer.printReceipt(saleId);
     } catch (err) {
-      console.error('Print failed:', err);
+      console.error("Print failed:", err);
     }
   };
 
@@ -332,18 +370,18 @@ export function ReceiptsSummary() {
   const handleReset = () => {
     setStartDate(todayStr);
     setEndDate(todayStr);
-    setPaymentFilter('all');
+    setPaymentFilter("all");
   };
 
   return (
     <Container>
       <HeaderRow>
-        <Title>{t('reports.receipts')}</Title>
+        <Title>{t("reports.receipts")}</Title>
       </HeaderRow>
 
       <FilterBar>
         <FilterGroup>
-          <FilterLabel>{t('reports.startDate')}</FilterLabel>
+          <FilterLabel>{t("reports.startDate")}</FilterLabel>
           <DateInput
             type="date"
             value={startDate}
@@ -352,7 +390,7 @@ export function ReceiptsSummary() {
           />
         </FilterGroup>
         <FilterGroup>
-          <FilterLabel>{t('reports.endDate')}</FilterLabel>
+          <FilterLabel>{t("reports.endDate")}</FilterLabel>
           <DateInput
             type="date"
             value={endDate}
@@ -361,31 +399,47 @@ export function ReceiptsSummary() {
           />
         </FilterGroup>
         <FilterGroup>
-          <FilterLabel>{t('reports.payment')}</FilterLabel>
+          <FilterLabel>{t("reports.payment")}</FilterLabel>
           <FilterSelect
             value={paymentFilter}
             onChange={(e) =>
-              setPaymentFilter(e.target.value as 'all' | 'cash' | 'card')
+              setPaymentFilter(e.target.value as "all" | "cash" | "card")
             }
           >
-            <option value="all">{t('reports.allPayments')}</option>
-            <option value="cash">{t('pos.cash')}</option>
-            <option value="card">{t('pos.card')}</option>
+            <option value="all">{t("reports.allPayments")}</option>
+            <option value="cash">{t("pos.cash")}</option>
+            <option value="card">{t("pos.card")}</option>
           </FilterSelect>
         </FilterGroup>
-        <ResetButton onClick={handleReset}>{t('common.refresh')}</ResetButton>
+        {isAdmin && knownTerminals.length > 1 && (
+          <FilterGroup>
+            <FilterLabel>{t("reports.terminal")}</FilterLabel>
+            <FilterSelect
+              value={terminalId}
+              onChange={(e) => setTerminalId(e.target.value)}
+            >
+              <option value="">{t("reports.allTerminals")}</option>
+              {knownTerminals.map((id) => (
+                <option key={id} value={id}>
+                  {id}
+                </option>
+              ))}
+            </FilterSelect>
+          </FilterGroup>
+        )}
+        <ResetButton onClick={handleReset}>{t("common.refresh")}</ResetButton>
       </FilterBar>
 
       {summary && (
         <StatsGrid>
           <StatCard>
-            <StatLabel>{t('reports.totalSales')}</StatLabel>
+            <StatLabel>{t("reports.totalSales")}</StatLabel>
             <StatValue>{summary.totalSales}</StatValue>
-            <StatSubtext>{t('reports.transactions')}</StatSubtext>
+            <StatSubtext>{t("reports.transactions")}</StatSubtext>
           </StatCard>
 
           <StatCard>
-            <StatLabel>{t('reports.totalRevenue')}</StatLabel>
+            <StatLabel>{t("reports.totalRevenue")}</StatLabel>
             <StatValue>{formatCurrency(summary.totalRevenue)}</StatValue>
             <StatSubtext>
               {startDate === endDate ? startDate : `${startDate} – ${endDate}`}
@@ -393,78 +447,89 @@ export function ReceiptsSummary() {
           </StatCard>
 
           <StatCard>
-            <StatLabel>{t('reports.avgMargin')}</StatLabel>
+            <StatLabel>{t("reports.avgMargin")}</StatLabel>
             <StatValue>{summary.avgMargin.toFixed(1)}%</StatValue>
-            <StatSubtext>{t('reports.perSale')}</StatSubtext>
+            <StatSubtext>{t("reports.perSale")}</StatSubtext>
           </StatCard>
 
           <StatCard>
-            <StatLabel>{t('reports.itemsSold')}</StatLabel>
+            <StatLabel>{t("reports.itemsSold")}</StatLabel>
             <StatValue>{summary.totalItems}</StatValue>
-            <StatSubtext>{t('reports.items')}</StatSubtext>
+            <StatSubtext>{t("reports.items")}</StatSubtext>
           </StatCard>
 
           <StatCard>
-            <StatLabel>{t('reports.cashPayments')}</StatLabel>
+            <StatLabel>{t("reports.cashPayments")}</StatLabel>
             <StatValue>{summary.cashSales}</StatValue>
-            <StatSubtext>{t('reports.transactions')}</StatSubtext>
+            <StatSubtext>{t("reports.transactions")}</StatSubtext>
           </StatCard>
 
           <StatCard>
-            <StatLabel>{t('reports.cardPayments')}</StatLabel>
+            <StatLabel>{t("reports.cardPayments")}</StatLabel>
             <StatValue>{summary.cardSales}</StatValue>
-            <StatSubtext>{t('reports.transactions')}</StatSubtext>
+            <StatSubtext>{t("reports.transactions")}</StatSubtext>
           </StatCard>
         </StatsGrid>
       )}
 
       <TableCard>
         <TableCardHeader>
-          <SectionTitle>{t('reports.receipts')}</SectionTitle>
+          <SectionTitle>{t("reports.receipts")}</SectionTitle>
         </TableCardHeader>
 
         {isLoading && !filteredSales.length ? (
-          <EmptyCell>{t('common.loading')}</EmptyCell>
+          <EmptyCell>{t("common.loading")}</EmptyCell>
         ) : !filteredSales.length ? (
-          <EmptyCell>{t('reports.noReceipts')}</EmptyCell>
+          <EmptyCell>{t("reports.noReceipts")}</EmptyCell>
         ) : (
           <Table>
             <thead>
               <tr>
-                <Th>{t('reports.dateTime')}</Th>
-                <Th>{t('pos.receiptNumber')}</Th>
-                <Th>{t('reports.cashier')}</Th>
-                <Th style={{ textAlign: 'center' }}>{t('pos.items')}</Th>
-                <Th>{t('reports.payment')}</Th>
-                <Th style={{ textAlign: 'right' }}>{t('reports.amount')}</Th>
-                <Th style={{ textAlign: 'right' }}>{t('reports.cost')}</Th>
-                <Th style={{ textAlign: 'right' }}>{t('reports.margin')}</Th>
-                <Th style={{ textAlign: 'center' }}>{t('common.actions')}</Th>
+                <Th>{t("reports.dateTime")}</Th>
+                <Th>{t("pos.receiptNumber")}</Th>
+                <Th>{t("reports.cashier")}</Th>
+                <Th style={{ textAlign: "center" }}>{t("pos.items")}</Th>
+                <Th>{t("reports.payment")}</Th>
+                <Th style={{ textAlign: "right" }}>{t("reports.amount")}</Th>
+                <Th style={{ textAlign: "right" }}>{t("reports.cost")}</Th>
+                <Th style={{ textAlign: "right" }}>{t("reports.margin")}</Th>
+                <Th style={{ textAlign: "center" }}>{t("common.actions")}</Th>
               </tr>
             </thead>
             <tbody>
               {filteredSales.map((sale) => (
                 <Tr key={sale.id}>
-                  <Td style={{ whiteSpace: 'nowrap' }}>{formatDateTime(sale.createdAt)}</Td>
-                  <Td style={{ fontFamily: 'monospace' }}>#{sale.receiptNumber}</Td>
+                  <Td style={{ whiteSpace: "nowrap" }}>
+                    {formatDateTime(sale.createdAt)}
+                  </Td>
+                  <Td style={{ fontFamily: "monospace" }}>
+                    #{sale.receiptNumber}
+                  </Td>
                   <Td>{sale.cashierName}</Td>
-                  <Td style={{ textAlign: 'center' }}>{sale.items.length}</Td>
+                  <Td style={{ textAlign: "center" }}>{sale.items.length}</Td>
                   <Td>
                     <PaymentBadge $method={sale.paymentMethod}>
-                      {sale.paymentMethod === 'cash' ? '💵' : '💳'}{' '}
+                      {sale.paymentMethod === "cash" ? "💵" : "💳"}{" "}
                       {t(`pos.${sale.paymentMethod}`)}
                     </PaymentBadge>
                   </Td>
-                  <Td style={{ textAlign: 'right', fontWeight: 600 }}>
+                  <Td style={{ textAlign: "right", fontWeight: 600 }}>
                     {formatCurrency(Number(sale.finalAmount))}
                   </Td>
-                  <Td style={{ textAlign: 'right', color: 'var(--color-text-secondary)' }}>
-                    {sale.totalCost != null ? formatCurrency(sale.totalCost) : '—'}
+                  <Td
+                    style={{
+                      textAlign: "right",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    {sale.totalCost != null
+                      ? formatCurrency(sale.totalCost)
+                      : "—"}
                   </Td>
-                  <Td style={{ textAlign: 'right', fontWeight: 600 }}>
-                    {sale.margin != null ? `${sale.margin.toFixed(1)}%` : '—'}
+                  <Td style={{ textAlign: "right", fontWeight: 600 }}>
+                    {sale.margin != null ? `${sale.margin.toFixed(1)}%` : "—"}
                   </Td>
-                  <Td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                  <Td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
                     <ActionBtn onClick={() => handlePrint(sale.id)}>
                       <Printer size={16} />
                     </ActionBtn>
@@ -483,15 +548,18 @@ export function ReceiptsSummary() {
       </TableCard>
 
       {deleteTargetId && (
-        <Modal title={t('common.delete')} onClose={() => setDeleteTargetId(null)}>
+        <Modal
+          title={t("common.delete")}
+          onClose={() => setDeleteTargetId(null)}
+        >
           <ModalBody>
-            <ModalText>{t('common.confirmDelete')}</ModalText>
+            <ModalText>{t("common.confirmDelete")}</ModalText>
             <ModalActions>
               <ModalBtn onClick={() => setDeleteTargetId(null)}>
-                {t('common.no')}
+                {t("common.no")}
               </ModalBtn>
               <ModalBtn $variant="danger" onClick={handleDeleteExecute}>
-                {t('common.yes')}
+                {t("common.yes")}
               </ModalBtn>
             </ModalActions>
           </ModalBody>

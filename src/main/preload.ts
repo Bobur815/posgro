@@ -48,7 +48,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     update: (id: string, data: unknown) =>
       ipcRenderer.invoke("sales:update", id, data),
     delete: (id: string) => ipcRenderer.invoke("sales:delete", id),
-    getAll: (filters?: { startDate?: string; endDate?: string }) =>
+    getAll: (filters?: { startDate?: string; endDate?: string; terminalId?: string }) =>
       ipcRenderer.invoke("sales:getAll", filters),
     getById: (id: string) => ipcRenderer.invoke("sales:getById", id),
     getTodaySummary: () => ipcRenderer.invoke("sales:getTodaySummary"),
@@ -118,6 +118,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.on("sync:failed", handler);
       return () => ipcRenderer.removeListener("sync:failed", handler);
     },
+    onStockConflict: (callback: (conflicts: { id: number; nameRu: string; stock: number }[]) => void) => {
+      const handler = (_event: IpcRendererEvent, conflicts: { id: number; nameRu: string; stock: number }[]) =>
+        callback(conflicts);
+      ipcRenderer.on("sync:stockConflict", handler);
+      return () => ipcRenderer.removeListener("sync:stockConflict", handler);
+    },
   },
 
   // Printer
@@ -181,8 +187,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // Analytics
   analytics: {
-    getData: (filters: { startDate: string; endDate: string }) =>
+    getData: (filters: { startDate: string; endDate: string; terminalId?: string }) =>
       ipcRenderer.invoke("analytics:getData", filters),
+  },
+
+  // Terminals
+  terminals: {
+    getKnown: () => ipcRenderer.invoke("terminals:getKnown"),
+    getStatus: () => ipcRenderer.invoke("terminals:getStatus"),
   },
 
   // App info
@@ -246,7 +258,7 @@ declare global {
         create: (data: unknown) => Promise<unknown>;
         update: (id: string, data: unknown) => Promise<unknown>;
         delete: (id: string) => Promise<boolean>;
-        getAll: (filters?: unknown) => Promise<unknown[]>;
+        getAll: (filters?: { startDate?: string; endDate?: string; terminalId?: string }) => Promise<unknown[]>;
         getById: (id: string) => Promise<unknown>;
         getTodaySummary: () => Promise<unknown>;
       };
@@ -286,6 +298,9 @@ declare global {
         onCompleted: (callback: () => void) => () => void;
         onFailed: (
           callback: (error: { message: string }) => void,
+        ) => () => void;
+        onStockConflict: (
+          callback: (conflicts: { id: number; nameRu: string; stock: number }[]) => void,
         ) => () => void;
       };
       printer: {
@@ -327,7 +342,12 @@ declare global {
         getData: (filters: {
           startDate: string;
           endDate: string;
+          terminalId?: string;
         }) => Promise<unknown>;
+      };
+      terminals: {
+        getKnown: () => Promise<string[]>;
+        getStatus: () => Promise<{ terminalId: string; lastSyncAt: string; unsyncedCount: number }[]>;
       };
       app: {
         getVersion: () => Promise<string>;

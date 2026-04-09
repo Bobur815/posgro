@@ -28,7 +28,7 @@ export function useSales() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadSales = useCallback(async (filters?: { startDate?: string; endDate?: string }) => {
+  const loadSales = useCallback(async (filters?: { startDate?: string; endDate?: string; terminalId?: string }) => {
     setIsLoading(true);
     setError(null);
 

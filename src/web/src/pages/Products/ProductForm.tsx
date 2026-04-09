@@ -511,8 +511,8 @@ export function ProductForm({
       nameUz: formData.nameUz,
       price: parseFloat(formData.price),
       cost: formData.cost ? parseFloat(formData.cost) : undefined,
-      stock: parseInt(formData.stock) || 0,
-      minStock: parseInt(formData.minStock) || 0,
+      stock: parseFloat(formData.stock) || 0,
+      minStock: parseFloat(formData.minStock) || 0,
       unit: formData.unit,
       categoryId: Number(formData.categoryId),
       supplierId: formData.supplierId || undefined,
@@ -691,6 +691,7 @@ export function ProductForm({
             <Input
               label={t("products.stock")}
               type="number"
+              step={formData.productType === "BULK_WEIGHTED" || formData.productType === "PREPACKAGED" ? "0.001" : "1"}
               value={formData.stock}
               onChange={(e) => handleChange("stock", e.target.value)}
             />

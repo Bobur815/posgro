@@ -203,7 +203,8 @@ export function ProductDetails() {
   );
 
   const isAdmin = user?.role === "ADMIN";
-
+  console.log(product);
+  
   useEffect(() => {
     if (id) {
       loadProduct();

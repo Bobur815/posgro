@@ -36,6 +36,7 @@ model Store {
   supplierTransactions SupplierTransaction[]
   systemSettings       SystemSetting[]
   auditLogs            AuditLog[]
+  terminalHeartbeats   TerminalHeartbeat[]
 
   @@map("stores")
 }
@@ -291,6 +292,22 @@ model SystemSetting {
   @@unique([storeId, key]) // Same key can exist in different stores
   @@index([storeId])
   @@map("system_settings")
+}
+
+// ==================== TERMINAL HEARTBEAT ====================
+
+model TerminalHeartbeat {
+  id             String   @id @default(cuid())
+  storeId        String   @map("store_id")
+  store          Store    @relation(fields: [storeId], references: [id])
+  terminalId     String   @map("terminal_id")
+  unsyncedCount  Int      @default(0) @map("unsynced_count")
+  lastSyncAt     DateTime @map("last_sync_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([storeId, terminalId])
+  @@index([storeId])
+  @@map("terminal_heartbeats")
 }
 
 model AuditLog {

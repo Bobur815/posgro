@@ -28,6 +28,7 @@ import { SupplierList, SupplierDetails } from "./pages/Suppliers";
 import { WeighedInventoryPage } from "./pages/Inventory/WeighedInventoryPage";
 import { ScaleSettings } from "./pages/Settings/ScaleSettings";
 import { SyncSettings } from "./pages/Settings/SyncSettings";
+import { TerminalStatus } from "./pages/Settings/TerminalStatus";
 
 function App() {
   const { isAuthenticated } = useAuthStore();
@@ -169,6 +170,14 @@ function App() {
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
               <SyncSettings />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="settings/terminals"
+          element={
+            <RoleGuard allowedRoles={["ADMIN"]}>
+              <TerminalStatus />
             </RoleGuard>
           }
         />
