@@ -79,10 +79,10 @@ export class ProductsService {
   }
 
   async create(storeId: string, createProductDto: CreateProductDto) {
-    const existing = await this.findByBarcode(
-      storeId,
-      createProductDto.barcode,
-    );
+    const existing = await this.prisma.product.findFirst({
+      where: { storeId, barcode: createProductDto.barcode, active: true },
+      select: { id: true },
+    });
     if (existing) {
       throw new ConflictException(
         "Product with this barcode already exists in this store",
@@ -134,6 +134,7 @@ export class ProductsService {
         where: {
           storeId,
           barcode: updateProductDto.barcode,
+          active: true,
           NOT: { id },
         },
       });

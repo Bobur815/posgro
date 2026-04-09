@@ -773,7 +773,7 @@ export function ProductForm({
                 label={t("products.internalCode")}
                 value={formData.internalCode}
                 readOnly
-                style={{ background: "var(--color-surface, #f5f5f5)", cursor: "default" }}
+                style={{ background: "var(--color-surface)", cursor: "default" }}
                 onChange={() => {}}
               />
               <div />
