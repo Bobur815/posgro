@@ -8,6 +8,13 @@ function transformProduct(p: any): Product {
   return {
     ...p,
     isActive: p.isActive ?? p.active,
+    price: Number(p.price),
+    cost: p.cost != null ? Number(p.cost) : undefined,
+    stock: Number(p.stock),
+    minStock: Number(p.minStock),
+    pendingPrice: p.pendingPrice != null ? Number(p.pendingPrice) : p.pendingPrice,
+    pendingPriceThreshold: p.pendingPriceThreshold != null ? Number(p.pendingPriceThreshold) : p.pendingPriceThreshold,
+    discountPercent: p.discountPercent != null ? Number(p.discountPercent) : undefined,
   };
 }
 
@@ -136,7 +143,7 @@ export function useProducts() {
   const searchByBarcode = useCallback(async (barcode: string) => {
     try {
       const product = await productsApi.getByBarcode(barcode);
-      return product as Product | null;
+      return product ? transformProduct(product) : null;
     } catch (err) {
       console.error('Failed to find product:', err);
       return null;
@@ -146,7 +153,7 @@ export function useProducts() {
   const getById = useCallback(async (id: string) => {
     try {
       const product = await productsApi.getById(id);
-      return product as Product | null;
+      return product ? transformProduct(product) : null;
     } catch (err) {
       console.error('Failed to get product:', err);
       return null;
