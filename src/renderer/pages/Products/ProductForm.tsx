@@ -453,7 +453,9 @@ export function ProductForm({
       nameUz: formData.nameUz,
       price: parseFloat(formData.price),
       cost: formData.cost ? parseFloat(formData.cost) : undefined,
-      stock: parseInt(formData.stock) || 0,
+      // When editing, omit stock — managed by inventory arrivals/sales only.
+      // Including it would overwrite concurrent changes (arrivals, sales).
+      ...(isEdit ? {} : { stock: parseInt(formData.stock) || 0 }),
       minStock: parseInt(formData.minStock) || 0,
       unit: formData.unit,
       categoryId: Number(formData.categoryId),

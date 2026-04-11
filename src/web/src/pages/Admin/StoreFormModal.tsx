@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import styled from 'styled-components';
-import { X } from 'lucide-react';
-import { stores, StoreRecord } from '../../api/client';
+import React, { useEffect, useState } from "react";
+import styled from "styled-components";
+import { X } from "lucide-react";
+import { stores, StoreRecord } from "../../api/client";
 
 const Overlay = styled.div`
   position: fixed;
@@ -39,7 +39,9 @@ const CloseBtn = styled.button`
   border: none;
   cursor: pointer;
   color: ${({ theme }) => theme.colors.textSecondary};
-  &:hover { color: ${({ theme }) => theme.colors.text}; }
+  &:hover {
+    color: ${({ theme }) => theme.colors.text};
+  }
 `;
 
 const Field = styled.div`
@@ -63,7 +65,10 @@ const Input = styled.input`
   background: ${({ theme }) => theme.colors.background};
   color: ${({ theme }) => theme.colors.text};
   box-sizing: border-box;
-  &:focus { outline: none; border-color: ${({ theme }) => theme.colors.primary}; }
+  &:focus {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.primary};
+  }
 `;
 
 const FooterActions = styled.div`
@@ -79,10 +84,16 @@ const Btn = styled.button<{ $primary?: boolean }>`
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  border: 1px solid ${({ $primary, theme }) => $primary ? theme.colors.primary : theme.colors.border};
-  background: ${({ $primary, theme }) => $primary ? theme.colors.primary : 'transparent'};
-  color: ${({ $primary }) => $primary ? '#fff' : 'inherit'};
-  &:disabled { opacity: 0.5; cursor: default; }
+  border: 1px solid
+    ${({ $primary, theme }) =>
+      $primary ? theme.colors.primary : theme.colors.border};
+  background: ${({ $primary, theme }) =>
+    $primary ? theme.colors.primary : "transparent"};
+  color: ${({ $primary }) => ($primary ? "#fff" : "inherit")};
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
 `;
 
 const ErrorMsg = styled.div`
@@ -99,21 +110,24 @@ interface Props {
 
 export function StoreFormModal({ store, onClose, onSaved }: Props) {
   const isNew = store === null;
-  const [name, setName] = useState(store?.name ?? '');
-  const [address, setAddress] = useState(store?.address ?? '');
-  const [phone, setPhone] = useState(store?.phone ?? '');
+  const [name, setName] = useState(store?.name ?? "");
+  const [address, setAddress] = useState(store?.address ?? "");
+  const [phone, setPhone] = useState(store?.phone ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setName(store?.name ?? '');
-    setAddress(store?.address ?? '');
-    setPhone(store?.phone ?? '');
+    setName(store?.name ?? "");
+    setAddress(store?.address ?? "");
+    setPhone(store?.phone ?? "");
   }, [store]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) { setError('Store name is required.'); return; }
+    if (!name.trim()) {
+      setError("Store name is required.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -140,8 +154,10 @@ export function StoreFormModal({ store, onClose, onSaved }: Props) {
     <Overlay onClick={(e) => e.target === e.currentTarget && onClose()}>
       <Modal>
         <ModalHeader>
-          <ModalTitle>{isNew ? 'New Store' : 'Edit Store'}</ModalTitle>
-          <CloseBtn onClick={onClose}><X size={18} /></CloseBtn>
+          <ModalTitle>{isNew ? "New Store" : "Edit Store"}</ModalTitle>
+          <CloseBtn onClick={onClose}>
+            <X size={18} />
+          </CloseBtn>
         </ModalHeader>
 
         <form onSubmit={handleSubmit}>
@@ -174,9 +190,11 @@ export function StoreFormModal({ store, onClose, onSaved }: Props) {
           {error && <ErrorMsg>{error}</ErrorMsg>}
 
           <FooterActions>
-            <Btn type="button" onClick={onClose}>Cancel</Btn>
+            <Btn type="button" onClick={onClose}>
+              Cancel
+            </Btn>
             <Btn type="submit" $primary disabled={saving}>
-              {saving ? 'Saving…' : isNew ? 'Create' : 'Save'}
+              {saving ? "Saving…" : isNew ? "Create" : "Save"}
             </Btn>
           </FooterActions>
         </form>

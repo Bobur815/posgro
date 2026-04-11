@@ -103,6 +103,18 @@ export class StoresService {
     return { success: true };
   }
 
+  async addCredits(id: string, amount: number) {
+    await this.findById(id);
+
+    const updated = await this.prisma.store.update({
+      where: { id },
+      data: { aiCredits: { increment: amount } },
+      select: { id: true, aiCredits: true },
+    });
+
+    return { success: true, aiCredits: Number(updated.aiCredits) };
+  }
+
   async getStats(id: string) {
     const store = await this.findById(id);
 

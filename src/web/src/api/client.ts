@@ -328,7 +328,7 @@ export const receipt = {
     });
     return data;
   },
-  getPlan: async (): Promise<{ plan: string; balance_usd: number | null }> => {
+  getPlan: async (): Promise<{ plan: string; balance_uzs: number | null }> => {
     const { data } = await axiosInstance.get("/invoice/plan");
     return data;
   },
@@ -343,6 +343,7 @@ export interface StoreRecord {
   phone: string | null;
   active: boolean;
   plan: string;
+  aiCredits: number;
   createdAt: string;
   updatedAt: string;
   _count?: { users: number; products: number; sales: number };
@@ -402,6 +403,10 @@ export const stores = {
   },
   deactivate: async (id: string): Promise<{ success: boolean }> => {
     const { data } = await axiosInstance.put(`/stores/${id}/deactivate`);
+    return data;
+  },
+  addCredits: async (id: string, amount: number): Promise<{ success: boolean; aiCredits: number }> => {
+    const { data } = await axiosInstance.post(`/stores/${id}/credits`, { amount });
     return data;
   },
 };

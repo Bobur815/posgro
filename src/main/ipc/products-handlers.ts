@@ -443,11 +443,31 @@ export function setupProductsHandlers(): void {
     const prisma = getPrismaClient();
     const numericId = Number(id);
 
-    // Soft delete
-    await prisma.product.update({
-      where: { id: numericId },
-      data: { active: false },
+    // Collect sale IDs that have items for this product
+    const affectedItems = await prisma.saleItem.findMany({
+      where: { productId: numericId },
+      select: { saleId: true },
     });
+    const affectedSaleIds = [...new Set(affectedItems.map((i: { saleId: string }) => i.saleId))];
+
+    // Remove sale items for this product
+    await prisma.saleItem.deleteMany({ where: { productId: numericId } });
+
+    // Delete sales that are now empty (no remaining items)
+    if (affectedSaleIds.length > 0) {
+      for (const saleId of affectedSaleIds) {
+        const remaining = await prisma.saleItem.count({ where: { saleId } });
+        if (remaining === 0) {
+          await prisma.sale.delete({ where: { id: saleId } });
+        }
+      }
+    }
+
+    // Delete inventory arrivals
+    await prisma.inventoryArrival.deleteMany({ where: { productId: numericId } });
+
+    // Hard delete the product
+    await prisma.product.delete({ where: { id: numericId } });
 
     // Log action
     await prisma.auditLog.create({

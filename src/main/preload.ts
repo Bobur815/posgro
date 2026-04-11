@@ -335,8 +335,8 @@ declare global {
         matchProducts: (
           items: { name: string; mxik?: string | null }[],
         ) => Promise<unknown[]>;
-        getPlan: () => Promise<{ plan: string; balance_usd: number | null }>;
-        getScanUsage: () => Promise<{ balance_usd: number | null }>;
+        getPlan: () => Promise<{ plan: string; balance_uzs: number | null }>;
+        getScanUsage: () => Promise<{ balance_uzs: number | null }>;
       };
       analytics: {
         getData: (filters: {

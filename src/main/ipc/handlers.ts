@@ -726,15 +726,15 @@ function setupReceiptHandlers(): void {
         items: unknown[];
         tier: string;
         cost_usd?: number;
-        balance_usd?: number;
+        balance_uzs?: number;
       };
 
       // Cache updated balance locally if server returned it
-      if (typeof result.balance_usd === "number") {
+      if (typeof result.balance_uzs === "number") {
         await prisma.systemSetting.upsert({
-          where: { key: "ai_balance_usd" },
-          update: { value: String(result.balance_usd) },
-          create: { key: "ai_balance_usd", value: String(result.balance_usd) },
+          where: { key: "ai_balance_uzs" },
+          update: { value: String(result.balance_uzs) },
+          create: { key: "ai_balance_uzs", value: String(result.balance_uzs) },
         });
       }
 
@@ -748,7 +748,7 @@ function setupReceiptHandlers(): void {
     const config = getAppConfig();
     try {
       const token = getServerToken();
-      if (!token) return { plan: "free", balance_usd: null };
+      if (!token) return { plan: "free", balance_uzs: null };
 
       const response = await fetch(`${config.vpsApiUrl}/invoice/plan`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -757,7 +757,7 @@ function setupReceiptHandlers(): void {
 
       const data = (await response.json()) as {
         plan: string;
-        balance_usd: number | null;
+        balance_uzs: number | null;
       };
       // Cache locally so the UI shows it even offline
       await prisma.systemSetting.upsert({
@@ -765,11 +765,11 @@ function setupReceiptHandlers(): void {
         update: { value: data.plan },
         create: { key: "ai_plan", value: data.plan },
       });
-      if (typeof data.balance_usd === "number") {
+      if (typeof data.balance_uzs === "number") {
         await prisma.systemSetting.upsert({
-          where: { key: "ai_balance_usd" },
-          update: { value: String(data.balance_usd) },
-          create: { key: "ai_balance_usd", value: String(data.balance_usd) },
+          where: { key: "ai_balance_uzs" },
+          update: { value: String(data.balance_uzs) },
+          create: { key: "ai_balance_uzs", value: String(data.balance_uzs) },
         });
       }
       return data;
@@ -777,11 +777,11 @@ function setupReceiptHandlers(): void {
       // Fallback to cached values
       const [planSetting, balanceSetting] = await Promise.all([
         prisma.systemSetting.findUnique({ where: { key: "ai_plan" } }),
-        prisma.systemSetting.findUnique({ where: { key: "ai_balance_usd" } }),
+        prisma.systemSetting.findUnique({ where: { key: "ai_balance_uzs" } }),
       ]);
       return {
         plan: planSetting?.value ?? "free",
-        balance_usd: balanceSetting ? parseFloat(balanceSetting.value) : null,
+        balance_uzs: balanceSetting ? parseFloat(balanceSetting.value) : null,
       };
     }
   });
@@ -790,12 +790,12 @@ function setupReceiptHandlers(): void {
   ipcMain.handle("receipt:getScanUsage", async () => {
     const prisma = getPrismaClient();
     const balanceSetting = await prisma.systemSetting.findUnique({
-      where: { key: "ai_balance_usd" },
+      where: { key: "ai_balance_uzs" },
     });
-    const balance_usd = balanceSetting
+    const balance_uzs = balanceSetting
       ? parseFloat(balanceSetting.value)
       : null;
-    return { balance_usd };
+    return { balance_uzs };
   });
 
   ipcMain.handle(

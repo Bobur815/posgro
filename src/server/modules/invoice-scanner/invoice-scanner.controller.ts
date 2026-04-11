@@ -50,7 +50,7 @@ export class InvoiceScannerController {
       : null;
     return {
       plan: store?.plan ?? 'free',
-      balance_usd: store?.plan === 'paid' ? Number(store.aiCredits) : null,
+      balance_uzs: store?.plan === 'paid' ? Number(store.aiCredits) : null,
     };
   }
 
@@ -81,7 +81,7 @@ export class InvoiceScannerController {
         data: { aiCredits: { decrement: billedAmount } },
         select: { aiCredits: true },
       });
-      return { ...result, balance_usd: Number(updated.aiCredits) };
+      return { ...result, balance_uzs: Number(updated.aiCredits) };
     }
 
     return result;

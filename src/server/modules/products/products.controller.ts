@@ -134,10 +134,10 @@ export class ProductsController {
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Deactivate product (Admin only)' })
-  @ApiResponse({ status: 200, description: 'Product deactivated' })
+  @ApiOperation({ summary: 'Hard delete product and its sales (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Product deleted' })
   @ApiResponse({ status: 404, description: 'Product not found' })
   async remove(@CurrentStore() storeId: string, @Param('id', ParseIntPipe) id: number) {
-    return this.productsService.deactivate(id, storeId);
+    return this.productsService.hardDelete(id, storeId);
   }
 }

@@ -4,16 +4,6 @@ import os from "os";
 import path from "path";
 import { getPrismaClient } from "../database/sqlite-client";
 
-/** Recalculates and fixes the EAN-13 check digit if the barcode is 13 digits. */
-function fixEan13CheckDigit(barcode: string): string {
-  if (!/^\d{13}$/.test(barcode)) return barcode;
-  let sum = 0;
-  for (let i = 0; i < 12; i++) {
-    sum += parseInt(barcode[i]) * (i % 2 === 0 ? 1 : 3);
-  }
-  const check = (10 - (sum % 10)) % 10;
-  return barcode.slice(0, 12) + check;
-}
 
 export interface TsplLabelItem {
   productNameRu: string;
@@ -34,6 +24,8 @@ export interface TsplPrintRequest {
   heightMm: number;
   gapMm?: number;
   lang: string;
+  fontSize?: number;   // CSS-like px value (8–24); maps to TSPL TEXT multiplier
+  fontWeight?: number; // CSS-like (300–900); >=600 prints text twice for bold effect
   elements: {
     name: boolean;
     price: boolean;
@@ -60,6 +52,17 @@ function fmtNum(n: number): string {
 
 function escapeTSPL(s: string): string {
   return s.replace(/\\/g, "/").replace(/"/g, "'");
+}
+
+/** Returns true only if the barcode is a 13-digit string with a valid EAN-13 check digit. */
+function isValidEan13(barcode: string): boolean {
+  if (!/^\d{13}$/.test(barcode)) return false;
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    sum += parseInt(barcode[i]) * (i % 2 === 0 ? 1 : 3);
+  }
+  const expected = (10 - (sum % 10)) % 10;
+  return parseInt(barcode[12]) === expected;
 }
 
 /** Convert a UTF-16 JS string to a Windows-1251 Buffer (Cyrillic code page). */
@@ -133,11 +136,42 @@ function wrapText(text: string, maxChars: number): string[] {
   return result;
 }
 
+/**
+ * Map the template's CSS-style fontSize (8–24) to a TSPL TEXT integer multiplier.
+ * TSPL TEXT syntax: TEXT x,y,"font",rot,xmul,ymul,"text"
+ * xmul/ymul are integer scaling factors (1 = base size, 2 = 2×, etc.)
+ */
+function fontSizeToMul(fontSize: number): number {
+  if (fontSize <= 11) return 1;
+  if (fontSize <= 15) return 1; // default
+  if (fontSize <= 19) return 2;
+  return 3;
+}
+
+/** Emit a TEXT command, optionally printing twice (+1 dot offset) to simulate bold. */
+function textCmd(
+  x: number,
+  y: number,
+  fontName: string,
+  mul: number,
+  text: string,
+  bold: boolean,
+): string[] {
+  const escaped = escapeTSPL(text);
+  const cmd = `TEXT ${x},${y},"${fontName}",0,${mul},${mul},"${escaped}"`;
+  if (!bold) return [cmd];
+  // Simulate bold: print again shifted 1 dot to the right
+  return [cmd, `TEXT ${x + 1},${y},"${fontName}",0,${mul},${mul},"${escaped}"`];
+}
+
 function buildOneLabelTSPL(item: TsplLabelItem, req: TsplPrintRequest): string {
   const { widthMm, heightMm, lang, elements } = req;
   const gapMm = req.gapMm ?? 3;
   const dotsH = Math.round(heightMm * DOTS_PER_MM);
   const marginDots = Math.round(2 * DOTS_PER_MM); // 2mm margin
+
+  const mul = fontSizeToMul(req.fontSize ?? 12);
+  const bold = (req.fontWeight ?? 400) >= 600;
 
   const lines: string[] = [];
   lines.push(`SIZE ${widthMm} mm, ${heightMm} mm`);
@@ -182,13 +216,12 @@ function buildOneLabelTSPL(item: TsplLabelItem, req: TsplPrintRequest): string {
   }
 
   if (elements.name && name) {
-    const maxChars = Math.floor(availableW / font.charW);
+    // Account for multiplier when calculating how many chars fit per line
+    const maxChars = Math.floor(availableW / (font.charW * mul));
     const nameLines = wrapText(name, maxChars);
     for (const l of nameLines) {
-      lines.push(
-        `TEXT ${marginDots},${y},"${font.name}",0,1,1,"${escapeTSPL(l)}"`,
-      );
-      y += font.h + 2;
+      lines.push(...textCmd(marginDots, y, font.name, mul, l, bold));
+      y += font.h * mul + 2;
     }
     y += 2; // small gap after name block
   }
@@ -239,10 +272,8 @@ function buildOneLabelTSPL(item: TsplLabelItem, req: TsplPrintRequest): string {
       y += smallFont.h + 2;
     }
     if (priceStr) {
-      lines.push(
-        `TEXT ${marginDots},${y},"${font.name}",0,1,1,"${escapeTSPL(priceStr)}"`,
-      );
-      y += font.h + 2;
+      lines.push(...textCmd(marginDots, y, font.name, mul, priceStr, bold));
+      y += font.h * mul + 2;
     }
   }
 
@@ -252,10 +283,11 @@ function buildOneLabelTSPL(item: TsplLabelItem, req: TsplPrintRequest): string {
       `TEXT ${marginDots},${ct2y},"${smallFont.name}",0,1,1,"${escapeTSPL(elements.customText2Value)}"`,
     );
   }
-
   if (elements.barcode && item.barcode) {
-    const fixedBarcode = fixEan13CheckDigit(item.barcode);
-    const barcodeType = /^\d{13}$/.test(fixedBarcode) ? "EAN13" : "128";
+    const fixedBarcode = item.barcode;
+    // Use EAN13 type only when the check digit is valid per EAN-13 spec.
+    // If invalid, fall back to Code 128 which prints the barcode exactly as-is.
+    const barcodeType = isValidEan13(fixedBarcode) ? "EAN13" : "128";
     const reservedBottom =
       elements.customText2 && elements.customText2Value
         ? smallFont.h + 4

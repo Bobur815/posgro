@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import styled from 'styled-components';
-import { X, RefreshCw } from 'lucide-react';
-import { stores, StoreRecord, StoreStats } from '../../api/client';
+import React, { useEffect, useState } from "react";
+import styled from "styled-components";
+import { X, RefreshCw } from "lucide-react";
+import { stores, StoreRecord, StoreStats } from "../../api/client";
 
 const Overlay = styled.div`
   position: fixed;
@@ -41,7 +41,9 @@ const CloseBtn = styled.button`
   border: none;
   cursor: pointer;
   color: ${({ theme }) => theme.colors.textSecondary};
-  &:hover { color: ${({ theme }) => theme.colors.text}; }
+  &:hover {
+    color: ${({ theme }) => theme.colors.text};
+  }
 `;
 
 const SectionTitle = styled.h3`
@@ -79,7 +81,8 @@ const StatValue = styled.div`
 `;
 
 const PlanCard = styled.div<{ $pro?: boolean }>`
-  border: 2px solid ${({ $pro, theme }) => $pro ? theme.colors.primary : theme.colors.border};
+  border: 2px solid
+    ${({ $pro, theme }) => ($pro ? theme.colors.primary : theme.colors.border)};
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 16px;
@@ -103,8 +106,9 @@ const PlanBadge = styled.span<{ $pro?: boolean }>`
   border-radius: 12px;
   font-size: 12px;
   font-weight: 700;
-  background: ${({ $pro, theme }) => $pro ? theme.colors.primary : theme.colors.border};
-  color: ${({ $pro, theme }) => $pro ? '#fff' : theme.colors.textSecondary};
+  background: ${({ $pro, theme }) =>
+    $pro ? theme.colors.primary : theme.colors.border};
+  color: ${({ $pro, theme }) => ($pro ? "#fff" : theme.colors.textSecondary)};
 `;
 
 const PlanNote = styled.p`
@@ -126,11 +130,19 @@ const PlanBtn = styled.button<{ $active?: boolean }>`
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  border: 1px solid ${({ $active, theme }) => $active ? theme.colors.primary : theme.colors.border};
-  background: ${({ $active, theme }) => $active ? theme.colors.primary : 'transparent'};
-  color: ${({ $active }) => $active ? '#fff' : 'inherit'};
-  &:hover { opacity: 0.85; }
-  &:disabled { opacity: 0.4; cursor: default; }
+  border: 1px solid
+    ${({ $active, theme }) =>
+      $active ? theme.colors.primary : theme.colors.border};
+  background: ${({ $active, theme }) =>
+    $active ? theme.colors.primary : "transparent"};
+  color: ${({ $active }) => ($active ? "#fff" : "inherit")};
+  &:hover {
+    opacity: 0.85;
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
 `;
 
 const ErrorMsg = styled.div`
@@ -152,16 +164,26 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setCurrentPlan(store.plan);
+  // Credit top-up
+  const [creditAmount, setCreditAmount] = useState("");
+  const [addingCredit, setAddingCredit] = useState(false);
+  const [creditError, setCreditError] = useState<string | null>(null);
+
+  const loadStats = () => {
     setLoadingStats(true);
-    stores.getStats(store.id)
+    stores
+      .getStats(store.id)
       .then(setStats)
       .catch(() => setStats(null))
       .finally(() => setLoadingStats(false));
+  };
+
+  useEffect(() => {
+    setCurrentPlan(store.plan);
+    loadStats();
   }, [store]);
 
-  const handlePlanChange = async (plan: 'free' | 'paid') => {
+  const handlePlanChange = async (plan: "free" | "paid") => {
     if (plan === currentPlan) return;
     setSaving(true);
     setError(null);
@@ -176,7 +198,25 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
     }
   };
 
+  const handleAddCredit = async () => {
+    const amount = parseFloat(creditAmount);
+    if (!amount || amount <= 0) return;
+    setAddingCredit(true);
+    setCreditError(null);
+    try {
+      await stores.addCredits(store.id, amount);
+      setCreditAmount("");
+      loadStats();
+      onUpdated();
+    } catch (e) {
+      setCreditError((e as Error).message);
+    } finally {
+      setAddingCredit(false);
+    }
+  };
+
   const revenue = stats?.stats.totalRevenue ?? 0;
+  const aiCredits = stats?.store.aiCredits ?? 0;
 
   return (
     <Overlay onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -185,76 +225,92 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
           <div>
             <ModalTitle>{store.name}</ModalTitle>
             {store.address && (
-              <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{store.address}</div>
+              <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
+                {store.address}
+              </div>
             )}
           </div>
-          <CloseBtn onClick={onClose}><X size={18} /></CloseBtn>
+          <CloseBtn onClick={onClose}>
+            <X size={18} />
+          </CloseBtn>
         </ModalHeader>
 
         {/* Stats */}
         <SectionTitle>Statistics</SectionTitle>
         {loadingStats ? (
-          <div style={{ display: 'flex', gap: 8, color: '#6b7280', fontSize: 14 }}>
-            <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} /> Loading…
+          <div
+            style={{ display: "flex", gap: 8, color: "#6b7280", fontSize: 14 }}
+          >
+            <RefreshCw
+              size={14}
+              style={{ animation: "spin 1s linear infinite" }}
+            />{" "}
+            Loading…
           </div>
         ) : (
           <StatGrid>
             <StatCard>
               <StatLabel>Total Sales</StatLabel>
-              <StatValue>{stats?.stats.totalSales?.toLocaleString() ?? '—'}</StatValue>
+              <StatValue>
+                {stats?.stats.totalSales?.toLocaleString() ?? "—"}
+              </StatValue>
             </StatCard>
             <StatCard>
               <StatLabel>Revenue (UZS)</StatLabel>
               <StatValue>
                 {revenue
-                  ? revenue.toLocaleString('ru-UZ', { maximumFractionDigits: 0 })
-                  : '—'}
+                  ? revenue.toLocaleString("ru-UZ", {
+                      maximumFractionDigits: 0,
+                    })
+                  : "—"}
               </StatValue>
             </StatCard>
             <StatCard>
               <StatLabel>Products</StatLabel>
-              <StatValue>{stats?.stats.productsCount ?? '—'}</StatValue>
+              <StatValue>{stats?.stats.productsCount ?? "—"}</StatValue>
             </StatCard>
             <StatCard>
               <StatLabel>Users</StatLabel>
-              <StatValue>{stats?.stats.usersCount ?? '—'}</StatValue>
+              <StatValue>{stats?.stats.usersCount ?? "—"}</StatValue>
             </StatCard>
           </StatGrid>
         )}
 
         {/* AI Plan */}
         <SectionTitle>AI Invoice Scanning Plan</SectionTitle>
-        <PlanCard $pro={currentPlan === 'paid'}>
+        <PlanCard $pro={currentPlan === "paid"}>
           <PlanRow>
             <PlanLabel>Current Plan</PlanLabel>
-            <PlanBadge $pro={currentPlan === 'paid'}>
-              {currentPlan === 'paid' ? 'Pro' : 'Free'}
+            <PlanBadge $pro={currentPlan === "paid"}>
+              {currentPlan === "paid" ? "Pro" : "Free"}
             </PlanBadge>
           </PlanRow>
 
-          {currentPlan === 'free' ? (
+          {currentPlan === "free" ? (
             <PlanNote>
-              Free plan uses PaddleOCR (open-source, $0/scan). Limited accuracy on complex
-              Uzbekistan invoices (PDF, multi-page, dense tables). Upgrade to Pro for Claude Vision.
+              Free plan uses PaddleOCR (open-source, $0/scan). Limited accuracy
+              on complex Uzbekistan invoices (PDF, multi-page, dense tables).
+              Upgrade to Pro for Claude Vision.
             </PlanNote>
           ) : (
             <PlanNote>
-              Pro plan uses Claude Vision AI. Billed at <strong>$0.052 / scan</strong> (Anthropic
-              cost + 30% margin). Accurate parsing of SoliqServis e-invoices with MXIK codes.
+              Pro plan uses Claude Vision AI. Billed at{" "}
+              <strong>$0.052 / scan</strong> (Anthropic cost + 30% margin).
+              Accurate parsing of SoliqServis e-invoices with MXIK codes.
             </PlanNote>
           )}
 
           <PlanToggleRow>
             <PlanBtn
-              $active={currentPlan === 'free'}
-              onClick={() => handlePlanChange('free')}
+              $active={currentPlan === "free"}
+              onClick={() => handlePlanChange("free")}
               disabled={saving}
             >
               Free (PaddleOCR)
             </PlanBtn>
             <PlanBtn
-              $active={currentPlan === 'paid'}
-              onClick={() => handlePlanChange('paid')}
+              $active={currentPlan === "paid"}
+              onClick={() => handlePlanChange("paid")}
               disabled={saving}
             >
               Pro (Claude Vision)
@@ -264,13 +320,66 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
           {error && <ErrorMsg>{error}</ErrorMsg>}
         </PlanCard>
 
+        {/* AI Credit Balance */}
+        <SectionTitle>AI Credit Balance</SectionTitle>
+        <PlanCard>
+          <PlanRow>
+            <PlanLabel>Current Balance</PlanLabel>
+            <PlanBadge $pro={aiCredits > 0}>
+              {aiCredits.toLocaleString("ru-UZ", { maximumFractionDigits: 0 })} so'm
+            </PlanBadge>
+          </PlanRow>
+          <PlanNote style={{ marginBottom: 12 }}>
+            When a client transfers payment (card, cash, etc.), enter the
+            amount in UZS to top up their credit balance.
+          </PlanNote>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              placeholder="Amount in UZS (so'm)"
+              value={creditAmount}
+              onChange={(e) => setCreditAmount(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddCredit()}
+              style={{
+                flex: 1,
+                padding: "8px 10px",
+                border: "1px solid #d1d5db",
+                borderRadius: 6,
+                fontSize: 14,
+                background: "transparent",
+                color: "inherit",
+              }}
+            />
+            <PlanBtn
+              $active
+              onClick={handleAddCredit}
+              disabled={addingCredit || !creditAmount || parseFloat(creditAmount) <= 0}
+              style={{ flex: "0 0 auto", padding: "8px 16px" }}
+            >
+              {addingCredit ? "Adding…" : "Add Credit"}
+            </PlanBtn>
+          </div>
+          {creditError && <ErrorMsg style={{ marginTop: 6 }}>{creditError}</ErrorMsg>}
+        </PlanCard>
+
         {/* Info */}
         <SectionTitle>Store Info</SectionTitle>
-        <div style={{ fontSize: 14, color: '#6b7280', lineHeight: 1.8 }}>
-          <div><strong>ID:</strong> {store.id}</div>
-          <div><strong>Phone:</strong> {store.phone ?? '—'}</div>
-          <div><strong>Status:</strong> {store.active ? 'Active' : 'Inactive'}</div>
-          <div><strong>Created:</strong> {new Date(store.createdAt).toLocaleDateString()}</div>
+        <div style={{ fontSize: 14, color: "#6b7280", lineHeight: 1.8 }}>
+          <div>
+            <strong>ID:</strong> {store.id}
+          </div>
+          <div>
+            <strong>Phone:</strong> {store.phone ?? "—"}
+          </div>
+          <div>
+            <strong>Status:</strong> {store.active ? "Active" : "Inactive"}
+          </div>
+          <div>
+            <strong>Created:</strong>{" "}
+            {new Date(store.createdAt).toLocaleDateString()}
+          </div>
         </div>
       </Modal>
     </Overlay>

@@ -125,7 +125,7 @@ const [syncStatus, setSyncStatus] = useState<{
 
   const [plan, setPlan] = useState<string | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
-  const [balanceUsd, setBalanceUsd] = useState<number | null>(null);
+  const [balanceUzs, setBalanceUzs] = useState<number | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -202,8 +202,8 @@ const [syncStatus, setSyncStatus] = useState<{
       const data = await window.electronAPI.receipt.getPlan();
       setPlan(data.plan);
       if (data.plan === "paid") {
-        setBalanceUsd(
-          typeof data.balance_usd === "number" ? data.balance_usd : null,
+        setBalanceUzs(
+          typeof data.balance_uzs === "number" ? data.balance_uzs : null,
         );
       }
     } catch (error) {
@@ -335,7 +335,9 @@ const [syncStatus, setSyncStatus] = useState<{
             <StatRow>
               <StatLabel>{t("aiSettings.creditBalance")}</StatLabel>
               <StatValue>
-                {balanceUsd !== null ? `$${balanceUsd.toFixed(4)}` : "—"}
+                {balanceUzs !== null
+                  ? `${balanceUzs.toLocaleString("ru-UZ", { maximumFractionDigits: 0 })} so'm`
+                  : "—"}
               </StatValue>
             </StatRow>
             <InfoText style={{ marginTop: "8px", fontSize: 12, opacity: 0.7 }}>

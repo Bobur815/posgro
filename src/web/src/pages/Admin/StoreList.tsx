@@ -1,9 +1,17 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import styled from 'styled-components';
-import { Plus, RefreshCw, Pencil, Trash2, ToggleLeft, ToggleRight, BarChart2 } from 'lucide-react';
-import { stores, StoreRecord } from '../../api/client';
-import { StoreFormModal } from './StoreFormModal';
-import { StoreDetailModal } from './StoreDetailModal';
+import React, { useEffect, useState, useCallback } from "react";
+import styled from "styled-components";
+import {
+  Plus,
+  RefreshCw,
+  Pencil,
+  Trash2,
+  ToggleLeft,
+  ToggleRight,
+  BarChart2,
+} from "lucide-react";
+import { stores, StoreRecord } from "../../api/client";
+import { StoreFormModal } from "./StoreFormModal";
+import { StoreDetailModal } from "./StoreDetailModal";
 
 const Page = styled.div`
   padding: 24px;
@@ -28,7 +36,7 @@ const Actions = styled.div`
   gap: 8px;
 `;
 
-const Btn = styled.button<{ $variant?: 'primary' | 'ghost' | 'danger' }>`
+const Btn = styled.button<{ $variant?: "primary" | "ghost" | "danger" }>`
   display: flex;
   align-items: center;
   gap: 6px;
@@ -37,14 +45,28 @@ const Btn = styled.button<{ $variant?: 'primary' | 'ghost' | 'danger' }>`
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  border: 1px solid ${({ $variant, theme }) =>
-    $variant === 'danger' ? theme.colors.error : $variant === 'primary' ? theme.colors.primary : theme.colors.border};
+  border: 1px solid
+    ${({ $variant, theme }) =>
+      $variant === "danger"
+        ? theme.colors.error
+        : $variant === "primary"
+          ? theme.colors.primary
+          : theme.colors.border};
   background: ${({ $variant, theme }) =>
-    $variant === 'primary' ? theme.colors.primary : 'transparent'};
+    $variant === "primary" ? theme.colors.primary : "transparent"};
   color: ${({ $variant, theme }) =>
-    $variant === 'primary' ? '#fff' : $variant === 'danger' ? theme.colors.error : theme.colors.text};
-  &:hover { opacity: 0.8; }
-  &:disabled { opacity: 0.4; cursor: default; }
+    $variant === "primary"
+      ? "#fff"
+      : $variant === "danger"
+        ? theme.colors.error
+        : theme.colors.text};
+  &:hover {
+    opacity: 0.8;
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
 `;
 
 const IconBtn = styled.button<{ $color?: string }>`
@@ -58,7 +80,9 @@ const IconBtn = styled.button<{ $color?: string }>`
   background: transparent;
   color: ${({ $color, theme }) => $color ?? theme.colors.textSecondary};
   cursor: pointer;
-  &:hover { opacity: 0.7; }
+  &:hover {
+    opacity: 0.7;
+  }
 `;
 
 const Table = styled.table`
@@ -83,16 +107,32 @@ const Td = styled.td`
   vertical-align: middle;
 `;
 
-const Badge = styled.span<{ $green?: boolean; $blue?: boolean; $gray?: boolean }>`
+const Badge = styled.span<{
+  $green?: boolean;
+  $blue?: boolean;
+  $gray?: boolean;
+}>`
   display: inline-block;
   padding: 2px 8px;
   border-radius: 10px;
   font-size: 12px;
   font-weight: 600;
   background: ${({ $green, $blue, $gray, theme }) =>
-    $green ? '#dcfce7' : $blue ? '#dbeafe' : $gray ? theme.colors.border : theme.colors.border};
+    $green
+      ? "#dcfce7"
+      : $blue
+        ? "#dbeafe"
+        : $gray
+          ? theme.colors.border
+          : theme.colors.border};
   color: ${({ $green, $blue, $gray, theme }) =>
-    $green ? '#16a34a' : $blue ? '#2563eb' : $gray ? theme.colors.textSecondary : theme.colors.textSecondary};
+    $green
+      ? "#16a34a"
+      : $blue
+        ? "#2563eb"
+        : $gray
+          ? theme.colors.textSecondary
+          : theme.colors.textSecondary};
 `;
 
 const RowActions = styled.div`
@@ -120,7 +160,7 @@ export function StoreList() {
   const [list, setList] = useState<StoreRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [formStore, setFormStore] = useState<StoreRecord | null | 'new'>(null);
+  const [formStore, setFormStore] = useState<StoreRecord | null | "new">(null);
   const [detailStore, setDetailStore] = useState<StoreRecord | null>(null);
 
   const load = useCallback(async () => {
@@ -136,7 +176,9 @@ export function StoreList() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleToggleActive = async (store: StoreRecord) => {
     try {
@@ -152,7 +194,8 @@ export function StoreList() {
   };
 
   const handleDelete = async (store: StoreRecord) => {
-    if (!confirm(`Delete store "${store.name}"? This cannot be undone.`)) return;
+    if (!confirm(`Delete store "${store.name}"? This cannot be undone.`))
+      return;
     try {
       await stores.delete(store.id);
       await load();
@@ -170,7 +213,7 @@ export function StoreList() {
             <RefreshCw size={14} />
             Refresh
           </Btn>
-          <Btn $variant="primary" onClick={() => setFormStore('new')}>
+          <Btn $variant="primary" onClick={() => setFormStore("new")}>
             <Plus size={14} />
             New Store
           </Btn>
@@ -195,64 +238,87 @@ export function StoreList() {
         </thead>
         <tbody>
           {loading ? (
-            <tr><Td colSpan={7}><Empty>Loading…</Empty></Td></tr>
-          ) : list.length === 0 ? (
-            <tr><Td colSpan={7}><Empty>No stores yet. Create one.</Empty></Td></tr>
-          ) : list.map((store) => (
-            <tr key={store.id}>
-              <Td>{store._count?.users ?? '—'}</Td>
-              <Td>{store.id}</Td>
-              <Td>
-                <div style={{ fontWeight: 600 }}>{store.name}</div>
-                {store.address && (
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>{store.address}</div>
-                )}
-              </Td>
-              <Td>{store.phone ?? '—'}</Td>
-              <Td>
-                {store.plan === 'paid'
-                  ? <Badge $blue>Pro</Badge>
-                  : <Badge $gray>Free</Badge>}
-              </Td>
-              <Td>{store._count?.users ?? '—'}</Td>
-              <Td>{store._count?.products ?? '—'}</Td>
-              <Td>
-                {store.active
-                  ? <Badge $green>Active</Badge>
-                  : <Badge $gray>Inactive</Badge>}
-              </Td>
-              <Td>
-                <RowActions>
-                  <IconBtn title="Stats / AI plan" onClick={() => setDetailStore(store)}>
-                    <BarChart2 size={15} />
-                  </IconBtn>
-                  <IconBtn title="Edit" onClick={() => setFormStore(store)}>
-                    <Pencil size={15} />
-                  </IconBtn>
-                  <IconBtn
-                    title={store.active ? 'Deactivate' : 'Activate'}
-                    onClick={() => handleToggleActive(store)}
-                    $color={store.active ? '#f59e0b' : '#16a34a'}
-                  >
-                    {store.active ? <ToggleRight size={15} /> : <ToggleLeft size={15} />}
-                  </IconBtn>
-                  <IconBtn
-                    title="Delete"
-                    $color="#ef4444"
-                    onClick={() => handleDelete(store)}
-                  >
-                    <Trash2 size={15} />
-                  </IconBtn>
-                </RowActions>
+            <tr>
+              <Td colSpan={7}>
+                <Empty>Loading…</Empty>
               </Td>
             </tr>
-          ))}
+          ) : list.length === 0 ? (
+            <tr>
+              <Td colSpan={7}>
+                <Empty>No stores yet. Create one.</Empty>
+              </Td>
+            </tr>
+          ) : (
+            list.map((store) => (
+              <tr key={store.id}>
+                <Td>{store._count?.users ?? "—"}</Td>
+                <Td>{store.id}</Td>
+                <Td>
+                  <div style={{ fontWeight: 600 }}>{store.name}</div>
+                  {store.address && (
+                    <div style={{ fontSize: 12, color: "#6b7280" }}>
+                      {store.address}
+                    </div>
+                  )}
+                </Td>
+                <Td>{store.phone ?? "—"}</Td>
+                <Td>
+                  {store.plan === "paid" ? (
+                    <Badge $blue>Pro</Badge>
+                  ) : (
+                    <Badge $gray>Free</Badge>
+                  )}
+                </Td>
+                <Td>{store._count?.users ?? "—"}</Td>
+                <Td>{store._count?.products ?? "—"}</Td>
+                <Td>
+                  {store.active ? (
+                    <Badge $green>Active</Badge>
+                  ) : (
+                    <Badge $gray>Inactive</Badge>
+                  )}
+                </Td>
+                <Td>
+                  <RowActions>
+                    <IconBtn
+                      title="Stats / AI plan"
+                      onClick={() => setDetailStore(store)}
+                    >
+                      <BarChart2 size={15} />
+                    </IconBtn>
+                    <IconBtn title="Edit" onClick={() => setFormStore(store)}>
+                      <Pencil size={15} />
+                    </IconBtn>
+                    <IconBtn
+                      title={store.active ? "Deactivate" : "Activate"}
+                      onClick={() => handleToggleActive(store)}
+                      $color={store.active ? "#f59e0b" : "#16a34a"}
+                    >
+                      {store.active ? (
+                        <ToggleRight size={15} />
+                      ) : (
+                        <ToggleLeft size={15} />
+                      )}
+                    </IconBtn>
+                    <IconBtn
+                      title="Delete"
+                      $color="#ef4444"
+                      onClick={() => handleDelete(store)}
+                    >
+                      <Trash2 size={15} />
+                    </IconBtn>
+                  </RowActions>
+                </Td>
+              </tr>
+            ))
+          )}
         </tbody>
       </Table>
 
       {formStore !== null && (
         <StoreFormModal
-          store={formStore === 'new' ? null : formStore}
+          store={formStore === "new" ? null : formStore}
           onClose={() => setFormStore(null)}
           onSaved={load}
         />

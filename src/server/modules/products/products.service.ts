@@ -162,13 +162,31 @@ export class ProductsService {
     });
   }
 
-  async deactivate(id: number, storeId: string) {
+  async hardDelete(id: number, storeId: string) {
     await this.findById(id, storeId);
 
-    await this.prisma.product.update({
-      where: { id },
-      data: { active: false },
+    // Collect sale IDs that have items for this product
+    const affectedItems = await this.prisma.saleItem.findMany({
+      where: { productId: id },
+      select: { saleId: true },
     });
+    const affectedSaleIds = [...new Set(affectedItems.map((i) => i.saleId))];
+
+    // Remove sale items for this product
+    await this.prisma.saleItem.deleteMany({ where: { productId: id } });
+
+    // Delete sales that are now empty (no remaining items)
+    if (affectedSaleIds.length > 0) {
+      await this.prisma.sale.deleteMany({
+        where: { id: { in: affectedSaleIds }, items: { none: {} } },
+      });
+    }
+
+    // Delete inventory arrivals
+    await this.prisma.inventoryArrival.deleteMany({ where: { productId: id } });
+
+    // Hard delete the product
+    await this.prisma.product.delete({ where: { id } });
 
     return { success: true };
   }
