@@ -505,13 +505,16 @@ export function ProductForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // When editing, omit `stock` — stock is managed by inventory arrivals and
+    // sales only. Including it here would overwrite any changes that occurred
+    // (arrivals, sales) between when the form was loaded and when it is saved.
     const data = {
       barcode: formData.barcode,
       nameRu: formData.nameRu,
       nameUz: formData.nameUz,
       price: parseFloat(formData.price),
       cost: formData.cost ? parseFloat(formData.cost) : undefined,
-      stock: parseFloat(formData.stock) || 0,
+      ...(isEdit ? {} : { stock: parseFloat(formData.stock) || 0 }),
       minStock: parseFloat(formData.minStock) || 0,
       unit: formData.unit,
       categoryId: Number(formData.categoryId),

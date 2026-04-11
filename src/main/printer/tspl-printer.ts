@@ -269,16 +269,16 @@ function buildOneLabelTSPL(item: TsplLabelItem, req: TsplPrintRequest): string {
       `BARCODE ${marginDots},${barcodeY},"${barcodeType}",${barcodeH},1,0,2,2,"${fixedBarcode}"`,
     );
 
-    if (isWeighted) {
-      // Total price alongside the barcode on the right
-      const total = Math.round(item.amount * item.price);
-      const totalStr = `${fmtNum(total)} so'm`;
-      const totalX = Math.round(dotsW * 0.2);
-      const totalY = barcodeY + Math.round((barcodeH - font.h) / 2);
-      lines.push(
-        `TEXT ${totalX},${totalY},"${font.name}",0,1,1,"${escapeTSPL(totalStr)}"`,
-      );
-    }
+    // if (isWeighted) {
+    //   // Total price alongside the barcode on the right
+    //   const total = Math.round(item.amount * item.price);
+    //   const totalStr = `${fmtNum(total)} so'm`;
+    //   const totalX = Math.round(dotsW * 0.2);
+    //   const totalY = barcodeY + Math.round((barcodeH - font.h) / 2);
+    //   lines.push(
+    //     `TEXT ${totalX},${totalY},"${font.name}",0,1,1,"${escapeTSPL(totalStr)}"`,
+    //   );
+    // }
   }
 
   lines.push(`PRINT ${item.copies},1`);
