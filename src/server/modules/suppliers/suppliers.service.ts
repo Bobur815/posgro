@@ -75,6 +75,7 @@ export class SuppliersService {
         nameRu: data.nameRu,
         phone: data.phone || null,
         address: data.address || null,
+        balance: data.balance ?? 0,
         active: true,
         categories: categoryIds?.length
           ? { connect: categoryIds.map((id) => ({ id })) }

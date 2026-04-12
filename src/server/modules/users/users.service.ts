@@ -68,6 +68,23 @@ export class UsersService {
     return user;
   }
 
+  async findAllForSync(storeId: string) {
+    return this.prisma.user.findMany({
+      where: { storeId },
+      select: {
+        id: true,
+        phone: true,
+        password: true,
+        role: true,
+        nameUz: true,
+        nameRu: true,
+        active: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async findByPhoneAnyStore(phone: string) {
     return this.prisma.user.findFirst({
       where: { phone, active: true },

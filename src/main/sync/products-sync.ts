@@ -184,6 +184,89 @@ export async function syncProducts(): Promise<{ id: number; nameRu: string; stoc
   }
 }
 
+export async function syncSuppliers(): Promise<void> {
+  const prisma = getPrismaClient();
+  const config = getAppConfig();
+  const token = getServerToken();
+  if (!token) return;
+
+  try {
+    const response = await fetch(`${config.vpsApiUrl}/suppliers`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return;
+
+    const suppliers = await response.json();
+    if (!Array.isArray(suppliers) || suppliers.length === 0) return;
+
+    for (const s of suppliers) {
+      await prisma.supplier.upsert({
+        where: { id: s.id },
+        update: {
+          nameUz: s.nameUz,
+          nameRu: s.nameRu,
+          phone: s.phone || null,
+          address: s.address || null,
+          active: s.active ?? true,
+        },
+        create: {
+          id: s.id,
+          nameUz: s.nameUz,
+          nameRu: s.nameRu,
+          phone: s.phone || null,
+          address: s.address || null,
+          active: s.active ?? true,
+          balance: s.balance ?? 0,
+        },
+      });
+    }
+  } catch (error) {
+    console.error('Failed to sync suppliers:', error instanceof Error ? error.message : error);
+  }
+}
+
+export async function syncUsers(): Promise<void> {
+  const prisma = getPrismaClient();
+  const config = getAppConfig();
+  const token = getServerToken();
+  if (!token) return;
+
+  try {
+    const response = await fetch(`${config.vpsApiUrl}/users/sync`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return;
+
+    const users = await response.json();
+    if (!Array.isArray(users) || users.length === 0) return;
+
+    for (const u of users) {
+      await prisma.user.upsert({
+        where: { id: u.id },
+        update: {
+          phone: u.phone,
+          password: u.password,
+          role: u.role,
+          nameUz: u.nameUz,
+          nameRu: u.nameRu,
+          active: u.active ?? true,
+        },
+        create: {
+          id: u.id,
+          phone: u.phone,
+          password: u.password,
+          role: u.role,
+          nameUz: u.nameUz,
+          nameRu: u.nameRu,
+          active: u.active ?? true,
+        },
+      });
+    }
+  } catch (error) {
+    console.error('Failed to sync users:', error instanceof Error ? error.message : error);
+  }
+}
+
 export async function syncCategories(): Promise<void> {
   const prisma = getPrismaClient();
   const config = getAppConfig();

@@ -81,6 +81,16 @@ export function useProducts() {
     }
   }, []);
 
+  const findByInternalCode = useCallback(async (internalCode: string) => {
+    try {
+      const product = await window.electronAPI.products.findByInternalCode(internalCode);
+      return product as Product | null;
+    } catch (err) {
+      console.error('Failed to find product by PLU:', err);
+      return null;
+    }
+  }, []);
+
   const createProduct = useCallback(async (data: Partial<Product>) => {
     setLoading(true);
 
@@ -158,6 +168,7 @@ export function useProducts() {
     search,
     searchByBarcode,
     getById,
+    findByInternalCode,
     createProduct,
     updateProduct,
     deleteProduct,

@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsArray,
   IsInt,
+  IsNumber,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -28,6 +29,12 @@ export class CreateSupplierDto {
   @IsOptional()
   @IsString()
   address?: string;
+
+  @ApiPropertyOptional({ example: 0, description: 'Initial balance' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  balance?: number;
 
   @ApiPropertyOptional({ example: [1, 2], description: 'Category IDs' })
   @IsOptional()

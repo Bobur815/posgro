@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { syncSales } from './sales-sync';
-import { syncProducts, syncCategories } from './products-sync';
+import { syncProducts, syncCategories, syncSuppliers, syncUsers } from './products-sync';
 import { uploadLocalData } from './upload-sync';
 import { getAppConfig } from '../config/app-config';
 import { getPrismaClient } from '../database/sqlite-client';
@@ -62,6 +62,10 @@ export class SyncService {
 
       // Sync categories (download from VPS — must come before products)
       await syncCategories();
+
+      // Sync suppliers and users (download from VPS to all terminals)
+      await syncSuppliers();
+      await syncUsers();
 
       // Sync products (download updated products from VPS)
       const stockConflicts = await syncProducts();

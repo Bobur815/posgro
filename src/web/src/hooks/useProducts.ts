@@ -160,6 +160,16 @@ export function useProducts() {
     }
   }, []);
 
+  const findByInternalCode = useCallback(async (internalCode: string) => {
+    try {
+      const product = await productsApi.findByInternalCode(internalCode);
+      return product ? transformProduct(product) : null;
+    } catch (err) {
+      console.error('Failed to find product by PLU:', err);
+      return null;
+    }
+  }, []);
+
   const createProduct = useCallback(async (data: Partial<Product>) => {
     setLoading(true);
 
@@ -237,6 +247,7 @@ export function useProducts() {
     search,
     searchByBarcode,
     getById,
+    findByInternalCode,
     createProduct,
     updateProduct,
     deleteProduct,

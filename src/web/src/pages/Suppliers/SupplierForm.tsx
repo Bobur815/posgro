@@ -66,20 +66,19 @@ export function SupplierForm({ supplierId, onClose, onSuccess }: SupplierFormPro
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const data = {
+    const baseData = {
       nameRu: formData.nameRu,
       nameUz: formData.nameUz,
       phone: formData.phoneDigits ? formatUzPhone(formData.phoneDigits) : undefined,
       address: formData.address || undefined,
-      balance: formData.balance ? Number(formData.balance) : 0,
     };
 
     let success;
     if (isEdit && supplierId) {
-      success = await updateSupplier(supplierId, data);
+      success = await updateSupplier(supplierId, baseData);
       if (success) toast.success(t("suppliers.supplierUpdated"));
     } else {
-      success = await createSupplier(data);
+      success = await createSupplier({ ...baseData, balance: formData.balance ? Number(formData.balance) : 0 });
       if (success) toast.success(t("suppliers.supplierCreated"));
     }
 
@@ -139,12 +138,15 @@ export function SupplierForm({ supplierId, onClose, onSuccess }: SupplierFormPro
           valueDigits={formData.phoneDigits}
           onDigitsChange={(digits) => setFormData((prev) => ({ ...prev, phoneDigits: digits }))}
         />
-        <Input
-          label={t("suppliers.balance")}
-          value={formData.balance}
-          onChange={(e) => handleChange("balance", e.target.value)}
-          placeholder="0.00"
-        />
+        {!isEdit && (
+          <Input
+            label={t("suppliers.balance")}
+            value={formData.balance}
+            onChange={(e) => handleChange("balance", e.target.value)}
+            placeholder="0.00"
+            type="number"
+          />
+        )}
         <Input
           label={t("suppliers.address")}
           value={formData.address}

@@ -229,6 +229,7 @@ export function setupProductsHandlers(): void {
       { barcode: { contains: searchQuery } },
       { nameRu: { contains: searchQuery } },
       { nameUz: { contains: searchQuery } },
+      { internalCode: { contains: searchQuery } },
     ];
 
     if (!isNaN(numericId) && Number.isInteger(numericId) && numericId > 0) {

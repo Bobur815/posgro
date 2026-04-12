@@ -48,6 +48,13 @@ export class ProductsService {
     });
   }
 
+  async findByInternalCode(storeId: string, internalCode: string) {
+    return this.prisma.product.findFirst({
+      where: { storeId, internalCode },
+      include: { category: true, supplier: true },
+    });
+  }
+
   async getNextInternalCode(storeId: string): Promise<string> {
     const rows = await this.prisma.product.findMany({
       where: { storeId, internalCode: { not: null } },
@@ -71,6 +78,7 @@ export class ProductsService {
           { barcode: { contains: searchQuery } },
           { nameRu: { contains: searchQuery, mode: "insensitive" } },
           { nameUz: { contains: searchQuery, mode: "insensitive" } },
+          { internalCode: { contains: searchQuery } },
         ],
       },
       include: { category: true, supplier: true },

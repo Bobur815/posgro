@@ -35,6 +35,14 @@ export class UsersController {
     return this.usersService.findAll(storeId);
   }
 
+  @Get('sync')
+  @Roles(USER_ROLES.ADMIN)
+  @ApiOperation({ summary: 'Get all users with password hashes for terminal sync (Admin only)' })
+  @ApiResponse({ status: 200, description: 'List of users with credentials' })
+  async findAllForSync(@CurrentStore() storeId: string) {
+    return this.usersService.findAllForSync(storeId);
+  }
+
   @Get(':id')
   @Roles(USER_ROLES.ADMIN)
   @ApiOperation({ summary: 'Get user by ID (Admin only)' })

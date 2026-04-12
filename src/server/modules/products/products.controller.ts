@@ -83,6 +83,13 @@ export class ProductsController {
     return this.productsService.findByBarcode(storeId, barcode);
   }
 
+  @Get('internal-code/:code')
+  @ApiOperation({ summary: 'Get product by internalCode (PLU)' })
+  @ApiResponse({ status: 200, description: 'Product details' })
+  async findByInternalCode(@CurrentStore() storeId: string, @Param('code') code: string) {
+    return this.productsService.findByInternalCode(storeId, code);
+  }
+
   @Get('next-internal-code')
   @ApiOperation({ summary: 'Get next auto-generated internalCode (PLU)' })
   @ApiResponse({ status: 200, description: 'Next internalCode as string' })

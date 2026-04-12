@@ -253,6 +253,25 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
     )
   `;
 
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS supplier_transactions (
+      id TEXT PRIMARY KEY,
+      supplier_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      payment_method TEXT NOT NULL,
+      amount REAL NOT NULL,
+      description TEXT,
+      reference_id TEXT,
+      reference_type TEXT,
+      due_date DATETIME,
+      paid_at DATETIME,
+      created_by TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+    )
+  `;
+
   // Create indexes
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)`;
@@ -263,6 +282,9 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_products_internal_code ON products(internal_code)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_pre_weighed_barcode ON pre_weighed_items(barcode)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_pre_weighed_status ON pre_weighed_items(status)`;
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_supplier_transactions_supplier ON supplier_transactions(supplier_id)`;
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_supplier_transactions_type ON supplier_transactions(type)`;
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_supplier_transactions_created ON supplier_transactions(created_at)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_sales_synced ON sales(synced)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id)`;
@@ -357,6 +379,33 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
     } finally {
       await prisma.$executeRaw`PRAGMA foreign_keys = ON`;
     }
+  }
+
+  // Migration 11: Create supplier_transactions table
+  try {
+    await prisma.$queryRaw`SELECT 1 FROM supplier_transactions LIMIT 1`;
+  } catch {
+    await prisma.$executeRaw`
+      CREATE TABLE IF NOT EXISTS supplier_transactions (
+        id TEXT PRIMARY KEY,
+        supplier_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        payment_method TEXT NOT NULL,
+        amount REAL NOT NULL,
+        description TEXT,
+        reference_id TEXT,
+        reference_type TEXT,
+        due_date DATETIME,
+        paid_at DATETIME,
+        created_by TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+      )
+    `;
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_supplier_transactions_supplier ON supplier_transactions(supplier_id)`;
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_supplier_transactions_type ON supplier_transactions(type)`;
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_supplier_transactions_created ON supplier_transactions(created_at)`;
   }
 
   // Migration 9: Create pre_weighed_items table

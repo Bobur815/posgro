@@ -139,6 +139,7 @@ export function StockManagement() {
     getLowStock,
     searchByBarcode,
     getById,
+    findByInternalCode,
     updateProduct,
     isLoading,
   } = useProducts();
@@ -197,9 +198,9 @@ export function StockManagement() {
     }
   }, [barcodeInput, searchByBarcode, t]);
 
-  const handleIdSubmit = useCallback(async () => {
+  const handlePluSubmit = useCallback(async () => {
     if (!idInput.trim()) return;
-    const product = (await getById(idInput.trim())) as Product | null;
+    const product = (await findByInternalCode(idInput.trim())) as Product | null;
     if (product) {
       handleAddArrival(product);
       setIdInput("");
@@ -207,7 +208,7 @@ export function StockManagement() {
       toast.error(t("products.noResults"));
       setIdInput("");
     }
-  }, [idInput, getById, t]);
+  }, [idInput, findByInternalCode, t]);
 
   const handleVirtualKeyPress = (key: string) => {
     if (key === "BACKSPACE") {
@@ -373,23 +374,23 @@ export function StockManagement() {
         </SearchField>
 
         <SearchField style={{ maxWidth: 150 }}>
-          <SearchLabel>{t("pos.id")}</SearchLabel>
+          <SearchLabel>PLU</SearchLabel>
           <SearchInput
             value={idInput}
             onChange={(e) => setIdInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                handleIdSubmit();
+                handlePluSubmit();
               }
             }}
-            placeholder={t("pos.id")}
+            placeholder="PLU"
           />
         </SearchField>
         <SubmitButton
           onClick={() => {
             if (barcodeInput.trim()) handleBarcodeSubmit();
-            else if (idInput.trim()) handleIdSubmit();
+            else if (idInput.trim()) handlePluSubmit();
           }}
         >
           <SendHorizontal size={22} />
