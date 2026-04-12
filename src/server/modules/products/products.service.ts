@@ -49,10 +49,19 @@ export class ProductsService {
   }
 
   async findByInternalCode(storeId: string, internalCode: string) {
-    return this.prisma.product.findFirst({
-      where: { storeId, internalCode },
-      include: { category: true, supplier: true },
-    });
+    const raw = internalCode.trim();
+    const candidates = [raw];
+    if (/^\d+$/.test(raw)) {
+      candidates.push(raw.padStart(6, '0'));
+    }
+    for (const code of candidates) {
+      const product = await this.prisma.product.findFirst({
+        where: { storeId, internalCode: code },
+        include: { category: true, supplier: true },
+      });
+      if (product) return product;
+    }
+    return null;
   }
 
   async getNextInternalCode(storeId: string): Promise<string> {

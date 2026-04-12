@@ -232,8 +232,10 @@ export function StockManagement() {
   }, [barcodeInput, searchByBarcode, t]);
 
   const handlePluSubmit = useCallback(async () => {
-    if (!idInput.trim()) return;
-    const product = (await findByInternalCode(idInput.trim())) as Product | null;
+    const raw = idInput.trim();
+    if (!raw) return;
+    const code = /^\d+$/.test(raw) ? raw.padStart(6, "0") : raw;
+    const product = (await findByInternalCode(code)) as Product | null;
     if (product) {
       handleAddArrival(product);
       setIdInput("");

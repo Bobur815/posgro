@@ -488,10 +488,20 @@ export function setupProductsHandlers(): void {
     "products:findByInternalCode",
     async (_event, internalCode: string) => {
       const prisma = getPrismaClient();
-      const product = await prisma.product.findUnique({
-        where: { internalCode },
-        include: { category: true, supplier: true },
-      });
+      const raw = internalCode.trim();
+      // Try exact match first, then zero-padded to 6 digits for numeric input
+      const candidates = [raw];
+      if (/^\d+$/.test(raw)) {
+        candidates.push(raw.padStart(6, "0"));
+      }
+      let product = null;
+      for (const code of candidates) {
+        product = await prisma.product.findUnique({
+          where: { internalCode: code },
+          include: { category: true, supplier: true },
+        });
+        if (product) break;
+      }
       return ipcSafe(serializeProduct(product));
     },
   );
