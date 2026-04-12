@@ -48,7 +48,8 @@ export class InventoryService {
       }
     }
 
-    const totalCost = createArrivalDto.quantity * createArrivalDto.cost;
+    const cost = createArrivalDto.cost ?? 0;
+    const totalCost = createArrivalDto.quantity * cost;
 
     // Create arrival record
     const arrival = await this.prisma.inventoryArrival.create({
@@ -56,7 +57,7 @@ export class InventoryService {
         storeId,
         productId: createArrivalDto.productId,
         quantity: createArrivalDto.quantity,
-        cost: createArrivalDto.cost,
+        cost,
         totalCost,
         supplierId: createArrivalDto.supplierId || null,
         notes: createArrivalDto.notes || null,
@@ -68,10 +69,10 @@ export class InventoryService {
       },
     });
 
-    // Build product update: always update stock and cost
+    // Build product update: always update stock; only update cost if provided
     const productUpdate: Record<string, unknown> = {
       stock: { increment: createArrivalDto.quantity },
-      cost: createArrivalDto.cost,
+      ...(createArrivalDto.cost != null && { cost: createArrivalDto.cost }),
     };
 
     if (createArrivalDto.productionDate) {

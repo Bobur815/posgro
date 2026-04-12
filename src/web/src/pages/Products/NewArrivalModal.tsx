@@ -222,7 +222,7 @@ export function NewArrivalModal({
       await inventoryApi.createArrival({
         productId: product.id,
         quantity: parseFloat(arrivalData.quantity),
-        cost: parseFloat(arrivalData.cost),
+        cost: arrivalData.cost ? parseFloat(arrivalData.cost) : undefined,
         notes: arrivalData.notes,
         supplierId: arrivalData.supplierId || undefined,
         paymentMethod: arrivalData.supplierId
@@ -332,13 +332,12 @@ export function NewArrivalModal({
         <FlexRow>
           <div>
             <Input
-              label={<>{t("inventory.costPerUnit")} <Req>*</Req></>}
+              label={t("inventory.costPerUnit")}
               type="number"
               value={arrivalData.cost}
               onChange={(e) =>
                 setArrivalData((prev) => ({ ...prev, cost: e.target.value }))
               }
-              required
             />
           </div>
           <div>

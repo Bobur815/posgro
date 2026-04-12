@@ -48,7 +48,7 @@ export async function uploadLocalData(): Promise<void> {
   const prisma = getPrismaClient();
   const token = getServerToken();
   if (!token) {
-    throw new Error("No server token — log in first to sync");
+    return; // No server token yet — will retry on next sync cycle
   }
 
   const since = await getLastUploadTime(prisma);

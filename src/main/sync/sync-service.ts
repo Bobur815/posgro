@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron';
 import { syncSales } from './sales-sync';
 import { syncProducts, syncCategories, syncSuppliers, syncUsers } from './products-sync';
+import { getCurrentUser } from '../ipc/auth-handlers';
 import { uploadLocalData } from './upload-sync';
 import { getAppConfig } from '../config/app-config';
 import { getPrismaClient } from '../database/sqlite-client';
@@ -51,14 +52,22 @@ export class SyncService {
 
 
       // Upload locally-created categories, suppliers, products, and arrivals to VPS
-      try {
-        await uploadLocalData();
-      } catch (uploadError) {
-        console.error('Upload sync failed (non-fatal):', uploadError instanceof Error ? uploadError.message : uploadError);
+      // Only ADMIN users have permission to upload product/supplier/category data
+      const currentUser = getCurrentUser();
+      if (currentUser?.role === 'ADMIN') {
+        try {
+          await uploadLocalData();
+        } catch (uploadError) {
+          console.error('Upload sync failed (non-fatal):', uploadError instanceof Error ? uploadError.message : uploadError);
+        }
       }
 
-      // Sync sales (upload local sales to VPS)
-      await syncSales();
+      // Sync sales (upload local sales to VPS) — all roles
+      try {
+        await syncSales();
+      } catch (salesError) {
+        console.error('Sales sync failed (non-fatal):', salesError instanceof Error ? salesError.message : salesError);
+      }
 
       // Sync categories (download from VPS — must come before products)
       await syncCategories();

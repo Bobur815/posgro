@@ -21,11 +21,12 @@ export class CreateArrivalDto {
   @Type(() => Number)
   quantity!: number;
 
-  @ApiProperty({ example: 10000, description: 'Purchase cost per unit' })
+  @ApiPropertyOptional({ example: 10000, description: 'Purchase cost per unit' })
+  @IsOptional()
   @IsNumber()
   @Min(0)
   @Type(() => Number)
-  cost!: number;
+  cost?: number;
 
   @ApiPropertyOptional({ example: 'clsupplier123', description: 'Supplier ID' })
   @IsOptional()

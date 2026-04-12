@@ -483,25 +483,26 @@ function setupInventoryHandlers(): void {
   ipcMain.handle("inventory:createArrival", async (_event, data) => {
     const prisma = getPrismaClient();
 
-    const totalCost = data.quantity * data.cost;
+    const cost = data.cost ?? 0;
+    const totalCost = data.quantity * cost;
 
     // Create arrival record
     const arrival = await prisma.inventoryArrival.create({
       data: {
         productId: data.productId,
         quantity: data.quantity,
-        cost: data.cost,
-        totalCost: totalCost,
+        cost,
+        totalCost,
         supplierId: data.supplierId || null,
         notes: data.notes || null,
         createdBy: data.createdBy,
       },
     });
 
-    // Update product stock and cost
+    // Update product stock; only update cost if provided
     const productUpdate: Record<string, unknown> = {
       stock: { increment: data.quantity },
-      cost: data.cost, // Update cost to latest purchase cost
+      ...(data.cost != null && { cost: data.cost }),
     };
 
     if (data.newPrice !== undefined && data.priceMode) {

@@ -161,6 +161,20 @@ export function setupAuthHandlers(): void {
     // Store token for sync operations
     await setAuthToken(token);
 
+    // Restore persisted server token (saved during last full login) so sync works
+    const serverTokenSetting = await prisma.systemSetting.findUnique({ where: { key: 'server_token' } });
+    if (serverTokenSetting?.value) {
+      try {
+        const parts = serverTokenSetting.value.split('.');
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString()) as { exp?: number };
+        if (!payload.exp || payload.exp * 1000 > Date.now()) {
+          setServerToken(serverTokenSetting.value);
+        }
+      } catch {
+        // Invalid token — ignore
+      }
+    }
+
     // Set current user
     currentUser = {
       id: cashier.id,

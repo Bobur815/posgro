@@ -209,7 +209,7 @@ export function NewArrivalModal({
       await window.electronAPI.inventory.createArrival({
         productId: product.id,
         quantity: parseFloat(arrivalData.quantity),
-        cost: parseFloat(arrivalData.cost),
+        cost: arrivalData.cost ? parseFloat(arrivalData.cost) : undefined,
         notes: arrivalData.notes,
         supplierId: arrivalData.supplierId || undefined,
         paymentMethod: arrivalData.supplierId
@@ -323,7 +323,7 @@ export function NewArrivalModal({
         <div style={{ display: "flex", gap: "16px" }}>
           <div style={{ flex: 1 }}>
             <Input
-              label={<>{t("inventory.costPerUnit")} <Req>*</Req></>}
+              label={t("inventory.costPerUnit")}
               type="number"
               value={arrivalData.cost}
               onChange={(e) =>
@@ -332,7 +332,6 @@ export function NewArrivalModal({
                   cost: e.target.value,
                 }))
               }
-              required
             />
           </div>
           <div style={{ flex: 1 }}>

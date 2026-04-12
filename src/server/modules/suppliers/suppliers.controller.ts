@@ -31,7 +31,8 @@ export class SuppliersController {
   constructor(private readonly suppliersService: SuppliersService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all suppliers for the store (Admin only)' })
+  @Roles(UserRole.ADMIN, UserRole.USER)
+  @ApiOperation({ summary: 'Get all suppliers for the store' })
   @ApiQuery({ name: 'active', required: false, type: Boolean })
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiResponse({ status: 200, description: 'List of suppliers' })

@@ -23,7 +23,7 @@ export async function syncSales(): Promise<void> {
 
   const token = getServerToken();
   if (!token) {
-    throw new Error('No server token available — log in first to sync');
+    return; // No server token yet — will retry on next sync cycle
   }
 
   let successCount = 0;
