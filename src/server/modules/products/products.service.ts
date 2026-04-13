@@ -324,6 +324,10 @@ export class ProductsService {
           where: { storeId_barcode: { storeId, barcode: p.barcode } },
         });
         if (existing) {
+          // Do NOT update stock on existing products — stock is managed exclusively
+          // via sale sync (decrements) and inventory arrivals (increments).
+          // Overwriting stock here would cause double-decrements when a terminal
+          // uploads post-sale local stock and then syncSales also decrements VPS stock.
           await this.prisma.product.update({
             where: { id: existing.id },
             data: {
@@ -331,7 +335,6 @@ export class ProductsService {
               nameRu: p.nameRu,
               price: p.price,
               ...(p.cost !== undefined && { cost: p.cost }),
-              ...(p.stock !== undefined && { stock: p.stock }),
               ...(p.minStock !== undefined && { minStock: p.minStock }),
               ...(p.unit && { unit: p.unit }),
               ...(p.active !== undefined && { active: p.active }),
