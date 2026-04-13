@@ -61,7 +61,6 @@ export class SalesService {
     });
 
     if (existing) {
-      console.log(`[sales-sync] Duplicate receipt=${syncSaleDto.receiptNumber} storeId=${storeId} — skipping`);
       return { id: existing.id, synced: true, message: 'Already synced' };
     }
 
@@ -71,7 +70,6 @@ export class SalesService {
       where: { storeId, barcode: { in: barcodes } },
       select: { id: true, barcode: true },
     });
-    console.log(`[sales-sync] storeId=${storeId} barcodes=${JSON.stringify(barcodes)} found=${serverProducts.length} products=${JSON.stringify(serverProducts)}`);
     const productIdByBarcode = new Map(serverProducts.map((p) => [p.barcode, p.id]));
 
     // Resolve the VPS cashierId by phone so the sale is attributed to the correct
@@ -122,10 +120,7 @@ export class SalesService {
     // terminals rely on updatedAt to detect changed products in the next sync pull.
     for (const item of syncSaleDto.items) {
       const serverId = productIdByBarcode.get(item.barcode);
-      if (!serverId) {
-        console.log(`[sales-sync] No server product found for barcode=${item.barcode} — stock not updated`);
-        continue;
-      }
+      if (!serverId) continue;
       const decrement = parseFloat(item.quantity);
 
       const current = await this.prisma.product.findUnique({
@@ -135,7 +130,6 @@ export class SalesService {
       if (!current) continue;
 
       const newStock = Math.max(0, Number(current.stock) - decrement);
-      console.log(`[sales-sync] Stock update productId=${serverId} barcode=${item.barcode} ${Number(current.stock)} → ${newStock}`);
       await this.prisma.product.update({
         where: { id: serverId },
         data: { stock: newStock },
@@ -143,44 +137,6 @@ export class SalesService {
     }
 
     return { id: sale.id, synced: true };
-  }
-
-  async backfillStockFromSales(storeId: string) {
-    // Aggregate total units sold per product across all historical sales
-    const items = await this.prisma.saleItem.findMany({
-      where: { sale: { storeId } },
-      select: { productId: true, quantity: true },
-    });
-
-    // Sum quantities per server-side productId (skip items with no resolved productId)
-    const totalSoldById = new Map<number, number>();
-    for (const item of items) {
-      if (!item.productId) continue;
-      const prev = totalSoldById.get(item.productId) ?? 0;
-      totalSoldById.set(item.productId, prev + Number(item.quantity));
-    }
-
-    let updated = 0;
-    let skipped = 0;
-
-    for (const [productId, totalSold] of totalSoldById) {
-      const product = await this.prisma.product.findUnique({
-        where: { id: productId },
-        select: { id: true, stock: true, storeId: true },
-      });
-      if (!product || product.storeId !== storeId) { skipped++; continue; }
-
-      const newStock = Math.max(0, Number(product.stock) - totalSold);
-      await this.prisma.product.update({
-        where: { id: productId },
-        data: { stock: newStock },
-      });
-      console.log(`[backfill] productId=${productId} stock ${Number(product.stock)} → ${newStock} (sold=${totalSold})`);
-      updated++;
-    }
-
-    console.log(`[backfill] Done: ${updated} products updated, ${skipped} skipped`);
-    return { updated, skipped };
   }
 
   async getDailySummary(storeId: string, date: Date, cashierId?: string) {
