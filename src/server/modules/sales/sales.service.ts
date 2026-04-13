@@ -61,6 +61,7 @@ export class SalesService {
     });
 
     if (existing) {
+      console.log(`[sale-sync] DUPLICATE receipt=${syncSaleDto.receiptNumber}`);
       return { id: existing.id, synced: true, message: 'Already synced' };
     }
 
@@ -70,6 +71,7 @@ export class SalesService {
       where: { storeId, barcode: { in: barcodes } },
       select: { id: true, barcode: true },
     });
+    console.log(`[sale-sync] NEW receipt=${syncSaleDto.receiptNumber} storeId=${storeId} barcodes=${JSON.stringify(barcodes)} found=${serverProducts.length}`);
     const productIdByBarcode = new Map(serverProducts.map((p) => [p.barcode, p.id]));
 
     // Resolve the VPS cashierId by phone so the sale is attributed to the correct
