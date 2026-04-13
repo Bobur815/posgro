@@ -1,5 +1,5 @@
 // src/web/src/pages/Products/ProductList.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ProductForm } from "./ProductForm";
@@ -30,6 +30,15 @@ import {
   MobileCardList,
   DesktopOnly,
 } from "../../components/common/MobileCard";
+
+const MobileSentinel = styled.div`
+  height: 1px;
+  @media (min-width: 769px) {
+    display: none;
+  }
+`;
+
+const MOBILE_PAGE_SIZE = 20;
 
 const Container = styled.div`
   display: flex;
@@ -81,6 +90,30 @@ export function ProductList() {
   const [showProductForm, setShowProductForm] = useState(false);
   const [editProductId, setEditProductId] = useState<string | null>(null);
   const isAdmin = user?.role === "ADMIN";
+
+  const [mobileCount, setMobileCount] = useState(MOBILE_PAGE_SIZE);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // Reset mobile count when the product list changes (new search/filter result)
+  useEffect(() => {
+    setMobileCount(MOBILE_PAGE_SIZE);
+  }, [products]);
+
+  // Infinite scroll: load next batch when sentinel enters viewport
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && mobileCount < products.length) {
+          setMobileCount((c) => Math.min(c + MOBILE_PAGE_SIZE, products.length));
+        }
+      },
+      { rootMargin: "150px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [mobileCount, products.length]);
 
   useEffect(() => {
     loadProducts();
@@ -290,7 +323,7 @@ export function ProductList() {
       />
 
       <MobileCardList>
-        {pageData.map((product) => (
+        {products.slice(0, mobileCount).map((product) => (
           <MobileCard
             key={product.id}
             title={i18n.language === "uz" ? product.nameUz : product.nameRu}
@@ -378,6 +411,7 @@ export function ProductList() {
           />
         ))}
       </MobileCardList>
+      <MobileSentinel ref={sentinelRef} />
 
       <DesktopOnly>
         <Table<Product>

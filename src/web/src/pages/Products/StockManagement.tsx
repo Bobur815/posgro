@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { useProducts } from "../../hooks/useProducts";
@@ -155,6 +155,15 @@ const StockCell = styled.div`
   gap: 4px;
 `;
 
+const MobileSentinel = styled.div`
+  height: 1px;
+  @media (min-width: 769px) {
+    display: none;
+  }
+`;
+
+const MOBILE_PAGE_SIZE = 20;
+
 export function StockManagement() {
   const { t, i18n } = useTranslation();
   const {
@@ -183,6 +192,30 @@ export function StockManagement() {
   const [showReceiptScan, setShowReceiptScan] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+
+  const [mobileCount, setMobileCount] = useState(MOBILE_PAGE_SIZE);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // Reset mobile count when the product list changes (new search/filter result)
+  useEffect(() => {
+    setMobileCount(MOBILE_PAGE_SIZE);
+  }, [products]);
+
+  // Infinite scroll: load next batch when sentinel enters viewport
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && mobileCount < products.length) {
+          setMobileCount((c) => Math.min(c + MOBILE_PAGE_SIZE, products.length));
+        }
+      },
+      { rootMargin: "150px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [mobileCount, products.length]);
 
   useEffect(() => {
     loadProducts();
@@ -427,7 +460,7 @@ export function StockManagement() {
       />
 
       <MobileCardList>
-        {pageData.map((product) => (
+        {products.slice(0, mobileCount).map((product) => (
           <MobileCard
             key={product.id}
             title={i18n.language === "uz" ? product.nameUz : product.nameRu}
@@ -481,6 +514,7 @@ export function StockManagement() {
           />
         ))}
       </MobileCardList>
+      <MobileSentinel ref={sentinelRef} />
 
       <DesktopOnly>
         <Table
