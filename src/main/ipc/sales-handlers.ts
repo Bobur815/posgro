@@ -71,7 +71,6 @@ export function setupSalesHandlers(): void {
 
     const discountAmount = data.discountAmount || 0;
     const finalAmount = totalAmount - discountAmount;
-
     // Generate receipt number
     const receiptNumber = await generateReceiptNumber(config.terminalId);
 

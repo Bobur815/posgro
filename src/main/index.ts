@@ -4,7 +4,7 @@ import { setupIpcHandlers } from "./ipc/handlers";
 import { SyncService } from "./sync/sync-service";
 import { initializeDatabase } from "./database/sqlite-client";
 import { seedLocalDatabase } from "./database/seed";
-import { getAppConfig } from "./config/app-config";
+import { getAppConfig, updateConfig } from "./config/app-config";
 import { getPrismaClient } from "./database/sqlite-client";
 import { getServerToken } from "./sync/queue-manager";
 import { getCurrentUser } from "./ipc/auth-handlers";
@@ -26,6 +26,20 @@ async function bootstrap() {
 
     // Seed database with initial data if needed
     await seedLocalDatabase();
+
+    // Apply persisted LocalConfig values to AppConfig so that terminalId, storeId,
+    // and apiUrl from the Settings UI are respected immediately on restart —
+    // without this, env-based defaults (e.g. TERMINAL_ID=T1) would override them.
+    const prisma = getPrismaClient();
+    const localConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+    if (localConfig) {
+      updateConfig({
+        terminalId: localConfig.terminalId,
+        storeId: localConfig.storeId,
+        vpsApiUrl: localConfig.apiUrl,
+      });
+      console.log(`[bootstrap] Loaded config from LocalConfig: terminalId=${localConfig.terminalId} storeId=${localConfig.storeId}`);
+    }
 
     // Create the main window
     mainWindow = createWindow();

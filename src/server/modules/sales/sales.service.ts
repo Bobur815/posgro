@@ -120,22 +120,35 @@ export class SalesService {
     // Update product stock using server-side product IDs.
     // Use update() (not updateMany) so that @updatedAt is always touched —
     // terminals rely on updatedAt to detect changed products in the next sync pull.
+    // Wrapped in try-catch per item so a failed update never causes a 500 response —
+    // a 500 would leave the local sale un-synced and cause infinite DUPLICATE retries.
     for (const item of syncSaleDto.items) {
       const serverId = productIdByBarcode.get(item.barcode);
-      if (!serverId) continue;
+      if (!serverId) {
+        console.warn(`[sale-sync] No VPS product found for barcode=${item.barcode} — stock NOT decremented for this item`);
+        continue;
+      }
       const decrement = parseFloat(item.quantity);
 
-      const current = await this.prisma.product.findUnique({
-        where: { id: serverId },
-        select: { stock: true },
-      });
-      if (!current) continue;
+      try {
+        const current = await this.prisma.product.findUnique({
+          where: { id: serverId },
+          select: { stock: true },
+        });
+        if (!current) {
+          console.warn(`[sale-sync] Product id=${serverId} barcode=${item.barcode} not found after lookup — skipping stock update`);
+          continue;
+        }
 
-      const newStock = Math.max(0, Number(current.stock) - decrement);
-      await this.prisma.product.update({
-        where: { id: serverId },
-        data: { stock: newStock },
-      });
+        const newStock = Math.max(0, Number(current.stock) - decrement);
+        await this.prisma.product.update({
+          where: { id: serverId },
+          data: { stock: newStock },
+        });
+        console.log(`[sale-sync] Stock updated: product id=${serverId} barcode=${item.barcode} ${Number(current.stock)} → ${newStock} (-${decrement})`);
+      } catch (stockErr) {
+        console.error(`[sale-sync] STOCK UPDATE FAILED for product id=${serverId} barcode=${item.barcode}:`, stockErr instanceof Error ? stockErr.message : stockErr);
+      }
     }
 
     return { id: sale.id, synced: true };

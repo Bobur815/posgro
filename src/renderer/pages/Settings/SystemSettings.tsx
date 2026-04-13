@@ -117,6 +117,7 @@ export function SystemSettings() {
   });
 
   const [terminalId, setTerminalId] = useState("");
+console.log(terminalId);
 
 const [syncStatus, setSyncStatus] = useState<{
     isSyncing: boolean;
