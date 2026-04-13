@@ -145,6 +145,44 @@ export class SalesService {
     return { id: sale.id, synced: true };
   }
 
+  async backfillStockFromSales(storeId: string) {
+    // Aggregate total units sold per product across all historical sales
+    const items = await this.prisma.saleItem.findMany({
+      where: { sale: { storeId } },
+      select: { productId: true, quantity: true },
+    });
+
+    // Sum quantities per server-side productId (skip items with no resolved productId)
+    const totalSoldById = new Map<number, number>();
+    for (const item of items) {
+      if (!item.productId) continue;
+      const prev = totalSoldById.get(item.productId) ?? 0;
+      totalSoldById.set(item.productId, prev + Number(item.quantity));
+    }
+
+    let updated = 0;
+    let skipped = 0;
+
+    for (const [productId, totalSold] of totalSoldById) {
+      const product = await this.prisma.product.findUnique({
+        where: { id: productId },
+        select: { id: true, stock: true, storeId: true },
+      });
+      if (!product || product.storeId !== storeId) { skipped++; continue; }
+
+      const newStock = Math.max(0, Number(product.stock) - totalSold);
+      await this.prisma.product.update({
+        where: { id: productId },
+        data: { stock: newStock },
+      });
+      console.log(`[backfill] productId=${productId} stock ${Number(product.stock)} → ${newStock} (sold=${totalSold})`);
+      updated++;
+    }
+
+    console.log(`[backfill] Done: ${updated} products updated, ${skipped} skipped`);
+    return { updated, skipped };
+  }
+
   async getDailySummary(storeId: string, date: Date, cashierId?: string) {
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);

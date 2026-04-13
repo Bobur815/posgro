@@ -6,6 +6,7 @@ import {
   Param,
   Query,
   UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { SalesService } from './sales.service';
@@ -71,5 +72,17 @@ export class SalesController {
   @ApiResponse({ status: 200, description: 'Sale already synced' })
   async sync(@CurrentStore() storeId: string, @Body() syncSaleDto: SyncSaleDto) {
     return this.salesService.syncFromTerminal(storeId, syncSaleDto);
+  }
+
+  @Post('backfill-stock')
+  @ApiOperation({ summary: 'One-time: apply stock decrements for all historical sales (ADMIN only)' })
+  async backfillStock(
+    @CurrentStore() storeId: string,
+    @CurrentUser() user: User,
+  ) {
+    if (user.role !== UserRole.ADMIN && user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('ADMIN only');
+    }
+    return this.salesService.backfillStockFromSales(storeId);
   }
 }
