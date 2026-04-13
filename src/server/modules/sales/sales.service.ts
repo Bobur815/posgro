@@ -154,6 +154,39 @@ export class SalesService {
     return { id: sale.id, synced: true };
   }
 
+  async deleteById(id: string, storeId: string) {
+    const sale = await this.prisma.sale.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+
+    if (!sale || sale.storeId !== storeId) {
+      throw new NotFoundException('Sale not found');
+    }
+
+    // Restore product stock for each item
+    for (const item of sale.items) {
+      if (!item.productId) continue;
+      try {
+        const product = await this.prisma.product.findUnique({
+          where: { id: item.productId },
+          select: { stock: true },
+        });
+        if (!product) continue;
+        const restoredStock = Number(product.stock) + Number(item.quantity);
+        await this.prisma.product.update({
+          where: { id: item.productId },
+          data: { stock: restoredStock },
+        });
+      } catch (err) {
+        console.error(`[sale-delete] Failed to restore stock for productId=${item.productId}:`, err instanceof Error ? err.message : err);
+      }
+    }
+
+    await this.prisma.sale.delete({ where: { id } });
+    return { deleted: true };
+  }
+
   async unbackfillStock(storeId: string) {
     // Reverse the backfill: add total units sold back to each product's stock.
     // The backfill incorrectly assumed VPS stock was never decremented, but

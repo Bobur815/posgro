@@ -417,6 +417,26 @@ export function setupSalesHandlers(): void {
     await prisma.saleItem.deleteMany({ where: { saleId } });
     await prisma.sale.delete({ where: { id: saleId } });
 
+    // If the sale was already synced to VPS, delete it there too so the
+    // receipt number is freed and stock is restored on the server.
+    if (sale.synced) {
+      try {
+        const appConfig = getAppConfig();
+        const token = getServerToken();
+        if (token) {
+          const res = await fetch(`${appConfig.vpsApiUrl}/sales/${saleId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) {
+            console.error(`[sales:delete] VPS delete failed for sale ${saleId}: HTTP ${res.status}`);
+          }
+        }
+      } catch (err) {
+        console.error(`[sales:delete] VPS delete error for sale ${saleId}:`, err instanceof Error ? err.message : err);
+      }
+    }
+
     await prisma.auditLog.create({
       data: {
         userId: currentUser.id,
@@ -669,23 +689,36 @@ async function generateReceiptNumber(terminalId: string): Promise<string> {
   const now = new Date();
   const dateStr = format(now, 'yyMMdd');
   const prefix = `${terminalId}${dateStr}`;
+  const counterKey = `receipt_seq_${terminalId}_${dateStr}`;
 
-  // Get ALL receipt numbers with this prefix to find the true max
-  const existing = await prisma.sale.findMany({
-    where: {
-      receiptNumber: { startsWith: prefix },
-    },
-    select: { receiptNumber: true },
-  });
+  // Monotonic counter — never decreases even when sales are deleted.
+  // This prevents a deleted receipt number from being reissued to a new sale,
+  // which would cause a DUPLICATE collision on the VPS.
+  //
+  // On first use today, seed the counter from existing local sales so that
+  // any receipts created before this logic was deployed are not reused.
+  const stored = await prisma.systemSetting.findUnique({ where: { key: counterKey } });
+  let storedSeq = stored ? parseInt(stored.value, 10) : 0;
 
-  let maxSeq = 0;
-  for (const row of existing) {
-    const seqStr = row.receiptNumber.slice(prefix.length);
-    const seq = parseInt(seqStr, 10);
-    if (!isNaN(seq) && seq > maxSeq) {
-      maxSeq = seq;
+  if (!stored) {
+    // Seed from current local max (migration: first day this counter is used)
+    const existing = await prisma.sale.findMany({
+      where: { receiptNumber: { startsWith: prefix } },
+      select: { receiptNumber: true },
+    });
+    for (const row of existing) {
+      const seq = parseInt(row.receiptNumber.slice(prefix.length), 10);
+      if (!isNaN(seq) && seq > storedSeq) storedSeq = seq;
     }
   }
 
-  return `${prefix}${(maxSeq + 1).toString().padStart(3, '0')}`;
+  const nextSeq = storedSeq + 1;
+
+  await prisma.systemSetting.upsert({
+    where: { key: counterKey },
+    update: { value: nextSeq.toString() },
+    create: { key: counterKey, value: nextSeq.toString() },
+  });
+
+  return `${prefix}${nextSeq.toString().padStart(3, '0')}`;
 }

@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
   Param,
   Query,
@@ -72,6 +73,21 @@ export class SalesController {
   @ApiResponse({ status: 200, description: 'Sale already synced' })
   async sync(@CurrentStore() storeId: string, @Body() syncSaleDto: SyncSaleDto) {
     return this.salesService.syncFromTerminal(storeId, syncSaleDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete sale and restore stock (terminal return flow)' })
+  @ApiResponse({ status: 200, description: 'Sale deleted and stock restored' })
+  @ApiResponse({ status: 404, description: 'Sale not found' })
+  async remove(
+    @CurrentStore() storeId: string,
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+  ) {
+    if (user.role !== UserRole.ADMIN && user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('ADMIN only');
+    }
+    return this.salesService.deleteById(id, storeId);
   }
 
   @Post('unbackfill-stock')
