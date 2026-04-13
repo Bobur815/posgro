@@ -139,6 +139,44 @@ export class SalesService {
     return { id: sale.id, synced: true };
   }
 
+  async unbackfillStock(storeId: string) {
+    // Reverse the backfill: add total units sold back to each product's stock.
+    // The backfill incorrectly assumed VPS stock was never decremented, but
+    // syncBulk was already uploading terminal local stock (post-sale values),
+    // so the backfill double-decremented. This undoes that.
+    const items = await this.prisma.saleItem.findMany({
+      where: { sale: { storeId } },
+      select: { productId: true, quantity: true },
+    });
+
+    const totalSoldById = new Map<number, number>();
+    for (const item of items) {
+      if (!item.productId) continue;
+      const prev = totalSoldById.get(item.productId) ?? 0;
+      totalSoldById.set(item.productId, prev + Number(item.quantity));
+    }
+
+    let updated = 0;
+    for (const [productId, totalSold] of totalSoldById) {
+      const product = await this.prisma.product.findUnique({
+        where: { id: productId },
+        select: { id: true, stock: true, storeId: true },
+      });
+      if (!product || product.storeId !== storeId) continue;
+
+      const restoredStock = Number(product.stock) + totalSold;
+      await this.prisma.product.update({
+        where: { id: productId },
+        data: { stock: restoredStock },
+      });
+      console.log(`[unbackfill] productId=${productId} ${Number(product.stock)} → ${restoredStock} (+${totalSold})`);
+      updated++;
+    }
+
+    console.log(`[unbackfill] Done: ${updated} products restored`);
+    return { updated };
+  }
+
   async getDailySummary(storeId: string, date: Date, cashierId?: string) {
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);

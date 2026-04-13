@@ -63,6 +63,17 @@ async function bootstrap() {
       await syncService?.triggerSync();
     });
 
+    ipcMain.handle("sync:unbackfillStock", async () => {
+      const config = getAppConfig();
+      const token = getServerToken();
+      if (!token) return { error: 'No server token — log in first' };
+      const res = await fetch(`${config.vpsApiUrl}/sales/unbackfill-stock`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      return res.json();
+    });
+
     // Diagnostic endpoint — call from renderer devtools:
     //   window.electronAPI.invoke('sync:diagnose').then(console.log)
     ipcMain.handle("sync:diagnose", async () => {

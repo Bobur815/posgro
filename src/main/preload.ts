@@ -109,6 +109,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     trigger: () => ipcRenderer.invoke("sync:trigger"),
     getStatus: () => ipcRenderer.invoke("sync:getStatus"),
     diagnose: () => ipcRenderer.invoke("sync:diagnose"),
+    unbackfillStock: () => ipcRenderer.invoke("sync:unbackfillStock"),
     onCompleted: (callback: () => void) => {
       ipcRenderer.on("sync:completed", callback);
       return () => ipcRenderer.removeListener("sync:completed", callback);
