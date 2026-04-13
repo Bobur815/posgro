@@ -154,7 +154,7 @@ export class SalesService {
     return { id: sale.id, synced: true };
   }
 
-  async deleteById(id: string, storeId: string) {
+  async deleteById(id: string, storeId: string, user?: SaleUser) {
     const sale = await this.prisma.sale.findUnique({
       where: { id },
       include: { items: true },
@@ -162,6 +162,11 @@ export class SalesService {
 
     if (!sale || sale.storeId !== storeId) {
       throw new NotFoundException('Sale not found');
+    }
+
+    // Non-admin users can only delete their own sales
+    if (user && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN' && sale.cashierId !== user.id) {
+      throw new ForbiddenException('Can only delete your own sales');
     }
 
     // Restore product stock for each item

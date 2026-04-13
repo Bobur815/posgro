@@ -79,15 +79,13 @@ export class SalesController {
   @ApiOperation({ summary: 'Delete sale and restore stock (terminal return flow)' })
   @ApiResponse({ status: 200, description: 'Sale deleted and stock restored' })
   @ApiResponse({ status: 404, description: 'Sale not found' })
+  @ApiResponse({ status: 403, description: 'Can only delete own sales' })
   async remove(
     @CurrentStore() storeId: string,
     @CurrentUser() user: User,
     @Param('id') id: string,
   ) {
-    if (user.role !== UserRole.ADMIN && user.role !== UserRole.SUPER_ADMIN) {
-      throw new ForbiddenException('ADMIN only');
-    }
-    return this.salesService.deleteById(id, storeId);
+    return this.salesService.deleteById(id, storeId, user);
   }
 
   @Post('unbackfill-stock')
