@@ -1,6 +1,9 @@
 import { getPrismaClient } from '../database/sqlite-client';
 import { getAppConfig } from '../config/app-config';
 import { getServerToken } from './queue-manager';
+import type { Sale, SaleItem } from '../../generated/prisma-sqlite';
+
+type SaleWithItems = Sale & { items: SaleItem[] };
 
 const BATCH_SIZE = 50;
 
@@ -19,7 +22,7 @@ export async function syncSales(): Promise<SalesSyncResult> {
   const result: SalesSyncResult = { totalUnsynced: 0, attempted: 0, succeeded: 0, failed: 0, errors: [] };
 
   // Get unsynced sales
-  const unsyncedSales = await prisma.sale.findMany({
+  const unsyncedSales: SaleWithItems[] = await prisma.sale.findMany({
     where: { synced: false },
     include: { items: true },
     take: BATCH_SIZE,
@@ -43,8 +46,10 @@ export async function syncSales(): Promise<SalesSyncResult> {
   let failCount = 0;
 
   // Pre-build a cashierId → phone map so the VPS can resolve the correct VPS user ID
-  const cashierIds = [...new Set(unsyncedSales.map((s) => s.cashierId).filter(Boolean))];
-  const cashierUsers = await prisma.user.findMany({
+  const cashierIds = [...new Set(
+    unsyncedSales.map((s) => s.cashierId).filter((id): id is string => Boolean(id))
+  )];
+  const cashierUsers: { id: string; phone: string }[] = await prisma.user.findMany({
     where: { id: { in: cashierIds } },
     select: { id: true, phone: true },
   });
@@ -67,7 +72,7 @@ export async function syncSales(): Promise<SalesSyncResult> {
           paymentMethod: sale.paymentMethod,
           cashierId: sale.cashierId,
           cashierName: sale.cashierName || sale.cashierId,
-          cashierPhone: cashierPhoneById.get(sale.cashierId) ?? undefined,
+          cashierPhone: sale.cashierId ? (cashierPhoneById.get(sale.cashierId) ?? undefined) : undefined,
           terminalId: config.terminalId,
           createdAt: sale.createdAt.toISOString(),
           items: sale.items.map((item: typeof sale.items[number]) => ({

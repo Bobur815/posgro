@@ -20,6 +20,8 @@ export interface PriceTagTemplate {
     barcode: boolean;
     articleId: boolean;
     pluCode: boolean;
+    productionDate: boolean;
+    expiryDate: boolean;
     customText1: boolean;
     customText2: boolean;
   };
@@ -44,6 +46,8 @@ function createDefaultTemplate(): PriceTagTemplate {
       barcode: true,
       articleId: false,
       pluCode: false,
+      productionDate: false,
+      expiryDate: false,
       customText1: false,
       customText2: false,
     },
@@ -489,6 +493,8 @@ export function PriceTags() {
                   "barcode",
                   "articleId",
                   "pluCode",
+                  "productionDate",
+                  "expiryDate",
                   "customText1",
                   "customText2",
                 ] as (keyof PriceTagTemplate["elements"])[]
@@ -720,6 +726,14 @@ function TagPreview({ template }: { template: PriceTagTemplate }) {
 
       {el.pluCode && (
         <PreviewLine $small>PLU: 00042</PreviewLine>
+      )}
+
+      {el.productionDate && (
+        <PreviewLine $small>Произв.: 01.01.2025</PreviewLine>
+      )}
+
+      {el.expiryDate && (
+        <PreviewLine $small>Годен до: 01.01.2026</PreviewLine>
       )}
 
       {(el.price || el.articleId) && (

@@ -16,6 +16,8 @@ export interface TsplLabelItem {
   productType?: string; // 'BULK_WEIGHTED' | 'PREPACKAGED' | 'REGULAR'
   articleId?: string | number;
   pluCode?: string;
+  productionDate?: string;
+  expiryDate?: string;
 }
 
 export interface TsplPrintRequest {
@@ -33,6 +35,8 @@ export interface TsplPrintRequest {
     barcode: boolean;
     articleId: boolean;
     pluCode: boolean;
+    productionDate: boolean;
+    expiryDate: boolean;
     customText1: boolean;
     customText2: boolean;
     customText1Value?: string;
@@ -268,6 +272,22 @@ function buildOneLabelTSPL(item: TsplLabelItem, req: TsplPrintRequest): string {
       const pluStr = `PLU: ${item.pluCode}`;
       lines.push(
         `TEXT ${marginDots},${y},"${smallFont.name}",0,1,1,"${escapeTSPL(pluStr)}"`,
+      );
+      y += smallFont.h + 2;
+    }
+    if (elements.productionDate && item.productionDate) {
+      const d = new Date(item.productionDate);
+      const dateStr = `${lang === 'uz' ? 'Ish.s.:' : 'Произв.:'} ${d.toLocaleDateString('ru-RU')}`;
+      lines.push(
+        `TEXT ${marginDots},${y},"${smallFont.name}",0,1,1,"${escapeTSPL(dateStr)}"`,
+      );
+      y += smallFont.h + 2;
+    }
+    if (elements.expiryDate && item.expiryDate) {
+      const d = new Date(item.expiryDate);
+      const dateStr = `${lang === 'uz' ? 'Yaroq.:' : 'Годен до:'} ${d.toLocaleDateString('ru-RU')}`;
+      lines.push(
+        `TEXT ${marginDots},${y},"${smallFont.name}",0,1,1,"${escapeTSPL(dateStr)}"`,
       );
       y += smallFont.h + 2;
     }

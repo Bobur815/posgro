@@ -1,5 +1,6 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum, IsBoolean } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEnum, IsBoolean, IsArray, ValidateNested } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import { USER_ROLES, UserRole } from '@shared/constants';
 
 export class SyncUserItemDto {
@@ -41,5 +42,8 @@ export class SyncUserItemDto {
 
 export class SyncUsersBulkDto {
   @ApiProperty({ type: [SyncUserItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SyncUserItemDto)
   users!: SyncUserItemDto[];
 }
