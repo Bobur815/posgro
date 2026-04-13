@@ -8,6 +8,22 @@ import {
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 
+const TASHKENT_LOCALE = 'uz-UZ';
+const TASHKENT_TZ = 'Asia/Tashkent';
+
+function nowTashkent(): string {
+  return new Date().toLocaleString(TASHKENT_LOCALE, {
+    timeZone: TASHKENT_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).replace(',', '') + ' +05:00';
+}
+
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
@@ -15,20 +31,20 @@ export class LoggingInterceptor implements NestInterceptor {
     const { method, url, body } = request;
     const startTime = Date.now();
 
-    console.log(`[${new Date().toISOString()}] ${method} ${url}`, {
+    console.log(`[${nowTashkent()}] ${method} ${url}`, {
       body: this.sanitizeBody(body),
     });
 
     return next.handle().pipe(
       tap({
-        next: (data) => {
+        next: (_data) => {
           const duration = Date.now() - startTime;
-          console.log(`[${new Date().toISOString()}] ${method} ${url} - ${duration}ms`);
+          console.log(`[${nowTashkent()}] ${method} ${url} - ${duration}ms`);
         },
         error: (error) => {
           const duration = Date.now() - startTime;
           console.error(
-            `[${new Date().toISOString()}] ${method} ${url} - ${duration}ms - ERROR:`,
+            `[${nowTashkent()}] ${method} ${url} - ${duration}ms - ERROR:`,
             error.message,
           );
         },

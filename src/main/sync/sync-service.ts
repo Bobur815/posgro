@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron';
-import { syncSales } from './sales-sync';
+import { syncSales, SalesSyncResult } from './sales-sync';
 import { syncProducts, syncCategories, syncSuppliers, syncUsers } from './products-sync';
 import { getCurrentUser } from '../ipc/auth-handlers';
 import { uploadLocalData } from './upload-sync';
@@ -12,6 +12,7 @@ export class SyncService {
   private isSyncing = false;
   private lastSyncTime: Date | null = null;
   private lastError: string | null = null;
+  private lastSalesSync: SalesSyncResult | null = null;
 
   start(): void {
 
@@ -47,13 +48,16 @@ export class SyncService {
       // Check internet connectivity
       const isOnline = await this.checkConnectivity();
       if (!isOnline) {
+        console.warn('[sync] VPS unreachable — skipping sync cycle');
         return;
       }
 
+      const currentUser = getCurrentUser();
+      const token = getServerToken();
+      console.log(`[sync] Cycle start — user: ${currentUser?.phone ?? 'none'}, role: ${currentUser?.role ?? 'none'}, token: ${token ? 'present' : 'MISSING'}`);
 
       // Upload locally-created categories, suppliers, products, and arrivals to VPS
       // Only ADMIN users have permission to upload product/supplier/category data
-      const currentUser = getCurrentUser();
       if (currentUser?.role === 'ADMIN') {
         try {
           await uploadLocalData();
@@ -64,7 +68,10 @@ export class SyncService {
 
       // Sync sales (upload local sales to VPS) — all roles
       try {
-        await syncSales();
+        this.lastSalesSync = await syncSales();
+        if (this.lastSalesSync.failed > 0 || this.lastSalesSync.skippedReason) {
+          this.notifyRenderer('sync:salesStatus', this.lastSalesSync);
+        }
       } catch (salesError) {
         console.error('Sales sync failed (non-fatal):', salesError instanceof Error ? salesError.message : salesError);
       }
@@ -200,11 +207,13 @@ export class SyncService {
     isSyncing: boolean;
     lastSyncTime: Date | null;
     lastError: string | null;
+    lastSalesSync: SalesSyncResult | null;
   } {
     return {
       isSyncing: this.isSyncing,
       lastSyncTime: this.lastSyncTime,
       lastError: this.lastError,
+      lastSalesSync: this.lastSalesSync,
     };
   }
 

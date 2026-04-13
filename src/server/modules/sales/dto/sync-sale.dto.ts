@@ -88,6 +88,11 @@ export class SyncSaleDto {
   @IsNotEmpty()
   cashierName!: string;
 
+  @ApiPropertyOptional({ example: '+998901234567', description: 'Cashier phone for server-side ID resolution' })
+  @IsOptional()
+  @IsString()
+  cashierPhone?: string;
+
   @ApiProperty({ example: 'T1', description: 'POS terminal ID' })
   @IsString()
   @IsNotEmpty()

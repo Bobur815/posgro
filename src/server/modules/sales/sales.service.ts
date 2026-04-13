@@ -72,6 +72,18 @@ export class SalesService {
     });
     const productIdByBarcode = new Map(serverProducts.map((p) => [p.barcode, p.id]));
 
+    // Resolve the VPS cashierId by phone so the sale is attributed to the correct
+    // VPS user (terminal user IDs may differ from VPS user IDs if the user was
+    // created locally before the first sync).
+    let resolvedCashierId = syncSaleDto.cashierId;
+    if (syncSaleDto.cashierPhone) {
+      const vpsUser = await this.prisma.user.findUnique({
+        where: { storeId_phone: { storeId, phone: syncSaleDto.cashierPhone } },
+        select: { id: true },
+      });
+      if (vpsUser) resolvedCashierId = vpsUser.id;
+    }
+
     // Create sale with items
     const sale = await this.prisma.sale.create({
       data: {
@@ -82,7 +94,7 @@ export class SalesService {
         discountAmount: syncSaleDto.discountAmount || '0',
         finalAmount: syncSaleDto.finalAmount,
         paymentMethod: syncSaleDto.paymentMethod,
-        cashierId: syncSaleDto.cashierId,
+        cashierId: resolvedCashierId,
         cashierName: syncSaleDto.cashierName,
         terminalId: syncSaleDto.terminalId,
         synced: true,

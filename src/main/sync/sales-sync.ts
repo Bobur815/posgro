@@ -4,9 +4,19 @@ import { getServerToken } from './queue-manager';
 
 const BATCH_SIZE = 50;
 
-export async function syncSales(): Promise<void> {
+export interface SalesSyncResult {
+  totalUnsynced: number;
+  attempted: number;
+  succeeded: number;
+  failed: number;
+  skippedReason?: string;
+  errors: string[];
+}
+
+export async function syncSales(): Promise<SalesSyncResult> {
   const prisma = getPrismaClient();
   const config = getAppConfig();
+  const result: SalesSyncResult = { totalUnsynced: 0, attempted: 0, succeeded: 0, failed: 0, errors: [] };
 
   // Get unsynced sales
   const unsyncedSales = await prisma.sale.findMany({
@@ -16,19 +26,29 @@ export async function syncSales(): Promise<void> {
     orderBy: { createdAt: 'asc' },
   });
 
-  if (unsyncedSales.length === 0) {
-    return;
-  }
+  result.totalUnsynced = unsyncedSales.length;
 
+  if (unsyncedSales.length === 0) {
+    return result;
+  }
 
   const token = getServerToken();
   if (!token) {
+    result.skippedReason = 'no_server_token';
     console.warn('[sales-sync] No server token available — skipping sync (user must log in first)');
-    return; // No server token yet — will retry on next sync cycle
+    return result;
   }
 
   let successCount = 0;
   let failCount = 0;
+
+  // Pre-build a cashierId → phone map so the VPS can resolve the correct VPS user ID
+  const cashierIds = [...new Set(unsyncedSales.map((s) => s.cashierId).filter(Boolean))];
+  const cashierUsers = await prisma.user.findMany({
+    where: { id: { in: cashierIds } },
+    select: { id: true, phone: true },
+  });
+  const cashierPhoneById = new Map(cashierUsers.map((u) => [u.id, u.phone]));
 
   for (const sale of unsyncedSales) {
     try {
@@ -47,6 +67,7 @@ export async function syncSales(): Promise<void> {
           paymentMethod: sale.paymentMethod,
           cashierId: sale.cashierId,
           cashierName: sale.cashierName || sale.cashierId,
+          cashierPhone: cashierPhoneById.get(sale.cashierId) ?? undefined,
           terminalId: config.terminalId,
           createdAt: sale.createdAt.toISOString(),
           items: sale.items.map((item: typeof sale.items[number]) => ({
@@ -61,43 +82,51 @@ export async function syncSales(): Promise<void> {
         }),
       });
 
+      result.attempted++;
+
       if (response.ok) {
         // Mark as synced
         await prisma.sale.update({
           where: { id: sale.id },
-          data: {
-            synced: true,
-            syncedAt: new Date(),
-          },
+          data: { synced: true, syncedAt: new Date() },
         });
         successCount++;
       } else {
         const errorText = await response.text();
-        // If the server reports a unique constraint violation, the sale already
-        // exists on the server (a previous sync succeeded but the terminal never
-        // received the 200 due to a network drop). Treat this as success so we
-        // don't retry forever.
-        if (errorText.includes('Unique constraint failed') || response.status === 409) {
+        // Only treat as already-synced when the server explicitly says so (409)
+        // or the error is clearly a duplicate receiptNumber/id constraint.
+        // Use a strict check to avoid false-positives from unrelated 500 errors.
+        const isDuplicate =
+          response.status === 409 ||
+          (response.status >= 500 &&
+            (errorText.includes(`"receiptNumber"`) || errorText.includes('"id"')) &&
+            errorText.includes('Unique constraint'));
+
+        if (isDuplicate) {
           await prisma.sale.update({
             where: { id: sale.id },
-            data: {
-              synced: true,
-              syncedAt: new Date(),
-            },
+            data: { synced: true, syncedAt: new Date() },
           });
           successCount++;
         } else {
-          console.error(`Failed to sync sale ${sale.receiptNumber} (HTTP ${response.status}):`, errorText);
+          const msg = `${sale.receiptNumber} → HTTP ${response.status}: ${errorText.slice(0, 200)}`;
+          console.error(`[sales-sync] Failed to sync sale: ${msg}`);
+          result.errors.push(msg);
           failCount++;
         }
       }
     } catch (error) {
-      console.error(`Error syncing sale ${sale.receiptNumber}:`, error);
+      const msg = `${sale.receiptNumber} → ${error instanceof Error ? error.message : String(error)}`;
+      console.error(`[sales-sync] Error syncing sale: ${msg}`);
+      result.errors.push(msg);
       failCount++;
-      // Continue with next sale
     }
   }
 
+  result.succeeded = successCount;
+  result.failed = failCount;
+
+  console.log(`[sales-sync] Done: ${successCount} synced, ${failCount} failed out of ${unsyncedSales.length} pending`);
 
   // Update last sync timestamp
   await prisma.systemSetting.upsert({
@@ -105,4 +134,6 @@ export async function syncSales(): Promise<void> {
     update: { value: new Date().toISOString() },
     create: { key: 'last_sale_sync', value: new Date().toISOString() },
   });
+
+  return result;
 }
