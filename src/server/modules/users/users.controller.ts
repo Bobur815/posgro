@@ -13,6 +13,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { SyncUsersBulkDto } from './dto/sync-user.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { StoreGuard } from '../../common/guards/store.guard';
@@ -41,6 +42,14 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'List of users with credentials' })
   async findAllForSync(@CurrentStore() storeId: string) {
     return this.usersService.findAllForSync(storeId);
+  }
+
+  @Post('sync-bulk')
+  @Roles(USER_ROLES.ADMIN)
+  @ApiOperation({ summary: 'Bulk upsert users from terminal (Admin only)' })
+  @ApiResponse({ status: 201, description: 'Users synced' })
+  async syncBulk(@CurrentStore() storeId: string, @Body() dto: SyncUsersBulkDto) {
+    return this.usersService.upsertBulk(dto.users, storeId);
   }
 
   @Get(':id')

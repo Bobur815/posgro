@@ -8,7 +8,14 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false, // We configure it manually below
+  });
+
+  // Increase body-parser limit for large product/sync payloads (default is 100kb)
+  const express = await import('express');
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // Serve the super-admin web app from /web (built assets live in dist/web)
   const webDistPath = join(__dirname, '..', 'web');

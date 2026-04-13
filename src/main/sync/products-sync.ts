@@ -241,26 +241,33 @@ export async function syncUsers(): Promise<void> {
     if (!Array.isArray(users) || users.length === 0) return;
 
     for (const u of users) {
-      await prisma.user.upsert({
-        where: { id: u.id },
-        update: {
-          phone: u.phone,
-          password: u.password,
-          role: u.role,
-          nameUz: u.nameUz,
-          nameRu: u.nameRu,
-          active: u.active ?? true,
-        },
-        create: {
-          id: u.id,
-          phone: u.phone,
-          password: u.password,
-          role: u.role,
-          nameUz: u.nameUz,
-          nameRu: u.nameRu,
-          active: u.active ?? true,
-        },
-      });
+      try {
+        // Upsert by phone (unique in local schema) rather than id.
+        // A user created locally before the first VPS sync will have a different id
+        // than the VPS record for the same phone — upserting by id would miss the
+        // existing row and then crash on the phone unique constraint.
+        await prisma.user.upsert({
+          where: { phone: u.phone },
+          update: {
+            password: u.password,
+            role: u.role,
+            nameUz: u.nameUz,
+            nameRu: u.nameRu,
+            active: u.active ?? true,
+          },
+          create: {
+            id: u.id,
+            phone: u.phone,
+            password: u.password,
+            role: u.role,
+            nameUz: u.nameUz,
+            nameRu: u.nameRu,
+            active: u.active ?? true,
+          },
+        });
+      } catch (userError) {
+        console.error(`Failed to sync user phone=${u.phone}:`, userError instanceof Error ? userError.message : userError);
+      }
     }
   } catch (error) {
     console.error('Failed to sync users:', error instanceof Error ? error.message : error);

@@ -23,6 +23,7 @@ export async function syncSales(): Promise<void> {
 
   const token = getServerToken();
   if (!token) {
+    console.warn('[sales-sync] No server token available — skipping sync (user must log in first)');
     return; // No server token yet — will retry on next sync cycle
   }
 
@@ -45,7 +46,7 @@ export async function syncSales(): Promise<void> {
           finalAmount: sale.finalAmount.toString(),
           paymentMethod: sale.paymentMethod,
           cashierId: sale.cashierId,
-          cashierName: sale.cashierName,
+          cashierName: sale.cashierName || sale.cashierId,
           terminalId: config.terminalId,
           createdAt: sale.createdAt.toISOString(),
           items: sale.items.map((item: typeof sale.items[number]) => ({
@@ -86,7 +87,7 @@ export async function syncSales(): Promise<void> {
           });
           successCount++;
         } else {
-          console.error(`Failed to sync sale ${sale.receiptNumber}:`, errorText);
+          console.error(`Failed to sync sale ${sale.receiptNumber} (HTTP ${response.status}):`, errorText);
           failCount++;
         }
       }

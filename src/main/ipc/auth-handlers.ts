@@ -79,11 +79,37 @@ export function setupAuthHandlers(): void {
         });
       } else {
         const text = await serverRes.text();
-        console.warn(`VPS login failed (${serverRes.status}): ${text} — storeId: ${storeId}`);
+        console.warn(`VPS login failed (${serverRes.status}): ${text} — storeId: ${storeId}, phone: ${phone}`);
+        // Fall back to existing valid server_token so sync continues working
+        // (e.g. user exists locally but not yet on VPS, or VPS rejected credentials)
+        const existingSetting = await prisma.systemSetting.findUnique({ where: { key: 'server_token' } });
+        if (existingSetting?.value) {
+          try {
+            const parts = existingSetting.value.split('.');
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString()) as { exp?: number };
+            if (!payload.exp || payload.exp * 1000 > Date.now()) {
+              setServerToken(existingSetting.value);
+            }
+          } catch {
+            // Invalid token format — ignore
+          }
+        }
       }
     } catch (err) {
-      // Server unreachable — sync will be unavailable
-      console.warn('VPS login error:', err);
+      // Server unreachable — fall back to existing valid server_token so sync can still work
+      console.warn('VPS login error (server unreachable):', err);
+      const existingSetting = await prisma.systemSetting.findUnique({ where: { key: 'server_token' } });
+      if (existingSetting?.value) {
+        try {
+          const parts = existingSetting.value.split('.');
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString()) as { exp?: number };
+          if (!payload.exp || payload.exp * 1000 > Date.now()) {
+            setServerToken(existingSetting.value);
+          }
+        } catch {
+          // Invalid token format — ignore
+        }
+      }
     }
 
     // Set current user

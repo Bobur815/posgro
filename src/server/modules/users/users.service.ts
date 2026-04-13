@@ -220,6 +220,53 @@ export class UsersService {
     return { success: true };
   }
 
+  async upsertBulk(users: { id: string; phone: string; password: string; nameUz: string; nameRu: string; role?: string; active?: boolean }[], storeId: string) {
+    let created = 0;
+    let updated = 0;
+    const errors: string[] = [];
+
+    for (const u of users) {
+      try {
+        const existing = await this.prisma.user.findUnique({
+          where: { storeId_phone: { storeId, phone: u.phone } },
+        });
+
+        if (existing) {
+          await this.prisma.user.update({
+            where: { id: existing.id },
+            data: {
+              nameUz: u.nameUz,
+              nameRu: u.nameRu,
+              role: (u.role as any) || existing.role,
+              active: u.active ?? existing.active,
+              // Only update password if it differs (both are bcrypt hashes)
+              ...(u.password !== existing.password ? { password: u.password } : {}),
+            },
+          });
+          updated++;
+        } else {
+          await this.prisma.user.create({
+            data: {
+              id: u.id,
+              storeId,
+              phone: u.phone,
+              password: u.password,
+              nameUz: u.nameUz,
+              nameRu: u.nameRu,
+              role: (u.role as any) || 'USER',
+              active: u.active ?? true,
+            },
+          });
+          created++;
+        }
+      } catch (err) {
+        errors.push(`phone=${u.phone}: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+
+    return { created, updated, errors };
+  }
+
   async updatePassword(id: string, hashedPassword: string) {
     return this.prisma.user.update({
       where: { id },

@@ -6,6 +6,7 @@ import type {
   Supplier,
   Product,
   InventoryArrival,
+  User,
 } from "../../generated/prisma-sqlite";
 
 async function apiPost(
@@ -53,12 +54,38 @@ export async function uploadLocalData(): Promise<void> {
 
   const since = await getLastUploadTime(prisma);
 
+  await uploadUsers(prisma, token);
   await uploadCategories(prisma, token, since);
   await uploadSuppliers(prisma, token, since);
   await uploadProducts(prisma, token, since);
   await uploadArrivals(prisma, token, since);
 
   await setLastUploadTime(prisma);
+}
+
+async function uploadUsers(
+  prisma: ReturnType<typeof getPrismaClient>,
+  token: string,
+): Promise<void> {
+  const users = await prisma.user.findMany({});
+
+  if (users.length === 0) return;
+
+  const payload = users.map((u: User) => ({
+    id: u.id,
+    phone: u.phone,
+    password: u.password,
+    nameUz: u.nameUz,
+    nameRu: u.nameRu,
+    role: u.role,
+    active: u.active,
+  }));
+
+  const res = await apiPost("/users/sync-bulk", token, { users: payload });
+  if (!res.ok) {
+    const text = await res.text();
+    console.error(`Failed to upload users (HTTP ${res.status}): ${text}`);
+  }
 }
 
 async function uploadCategories(
