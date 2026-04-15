@@ -2,8 +2,13 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
 import { CreateArrivalDto } from './dto/create-arrival.dto';
-import { Product } from '@prisma/client';
+import { Product, SupplierPaymentMethod, SupplierTransactionType } from '@prisma/client';
 import { ArrivalFilters, InventoryArrivalWhereInput } from './types/inventory.types';
+
+const DEBT_PAYMENT_METHODS: SupplierPaymentMethod[] = [
+  SupplierPaymentMethod.INSTALLMENT,
+  SupplierPaymentMethod.ONE_TO_ONE,
+];
 
 @Injectable()
 export class InventoryService {
@@ -98,6 +103,35 @@ export class InventoryService {
       data: productUpdate,
     });
 
+    // For debt-creating payment methods (INSTALLMENT, ONE_TO_ONE), record the
+    // purchase as a SupplierTransaction and decrement the supplier balance.
+    // CASH / CARD / BANK_TRANSFER are assumed paid immediately — no debt recorded.
+    if (
+      createArrivalDto.supplierId &&
+      createArrivalDto.paymentMethod &&
+      DEBT_PAYMENT_METHODS.includes(createArrivalDto.paymentMethod as SupplierPaymentMethod)
+    ) {
+      const paymentMethod = createArrivalDto.paymentMethod as SupplierPaymentMethod;
+      await this.prisma.supplierTransaction.create({
+        data: {
+          storeId,
+          supplierId: createArrivalDto.supplierId,
+          type: SupplierTransactionType.PURCHASE,
+          paymentMethod,
+          amount: -totalCost, // negative = we owe more
+          description: `Arrival: ${product.nameRu} x${createArrivalDto.quantity}`,
+          referenceId: arrival.id,
+          referenceType: 'ARRIVAL',
+          createdBy: userId,
+        },
+      });
+
+      await this.prisma.supplier.update({
+        where: { id: createArrivalDto.supplierId },
+        data: { balance: { decrement: totalCost } },
+      });
+    }
+
     return arrival;
   }
 
@@ -125,24 +159,30 @@ export class InventoryService {
         if (!product) { errors++; continue; }
 
         const totalCost = a.quantity * a.cost;
-        await this.prisma.inventoryArrival.create({
-          data: {
-            id: a.id,
-            storeId,
-            productId: product.id,
-            supplierId: a.supplierId || null,
-            quantity: a.quantity,
-            cost: a.cost,
-            totalCost,
-            notes: a.notes || null,
-            createdBy: a.createdBy,
-            createdAt: new Date(a.createdAt),
-          },
-        });
-        // Update stock on server too
-        await this.prisma.product.update({
-          where: { id: product.id },
-          data: { stock: { increment: a.quantity }, cost: a.cost },
+        // Wrap both writes in a transaction: if the stock increment fails the
+        // arrival record is rolled back too, so the next sync cycle can retry it.
+        // Without this, a partial failure would permanently skip the stock increment
+        // (the idempotency check would see the arrival as already processed).
+        await this.prisma.$transaction(async (tx) => {
+          await tx.inventoryArrival.create({
+            data: {
+              id: a.id,
+              storeId,
+              productId: product.id,
+              supplierId: a.supplierId || null,
+              quantity: a.quantity,
+              cost: a.cost,
+              totalCost,
+              notes: a.notes || null,
+              createdBy: a.createdBy,
+              createdAt: new Date(a.createdAt),
+            },
+          });
+          // Update stock on server too
+          await tx.product.update({
+            where: { id: product.id },
+            data: { stock: { increment: a.quantity }, cost: a.cost },
+          });
         });
         created++;
       } catch {

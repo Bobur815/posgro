@@ -455,9 +455,12 @@ export function POSScreen() {
       return;
     }
     // Extract EAN-13 from GS1 DataMatrix QR payload (e.g. 01GTIN-14 21serial 93check)
-    const gs1 = rawValue.match(/\(01\)(\d{14})/) ?? rawValue.match(/^01(\d{14})/);
+    const gs1 =
+      rawValue.match(/\(01\)(\d{14})/) ?? rawValue.match(/^01(\d{14})/);
     const barcodeValue = gs1
-      ? (gs1[1].startsWith("0") ? gs1[1].slice(1) : gs1[1])
+      ? gs1[1].startsWith("0")
+        ? gs1[1].slice(1)
+        : gs1[1]
       : rawValue;
 
     const resetInputs = () => {
@@ -822,7 +825,9 @@ export function POSScreen() {
           <InputColumn>
             <InputSection>
               <InputPanel>
-                <InputLabel style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <InputLabel
+                  style={{ display: "flex", alignItems: "center", gap: 4 }}
+                >
                   {barcodeType === "qr" ? (
                     <QrCode size={12} />
                   ) : (

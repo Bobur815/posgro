@@ -131,21 +131,17 @@ export class SalesService {
       const decrement = parseFloat(item.quantity);
 
       try {
-        const current = await this.prisma.product.findUnique({
-          where: { id: serverId },
-          select: { stock: true },
-        });
-        if (!current) {
-          console.warn(`[sale-sync] Product id=${serverId} barcode=${item.barcode} not found after lookup — skipping stock update`);
-          continue;
-        }
-
-        const newStock = Math.max(0, Number(current.stock) - decrement);
-        await this.prisma.product.update({
-          where: { id: serverId },
-          data: { stock: newStock },
-        });
-        console.log(`[sale-sync] Stock updated: product id=${serverId} barcode=${item.barcode} ${Number(current.stock)} → ${newStock} (-${decrement})`);
+        // Atomic decrement — GREATEST(0, stock - N) prevents going negative,
+        // and the single SQL statement eliminates the T1/T2 race condition that
+        // the old read→compute→write pattern had (two concurrent terminals both
+        // reading the same stock value and overwriting each other's decrement).
+        await this.prisma.$executeRaw`
+          UPDATE products
+          SET stock = GREATEST(0, stock - ${decrement}::numeric),
+              updated_at = NOW()
+          WHERE id = ${serverId}
+        `;
+        console.log(`[sale-sync] Stock decremented: product id=${serverId} barcode=${item.barcode} -${decrement} (atomic)`);
       } catch (stockErr) {
         console.error(`[sale-sync] STOCK UPDATE FAILED for product id=${serverId} barcode=${item.barcode}:`, stockErr instanceof Error ? stockErr.message : stockErr);
       }
