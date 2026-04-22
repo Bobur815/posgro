@@ -29,7 +29,7 @@ export class SalesService {
       where,
       include: { items: true },
       orderBy: { createdAt: 'desc' },
-      take: 100,
+      ...(filters?.startDate || filters?.endDate ? {} : { take: 100 }),
     });
   }
 

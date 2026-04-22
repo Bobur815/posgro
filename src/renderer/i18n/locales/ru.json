@@ -186,7 +186,19 @@
     "transactions": "Транзакции",
     "daysInPeriod": "Дней в периоде",
     "noAnalyticsData": "Нет данных за выбранный период",
-    "generateBarcode": "Сгенерировать штрих-код"
+    "generateBarcode": "Сгенерировать штрих-код",
+    "scanQrCode": "Сканировать QR / Штрихкод",
+    "qrCodeIsFiscal": "Это QR-код фискального чека",
+    "invalidDataMatrix": "Неверный QR-код DataMatrix",
+    "invalidMarkingCode": "Недействительный или незарегистрированный код маркировки",
+    "markingCodeNotValid": "Статус кода маркировки: {{status}} — недействителен для продажи",
+    "markingCodeVerified": "Код маркировки подтверждён asl-belgisi",
+    "verifiedByAslBelgisi": "Код маркировки подтвержден",
+    "issuer": "Производитель",
+    "productDataImported": "Данные товара импортированы из {{source}}",
+    "manualEntryRequired": "Товар не найден. Введите данные вручную",
+    "mxikCodeScanned": "MXIK-код отсканирован",
+    "mxikLookupFailed": "Не удалось найти MXIK-код"
   },
   "inventory": {
     "stockManagement": "Склад",

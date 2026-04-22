@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { CreateStoreDto } from './dto/create-store.dto';
-import { UpdateStoreDto } from './dto/update-store.dto';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { PrismaService } from "../../prisma/prisma.service";
+import { CreateStoreDto } from "./dto/create-store.dto";
+import { UpdateStoreDto } from "./dto/update-store.dto";
 
 @Injectable()
 export class StoresService {
@@ -9,7 +9,7 @@ export class StoresService {
 
   async findAll() {
     return this.prisma.store.findMany({
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: {
         _count: {
           select: {
@@ -37,19 +37,44 @@ export class StoresService {
     });
 
     if (!store) {
-      throw new NotFoundException('Store not found');
+      throw new NotFoundException("Store not found");
     }
 
     return store;
   }
 
+  private async generateStoreId(): Promise<string> {
+    const existing = await this.prisma.store.findMany({ select: { id: true } });
+    const usedIds = new Set(existing.map((s) => s.id));
+
+    let digits = 4;
+    let min = 1000;
+    let max = 9999;
+
+    while (true) {
+      for (let id = min; id <= max; id++) {
+        const candidate = String(id);
+        if (!usedIds.has(candidate)) return candidate;
+      }
+      // All N-digit IDs taken — expand to next digit length
+      digits++;
+      min = Math.pow(10, digits - 1);
+      max = Math.pow(10, digits) - 1;
+    }
+  }
+
   async create(createStoreDto: CreateStoreDto) {
+    const id = await this.generateStoreId();
+
     return this.prisma.store.create({
       data: {
+        id,
         name: createStoreDto.name,
         address: createStoreDto.address,
         phone: createStoreDto.phone,
-        settings: createStoreDto.settings ? JSON.stringify(createStoreDto.settings) : null,
+        settings: createStoreDto.settings
+          ? JSON.stringify(createStoreDto.settings)
+          : null,
         active: true,
       },
     });
@@ -61,9 +86,11 @@ export class StoresService {
     const data: Record<string, unknown> = {};
 
     if (updateStoreDto.name !== undefined) data.name = updateStoreDto.name;
-    if (updateStoreDto.address !== undefined) data.address = updateStoreDto.address;
+    if (updateStoreDto.address !== undefined)
+      data.address = updateStoreDto.address;
     if (updateStoreDto.phone !== undefined) data.phone = updateStoreDto.phone;
-    if (updateStoreDto.active !== undefined) data.active = updateStoreDto.active;
+    if (updateStoreDto.active !== undefined)
+      data.active = updateStoreDto.active;
     if (updateStoreDto.plan !== undefined) data.plan = updateStoreDto.plan;
     if (updateStoreDto.settings !== undefined) {
       data.settings = JSON.stringify(updateStoreDto.settings);

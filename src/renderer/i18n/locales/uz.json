@@ -175,7 +175,19 @@
     "transactions": "Tranzaksiyalar",
     "daysInPeriod": "Davrdagi kunlar",
     "noAnalyticsData": "Tanlangan davr uchun ma'lumot yo'q",
-    "generateBarcode": "Shtrix-kod yaratish"
+    "generateBarcode": "Shtrix-kod yaratish",
+    "scanQrCode": "QR / Shtrix-kod skanerlash",
+    "qrCodeIsFiscal": "Bu fiskal chek QR-kodi",
+    "invalidDataMatrix": "Noto'g'ri DataMatrix QR-kodi",
+    "invalidMarkingCode": "Yaroqsiz yoki ro'yxatdan o'tmagan markirovka kodi",
+    "markingCodeNotValid": "Markirovka kodi holati: {{status}} — sotish uchun yaroqsiz",
+    "markingCodeVerified": "Markirovka kodi asl-belgisi orqali tasdiqlandi",
+    "verifiedByAslBelgisi": "Markirovka kodi tasdiqlandi",
+    "issuer": "Ishlab chiqaruvchi",
+    "productDataImported": "Mahsulot ma'lumotlari {{source}} dan import qilindi",
+    "manualEntryRequired": "Mahsulot topilmadi. Ma'lumotlarni qo'lda kiriting",
+    "mxikCodeScanned": "MXIK-kod skanerlab olindi",
+    "mxikLookupFailed": "MXIK-kodni topib bo'lmadi"
   },
   "inventory": {
     "stockManagement": "Ombor",

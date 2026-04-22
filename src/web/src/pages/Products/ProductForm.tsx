@@ -26,7 +26,12 @@ import { convertUzbekText } from "@shared/utils/transliterator";
 import { Camera, RefreshCw, Settings } from "lucide-react";
 import { SupplierManagementModal } from "../Suppliers/SupplierManagementModal";
 import { CategoryManagementModal } from "./CategoryManagementModal";
-import { inventory, products as productsApi, mxik as mxikApi } from "../../api/client";
+import {
+  inventory,
+  products as productsApi,
+  mxik as mxikApi,
+  aslBelgisi,
+} from "../../api/client";
 
 const Form = styled.form`
   display: flex;
@@ -277,7 +282,13 @@ export function ProductForm({
   const [isSubmittingArrival, setIsSubmittingArrival] = useState(false);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
+  const [showQrScanner, setShowQrScanner] = useState(false);
+  const [isLookingUpAslBelgisi, setIsLookingUpAslBelgisi] = useState(false);
+  const [mcVerification, setMcVerification] = useState<{
+    isValid: boolean;
+    issuerName?: string;
+    status?: string;
+  } | null>(null);
 
   useEffect(() => {
     loadCategories();
@@ -357,6 +368,8 @@ export function ProductForm({
   const handleBarcodeChange = (value: string) => {
     setFormData((prev) => ({ ...prev, barcode: value }));
 
+    if (!value) setMcVerification(null);
+
     if (barcodeCheckTimeout.current) {
       clearTimeout(barcodeCheckTimeout.current);
     }
@@ -372,9 +385,96 @@ export function ProductForm({
     }
   };
 
-  const handleScanResult = (raw: string) => {
-    setShowScanner(false);
-    const barcode = extractEan13(raw);
+  const handleQrScan = async (qrData: string) => {
+    setShowQrScanner(false);
+    const qrType = aslBelgisi.detectQrType(qrData);
+
+    if (qrType === 'fiscal') {
+      toast.warning(t("products.qrCodeIsFiscal"));
+      return;
+    }
+
+    if (qrType === 'mxik') {
+      try {
+        const mxikData = await mxikApi.lookupCode(qrData);
+        setFormData((prev) => ({ ...prev, mxik: mxikData.code }));
+        toast.success(t("products.mxikCodeScanned"));
+      } catch {
+        toast.error(t("products.mxikLookupFailed"));
+      }
+      return;
+    }
+
+    if (qrType === 'datamatrix') {
+      const gtin = aslBelgisi.extractGtinFromDataMatrix(qrData);
+      if (!gtin) {
+        toast.error(t("products.invalidDataMatrix"));
+        return;
+      }
+
+      setIsLookingUpAslBelgisi(true);
+      try {
+        // Step 1: Verify marking code with asl-belgisi
+        const mcVerif = await aslBelgisi.verifyMarkingCode(qrData);
+        if (!mcVerif.isValid) {
+          toast.error(t("products.invalidMarkingCode"));
+          return;
+        }
+
+        const VALID_MC_STATUSES = ['INTRODUCED', 'APPLIED', 'IN_CIRCULATION'];
+        if (mcVerif.status && !VALID_MC_STATUSES.includes(mcVerif.status)) {
+          toast.error(t("products.markingCodeNotValid", { status: mcVerif.status }));
+          return;
+        }
+
+        setMcVerification({ isValid: true, issuerName: mcVerif.issuerName, status: mcVerif.status });
+        toast.success(t("products.markingCodeVerified"));
+
+        // Step 2: Check local database
+        const existing = await searchByBarcode(gtin);
+        if (existing) {
+          setExistingProduct(existing);
+          setShowArrivalModal(true);
+          setArrivalData((prev) => ({
+            ...prev,
+            cost: existing.cost ? String(existing.cost) : "",
+            newPrice: String(existing.price),
+            priceMode: "none",
+            supplierId: existing.supplierId || "",
+          }));
+          setFormData((prev) => ({ ...prev, barcode: gtin }));
+          return;
+        }
+
+        // Step 3: Lookup in tasnif registry
+        setFormData((prev) => ({ ...prev, barcode: gtin }));
+        try {
+          const tasnifData = await mxikApi.searchByBarcode(gtin);
+          setFormData((prev) => ({
+            ...prev,
+            barcode: gtin,
+            nameRu: tasnifData.nameRu,
+            nameUz: tasnifData.name,
+            mxik: tasnifData.code,
+            productionDate: mcVerif.productionDate
+              ? mcVerif.productionDate.split('T')[0]
+              : prev.productionDate,
+            expiryDate: mcVerif.expirationDate
+              ? mcVerif.expirationDate.split('T')[0]
+              : prev.expiryDate,
+          }));
+          toast.success(t("products.productDataImported", { source: "asl-belgisi + tasnif" }));
+        } catch {
+          toast.warning(t("products.manualEntryRequired"));
+        }
+      } finally {
+        setIsLookingUpAslBelgisi(false);
+      }
+      return;
+    }
+
+    // Regular barcode (EAN-13, Code128, etc.)
+    const barcode = extractEan13(qrData);
     setFormData((prev) => ({ ...prev, barcode }));
     checkBarcode(barcode);
   };
@@ -551,7 +651,6 @@ export function ProductForm({
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-
   const handleNameUzChange = (value: string) => {
     setFormData((prev) => {
       const converted = convertUzbekText(value);
@@ -620,11 +719,16 @@ export function ProductForm({
                         type="button"
                         variant="secondary"
                         size="small"
-                        onClick={() => setShowScanner(true)}
-                        title={t("scanner.title") || "Scan barcode"}
+                        onClick={() => setShowQrScanner(true)}
+                        title={t("products.scanQrCode")}
+                        disabled={isLookingUpAslBelgisi}
                         style={{ flexShrink: 0 }}
                       >
-                        <Camera size={16} />
+                        {isLookingUpAslBelgisi ? (
+                          <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} />
+                        ) : (
+                          <Camera size={16} />
+                        )}
                       </Button>
                     )}
                     <Button
@@ -640,6 +744,28 @@ export function ProductForm({
                   </>
                 )}
               </div>
+              {mcVerification?.isValid && (
+                <div style={{
+                  marginTop: 6,
+                  padding: "6px 10px",
+                  background: "#4caf5015",
+                  border: "1px solid #4caf5060",
+                  borderRadius: 4,
+                  fontSize: 12,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}>
+                  <span style={{ color: "#4caf50", fontWeight: 600 }}>
+                    ✓ {t("products.verifiedByAslBelgisi")}
+                  </span>
+                  {mcVerification.issuerName && (
+                    <span style={{ color: "#666" }}>
+                      {t("products.issuer")}: {mcVerification.issuerName}
+                    </span>
+                  )}
+                </div>
+              )}
             </FormGroup>
           </Row>
 
@@ -694,7 +820,12 @@ export function ProductForm({
             <Input
               label={t("products.stock")}
               type="number"
-              step={formData.productType === "BULK_WEIGHTED" || formData.productType === "PREPACKAGED" ? "0.001" : "1"}
+              step={
+                formData.productType === "BULK_WEIGHTED" ||
+                formData.productType === "PREPACKAGED"
+                  ? "0.001"
+                  : "1"
+              }
               value={formData.stock}
               onChange={(e) => handleChange("stock", e.target.value)}
             />
@@ -776,7 +907,10 @@ export function ProductForm({
                 label={t("products.internalCode")}
                 value={formData.internalCode}
                 readOnly
-                style={{ background: "var(--color-surface)", cursor: "default" }}
+                style={{
+                  background: "var(--color-surface)",
+                  cursor: "default",
+                }}
                 onChange={() => {}}
               />
               <div />
@@ -865,13 +999,14 @@ export function ProductForm({
         </Form>
       </Modal>
 
-      {showScanner && (
+      {showQrScanner && (
         <BarcodeScannerModal
-          onScan={handleScanResult}
-          onClose={() => setShowScanner(false)}
+          onScan={handleQrScan}
+          onClose={() => setShowQrScanner(false)}
+          formats={["qr_code", "data_matrix", "ean_13", "ean_8", "code_128"]}
+          title={t("products.scanQrCode")}
         />
       )}
-
 
       {showArrivalModal && existingProduct && (
         <Modal

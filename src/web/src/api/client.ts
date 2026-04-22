@@ -451,6 +451,69 @@ export const mxik = {
   },
 };
 
+// ─── ASL-BELGISI (Client-side - Public endpoints only) ──────────────────────
+
+export const aslBelgisi = {
+  /**
+   * Verify marking code (MC) authenticity and get status.
+   * Uses PUBLIC endpoint — NO authentication required.
+   */
+  verifyMarkingCode: async (markingCode: string): Promise<{
+    isValid: boolean;
+    status?: string;
+    extendedStatus?: string;
+    gtin?: string;
+    productId?: string;
+    emissionDate?: string;
+    productionDate?: string;
+    expirationDate?: string;
+    productSeries?: string;
+    issuerName?: string;
+    packageType?: string;
+  }> => {
+    try {
+      const response = await fetch('https://xtrace.aslbelgisi.uz/public/api/cod/public/codes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codes: [markingCode], addCodeHistory: false }),
+      });
+      if (!response.ok) return { isValid: false };
+      const data = await response.json();
+      if (!data?.length) return { isValid: false };
+      const mc = data[0];
+      return {
+        isValid: true,
+        status: mc.status,
+        extendedStatus: mc.extendedStatus,
+        gtin: mc.gtin,
+        productId: mc.productId,
+        emissionDate: mc.emissionDate,
+        productionDate: mc.productionDate,
+        expirationDate: mc.expirationDate,
+        productSeries: mc.productSeries,
+        issuerName: mc.issuerShortInfo?.issuerName?.ru,
+        packageType: mc.packageType,
+      };
+    } catch {
+      return { isValid: false };
+    }
+  },
+
+  /** Extract 14-digit GTIN from a DataMatrix payload starting with "01{GTIN14}..." */
+  extractGtinFromDataMatrix: (dataMatrix: string): string | null => {
+    const match = dataMatrix.match(/^01(\d{14})/);
+    return match ? match[1] : null;
+  },
+
+  /** Detect QR code type to route scanning logic correctly. */
+  detectQrType: (qrData: string): 'fiscal' | 'datamatrix' | 'mxik' | 'barcode' => {
+    if (qrData.includes('http://') || qrData.includes('https://')) return 'fiscal';
+    if (/^01\d{14}/.test(qrData)) return 'datamatrix';
+    if (/^\d{17}$/.test(qrData)) return 'mxik';
+    return 'barcode';
+  },
+};
+
 // ─── Combined export ─────────────────────────────────────────────────────────
 
 export const api = {
@@ -466,4 +529,5 @@ export const api = {
   stores,
   analytics,
   mxik,
+  aslBelgisi,
 };

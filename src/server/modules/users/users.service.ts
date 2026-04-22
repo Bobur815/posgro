@@ -239,8 +239,6 @@ export class UsersService {
               nameRu: u.nameRu,
               role: (u.role as any) || existing.role,
               active: u.active ?? existing.active,
-              // Only update password if it differs (both are bcrypt hashes)
-              ...(u.password !== existing.password ? { password: u.password } : {}),
             },
           });
           updated++;
