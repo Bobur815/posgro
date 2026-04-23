@@ -541,7 +541,7 @@ export function POSScreen() {
             addItem({
               productId: product.id,
               productName: productNameForCart,
-              barcode: barcodeValue,
+              barcode: product.barcode,
               unitPrice: Number(product.price),
               quantity: rongtaParsed.weight,
               stock: product.stock,

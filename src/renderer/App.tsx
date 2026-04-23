@@ -29,6 +29,7 @@ import { WeighedInventoryPage } from "./pages/Inventory/WeighedInventoryPage";
 import { ScaleSettings } from "./pages/Settings/ScaleSettings";
 import { SyncSettings } from "./pages/Settings/SyncSettings";
 import { TerminalStatus } from "./pages/Settings/TerminalStatus";
+import { AppUpdatePage } from "./pages/Settings/AppUpdatePage";
 
 function App() {
   const { isAuthenticated } = useAuthStore();
@@ -232,6 +233,16 @@ function App() {
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
               <WeighedInventoryPage />
+            </RoleGuard>
+          }
+        />
+
+        {/* App Update (Admin only) */}
+        <Route
+          path="settings/app-update"
+          element={
+            <RoleGuard allowedRoles={["ADMIN"]}>
+              <AppUpdatePage />
             </RoleGuard>
           }
         />

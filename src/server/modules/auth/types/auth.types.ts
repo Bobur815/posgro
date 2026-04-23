@@ -6,6 +6,7 @@ export interface JwtPayload {
   storeId: string | null; // Null for SUPER_ADMIN
   phone: string;
   role: UserRole;
+  sessionId?: string;
   iat?: number;
   exp?: number;
 }

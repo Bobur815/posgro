@@ -34,10 +34,45 @@ export function setupAuthHandlers(): void {
       throw new Error('auth.errors.user_deactivated');
     }
 
-    // Verify password
+    // Verify password against local hash
     const isValidPassword = await bcrypt.compare(password, user.password);
+
+    // Use storeId from LocalConfig (authoritative) rather than env-based app-config
+    const localConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+    const storeId = localConfig?.storeId || config.storeId;
+    const vpsApiUrl = localConfig?.apiUrl || config.vpsApiUrl;
+
+    let serverTokenObtained = false;
+
     if (!isValidPassword) {
-      throw new Error('auth.errors.invalid_password');
+      // Local hash may be stale (password changed on web) — try VPS as fallback
+      let vpsAccepted = false;
+      try {
+        const serverRes = await fetch(`${vpsApiUrl}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storeId, phone, password }),
+        });
+        if (serverRes.ok) {
+          vpsAccepted = true;
+          serverTokenObtained = true;
+          const { token: sToken } = await serverRes.json() as { token: string };
+          setServerToken(sToken);
+          await prisma.systemSetting.upsert({
+            where: { key: 'server_token' },
+            update: { value: sToken },
+            create: { key: 'server_token', value: sToken },
+          });
+          // Sync local hash so future offline logins use the new password
+          const hashedPassword = await bcrypt.hash(password, 10);
+          await prisma.user.update({ where: { phone }, data: { password: hashedPassword } });
+        }
+      } catch {
+        // VPS unreachable — fall through to invalid_password
+      }
+      if (!vpsAccepted) {
+        throw new Error('auth.errors.invalid_password');
+      }
     }
 
     // Generate JWT token (for local use and sync)
@@ -56,13 +91,8 @@ export function setupAuthHandlers(): void {
     // Store token for sync operations
     await setAuthToken(token);
 
-    // Also login to the VPS server to get a server-issued token for API calls (invoice scan, etc.)
-    try {
-      // Use storeId from LocalConfig (authoritative) rather than env-based app-config
-      const localConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
-      const storeId = localConfig?.storeId || config.storeId;
-      const vpsApiUrl = localConfig?.apiUrl || config.vpsApiUrl;
-
+    // Login to VPS to get a server-issued token (skip if already obtained in fallback above)
+    if (!serverTokenObtained) try {
       const serverRes = await fetch(`${vpsApiUrl}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -71,7 +101,6 @@ export function setupAuthHandlers(): void {
       if (serverRes.ok) {
         const { token: sToken } = await serverRes.json() as { token: string };
         setServerToken(sToken);
-        // Persist so session restore can reload it
         await prisma.systemSetting.upsert({
           where: { key: 'server_token' },
           update: { value: sToken },
@@ -80,8 +109,6 @@ export function setupAuthHandlers(): void {
       } else {
         const text = await serverRes.text();
         console.warn(`VPS login failed (${serverRes.status}): ${text} — storeId: ${storeId}, phone: ${phone}`);
-        // Fall back to existing valid server_token so sync continues working
-        // (e.g. user exists locally but not yet on VPS, or VPS rejected credentials)
         const existingSetting = await prisma.systemSetting.findUnique({ where: { key: 'server_token' } });
         if (existingSetting?.value) {
           try {
@@ -96,7 +123,6 @@ export function setupAuthHandlers(): void {
         }
       }
     } catch (err) {
-      // Server unreachable — fall back to existing valid server_token so sync can still work
       console.warn('VPS login error (server unreachable):', err);
       const existingSetting = await prisma.systemSetting.findUnique({ where: { key: 'server_token' } });
       if (existingSetting?.value) {

@@ -13,6 +13,7 @@ import {
   Package,
   Scale,
   Monitor,
+  Download,
 } from "lucide-react";
 
 const Container = styled.div`
@@ -121,6 +122,12 @@ export function SettingsPage() {
       title: t("settings.terminalStatus"),
       description: t("settings.terminalStatusDescription"),
       path: "/settings/terminals",
+    },
+    {
+      icon: <Download size={32} />,
+      title: t("settings.appUpdate"),
+      description: t("settings.appUpdateDescription"),
+      path: "/settings/app-update",
     },
   ];
 

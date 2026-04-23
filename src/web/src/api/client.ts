@@ -1,5 +1,14 @@
 import axios from "axios";
 
+export interface DeviceSession {
+  id: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  isCurrent: boolean;
+  isRevoked: boolean;
+}
+
 const baseURL = import.meta.env.VITE_API_URL ?? "/api";
 
 export const axiosInstance = axios.create({ baseURL });
@@ -64,6 +73,18 @@ export const auth = {
       currentPassword,
       newPassword,
     });
+    return data;
+  },
+  getSessions: async (): Promise<DeviceSession[]> => {
+    const { data } = await axiosInstance.get("/auth/sessions");
+    return data;
+  },
+  revokeSession: async (sessionId: string) => {
+    const { data } = await axiosInstance.delete(`/auth/sessions/${sessionId}`);
+    return data;
+  },
+  revokeOtherSessions: async () => {
+    const { data } = await axiosInstance.delete("/auth/sessions/others");
     return data;
   },
 };

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styled, { keyframes } from "styled-components";
@@ -288,6 +288,15 @@ const LogoutButton = styled.button`
   }
 `;
 
+const UpdateDot = styled.span`
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: ${({ theme }) => theme.colors.error};
+  margin-left: auto;
+  flex-shrink: 0;
+`;
+
 export function Sidebar() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -295,6 +304,13 @@ export function Sidebar() {
   const { isCollapsed, toggleSidebar, collapseSidebar } = useSidebar();
   const { status, refreshStatus } = useSync();
   const isAdmin = user?.role === "ADMIN";
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+
+  useEffect(() => {
+    if (!window.electronAPI?.updater) return;
+    const unsub = window.electronAPI.updater.onAvailable(() => setUpdateAvailable(true));
+    return unsub;
+  }, []);
 
   const handleLogin = async () => {
     await logout();
@@ -386,7 +402,11 @@ export function Sidebar() {
               )}
               {renderNavItem("/suppliers", Truck, t("suppliers.title"))}
               {renderNavItem("/users", Users, t("nav.users"))}
-              {renderNavItem("/settings", Settings, t("nav.settings"))}
+              <StyledNavLink to="/settings" onClick={collapseSidebar}>
+                <IconWrapper><Settings size={17} /></IconWrapper>
+                <NavText>{t("nav.settings")}</NavText>
+                {updateAvailable && <UpdateDot />}
+              </StyledNavLink>
             </NavSection>
           )}
 

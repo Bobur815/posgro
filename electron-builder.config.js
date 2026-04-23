@@ -63,5 +63,9 @@ module.exports = {
     category: 'Office'
   },
 
-  publish: null
+  publish: {
+    provider: 'generic',
+    url: 'https://pos.bobur-dev.uz/releases/',
+    channel: 'latest'
+  }
 };

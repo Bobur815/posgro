@@ -389,12 +389,12 @@ export function ProductForm({
     setShowQrScanner(false);
     const qrType = aslBelgisi.detectQrType(qrData);
 
-    if (qrType === 'fiscal') {
+    if (qrType === "fiscal") {
       toast.warning(t("products.qrCodeIsFiscal"));
       return;
     }
 
-    if (qrType === 'mxik') {
+    if (qrType === "mxik") {
       try {
         const mxikData = await mxikApi.lookupCode(qrData);
         setFormData((prev) => ({ ...prev, mxik: mxikData.code }));
@@ -405,7 +405,7 @@ export function ProductForm({
       return;
     }
 
-    if (qrType === 'datamatrix') {
+    if (qrType === "datamatrix") {
       const gtin = aslBelgisi.extractGtinFromDataMatrix(qrData);
       if (!gtin) {
         toast.error(t("products.invalidDataMatrix"));
@@ -421,13 +421,19 @@ export function ProductForm({
           return;
         }
 
-        const VALID_MC_STATUSES = ['INTRODUCED', 'APPLIED', 'IN_CIRCULATION'];
+        const VALID_MC_STATUSES = ["INTRODUCED", "APPLIED", "IN_CIRCULATION"];
         if (mcVerif.status && !VALID_MC_STATUSES.includes(mcVerif.status)) {
-          toast.error(t("products.markingCodeNotValid", { status: mcVerif.status }));
+          toast.error(
+            t("products.markingCodeNotValid", { status: mcVerif.status }),
+          );
           return;
         }
 
-        setMcVerification({ isValid: true, issuerName: mcVerif.issuerName, status: mcVerif.status });
+        setMcVerification({
+          isValid: true,
+          issuerName: mcVerif.issuerName,
+          status: mcVerif.status,
+        });
         toast.success(t("products.markingCodeVerified"));
 
         // Step 2: Check local database
@@ -457,13 +463,17 @@ export function ProductForm({
             nameUz: tasnifData.name,
             mxik: tasnifData.code,
             productionDate: mcVerif.productionDate
-              ? mcVerif.productionDate.split('T')[0]
+              ? mcVerif.productionDate.split("T")[0]
               : prev.productionDate,
             expiryDate: mcVerif.expirationDate
-              ? mcVerif.expirationDate.split('T')[0]
+              ? mcVerif.expirationDate.split("T")[0]
               : prev.expiryDate,
           }));
-          toast.success(t("products.productDataImported", { source: "asl-belgisi + tasnif" }));
+          toast.success(
+            t("products.productDataImported", {
+              source: "asl-belgisi + tasnif",
+            }),
+          );
         } catch {
           toast.warning(t("products.manualEntryRequired"));
         }
@@ -725,7 +735,10 @@ export function ProductForm({
                         style={{ flexShrink: 0 }}
                       >
                         {isLookingUpAslBelgisi ? (
-                          <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} />
+                          <RefreshCw
+                            size={16}
+                            style={{ animation: "spin 1s linear infinite" }}
+                          />
                         ) : (
                           <Camera size={16} />
                         )}
@@ -745,17 +758,19 @@ export function ProductForm({
                 )}
               </div>
               {mcVerification?.isValid && (
-                <div style={{
-                  marginTop: 6,
-                  padding: "6px 10px",
-                  background: "#4caf5015",
-                  border: "1px solid #4caf5060",
-                  borderRadius: 4,
-                  fontSize: 12,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                }}>
+                <div
+                  style={{
+                    marginTop: 6,
+                    padding: "6px 10px",
+                    background: "#4caf5015",
+                    border: "1px solid #4caf5060",
+                    borderRadius: 4,
+                    fontSize: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
                   <span style={{ color: "#4caf50", fontWeight: 600 }}>
                     ✓ {t("products.verifiedByAslBelgisi")}
                   </span>

@@ -379,7 +379,38 @@
     "syncOk": "Sinxronlashtirildi",
     "syncFailed": "Xato",
     "syncNever": "Sinxronlanmagan",
-    "vpsApiUrl": "Server URL"
+    "vpsApiUrl": "Server URL",
+    "devicesSettings": "Qurilmalar va sessiyalar",
+    "devicesSettingsDescription": "Faol sessiyalar va qurilmalarni boshqarish",
+    "appUpdate": "Ilovani yangilash",
+    "appUpdateDescription": "Yangilanishlarni tekshirish va o'rnatish"
+  },
+  "updater": {
+    "currentVersion": "Joriy versiya",
+    "checkForUpdates": "Yangilanishlarni tekshirish",
+    "checking": "Tekshirilmoqda...",
+    "upToDate": "Ilova dolzarb",
+    "updateAvailable": "Yangilanish mavjud",
+    "downloadUpdate": "Yangilanishni yuklab olish",
+    "downloading": "Yuklanmoqda...",
+    "downloaded": "Yangilanish yuklandi",
+    "installAndRestart": "O'rnatish va qayta ishga tushirish",
+    "error": "Yangilanishni tekshirishda xato",
+    "retry": "Qayta urinish"
+  },
+  "devices": {
+    "title": "Faol qurilmalar",
+    "activeSessions": "Faol sessiyalar",
+    "currentDevice": "Joriy qurilma",
+    "active": "Faol",
+    "loginAt": "Kirish vaqti",
+    "revoke": "Tugatish",
+    "logoutAllOthers": "Boshqa qurilmalardan chiqish",
+    "noSessions": "Faol sessiyalar yo'q",
+    "loadError": "Sessiyalarni yuklashda xato",
+    "revokeSuccess": "Sessiya tugatildi",
+    "revokeOthersSuccess": "Barcha boshqa sessiyalar tugatildi",
+    "revokeError": "Sessiyani tugatishda xato"
   },
   "pagination": {
     "showing": "{{from}}–{{to}} / {{total}} ta",

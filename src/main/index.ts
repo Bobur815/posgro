@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import { createWindow } from "./window";
 import { setupIpcHandlers } from "./ipc/handlers";
+import { setupAutoUpdater } from "./updater/auto-updater";
+import { autoUpdater } from "electron-updater";
 import { SyncService } from "./sync/sync-service";
 import { initializeDatabase } from "./database/sqlite-client";
 import { seedLocalDatabase } from "./database/seed";
@@ -46,6 +48,16 @@ async function bootstrap() {
 
     // Setup IPC handlers for renderer communication
     setupIpcHandlers();
+
+    // Setup auto-updater and trigger silent check 5s after window loads
+    if (mainWindow) {
+      setupAutoUpdater(mainWindow);
+      mainWindow.webContents.once('did-finish-load', () => {
+        setTimeout(() => {
+          autoUpdater.checkForUpdates().catch(() => { /* offline — ignore */ });
+        }, 5000);
+      });
+    }
 
     // Start sync service
     syncService = new SyncService();

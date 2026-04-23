@@ -5,18 +5,19 @@ import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { JwtPayload, LoginResponse } from './types/auth.types';
 import { UserRole } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly prisma: PrismaService,
   ) {}
 
-  async login(loginDto: LoginDto): Promise<LoginResponse> {
+  async login(loginDto: LoginDto, userAgent?: string, ipAddress?: string): Promise<LoginResponse> {
     const { storeId, phone, password } = loginDto;
 
-    // Find user by phone within the store scope (or global for SUPER_ADMIN)
     const user = await this.usersService.findByPhoneAndStore(phone, storeId);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -26,7 +27,6 @@ export class AuthService {
       throw new UnauthorizedException('Account is deactivated');
     }
 
-    // SUPER_ADMIN doesn't need storeId, but regular users do
     if (user.role !== UserRole.SUPER_ADMIN && !user.storeId) {
       throw new UnauthorizedException('User is not assigned to any store');
     }
@@ -36,11 +36,16 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    const session = await this.prisma.userSession.create({
+      data: { userId: user.id, userAgent, ipAddress },
+    });
+
     const payload: JwtPayload = {
       sub: user.id,
       storeId: user.storeId,
       phone: user.phone,
       role: user.role,
+      sessionId: session.id,
     };
 
     const token = this.jwtService.sign(payload);
@@ -77,7 +82,43 @@ export class AuthService {
     if (!user || !user.active) {
       return null;
     }
-    // Attach storeId from token to user object for easy access
-    return { ...user, storeId: payload.storeId };
+
+    if (payload.sessionId) {
+      const session = await this.prisma.userSession.findUnique({
+        where: { id: payload.sessionId },
+      });
+      if (!session || session.isRevoked) {
+        return null;
+      }
+    }
+
+    return { ...user, storeId: payload.storeId, sessionId: payload.sessionId };
+  }
+
+  async getSessions(userId: string) {
+    return this.prisma.userSession.findMany({
+      where: { userId, isRevoked: false },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async revokeSession(sessionId: string, userId: string) {
+    const session = await this.prisma.userSession.findUnique({ where: { id: sessionId } });
+    if (!session || session.userId !== userId) {
+      throw new UnauthorizedException('Session not found');
+    }
+    await this.prisma.userSession.update({
+      where: { id: sessionId },
+      data: { isRevoked: true },
+    });
+    return { success: true };
+  }
+
+  async revokeOtherSessions(currentSessionId: string, userId: string) {
+    await this.prisma.userSession.updateMany({
+      where: { userId, isRevoked: false, id: { not: currentSessionId } },
+      data: { isRevoked: true },
+    });
+    return { success: true };
   }
 }

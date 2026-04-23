@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
-import { UserCog, Settings, Users, Package } from 'lucide-react';
+import { UserCog, Settings, Users, Package, MonitorSmartphone } from 'lucide-react';
 
 const Container = styled.div`
   display: flex;
@@ -79,6 +79,12 @@ export function SettingsPage() {
       title: t('settings.inventorySettings'),
       description: t('settings.inventorySettingsDescription'),
       path: '/products/stock',
+    },
+    {
+      icon: <MonitorSmartphone size={32} />,
+      title: t('settings.devicesSettings'),
+      description: t('settings.devicesSettingsDescription'),
+      path: '/settings/devices',
     },
   ];
 

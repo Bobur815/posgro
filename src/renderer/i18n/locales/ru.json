@@ -388,7 +388,38 @@
     "syncOk": "Синхронизировано",
     "syncFailed": "Ошибка",
     "syncNever": "Не синхронизировано",
-    "vpsApiUrl": "URL сервера"
+    "vpsApiUrl": "URL сервера",
+    "devicesSettings": "Устройства и сессии",
+    "devicesSettingsDescription": "Управление активными сессиями и устройствами",
+    "appUpdate": "Обновление приложения",
+    "appUpdateDescription": "Проверка и установка обновлений"
+  },
+  "updater": {
+    "currentVersion": "Текущая версия",
+    "checkForUpdates": "Проверить обновления",
+    "checking": "Проверяется...",
+    "upToDate": "Приложение актуально",
+    "updateAvailable": "Доступно обновление",
+    "downloadUpdate": "Скачать обновление",
+    "downloading": "Загрузка...",
+    "downloaded": "Обновление загружено",
+    "installAndRestart": "Установить и перезапустить",
+    "error": "Ошибка проверки обновлений",
+    "retry": "Повторить"
+  },
+  "devices": {
+    "title": "Активные устройства",
+    "activeSessions": "Активные сессии",
+    "currentDevice": "Это устройство",
+    "active": "Активно",
+    "loginAt": "Вход",
+    "revoke": "Завершить",
+    "logoutAllOthers": "Выйти на всех других устройствах",
+    "noSessions": "Нет активных сессий",
+    "loadError": "Не удалось загрузить сессии",
+    "revokeSuccess": "Сессия завершена",
+    "revokeOthersSuccess": "Все другие сессии завершены",
+    "revokeError": "Не удалось завершить сессию"
   },
   "pagination": {
     "showing": "Показано {{from}}–{{to}} из {{total}}",

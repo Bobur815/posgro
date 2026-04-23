@@ -222,6 +222,41 @@ contextBridge.exposeInMainWorld("electronAPI", {
       terminalId?: string;
     }) => ipcRenderer.invoke("config:updateLocalConfig", data),
   },
+
+  // Auto-updater
+  updater: {
+    checkForUpdates: () => ipcRenderer.invoke("updater:checkForUpdates"),
+    startDownload: () => ipcRenderer.invoke("updater:startDownload"),
+    quitAndInstall: () => ipcRenderer.invoke("updater:quitAndInstall"),
+    onChecking: (cb: () => void) => {
+      ipcRenderer.on("updater:checking", cb);
+      return () => ipcRenderer.removeListener("updater:checking", cb);
+    },
+    onAvailable: (cb: (info: { version: string; releaseDate: string }) => void) => {
+      const h = (_e: IpcRendererEvent, i: { version: string; releaseDate: string }) => cb(i);
+      ipcRenderer.on("updater:available", h);
+      return () => ipcRenderer.removeListener("updater:available", h);
+    },
+    onNotAvailable: (cb: () => void) => {
+      ipcRenderer.on("updater:not-available", cb);
+      return () => ipcRenderer.removeListener("updater:not-available", cb);
+    },
+    onProgress: (cb: (p: { percent: number; transferred: number; total: number; bytesPerSecond: number }) => void) => {
+      const h = (_e: IpcRendererEvent, p: { percent: number; transferred: number; total: number; bytesPerSecond: number }) => cb(p);
+      ipcRenderer.on("updater:progress", h);
+      return () => ipcRenderer.removeListener("updater:progress", h);
+    },
+    onDownloaded: (cb: (info: { version: string }) => void) => {
+      const h = (_e: IpcRendererEvent, i: { version: string }) => cb(i);
+      ipcRenderer.on("updater:downloaded", h);
+      return () => ipcRenderer.removeListener("updater:downloaded", h);
+    },
+    onError: (cb: (e: { message: string }) => void) => {
+      const h = (_e: IpcRendererEvent, e: { message: string }) => cb(e);
+      ipcRenderer.on("updater:error", h);
+      return () => ipcRenderer.removeListener("updater:error", h);
+    },
+  },
 });
 
 // Type declarations for the exposed API
@@ -372,6 +407,17 @@ declare global {
           storeName?: string;
           terminalId?: string;
         }) => Promise<unknown>;
+      };
+      updater: {
+        checkForUpdates: () => Promise<void>;
+        startDownload: () => Promise<void>;
+        quitAndInstall: () => void;
+        onChecking: (cb: () => void) => () => void;
+        onAvailable: (cb: (info: { version: string; releaseDate: string }) => void) => () => void;
+        onNotAvailable: (cb: () => void) => () => void;
+        onProgress: (cb: (p: { percent: number; transferred: number; total: number; bytesPerSecond: number }) => void) => () => void;
+        onDownloaded: (cb: (info: { version: string }) => void) => () => void;
+        onError: (cb: (e: { message: string }) => void) => () => void;
       };
     };
   }

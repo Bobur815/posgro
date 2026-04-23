@@ -55,6 +55,22 @@
 
 ---
 
+# Versioning (Electron App)
+
+When making changes to the Electron app (`src/main/`, `src/renderer/`, `src/shared/`), bump `package.json` version before finishing:
+
+- **Bug fix** → `patch` (1.0.0 → 1.0.1)
+- **New feature** → `minor` (1.0.0 → 1.1.0)
+- **Breaking change / major redesign** → `major` (1.0.0 → 2.0.0)
+
+Rules:
+- Server-only changes (`src/server/`, `src/web/`) do NOT bump the version
+- Always bump version when the task touches renderer UI, main process, or IPC
+- Use `npm version patch|minor|major` or edit `package.json` directly
+- Remind the user to run `npm run deploy:pos` after the version bump to upload to VPS
+
+---
+
 # Core Principles
 
 - **Simplicity First:** Make every change as simple as possible. Impact minimal code.

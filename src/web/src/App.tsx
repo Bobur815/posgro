@@ -16,6 +16,7 @@ import { UserForm } from './pages/Users/UserForm';
 import { SettingsPage } from './pages/Settings/SettingsPage';
 import { SystemSettings } from './pages/Settings/SystemSettings';
 import { UserSettings } from './pages/Settings/UserSettings';
+import { DevicesPage } from './pages/Settings/DevicesPage';
 import { StoreList } from './pages/Admin/StoreList';
 
 function PrivateRoute({
@@ -94,6 +95,7 @@ export function App() {
           <Route path="settings" element={<PrivateRoute adminOnly><SettingsPage /></PrivateRoute>} />
           <Route path="settings/system" element={<PrivateRoute adminOnly><SystemSettings /></PrivateRoute>} />
           <Route path="settings/user" element={<UserSettings />} />
+          <Route path="settings/devices" element={<DevicesPage />} />
 
           {/* Super Admin */}
           <Route path="admin/stores" element={<PrivateRoute superAdminOnly><StoreList /></PrivateRoute>} />

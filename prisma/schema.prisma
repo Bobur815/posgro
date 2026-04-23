@@ -63,9 +63,24 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  sessions  UserSession[]
+
   @@unique([storeId, phone]) // Same phone can exist in different stores
   @@index([storeId])
   @@map("users")
+}
+
+model UserSession {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent  String?  @map("user_agent") @db.Text
+  ipAddress  String?  @map("ip_address")
+  isRevoked  Boolean  @default(false) @map("is_revoked")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("user_sessions")
 }
 
 // ==================== PRODUCTS & INVENTORY ====================

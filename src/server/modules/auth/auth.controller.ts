@@ -1,13 +1,17 @@
 import {
   Controller,
   Post,
+  Delete,
   Body,
   Get,
+  Param,
   UseGuards,
   HttpCode,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -23,10 +27,10 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'User login' })
-  @ApiResponse({ status: 200, description: 'Login successful' })
-  @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  async login(@Body() loginDto: LoginDto, @Req() req: Request) {
+    const userAgent = req.headers['user-agent'];
+    const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip;
+    return this.authService.login(loginDto, userAgent, ipAddress);
   }
 
   @Post('logout')
@@ -34,8 +38,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'User logout' })
-  @ApiResponse({ status: 200, description: 'Logout successful' })
-  async logout() {
+  async logout(@CurrentUser() user: User & { sessionId?: string }) {
+    if (user.sessionId) {
+      await this.authService.revokeSession(user.sessionId, user.id);
+    }
     return { success: true };
   }
 
@@ -55,7 +61,6 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Get current user profile' })
-  @ApiResponse({ status: 200, description: 'User profile' })
   async getProfile(@CurrentUser() user: User & { storeId: string | null }): Promise<CurrentUserType> {
     return {
       id: user.id,
@@ -65,5 +70,36 @@ export class AuthController {
       nameUz: user.nameUz,
       nameRu: user.nameRu,
     };
+  }
+
+  @Get('sessions')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'List active sessions' })
+  async getSessions(@CurrentUser() user: User & { sessionId?: string }) {
+    const sessions = await this.authService.getSessions(user.id);
+    return sessions.map((s) => ({ ...s, isCurrent: s.id === user.sessionId }));
+  }
+
+  @Delete('sessions/others')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Revoke all other sessions' })
+  async revokeOtherSessions(@CurrentUser() user: User & { sessionId?: string }) {
+    if (!user.sessionId) return { success: true };
+    return this.authService.revokeOtherSessions(user.sessionId, user.id);
+  }
+
+  @Delete('sessions/:id')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Revoke a session' })
+  async revokeSession(
+    @Param('id') sessionId: string,
+    @CurrentUser() user: User & { sessionId?: string },
+  ) {
+    return this.authService.revokeSession(sessionId, user.id);
   }
 }

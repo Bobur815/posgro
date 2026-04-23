@@ -21,7 +21,9 @@ import {
   Trash,
   X,
   Eye,
+  Plus,
 } from "lucide-react";
+import { keyframes } from "styled-components";
 import { formatDate } from "../../utils/formatters";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { debounce } from "../../utils/helpers";
@@ -30,6 +32,40 @@ import {
   MobileCardList,
   DesktopOnly,
 } from "../../components/common/MobileCard";
+
+const pulse = keyframes`
+  0% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb, 59, 130, 246), 0.5); }
+  70% { box-shadow: 0 0 0 12px rgba(var(--primary-rgb, 59, 130, 246), 0); }
+  100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb, 59, 130, 246), 0); }
+`;
+
+const FAB = styled.button`
+  position: fixed;
+  bottom: 50px;
+  right: 16px;
+  z-index: 100;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: none;
+  background-color: ${({ theme }) => theme.colors.primary};
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  animation: ${pulse} 2s ease-out infinite;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    transform: scale(1.1);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+`;
 
 const MobileSentinel = styled.div`
   height: 1px;
@@ -262,15 +298,12 @@ export function ProductList() {
     <Container>
       <Header>
         <Title>{t("products.title")}</Title>
-        {isAdmin && (
-          <Button
-            style={{ fontSize: "26px" }}
-            onClick={() => setShowProductForm(true)}
-          >
-            <PlusCircle size={24} /> {t("products.add")}
-          </Button>
-        )}
       </Header>
+      {isAdmin && (
+        <FAB onClick={() => setShowProductForm(true)}>
+          <Plus size={38} />
+        </FAB>
+      )}
 
       <Filters>
         <div style={{ position: "relative", flex: 1 }}>
