@@ -345,15 +345,19 @@ export function ProductForm({
       } else {
         // Not in local DB — look up in tasnif registry using clean EAN-13
         try {
-          const info = await mxikApi.searchByBarcode(extractEan13(barcode));
+          const ean = extractEan13(barcode);
+          console.log('[checkBarcode] tasnif lookup for:', ean);
+          const info = await mxikApi.searchByBarcode(ean);
+          console.log('[checkBarcode] tasnif result:', info);
           setFormData((prev) => ({
             ...prev,
             mxik: info.code,
             nameUz: info.name,
             nameRu: info.nameRu,
           }));
-        } catch {
-          // Not found in tasnif either — user fills manually
+        } catch (err) {
+          console.warn('[checkBarcode] tasnif lookup failed:', err);
+          toast.warning(t("products.manualEntryRequired"));
         }
       }
     },
@@ -388,6 +392,7 @@ export function ProductForm({
   const handleQrScan = async (qrData: string) => {
     setShowQrScanner(false);
     const qrType = aslBelgisi.detectQrType(qrData);
+    console.log('[handleQrScan] qrData:', qrData.slice(0, 60), '| type:', qrType);
 
     if (qrType === "fiscal") {
       toast.warning(t("products.qrCodeIsFiscal"));
@@ -415,7 +420,9 @@ export function ProductForm({
       setIsLookingUpAslBelgisi(true);
       try {
         // Step 1: Verify marking code with asl-belgisi
+        console.log('[handleQrScan] calling verifyMarkingCode...');
         const mcVerif = await aslBelgisi.verifyMarkingCode(qrData);
+        console.log('[handleQrScan] mcVerif:', mcVerif);
         if (!mcVerif.isValid) {
           toast.error(t("products.invalidMarkingCode"));
           return;
