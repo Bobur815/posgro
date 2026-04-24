@@ -7,7 +7,7 @@
     "dev:pos": "cross-env APP_MODE=pos electron-vite dev",
     "dev:server": "nest start --watch",
     "build:pos": "cross-env APP_MODE=pos electron-vite build && electron-builder",
-    "deploy:pos": "npm run build:pos && scp dist/latest.yml bobur@144.91.121.160:/home/bobur/releases/ && scp \"dist/grocery-pos Setup $(node -p \"require('./package.json').version\").exe\" bobur@144.91.121.160:/home/bobur/releases/",
+    "deploy:pos": "npm run build:pos && node scripts/upload-release.js",
     "build:server": "nest build",
     "prisma:generate": "prisma generate",
     "prisma:generate:sqlite": "prisma generate --schema=prisma/schema.sqlite.prisma",

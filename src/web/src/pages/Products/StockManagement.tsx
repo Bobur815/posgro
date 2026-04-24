@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { useProducts } from "../../hooks/useProducts";
@@ -43,7 +49,10 @@ const Header = styled.div`
   justify-content: space-between;
   align-items: center;
   gap: ${({ theme }) => theme.spacing.md};
-  flex-wrap: wrap;
+
+  @media (max-width: 768px) {
+    gap: ${({ theme }) => theme.spacing.sm};
+  }
 `;
 
 const SearchRow = styled.div`
@@ -51,9 +60,17 @@ const SearchRow = styled.div`
   gap: ${({ theme }) => theme.spacing.md};
   align-items: flex-end;
   flex-wrap: wrap;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    align-items: stretch;
+  }
 `;
 
 const SearchField = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.spacing.xs};
   flex: 1;
   min-width: 120px;
 `;
@@ -61,7 +78,6 @@ const SearchField = styled.div`
 const SearchLabel = styled.div`
   font-size: 12px;
   color: ${({ theme }) => theme.colors.textSecondary};
-  margin-bottom: ${({ theme }) => theme.spacing.xs};
   text-transform: uppercase;
   font-weight: 500;
 `;
@@ -85,7 +101,7 @@ const SearchInput = styled.input`
 `;
 
 const SubmitButton = styled.button`
-  height: 46px;
+  height: 40px;
   width: 46px;
   border-radius: ${({ theme }) => theme.borderRadius};
   border: none;
@@ -96,7 +112,8 @@ const SubmitButton = styled.button`
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-
+  min-width: 46px;
+  transition: background-color 0.2s, transform 0.1s;
   &:hover {
     opacity: 0.9;
   }
@@ -104,11 +121,22 @@ const SubmitButton = styled.button`
   &:active {
     transform: scale(0.95);
   }
+
+  @media (max-width: 768px) {
+    width: auto;
+    flex: 1;
+  }
 `;
 
 const Title = styled.h1`
   margin: 0;
+  font-size: 1.75rem;
+  flex: 1;
   color: ${({ theme }) => theme.colors.text};
+
+  @media (max-width: 768px) {
+    font-size: 1.5rem;
+  }
 `;
 
 const LowStockBadge = styled.span`
@@ -130,6 +158,9 @@ const OutOfStockBadge = styled.span`
 `;
 
 const SearchWrapper = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.md};
+  align-items: flex-end;
   position: relative;
   flex: 1;
   min-width: 200px;
@@ -147,6 +178,12 @@ const ClearBtn = styled.button`
   display: flex;
   align-items: center;
   padding: 4px;
+`;
+
+const PluField = styled(SearchField)`
+  @media (min-width: 769px) {
+    max-width: 320px;
+  }
 `;
 
 const StockCell = styled.div`
@@ -188,6 +225,7 @@ export function StockManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [idInput, setIdInput] = useState("");
+  const [pluInput, setPluInput] = useState("");
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showReceiptScan, setShowReceiptScan] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
@@ -208,7 +246,9 @@ export function StockManagement() {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && mobileCount < products.length) {
-          setMobileCount((c) => Math.min(c + MOBILE_PAGE_SIZE, products.length));
+          setMobileCount((c) =>
+            Math.min(c + MOBILE_PAGE_SIZE, products.length),
+          );
         }
       },
       { rootMargin: "150px" },
@@ -264,11 +304,10 @@ export function StockManagement() {
     }
   }, [barcodeInput, searchByBarcode, t]);
 
-  const handlePluSubmit = useCallback(async () => {
+  const handleIdSubmit = useCallback(async () => {
     const raw = idInput.trim();
     if (!raw) return;
-    const code = /^\d+$/.test(raw) ? raw.padStart(6, "0") : raw;
-    const product = (await findByInternalCode(code)) as Product | null;
+    const product = (await getById(raw)) as Product | null;
     if (product) {
       handleAddArrival(product);
       setIdInput("");
@@ -276,7 +315,21 @@ export function StockManagement() {
       toast.error(t("products.noResults"));
       setIdInput("");
     }
-  }, [idInput, findByInternalCode, t]);
+  }, [idInput, getById, t]);
+
+  const handlePluSubmit = useCallback(async () => {
+    const raw = pluInput.trim();
+    if (!raw) return;
+    const code = /^\d+$/.test(raw) ? raw.padStart(6, "0") : raw;
+    const product = (await findByInternalCode(code)) as Product | null;
+    if (product) {
+      handleAddArrival(product);
+      setPluInput("");
+    } else {
+      toast.error(t("products.noResults"));
+      setPluInput("");
+    }
+  }, [pluInput, findByInternalCode, t]);
 
   const {
     pageData,
@@ -357,16 +410,10 @@ export function StockManagement() {
       <Header>
         <Title>
           {t("inventory.stockManagement")}
-          {products.filter((p) => p.stock <= p.minStock).length > 0 && (
-            <LowStockBadge>
-              {products.filter((p) => p.stock <= p.minStock).length}{" "}
-              {t("inventory.lowStockItems")}
-            </LowStockBadge>
-          )}
         </Title>
         {user?.role === "ADMIN" && (
           <Button size="medium" onClick={() => setShowReceiptScan(true)}>
-            <ScanLine size={18} />
+            <ScanLine size={24} />
             {t("receiptScan.scanReceipt")}
           </Button>
         )}
@@ -379,76 +426,91 @@ export function StockManagement() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t("common.search")}
-            style={{ paddingRight: "32px" }}
+            style={{ paddingRight: "32px", fontSize: 18, fontWeight: "bold" }}
           />
           {searchQuery.length > 0 && (
             <ClearBtn onClick={() => setSearchQuery("")} tabIndex={-1}>
               <X size={16} />
             </ClearBtn>
           )}
-        </SearchWrapper>
 
-        {isMobile && (
           <Button
-            type="button"
-            variant="secondary"
-            size="medium"
-            style={{ padding: "10px 12px", flexShrink: 0 }}
-            onClick={() => setShowScanner(true)}
-            title={t("scanner.title") || "Scan barcode"}
-          >
-            <Camera size={16} />
-          </Button>
-        )}
-
-        <Button
           size="medium"
-          style={{ padding: "10px 12px" }}
+          style={{ padding: "9px 12px" }}
           onClick={() => setIsFilterOpen(!isFilterOpen)}
         >
           {t("filters.filters")}{" "}
           {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
         </Button>
+        </SearchWrapper>
+
+        
 
         <SearchField>
           <SearchLabel>{t("pos.barcode")}</SearchLabel>
-          <SearchInput
-            value={barcodeInput}
-            onChange={(e) => setBarcodeInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleBarcodeSubmit();
-              }
-            }}
-            placeholder={t("pos.enterBarcode")}
-            autoFocus
-          />
+          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+            <SearchInput
+              value={barcodeInput}
+              onChange={(e) => setBarcodeInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleBarcodeSubmit();
+                }
+              }}
+              placeholder={t("pos.enterBarcode")}
+            />
+            {isMobile && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="medium"
+                style={{ padding: "9px 13px", flexShrink: 0 }}
+                onClick={() => setShowScanner(true)}
+                title={t("scanner.title") || "Scan barcode"}
+              >
+                <Camera size={18} />
+              </Button>
+            )}
+          </div>
         </SearchField>
 
-        <SearchField style={{ maxWidth: 150 }}>
-          <SearchLabel>PLU</SearchLabel>
-          <SearchInput
-            value={idInput}
-            onChange={(e) => setIdInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handlePluSubmit();
-              }
-            }}
-            placeholder="PLU"
-          />
-        </SearchField>
-
-        <SubmitButton
-          onClick={() => {
-            if (barcodeInput.trim()) handleBarcodeSubmit();
-            else if (idInput.trim()) handlePluSubmit();
-          }}
-        >
-          <SendHorizontal size={22} />
-        </SubmitButton>
+        <PluField>
+          <SearchLabel>KOD / PLU</SearchLabel>
+          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+            <SearchInput
+              value={idInput}
+              onChange={(e) => setIdInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleIdSubmit();
+                }
+              }}
+              placeholder={t("pos.id")}
+            />
+            <SearchInput
+              value={pluInput}
+              onChange={(e) => setPluInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handlePluSubmit();
+                }
+              }}
+              placeholder="PLU"
+            />
+            <SubmitButton
+              onClick={() => {
+                if (barcodeInput.trim()) handleBarcodeSubmit();
+                else if (idInput.trim()) handleIdSubmit();
+                else if (pluInput.trim()) handlePluSubmit();
+              }}
+            >
+              <SendHorizontal size={22} />
+            </SubmitButton>
+          </div>
+        </PluField>
       </SearchRow>
 
       <ProductFilters
@@ -558,14 +620,9 @@ export function StockManagement() {
       )}
       {showScanner && (
         <BarcodeScannerModal
-          onScan={async (barcode) => {
+          onScan={(barcode) => {
             setShowScanner(false);
-            const product = (await searchByBarcode(barcode)) as Product | null;
-            if (product) {
-              handleAddArrival(product);
-            } else {
-              toast.error(t("products.noResults"));
-            }
+            setBarcodeInput(barcode);
           }}
           onClose={() => setShowScanner(false)}
         />

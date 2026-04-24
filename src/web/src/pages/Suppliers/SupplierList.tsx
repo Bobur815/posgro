@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import styled from "styled-components";
+import styled, { keyframes } from "styled-components";
 import { Table } from "@components/common/Table";
 import { Button } from "@components/common/Button";
 import { ConfirmDialog } from "@components/common/ConfirmDialog";
@@ -18,7 +18,7 @@ import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import {
   ChevronDown,
   ChevronUp,
-  PlusCircle,
+  Plus,
   Eye,
   Edit,
   Trash,
@@ -47,13 +47,46 @@ const Header = styled.div`
 
 const Title = styled.h1`
   margin: 0;
+  font-size: 1.75rem;
   color: ${({ theme }) => theme.colors.text};
+
+  @media (max-width: 768px) {
+    font-size: 1.5rem;
+  }
 `;
 
-const HeaderActions = styled.div`
+const pulse = keyframes`
+  0% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb, 59, 130, 246), 0.5); }
+  70% { box-shadow: 0 0 0 12px rgba(var(--primary-rgb, 59, 130, 246), 0); }
+  100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb, 59, 130, 246), 0); }
+`;
+
+const FAB = styled.button`
+  position: fixed;
+  bottom: 50px;
+  right: 16px;
+  z-index: 100;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: none;
+  background-color: ${({ theme }) => theme.colors.primary};
+  color: #fff;
   display: flex;
-  gap: ${({ theme }) => theme.spacing.md};
   align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  animation: ${pulse} 2s ease-out infinite;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    transform: scale(1.1);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
 `;
 
 const Badge = styled.span<{ $active?: boolean }>`
@@ -234,11 +267,6 @@ export function SupplierList() {
             {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
           </Button>
         </div>
-        <HeaderActions>
-          <Button onClick={() => setShowSupplierForm(true)}>
-            <PlusCircle size={24} /> {t("suppliers.addSupplier")}
-          </Button>
-        </HeaderActions>
       </Header>
 
       <SupplierFilters
@@ -351,6 +379,9 @@ export function SupplierList() {
           }}
         />
       )}
+      <FAB onClick={() => setShowSupplierForm(true)}>
+        <Plus size={38} />
+      </FAB>
     </Container>
   );
 }

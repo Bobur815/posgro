@@ -12,7 +12,12 @@ const Container = styled.div`
 
 const Title = styled.h1`
   margin: 0;
+  font-size: 1.75rem;
   color: ${({ theme }) => theme.colors.text};
+
+  @media (max-width: 768px) {
+    font-size: 1.5rem;
+  }
 `;
 
 const SettingsGrid = styled.div`

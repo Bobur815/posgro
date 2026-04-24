@@ -2,6 +2,11 @@ import { ipcMain, BrowserWindow } from 'electron';
 import { autoUpdater, UpdateInfo, ProgressInfo } from 'electron-updater';
 
 export function setupAutoUpdater(mainWindow: BrowserWindow): void {
+  autoUpdater.setFeedURL({
+    provider: 'generic',
+    url: 'https://pos.bobur-dev.uz/releases/',
+    channel: 'latest',
+  });
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
 
