@@ -8,6 +8,8 @@ import {
   AlertCircle,
   FileText,
   PlusCircle,
+  Tag,
+  Package,
 } from "lucide-react";
 import { Modal } from "@components/common/Modal";
 import { Button } from "@components/common/Button";
@@ -27,6 +29,8 @@ import {
   receipt as receiptApi,
   inventory,
   products as productsApi,
+  mxik as mxikApi,
+  MxikScanInfo,
 } from "../../api/client";
 import { debounce } from "../../utils/helpers";
 
@@ -39,6 +43,8 @@ interface ReceiptScanModalProps {
   onClose: () => void;
   onSuccess: () => void;
 }
+
+// ─── Shared styled components ────────────────────────────────────────────────
 
 const StepIndicator = styled.div`
   display: flex;
@@ -124,28 +130,6 @@ const SpinnerText = styled.p`
   margin: 0;
 `;
 
-const ReviewTable = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-`;
-
-const Th = styled.th`
-  text-align: left;
-  padding: ${({ theme }) => theme.spacing.sm};
-  border-bottom: 2px solid ${({ theme }) => theme.colors.border};
-  color: ${({ theme }) => theme.colors.textSecondary};
-  font-weight: 600;
-  font-size: 12px;
-  text-transform: uppercase;
-`;
-
-const Td = styled.td`
-  padding: ${({ theme }) => theme.spacing.sm};
-  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
-  vertical-align: middle;
-`;
-
 const ConfidenceBadge = styled.span<{ $level: string }>`
   display: inline-block;
   padding: 2px 8px;
@@ -176,7 +160,7 @@ const ConfidenceBadge = styled.span<{ $level: string }>`
 
 const SearchInput = styled.input<{ $selected?: boolean }>`
   width: 100%;
-  padding: 4px 6px;
+  padding: 8px 10px;
   border: 1px solid
     ${({ theme, $selected }) =>
       $selected ? theme.colors.primary : theme.colors.border};
@@ -185,6 +169,11 @@ const SearchInput = styled.input<{ $selected?: boolean }>`
   color: ${({ theme }) => theme.colors.text};
   font-size: 13px;
   cursor: text;
+
+  @media (max-width: 640px) {
+    font-size: 16px; /* prevents iOS zoom */
+    padding: 8px 10px;
+  }
 `;
 
 const SearchWrapper = styled.div`
@@ -208,8 +197,8 @@ const SearchDropdown = styled.div`
 `;
 
 const SearchDropdownItem = styled.div<{ $active?: boolean }>`
-  padding: 6px 8px;
-  min-height: 36px;
+  padding: 8px 10px;
+  min-height: 40px;
   display: flex;
   align-items: center;
   font-size: 13px;
@@ -222,20 +211,26 @@ const SearchDropdownItem = styled.div<{ $active?: boolean }>`
   }
 
   @media (max-width: 640px) {
-    min-height: 44px;
+    min-height: 48px;
     font-size: 14px;
   }
 `;
 
 const NumberInput = styled.input`
-  width: 80px;
-  padding: 4px 6px;
+  width: 90px;
+  padding: 6px 8px;
   border: 1px solid ${({ theme }) => theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
   background-color: ${({ theme }) => theme.colors.surface};
   color: ${({ theme }) => theme.colors.text};
   font-size: 13px;
   text-align: right;
+
+  @media (max-width: 640px) {
+    width: 100%;
+    font-size: 16px;
+    padding: 8px 10px;
+  }
 `;
 
 const SupplierRow = styled.div`
@@ -247,6 +242,7 @@ const SupplierRow = styled.div`
 
 const FormGroup = styled.div`
   flex: 1;
+  min-width: 160px;
 `;
 
 const Label = styled.label`
@@ -271,6 +267,14 @@ const Actions = styled.div`
   gap: ${({ theme }) => theme.spacing.md};
   justify-content: flex-end;
   margin-top: ${({ theme }) => theme.spacing.md};
+
+  @media (max-width: 480px) {
+    flex-direction: column-reverse;
+
+    button {
+      width: 100%;
+    }
+  }
 `;
 
 const ProgressBar = styled.div`
@@ -304,19 +308,163 @@ const SuccessContainer = styled.div`
   color: ${({ theme }) => theme.colors.success};
 `;
 
-const SkipCheckbox = styled.input`
-  cursor: pointer;
+// ─── Review card styled components ───────────────────────────────────────────
+
+const ItemCard = styled.div<{ $skip?: boolean }>`
+  background: ${({ theme }) => theme.colors.surface};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  padding: ${({ theme }) => theme.spacing.md};
+  margin-bottom: ${({ theme }) => theme.spacing.sm};
+  opacity: ${({ $skip }) => ($skip ? 0.45 : 1)};
+  transition: opacity 0.15s;
 `;
+
+const CardHeader = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: ${({ theme }) => theme.spacing.sm};
+`;
+
+const CardCheckbox = styled.input`
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  cursor: pointer;
+  margin-top: 3px;
+`;
+
+const CardHeaderContent = styled.div`
+  flex: 1;
+  min-width: 0;
+`;
+
+const ScannedNameText = styled.div`
+  font-weight: 600;
+  font-size: 14px;
+  color: ${({ theme }) => theme.colors.text};
+  word-break: break-word;
+  line-height: 1.3;
+`;
+
+const CardBadgeRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  flex-wrap: wrap;
+`;
+
+const MxikChip = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-family: monospace;
+  background: ${({ theme }) => theme.colors.primary}18;
+  color: ${({ theme }) => theme.colors.primary};
+  font-weight: 600;
+  letter-spacing: 0.02em;
+`;
+
+const MxikInfoBlock = styled.div`
+  margin-top: ${({ theme }) => theme.spacing.sm};
+  padding: 8px 10px;
+  background: ${({ theme }) => theme.colors.background};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  border-left: 3px solid ${({ theme }) => theme.colors.primary}40;
+`;
+
+const MxikBrandRow = styled.div`
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+`;
+
+const MxikBrand = styled.span`
+  font-weight: 700;
+  font-size: 13px;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const MxikAttribute = styled.span`
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-size: 12px;
+`;
+
+const MxikUnitsRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-size: 11px;
+`;
+
+const CardDivider = styled.hr`
+  border: none;
+  border-top: 1px solid ${({ theme }) => theme.colors.border};
+  margin: ${({ theme }) => theme.spacing.sm} 0;
+`;
+
+const CardSection = styled.div``;
+
+const CardSectionLabel = styled.div`
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  margin-bottom: 5px;
+  letter-spacing: 0.05em;
+`;
+
+const CardAmountRow = styled.div`
+  display: flex;
+  align-items: flex-end;
+  gap: ${({ theme }) => theme.spacing.sm};
+  margin-top: ${({ theme }) => theme.spacing.sm};
+  flex-wrap: wrap;
+  @media (max-width: 400px) {
+    gap: ${({ theme }) => theme.spacing.xs};
+  }
+`;
+
+const AmountField = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+`;
+
+const AmountLabel = styled.div`
+  font-size: 11px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+`;
+
+const TotalDisplay = styled.div`
+  margin-left: auto;
+  text-align: right;
+`;
+
+// ─── ReviewItem ───────────────────────────────────────────────────────────────
 
 interface ReviewItem {
   scannedName: string;
   mxik: string | null;
+  mxikInfo?: MxikScanInfo;
   productId: string;
   quantity: number;
   unitCost: number;
   confidence: "exact" | "high" | "medium" | "low" | "none";
   skip: boolean;
 }
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export function ReceiptScanModal({
   suppliers,
@@ -328,7 +476,8 @@ export function ReceiptScanModal({
   const { t, i18n } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [step, setStep] = useState<Step>("upload");
+  // TODO: revert to "upload" before shipping
+  const [step, setStep] = useState<Step>("review");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [imageMimeType, setImageMimeType] = useState<string>("image/jpeg");
@@ -337,7 +486,59 @@ export function ReceiptScanModal({
   const [error, setError] = useState<string | null>(null);
 
   const [scanResult, setScanResult] = useState<ScannedReceiptData | null>(null);
-  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
+  // TODO: revert to [] before shipping
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([
+    {
+      scannedName: "Coca Cola PET 0.5L",
+      mxik: "02202002001010007",
+      mxikInfo: { name: "Coca-Cola", brandName: "Coca-Cola", attributeName: "0.5L", unitsName: "шт", groupCode: "022" },
+      productId: "",
+      quantity: 96,
+      unitCost: 5859,
+      confidence: "none",
+      skip: false,
+    },
+    {
+      scannedName: "Lipton Ice Tea Peach 0.5L",
+      mxik: "02202001001010001",
+      mxikInfo: { name: "Lipton Ice Tea", brandName: "Lipton", attributeName: "Peach 0.5L", unitsName: "шт", groupCode: "022" },
+      productId: "",
+      quantity: 24,
+      unitCost: 6500,
+      confidence: "none",
+      skip: false,
+    },
+    {
+      scannedName: "Картошка белая кг",
+      mxik: "01905012001000000",
+      mxikInfo: { name: "Картошка", brandName: null, attributeName: "белая", unitsName: "кг", groupCode: "019" },
+      productId: "",
+      quantity: 50,
+      unitCost: 4500,
+      confidence: "none",
+      skip: false,
+    },
+    {
+      scannedName: "Unknown XYZ Product",
+      mxik: null,
+      mxikInfo: undefined,
+      productId: "",
+      quantity: 10,
+      unitCost: 15000,
+      confidence: "none",
+      skip: false,
+    },
+    {
+      scannedName: "Fanta Orange 1L",
+      mxik: "02202002001010010",
+      mxikInfo: { name: "Fanta", brandName: "Fanta", attributeName: "Orange 1L", unitsName: "шт", groupCode: "022" },
+      productId: "",
+      quantity: 12,
+      unitCost: 8500,
+      confidence: "none",
+      skip: true,
+    },
+  ]);
   const [supplierId, setSupplierId] = useState("");
   const [paymentMethod, setPaymentMethod] =
     useState<SupplierPaymentMethod>("CASH");
@@ -346,10 +547,14 @@ export function ReceiptScanModal({
     if (!supplierId) setPaymentMethod("CASH");
   }, [supplierId]);
 
-  // Local product list — starts from prop, updated after new product creation
   const [localProducts, setLocalProducts] = useState<Product[]>(products);
-  // Index of the review row for which we're creating a new product
   const [addingForRowIdx, setAddingForRowIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    productsApi.getAll()
+      .then((data) => setLocalProducts(data as Product[]))
+      .catch(() => {});
+  }, []);
 
   const [createProgress, setCreateProgress] = useState(0);
   const [createTotal, setCreateTotal] = useState(0);
@@ -411,11 +616,9 @@ export function ReceiptScanModal({
   };
 
   const handleProductCreated = async () => {
-    // Reload the full product list from the API
     const updated = (await productsApi.getAll()) as Product[];
     setLocalProducts(updated);
 
-    // Try to auto-assign the newly created product to the row
     if (addingForRowIdx !== null) {
       const row = reviewItems[addingForRowIdx];
 
@@ -561,6 +764,20 @@ export function ReceiptScanModal({
         matchItems,
       )) as ProductMatch[];
 
+      // MXIK enrichment — browser calls tasnif.soliq.uz directly (VPS is geo-blocked)
+      const mxikCodes = result.items
+        .map((item) => item.mxik)
+        .filter((code): code is string => !!code);
+
+      let mxikInfoMap: Record<string, MxikScanInfo> = {};
+      if (mxikCodes.length > 0) {
+        try {
+          mxikInfoMap = await mxikApi.lookupBatch(mxikCodes);
+        } catch {
+          // non-fatal: proceed without MXIK enrichment
+        }
+      }
+
       if (result.supplierName) {
         const matchedSupplier = suppliers.find((s) => {
           const nameRuLower = s.nameRu.toLowerCase();
@@ -583,6 +800,7 @@ export function ReceiptScanModal({
         return {
           scannedName: item.scannedName,
           mxik: item.mxik ?? null,
+          mxikInfo: item.mxik ? mxikInfoMap[item.mxik] : undefined,
           productId: match?.matchedProductId || "",
           quantity: item.quantity,
           unitCost: item.unitCost,
@@ -670,9 +888,14 @@ export function ReceiptScanModal({
     }
   };
 
+  const isBulkWeighted = (info?: MxikScanInfo) => info?.groupCode === "019";
+
+  const activeCount = reviewItems.filter((i) => !i.skip && i.productId).length;
+
   return (
     <>
-      <Modal title={getStepTitle()} onClose={onClose} width="900px">
+      <Modal title={getStepTitle()} onClose={onClose} width="760px">
+        {/* ── Upload ── */}
         {step === "upload" && (
           <>
             <input
@@ -726,6 +949,7 @@ export function ReceiptScanModal({
           </>
         )}
 
+        {/* ── Scanning / Matching spinner ── */}
         {(step === "scanning" || step === "matching") && (
           <SpinnerContainer>
             <Loader2 size={48} />
@@ -737,6 +961,7 @@ export function ReceiptScanModal({
           </SpinnerContainer>
         )}
 
+        {/* ── Review ── */}
         {step === "review" && (
           <>
             {scanResult?.supplierName && (
@@ -781,142 +1006,173 @@ export function ReceiptScanModal({
               )}
             </SupplierRow>
 
-            <div style={{ overflowX: "auto" }}>
-              <ReviewTable>
-                <thead>
-                  <tr>
-                    <Th style={{ width: 30 }}></Th>
-                    <Th>{t("receiptScan.scannedName")}</Th>
-                    <Th style={{ width: 130 }}>MXIK</Th>
-                    <Th>{t("receiptScan.matchedProduct")}</Th>
-                    <Th style={{ width: 80 }}>{t("receiptScan.confidence")}</Th>
-                    <Th style={{ width: 90 }}>{t("receiptScan.quantity")}</Th>
-                    <Th style={{ width: 100 }}>{t("receiptScan.unitCost")}</Th>
-                    <Th style={{ width: 100 }}>{t("receiptScan.totalCost")}</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reviewItems.map((item, idx) => (
-                    <tr key={idx} style={{ opacity: item.skip ? 0.4 : 1 }}>
-                      <Td>
-                        <SkipCheckbox
-                          type="checkbox"
-                          checked={!item.skip}
-                          onChange={(e) =>
-                            updateReviewItem(idx, { skip: !e.target.checked })
-                          }
-                          title={t("receiptScan.skipItem")}
-                        />
-                      </Td>
-                      <Td>{item.scannedName}</Td>
-                      <Td
-                        style={{
-                          fontSize: 11,
-                          opacity: 0.6,
-                          fontFamily: "monospace",
-                        }}
-                      >
-                        {item.mxik || "—"}
-                      </Td>
-                      <Td>
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "4px",
-                            alignItems: "center",
-                          }}
-                        >
-                          <SearchWrapper>
-                            <SearchInput
-                              type="text"
-                              placeholder={t("receiptScan.selectProduct")}
-                              value={getInputDisplayValue(idx, item)}
-                              $selected={
-                                !!item.productId && openDropdownIdx !== idx
-                              }
-                              onFocus={() => handleInputFocus(idx)}
-                              onBlur={() => handleInputBlur(idx)}
-                              onChange={(e) =>
-                                handleInputChange(idx, e.target.value)
-                              }
-                              disabled={item.skip}
-                            />
-                            {openDropdownIdx === idx && (
-                              <SearchDropdown>
-                                {getFilteredProducts(idx).length === 0 ? (
-                                  <SearchDropdownItem
-                                    style={{ opacity: 0.5, cursor: "default" }}
-                                  >
-                                    {t("common.noResults") || "No results"}
-                                  </SearchDropdownItem>
-                                ) : (
-                                  getFilteredProducts(idx).map((p) => (
-                                    <SearchDropdownItem
-                                      key={p.id}
-                                      $active={String(p.id) === item.productId}
-                                      onMouseDown={() =>
-                                        handleProductSelect(idx, String(p.id))
-                                      }
-                                    >
-                                      {getProductName(p)}
-                                    </SearchDropdownItem>
-                                  ))
-                                )}
-                              </SearchDropdown>
-                            )}
-                          </SearchWrapper>
-                          {!item.productId && !item.skip && (
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="small"
-                              title={t("products.add")}
-                              style={{ flexShrink: 0, padding: "4px 6px" }}
-                              onClick={() => setAddingForRowIdx(idx)}
-                            >
-                              <PlusCircle size={15} />
-                            </Button>
-                          )}
-                        </div>
-                      </Td>
-                      <Td>
+            {/* Item cards */}
+            <div>
+              {reviewItems.map((item, idx) => (
+                <ItemCard key={idx} $skip={item.skip}>
+                  {/* Header: checkbox + name + badges */}
+                  <CardHeader>
+                    <CardCheckbox
+                      type="checkbox"
+                      checked={!item.skip}
+                      onChange={(e) =>
+                        updateReviewItem(idx, { skip: !e.target.checked })
+                      }
+                    />
+                    <CardHeaderContent>
+                      <ScannedNameText>{item.scannedName}</ScannedNameText>
+                      <CardBadgeRow>
+                        {item.mxik && (
+                          <MxikChip>
+                            <Tag size={9} />
+                            {item.mxik}
+                          </MxikChip>
+                        )}
                         <ConfidenceBadge $level={item.confidence}>
                           {getConfidenceLabel(item.confidence)}
                         </ConfidenceBadge>
-                      </Td>
-                      <Td>
-                        <NumberInput
-                          type="number"
-                          step="any"
-                          value={item.quantity}
+                      </CardBadgeRow>
+                    </CardHeaderContent>
+                  </CardHeader>
+
+                  {/* MXIK enrichment block */}
+                  {item.mxikInfo && (
+                    <MxikInfoBlock>
+                      <MxikBrandRow>
+                        {item.mxikInfo.brandName && (
+                          <MxikBrand>{item.mxikInfo.brandName}</MxikBrand>
+                        )}
+                        {item.mxikInfo.attributeName && (
+                          <MxikAttribute>
+                            {item.mxikInfo.attributeName}
+                          </MxikAttribute>
+                        )}
+                      </MxikBrandRow>
+                      {item.mxikInfo.unitsName && (
+                        <MxikUnitsRow>
+                          <Package size={10} />
+                          {item.mxikInfo.unitsName}
+                        </MxikUnitsRow>
+                      )}
+                    </MxikInfoBlock>
+                  )}
+
+                  <CardDivider />
+
+                  {/* Product match */}
+                  <CardSection>
+                    <CardSectionLabel>
+                      {t("receiptScan.matchedProduct")}
+                    </CardSectionLabel>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "6px",
+                        alignItems: "center",
+                      }}
+                    >
+                      <SearchWrapper>
+                        <SearchInput
+                          type="text"
+                          placeholder={t("receiptScan.selectProduct")}
+                          value={getInputDisplayValue(idx, item)}
+                          $selected={
+                            !!item.productId && openDropdownIdx !== idx
+                          }
+                          onFocus={() => handleInputFocus(idx)}
+                          onBlur={() => handleInputBlur(idx)}
                           onChange={(e) =>
-                            updateReviewItem(idx, {
-                              quantity: parseFloat(e.target.value) || 0,
-                            })
+                            handleInputChange(idx, e.target.value)
                           }
                           disabled={item.skip}
                         />
-                      </Td>
-                      <Td>
-                        <NumberInput
-                          type="number"
-                          step="any"
-                          value={item.unitCost}
-                          onChange={(e) =>
-                            updateReviewItem(idx, {
-                              unitCost: parseFloat(e.target.value) || 0,
-                            })
-                          }
-                          disabled={item.skip}
-                        />
-                      </Td>
-                      <Td style={{ textAlign: "right", fontWeight: 600 }}>
+                        {openDropdownIdx === idx && (
+                          <SearchDropdown>
+                            {getFilteredProducts(idx).length === 0 ? (
+                              <SearchDropdownItem
+                                style={{ opacity: 0.5, cursor: "default" }}
+                              >
+                                {t("common.noResults") || "No results"}
+                              </SearchDropdownItem>
+                            ) : (
+                              getFilteredProducts(idx).map((p) => (
+                                <SearchDropdownItem
+                                  key={p.id}
+                                  $active={String(p.id) === item.productId}
+                                  onMouseDown={() =>
+                                    handleProductSelect(idx, String(p.id))
+                                  }
+                                >
+                                  {getProductName(p)}
+                                </SearchDropdownItem>
+                              ))
+                            )}
+                          </SearchDropdown>
+                        )}
+                      </SearchWrapper>
+                      {!item.productId && !item.skip && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="small"
+                          title={t("products.add")}
+                          style={{ flexShrink: 0, padding: "8px 10px" }}
+                          onClick={() => setAddingForRowIdx(idx)}
+                        >
+                          <PlusCircle size={18} />
+                        </Button>
+                      )}
+                    </div>
+                  </CardSection>
+
+                  {/* Qty / Cost / Total */}
+                  <CardAmountRow>
+                    <div style={{ display: 'flex', gap: '8px'}}>
+                      <AmountField>
+                      <AmountLabel>
+                        {t("receiptScan.quantity")}
+                        {isBulkWeighted(item.mxikInfo) && (
+                          <span style={{ marginLeft: 4, fontWeight: 700 }}>(кг)</span>
+                        )}
+                      </AmountLabel>
+                      <NumberInput
+                        type="number"
+                        step="any"
+                        value={item.quantity}
+                        onChange={(e) =>
+                          updateReviewItem(idx, {
+                            quantity: parseFloat(e.target.value) || 0,
+                          })
+                        }
+                        disabled={item.skip}
+                      />
+                    </AmountField>
+                    <AmountField>
+                      <AmountLabel>{t("receiptScan.unitCost")}</AmountLabel>
+                      <NumberInput
+                        type="number"
+                        step="any"
+                        value={item.unitCost}
+                        onChange={(e) =>
+                          updateReviewItem(idx, {
+                            unitCost: parseFloat(e.target.value) || 0,
+                          })
+                        }
+                        disabled={item.skip}
+                      />
+                    </AmountField>
+                    </div>
+                    <TotalDisplay>
+                      <AmountLabel style={{ textAlign: "right" }}>
+                        {t("receiptScan.totalCost")}
+                      </AmountLabel>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>
                         {(item.quantity * item.unitCost).toLocaleString()}
-                      </Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </ReviewTable>
+                      </div>
+                    </TotalDisplay>
+                  </CardAmountRow>
+                </ItemCard>
+              ))}
             </div>
 
             {error && <ErrorText>{error}</ErrorText>}
@@ -927,17 +1183,15 @@ export function ReceiptScanModal({
               </Button>
               <Button
                 onClick={handleCreateArrivals}
-                disabled={
-                  reviewItems.filter((i) => !i.skip && i.productId).length === 0
-                }
+                disabled={activeCount === 0}
               >
-                {t("receiptScan.createArrivals")} (
-                {reviewItems.filter((i) => !i.skip && i.productId).length})
+                {t("receiptScan.createArrivals")} ({activeCount})
               </Button>
             </Actions>
           </>
         )}
 
+        {/* ── Creating ── */}
         {step === "creating" && (
           <SpinnerContainer>
             <Loader2 size={48} />
@@ -957,6 +1211,7 @@ export function ReceiptScanModal({
           </SpinnerContainer>
         )}
 
+        {/* ── Done ── */}
         {step === "done" && (
           <>
             <SuccessContainer>
@@ -984,6 +1239,7 @@ export function ReceiptScanModal({
                 mxik: row.mxik || undefined,
                 cost: row.unitCost || undefined,
                 stock: row.quantity || undefined,
+                groupCode: row.mxikInfo?.groupCode || undefined,
               }}
               onClose={() => setAddingForRowIdx(null)}
               onSuccess={handleProductCreated}

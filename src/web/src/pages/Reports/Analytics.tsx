@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
-import styled, { useTheme } from 'styled-components';
+import React, { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
+import styled, { useTheme } from "styled-components";
 import {
   AreaChart,
   Area,
@@ -12,30 +12,40 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
-} from 'recharts';
-import { Select } from '@components/common/Select';
-import { formatCurrency as formatCurrencyBase } from '@shared/utils';
-import { analytics as analyticsApi } from '../../api/client';
+} from "recharts";
+import { Select } from "@components/common/Select";
+import { formatCurrency as formatCurrencyBase } from "@shared/utils";
+import { analytics as analyticsApi } from "../../api/client";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type DatePreset =
-  | 'today'
-  | 'weekStart'
-  | 'last7'
-  | 'monthStart'
-  | 'last30'
-  | 'yearStart'
-  | 'last365'
-  | 'custom';
+  | "today"
+  | "weekStart"
+  | "last7"
+  | "monthStart"
+  | "last30"
+  | "yearStart"
+  | "last365"
+  | "custom";
 
 interface AnalyticsData {
   salesTrend: { date: string; revenue: number; count: number }[];
-  salesByCategory: { categoryRu: string; categoryUz: string; revenue: number; quantity: number }[];
+  salesByCategory: {
+    categoryRu: string;
+    categoryUz: string;
+    revenue: number;
+    quantity: number;
+  }[];
   hourlyDistribution: { hour: number; revenue: number; count: number }[];
   topProducts: { name: string; quantity: number; revenue: number }[];
   cashierPerformance: { name: string; revenue: number; count: number }[];
-  profitMargins: { categoryRu: string; categoryUz: string; revenue: number; cost: number }[];
+  profitMargins: {
+    categoryRu: string;
+    categoryUz: string;
+    revenue: number;
+    cost: number;
+  }[];
   summary: {
     totalSales: number;
     totalRevenue: number;
@@ -45,6 +55,32 @@ interface AnalyticsData {
   };
 }
 
+// ── Tashkent (UTC+5) date helpers ────────────────────────────────────────────
+
+const UZT_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+/** Current year/month/day in Tashkent time. */
+function uztToday(): { y: number; m: number; d: number } {
+  const t = new Date(Date.now() + UZT_OFFSET_MS);
+  return { y: t.getUTCFullYear(), m: t.getUTCMonth(), d: t.getUTCDate() };
+}
+
+/** 00:00:00.000 of a Tashkent calendar day expressed as a UTC Date. */
+function uztDayStart(y: number, m: number, d: number): Date {
+  return new Date(Date.UTC(y, m, d, 0, 0, 0, 0) - UZT_OFFSET_MS);
+}
+
+/** 23:59:59.999 of a Tashkent calendar day expressed as a UTC Date. */
+function uztDayEnd(y: number, m: number, d: number): Date {
+  return new Date(Date.UTC(y, m, d, 23, 59, 59, 999) - UZT_OFFSET_MS);
+}
+
+/** Parse a YYYY-MM-DD string (from <input type="date">) as a Tashkent date. */
+function parseUztDate(s: string): { y: number; m: number; d: number } {
+  const [y, m, d] = s.split("-").map(Number);
+  return { y, m: m - 1, d };
+}
+
 // ── Date range helpers ────────────────────────────────────────────────────────
 
 function getDateRange(
@@ -52,56 +88,39 @@ function getDateRange(
   customStart?: string,
   customEnd?: string,
 ): { start: Date; end: Date } {
-  const now = new Date();
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
+  const { y, m, d } = uztToday();
+  const todayEnd = uztDayEnd(y, m, d);
 
   switch (preset) {
-    case 'today': {
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-      return { start, end: todayEnd };
+    case "today":
+      return { start: uztDayStart(y, m, d), end: todayEnd };
+
+    case "weekStart": {
+      const dow = new Date(Date.UTC(y, m, d)).getUTCDay();
+      const diff = dow === 0 ? -6 : 1 - dow;
+      const ws = new Date(Date.UTC(y, m, d + diff));
+      return { start: uztDayStart(ws.getUTCFullYear(), ws.getUTCMonth(), ws.getUTCDate()), end: todayEnd };
     }
-    case 'weekStart': {
-      const start = new Date();
-      const day = start.getDay();
-      const diff = day === 0 ? -6 : 1 - day;
-      start.setDate(start.getDate() + diff);
-      start.setHours(0, 0, 0, 0);
-      return { start, end: todayEnd };
-    }
-    case 'last7': {
-      const start = new Date();
-      start.setDate(start.getDate() - 6);
-      start.setHours(0, 0, 0, 0);
-      return { start, end: todayEnd };
-    }
-    case 'monthStart': {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { start, end: todayEnd };
-    }
-    case 'last30': {
-      const start = new Date();
-      start.setDate(start.getDate() - 29);
-      start.setHours(0, 0, 0, 0);
-      return { start, end: todayEnd };
-    }
-    case 'yearStart': {
-      const start = new Date(now.getFullYear(), 0, 1);
-      return { start, end: todayEnd };
-    }
-    case 'last365': {
-      const start = new Date();
-      start.setDate(start.getDate() - 364);
-      start.setHours(0, 0, 0, 0);
-      return { start, end: todayEnd };
-    }
-    case 'custom': {
-      const start = customStart ? new Date(customStart) : new Date();
-      const end = customEnd ? new Date(customEnd) : new Date();
-      start.setHours(0, 0, 0, 0);
-      end.setHours(23, 59, 59, 999);
-      return { start, end };
+
+    case "last7":
+      return { start: uztDayStart(y, m, d - 6), end: todayEnd };
+
+    case "monthStart":
+      return { start: uztDayStart(y, m, 1), end: todayEnd };
+
+    case "last30":
+      return { start: uztDayStart(y, m, d - 29), end: todayEnd };
+
+    case "yearStart":
+      return { start: uztDayStart(y, 0, 1), end: todayEnd };
+
+    case "last365":
+      return { start: uztDayStart(y, m, d - 364), end: todayEnd };
+
+    case "custom": {
+      const s = customStart ? parseUztDate(customStart) : { y, m, d };
+      const e = customEnd ? parseUztDate(customEnd) : { y, m, d };
+      return { start: uztDayStart(s.y, s.m, s.d), end: uztDayEnd(e.y, e.m, e.d) };
     }
   }
 }
@@ -224,28 +243,28 @@ export function Analytics() {
   const { t, i18n } = useTranslation();
   const theme = useTheme();
 
-  const [preset, setPreset] = useState<DatePreset>('today');
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
+  const [preset, setPreset] = useState<DatePreset>("today");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  const lang = i18n.language as 'ru' | 'uz';
+  
+  const lang = i18n.language as "ru" | "uz";
   const fmt = (amount: number) => formatCurrencyBase(amount, lang);
 
   const presetOptions = [
-    { value: 'today', label: t('reports.today') },
-    { value: 'weekStart', label: t('reports.thisWeek') },
-    { value: 'last7', label: t('reports.last7Days') },
-    { value: 'monthStart', label: t('reports.thisMonth') },
-    { value: 'last30', label: t('reports.last30Days') },
-    { value: 'yearStart', label: t('reports.thisYear') },
-    { value: 'last365', label: t('reports.last365Days') },
-    { value: 'custom', label: t('reports.custom') },
+    { value: "today", label: t("reports.today") },
+    { value: "weekStart", label: t("reports.thisWeek") },
+    { value: "last7", label: t("reports.last7Days") },
+    { value: "monthStart", label: t("reports.thisMonth") },
+    { value: "last30", label: t("reports.last30Days") },
+    { value: "yearStart", label: t("reports.thisYear") },
+    { value: "last365", label: t("reports.last365Days") },
+    { value: "custom", label: t("reports.custom") },
   ];
 
   const fetchData = useCallback(async () => {
-    if (preset === 'custom' && (!customStart || !customEnd)) return;
+    if (preset === "custom" && (!customStart || !customEnd)) return;
     setIsLoading(true);
     try {
       const { start, end } = getDateRange(preset, customStart, customEnd);
@@ -255,7 +274,7 @@ export function Analytics() {
       });
       setData(result as AnalyticsData);
     } catch (err) {
-      console.error('Analytics fetch error:', err);
+      console.error("Analytics fetch error:", err);
     } finally {
       setIsLoading(false);
     }
@@ -268,13 +287,13 @@ export function Analytics() {
   // Prepare localised data
   const categoryData =
     data?.salesByCategory.map((c) => ({
-      name: lang === 'ru' ? c.categoryRu : c.categoryUz,
+      name: lang === "ru" ? c.categoryRu : c.categoryUz,
       revenue: c.revenue,
     })) ?? [];
 
   const profitData =
     data?.profitMargins.map((c) => ({
-      name: lang === 'ru' ? c.categoryRu : c.categoryUz,
+      name: lang === "ru" ? c.categoryRu : c.categoryUz,
       revenue: c.revenue,
       cost: c.cost,
     })) ?? [];
@@ -293,7 +312,7 @@ export function Analytics() {
     <Container>
       {/* ── Header / Filters ── */}
       <Header>
-        <Title>{t('reports.analytics')}</Title>
+        <Title>{t("reports.analytics")}</Title>
 
         <FilterRow>
           <PresetSelect
@@ -301,7 +320,7 @@ export function Analytics() {
             value={preset}
             onChange={(e) => setPreset(e.target.value as DatePreset)}
           />
-          {preset === 'custom' && (
+          {preset === "custom" && (
             <>
               <DateInput
                 type="date"
@@ -319,27 +338,27 @@ export function Analytics() {
         </FilterRow>
       </Header>
 
-      {isLoading && <LoadingText>{t('common.loading')}</LoadingText>}
+      {isLoading && <LoadingText>{t("common.loading")}</LoadingText>}
 
       {data && (
         <>
           {/* ── KPI summary ── */}
           <KpiGrid>
             <KpiCard>
-              <KpiLabel>{t('reports.totalRevenue')}</KpiLabel>
+              <KpiLabel>{t("reports.totalRevenue")}</KpiLabel>
               <KpiValue>{fmt(data.summary.totalRevenue)}</KpiValue>
             </KpiCard>
             <KpiCard>
-              <KpiLabel>{t('reports.totalSales')}</KpiLabel>
+              <KpiLabel>{t("reports.totalSales")}</KpiLabel>
               <KpiValue>{data.summary.totalSales}</KpiValue>
             </KpiCard>
             <KpiCard>
-              <KpiLabel>{t('reports.averageTransaction')}</KpiLabel>
+              <KpiLabel>{t("reports.averageTransaction")}</KpiLabel>
               <KpiValue>{fmt(data.summary.averageTransaction)}</KpiValue>
             </KpiCard>
             <KpiCard>
               <KpiLabel>
-                {t('reports.cashPayments')} / {t('reports.cardPayments')}
+                {t("reports.cashPayments")} / {t("reports.cardPayments")}
               </KpiLabel>
               <KpiValue>
                 {data.summary.cashSales} / {data.summary.cardSales}
@@ -349,12 +368,15 @@ export function Analytics() {
 
           {/* ── Sales Trend (full width) ── */}
           <Card>
-            <CardTitle>{t('reports.salesTrend')}</CardTitle>
+            <CardTitle>{t("reports.salesTrend")}</CardTitle>
             {data.salesTrend.length === 0 ? (
-              <NoData>{t('reports.noData')}</NoData>
+              <NoData>{t("reports.noData")}</NoData>
             ) : (
               <ResponsiveContainer width="100%" height={230}>
-                <AreaChart data={data.salesTrend} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                <AreaChart
+                  data={data.salesTrend}
+                  margin={{ top: 4, right: 16, left: 0, bottom: 0 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
                   <XAxis dataKey="date" tick={tickStyle} />
                   <YAxis
@@ -363,13 +385,13 @@ export function Analytics() {
                     width={100}
                   />
                   <Tooltip
-                    formatter={(v: any) => [fmt(v ?? 0), t('reports.revenue')]}
+                    formatter={(v: any) => [fmt(v ?? 0), t("reports.revenue")]}
                   />
                   <Area
                     type="monotone"
                     dataKey="revenue"
                     stroke={PRIMARY}
-                    fill={PRIMARY + '33'}
+                    fill={PRIMARY + "33"}
                     strokeWidth={2}
                   />
                 </AreaChart>
@@ -380,36 +402,47 @@ export function Analytics() {
           {/* ── Hourly | By Category ── */}
           <TwoCol>
             <Card>
-              <CardTitle>{t('reports.hourlyDistribution')}</CardTitle>
-              {data.hourlyDistribution.length === 0 ? (
-                <NoData>{t('reports.noData')}</NoData>
-              ) : (
-                <ResponsiveContainer width="100%" height={210}>
-                  <BarChart
-                    data={data.hourlyDistribution}
-                    margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-                    <XAxis
-                      dataKey="hour"
-                      tickFormatter={(h: number) => `${h}:00`}
-                      tick={tickStyle}
-                    />
-                    <YAxis tick={tickStyle} />
-                    <Tooltip
-                      formatter={(v: any) => [v ?? 0, t('reports.transactions')]}
-                      labelFormatter={(h) => `${h}:00 – ${(Number(h) + 1) % 24}:00`}
-                    />
-                    <Bar dataKey="count" fill={PRIMARY} radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
+              <CardTitle>{t("reports.hourlyDistribution")}</CardTitle>
+              {(() => {
+                const fullDay = Array.from({ length: 24 }, (_, h) => {
+                  const found = data.hourlyDistribution.find((d) => d.hour === h);
+                  return { hour: h, revenue: found?.revenue ?? 0, count: found?.count ?? 0 };
+                });
+                return (
+                  <ResponsiveContainer width="100%" height={210}>
+                    <BarChart
+                      data={fullDay}
+                      margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                      <XAxis
+                        dataKey="hour"
+                        ticks={[0, 3, 6, 9, 12, 15, 18, 21, 23]}
+                        tickFormatter={(h: number) =>
+                          `${String(h).padStart(2, "0")}:00`
+                        }
+                        tick={tickStyle}
+                      />
+                      <YAxis tick={tickStyle} allowDecimals={false} />
+                      <Tooltip
+                        formatter={(v: any) => [v ?? 0, t("reports.transactions")]}
+                        labelFormatter={(h) => {
+                          const hh = String(Number(h)).padStart(2, "0");
+                          const end = Number(h) === 23 ? "23:59" : `${String(Number(h) + 1).padStart(2, "0")}:00`;
+                          return `${hh}:00 – ${end}`;
+                        }}
+                      />
+                      <Bar dataKey="count" fill={PRIMARY} radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                );
+              })()}
             </Card>
 
             <Card>
-              <CardTitle>{t('reports.salesByCategory')}</CardTitle>
+              <CardTitle>{t("reports.salesByCategory")}</CardTitle>
               {categoryData.length === 0 ? (
-                <NoData>{t('reports.noData')}</NoData>
+                <NoData>{t("reports.noData")}</NoData>
               ) : (
                 <ResponsiveContainer width="100%" height={210}>
                   <BarChart
@@ -430,7 +463,10 @@ export function Analytics() {
                       tick={tickStyle}
                     />
                     <Tooltip
-                      formatter={(v: any) => [fmt(v ?? 0), t('reports.revenue')]}
+                      formatter={(v: any) => [
+                        fmt(v ?? 0),
+                        t("reports.revenue"),
+                      ]}
                     />
                     <Bar dataKey="revenue" fill={INFO} radius={[0, 3, 3, 0]} />
                   </BarChart>
@@ -442,9 +478,9 @@ export function Analytics() {
           {/* ── Top Products | Cashier Performance ── */}
           <TwoCol>
             <Card>
-              <CardTitle>{t('reports.topSellingProducts')}</CardTitle>
+              <CardTitle>{t("reports.topSellingProducts")}</CardTitle>
               {data.topProducts.length === 0 ? (
-                <NoData>{t('reports.noData')}</NoData>
+                <NoData>{t("reports.noData")}</NoData>
               ) : (
                 <ResponsiveContainer width="100%" height={210}>
                   <BarChart
@@ -461,18 +497,22 @@ export function Analytics() {
                       tick={tickStyle}
                     />
                     <Tooltip
-                      formatter={(v: any) => [v ?? 0, t('reports.items')]}
+                      formatter={(v: any) => [v ?? 0, t("reports.items")]}
                     />
-                    <Bar dataKey="quantity" fill={SUCCESS} radius={[0, 3, 3, 0]} />
+                    <Bar
+                      dataKey="quantity"
+                      fill={SUCCESS}
+                      radius={[0, 3, 3, 0]}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               )}
             </Card>
 
             <Card>
-              <CardTitle>{t('reports.cashierPerformance')}</CardTitle>
+              <CardTitle>{t("reports.cashierPerformance")}</CardTitle>
               {data.cashierPerformance.length === 0 ? (
-                <NoData>{t('reports.noData')}</NoData>
+                <NoData>{t("reports.noData")}</NoData>
               ) : (
                 <ResponsiveContainer width="100%" height={210}>
                   <BarChart
@@ -487,9 +527,16 @@ export function Analytics() {
                       width={100}
                     />
                     <Tooltip
-                      formatter={(v: any) => [fmt(v ?? 0), t('reports.revenue')]}
+                      formatter={(v: any) => [
+                        fmt(v ?? 0),
+                        t("reports.revenue"),
+                      ]}
                     />
-                    <Bar dataKey="revenue" fill={WARNING} radius={[3, 3, 0, 0]} />
+                    <Bar
+                      dataKey="revenue"
+                      fill={WARNING}
+                      radius={[3, 3, 0, 0]}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -498,9 +545,9 @@ export function Analytics() {
 
           {/* ── Profit Margins (full width) ── */}
           <Card>
-            <CardTitle>{t('reports.profitMargins')}</CardTitle>
+            <CardTitle>{t("reports.profitMargins")}</CardTitle>
             {profitData.length === 0 ? (
-              <NoData>{t('reports.noData')}</NoData>
+              <NoData>{t("reports.noData")}</NoData>
             ) : (
               <ResponsiveContainer width="100%" height={230}>
                 <BarChart
@@ -514,19 +561,17 @@ export function Analytics() {
                     tick={tickStyle}
                     width={100}
                   />
-                  <Tooltip
-                    formatter={(v: any) => [fmt(v ?? 0), '']}
-                  />
+                  <Tooltip formatter={(v: any) => [fmt(v ?? 0), ""]} />
                   <Legend />
                   <Bar
                     dataKey="revenue"
-                    name={t('reports.revenue')}
+                    name={t("reports.revenue")}
                     fill={PRIMARY}
                     radius={[3, 3, 0, 0]}
                   />
                   <Bar
                     dataKey="cost"
-                    name={t('reports.cost')}
+                    name={t("reports.cost")}
                     fill={ERROR}
                     radius={[3, 3, 0, 0]}
                   />
@@ -537,9 +582,7 @@ export function Analytics() {
         </>
       )}
 
-      {!isLoading && !data && (
-        <NoData>{t('reports.noData')}</NoData>
-      )}
+      {!isLoading && !data && <NoData>{t("reports.noData")}</NoData>}
     </Container>
   );
 }

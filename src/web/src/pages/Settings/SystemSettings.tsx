@@ -4,7 +4,10 @@ import styled from "styled-components";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@components/common/Button";
 import { Input } from "@components/common/Input";
-import { settings as settingsApi, receipt as receiptApi } from "../../api/client";
+import {
+  settings as settingsApi,
+  receipt as receiptApi,
+} from "../../api/client";
 
 const Container = styled.div`
   max-width: 800px;
@@ -99,7 +102,9 @@ export function SystemSettings() {
     storePhone: "",
     taxRate: "0",
   });
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">(
+    "idle",
+  );
 
   const [plan, setPlan] = useState<string | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
@@ -129,7 +134,11 @@ export function SystemSettings() {
     try {
       const data = await receiptApi.getPlan();
       setPlan(data.plan);
-      setBalanceUzs(data.plan === "paid" && typeof data.balance_uzs === "number" ? data.balance_uzs : null);
+      setBalanceUzs(
+        data.plan === "paid" && typeof data.balance_uzs === "number"
+          ? data.balance_uzs
+          : null,
+      );
     } catch (error) {
       console.error("Failed to load plan:", error);
     } finally {
@@ -164,14 +173,20 @@ export function SystemSettings() {
             label={t("settings.storeName")}
             value={storeSettings.storeName}
             onChange={(e) =>
-              setStoreSettings((prev) => ({ ...prev, storeName: e.target.value }))
+              setStoreSettings((prev) => ({
+                ...prev,
+                storeName: e.target.value,
+              }))
             }
           />
           <Input
             label={t("settings.storeAddress")}
             value={storeSettings.storeAddress}
             onChange={(e) =>
-              setStoreSettings((prev) => ({ ...prev, storeAddress: e.target.value }))
+              setStoreSettings((prev) => ({
+                ...prev,
+                storeAddress: e.target.value,
+              }))
             }
           />
           <Row>
@@ -179,7 +194,10 @@ export function SystemSettings() {
               label={t("settings.storePhone")}
               value={storeSettings.storePhone}
               onChange={(e) =>
-                setStoreSettings((prev) => ({ ...prev, storePhone: e.target.value }))
+                setStoreSettings((prev) => ({
+                  ...prev,
+                  storePhone: e.target.value,
+                }))
               }
             />
             <Input
@@ -188,7 +206,10 @@ export function SystemSettings() {
               step="0.01"
               value={storeSettings.taxRate}
               onChange={(e) =>
-                setStoreSettings((prev) => ({ ...prev, taxRate: e.target.value }))
+                setStoreSettings((prev) => ({
+                  ...prev,
+                  taxRate: e.target.value,
+                }))
               }
             />
           </Row>

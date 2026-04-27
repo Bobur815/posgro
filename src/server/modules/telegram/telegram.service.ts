@@ -6,7 +6,9 @@ import { SuppliersService } from '../suppliers/suppliers.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { ProductsService } from '../products/products.service';
 import { AnalyticsService } from '../analytics/analytics.service';
+import { StoresService } from '../stores/stores.service';
 import * as fmt from './bot-commands';
+import type { Lang } from './bot-commands';
 
 type UserRole = 'ADMIN' | 'USER' | 'SUPER_ADMIN' | 'SUPPLIER';
 
@@ -17,25 +19,58 @@ interface BotSession {
   supplierId?: string;
   storeId: string;
   name: string;
+  lang: Lang;
 }
 
-// Keyboard button labels (must match exactly in bot.hears())
-const BTN = {
-  ANALYTICS: '📊 Bugungi tahlil / Аналитика',
-  STOCK: '📦 Ombor / Остатки',
-  LOW_STOCK: '🔴 Kam qolganlar / Мало на складе',
-  SUPPLIERS: "👥 Ta'minotchilar / Поставщики",
-  BALANCE: '💰 Mening balansim / Мой баланс',
-  TRANSACTIONS: '📋 Tranzaksiyalar / Транзакции',
-  MY_PRODUCTS: '📦 Mening tovarlarim / Мои товары',
-  WEB: '🌐 Veb-panel / Открыть веб-панель',
+// Keyboard button labels — language-aware, built per user
+const BTN_UZ = {
+  ANALYTICS: "📊 Bugungi tahlil",
+  STOCK: "📦 Ombor qoldiqlari",
+  LOW_STOCK: "🔴 Kam qolganlar",
+  SUPPLIERS: "👥 Ta'minotchilar",
+  STORES: "🏪 Do'konlar",
+  BALANCE: "💰 Mening balansim",
+  TRANSACTIONS: "📋 Tranzaksiyalar",
+  MY_PRODUCTS: "📦 Mening tovarlarim",
+  WEB: "🌐 Veb-panel",
 } as const;
+
+const BTN_RU = {
+  ANALYTICS: "📊 Аналитика",
+  STOCK: "📦 Остатки",
+  LOW_STOCK: "🔴 Мало на складе",
+  SUPPLIERS: "👥 Поставщики",
+  STORES: "🏪 Магазины",
+  BALANCE: "💰 Мой баланс",
+  TRANSACTIONS: "📋 Транзакции",
+  MY_PRODUCTS: "📦 Мои товары",
+  WEB: "🌐 Веб-панель",
+} as const;
+
+// All possible button texts for hears() matching — plain string[] so Telegraf accepts them
+const ALL_BTNS: Record<keyof typeof BTN_UZ, string[]> = {
+  ANALYTICS: [BTN_UZ.ANALYTICS, BTN_RU.ANALYTICS],
+  STOCK: [BTN_UZ.STOCK, BTN_RU.STOCK],
+  LOW_STOCK: [BTN_UZ.LOW_STOCK, BTN_RU.LOW_STOCK],
+  SUPPLIERS: [BTN_UZ.SUPPLIERS, BTN_RU.SUPPLIERS],
+  STORES: [BTN_UZ.STORES, BTN_RU.STORES],
+  BALANCE: [BTN_UZ.BALANCE, BTN_RU.BALANCE],
+  TRANSACTIONS: [BTN_UZ.TRANSACTIONS, BTN_RU.TRANSACTIONS],
+  MY_PRODUCTS: [BTN_UZ.MY_PRODUCTS, BTN_RU.MY_PRODUCTS],
+  WEB: [BTN_UZ.WEB, BTN_RU.WEB],
+};
+
+function btn(key: keyof typeof BTN_UZ, lang: Lang) {
+  return lang === 'uz' ? BTN_UZ[key] : BTN_RU[key];
+}
 
 @Injectable()
 export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TelegramService.name);
   private bot: Telegraf | null = null;
   private readonly sessions = new Map<number, BotSession>();
+  /** Stores chosen language before phone auth completes */
+  private readonly langPrefs = new Map<number, Lang>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -44,6 +79,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     private readonly inventoryService: InventoryService,
     private readonly productsService: ProductsService,
     private readonly analyticsService: AnalyticsService,
+    private readonly storesService: StoresService,
   ) {}
 
   onModuleInit() {
@@ -69,7 +105,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     return [digits, `+${digits}`];
   }
 
-  private async resolveIdentity(rawPhone: string): Promise<BotSession | null> {
+  private async resolveIdentity(rawPhone: string): Promise<Omit<BotSession, 'lang'> | null> {
     for (const phone of this.phoneVariants(rawPhone)) {
       const user = await this.usersService.findByPhoneAnyStore(phone);
       if (user) {
@@ -101,25 +137,32 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
   // ─── Keyboards ────────────────────────────────────────────────────────────
 
-  private kbAskPhone() {
-    return Markup.keyboard([[Markup.button.contactRequest('📱 Raqamni ulashish / Поделиться номером')]])
-      .oneTime()
-      .resize();
+  private kbAskPhone(lang: Lang) {
+    const label = lang === 'uz'
+      ? '📱 Raqamni ulashish'
+      : '📱 Поделиться номером';
+    return Markup.keyboard([[Markup.button.contactRequest(label)]]).oneTime().resize();
   }
 
-  private kbAdmin() {
+  private kbAdmin(lang: Lang) {
     return Markup.keyboard([
-      [BTN.ANALYTICS, BTN.STOCK],
-      [BTN.LOW_STOCK, BTN.SUPPLIERS],
-      [BTN.WEB],
+      [btn('ANALYTICS', lang), btn('STOCK', lang)],
+      [btn('LOW_STOCK', lang), btn('SUPPLIERS', lang)],
+      [btn('WEB', lang)],
     ]).resize();
   }
 
-  private kbSupplier() {
+  private kbSuperAdmin(lang: Lang) {
     return Markup.keyboard([
-      [BTN.BALANCE, BTN.TRANSACTIONS],
-      [BTN.MY_PRODUCTS],
-      [BTN.WEB],
+      [btn('STORES', lang)],
+      [btn('WEB', lang)],
+    ]).resize();
+  }
+
+  private kbSupplier(lang: Lang) {
+    return Markup.keyboard([
+      [btn('BALANCE', lang), btn('TRANSACTIONS', lang)],
+      [btn('MY_PRODUCTS', lang)],
     ]).resize();
   }
 
@@ -128,75 +171,141 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     return Markup.inlineKeyboard([Markup.button.url('🌐 Veb-panel / Открыть веб-панель', url)]);
   }
 
+  private getLang(chatId: number): Lang {
+    return this.sessions.get(chatId)?.lang ?? this.langPrefs.get(chatId) ?? 'ru';
+  }
+
   // ─── Handler Registration ─────────────────────────────────────────────────
 
   private registerHandlers(bot: Telegraf) {
-    // /start — reset session, show welcome, ask for phone
+    // /start — reset session, ask language
     bot.start(async (ctx) => {
       this.sessions.delete(ctx.chat.id);
-      await ctx.reply(fmt.msgWelcome(), this.kbAskPhone());
+      this.langPrefs.delete(ctx.chat.id);
+      await ctx.reply(
+        fmt.msgSelectLanguage(),
+        Markup.inlineKeyboard([
+          Markup.button.callback("O'zbek 🇺🇿", 'lang_uz'),
+          Markup.button.callback('Русский 🇷🇺', 'lang_ru'),
+        ]),
+      );
+    });
+
+    // Language selection callbacks
+    bot.action('lang_uz', async (ctx) => {
+      if (!ctx.chat) return;
+      this.langPrefs.set(ctx.chat.id, 'uz');
+      await ctx.answerCbQuery();
+      await ctx.editMessageText("O'zbek tili tanlandi ✅");
+      setTimeout(() => ctx.deleteMessage().catch(() => {}), 1500);
+      await ctx.reply(fmt.msgAskPhone('uz'), this.kbAskPhone('uz'));
+    });
+
+    bot.action('lang_ru', async (ctx) => {
+      if (!ctx.chat) return;
+      this.langPrefs.set(ctx.chat.id, 'ru');
+      await ctx.answerCbQuery();
+      await ctx.editMessageText('Выбран русский язык ✅');
+      setTimeout(() => ctx.deleteMessage().catch(() => {}), 1500);
+      await ctx.reply(fmt.msgAskPhone('ru'), this.kbAskPhone('ru'));
     });
 
     // Contact shared — identify user
     bot.on('contact', async (ctx) => {
+      const lang = this.getLang(ctx.chat.id);
       const rawPhone = ctx.message.contact.phone_number;
       try {
-        const session = await this.resolveIdentity(rawPhone);
-        if (!session) {
-          await ctx.reply(fmt.msgUnknownPhone(), this.inlineWebButton());
+        const identity = await this.resolveIdentity(rawPhone);
+        if (!identity) {
+          await ctx.reply(fmt.msgUnknownPhone(lang), this.inlineWebButton());
           return;
         }
+        const session: BotSession = { ...identity, lang };
         this.sessions.set(ctx.chat.id, session);
         if (session.role === 'SUPPLIER') {
-          await ctx.reply(fmt.msgSupplierMenu(session.name), this.kbSupplier());
+          await ctx.reply(fmt.msgSupplierMenu(session.name, lang), this.kbSupplier(lang));
+        } else if (session.role === 'SUPER_ADMIN') {
+          await ctx.reply(fmt.msgSuperAdminMenu(session.name, lang), this.kbSuperAdmin(lang));
         } else {
-          await ctx.reply(fmt.msgAdminMenu(session.name), this.kbAdmin());
+          await ctx.reply(fmt.msgAdminMenu(session.name, lang), this.kbAdmin(lang));
         }
       } catch (err) {
         this.logger.error('Contact handler error', err);
-        await ctx.reply(fmt.msgError('auth'));
+        await ctx.reply(fmt.msgError('auth', lang));
       }
     });
 
-    // ── Admin: Today's analytics ────────────────────────────────────────────
-    bot.hears(BTN.ANALYTICS, async (ctx) => {
+    // ── Super Admin: Stores list ───────────────────────────────────────────
+    bot.hears(ALL_BTNS.STORES, async (ctx) => {
       const session = this.sessions.get(ctx.chat.id);
-      if (!session || session.role === 'SUPPLIER') return;
+      if (!session || session.role !== 'SUPER_ADMIN') return;
+      try {
+        const stores = await this.storesService.findAll();
+        await ctx.replyWithMarkdown(
+          fmt.msgStoresList(
+            stores.map((s) => ({
+              name: s.name,
+              plan: s.plan,
+              active: s.active,
+              aiCredits: Number(s.aiCredits),
+              usersCount: s._count.users,
+              productsCount: s._count.products,
+              salesCount: s._count.sales,
+            })),
+            session.lang,
+          ),
+        );
+      } catch (err) {
+        this.logger.error('Stores list error', err);
+        await ctx.reply(fmt.msgError('stores', session.lang));
+      }
+    });
+
+    // ── Admin: Today's analytics ──────────────────────────────────────────
+    bot.hears(ALL_BTNS.ANALYTICS, async (ctx) => {
+      const session = this.sessions.get(ctx.chat.id);
+      if (!session || session.role === 'SUPPLIER' || session.role === 'SUPER_ADMIN') return;
       if (!session.storeId) {
-        await ctx.reply(fmt.msgError('no-store'));
+        await ctx.reply(fmt.msgError('no-store', session.lang));
         return;
       }
       try {
         const data = await this.analyticsService.getDailyAnalytics(session.storeId, new Date());
-        await ctx.replyWithMarkdown(fmt.msgTodayAnalytics(data));
+        await ctx.replyWithMarkdown(fmt.msgTodayAnalytics(data, session.lang));
       } catch (err) {
         this.logger.error('Analytics error', err);
-        await ctx.reply(fmt.msgError('analytics'));
+        await ctx.reply(fmt.msgError('analytics', session.lang));
       }
     });
 
-    // ── Admin: Stock overview ───────────────────────────────────────────────
-    bot.hears(BTN.STOCK, async (ctx) => {
+    // ── Admin: Stock overview ─────────────────────────────────────────────
+    bot.hears(ALL_BTNS.STOCK, async (ctx) => {
       const session = this.sessions.get(ctx.chat.id);
-      if (!session || session.role === 'SUPPLIER') return;
+      if (!session || session.role === 'SUPPLIER' || session.role === 'SUPER_ADMIN') return;
       if (!session.storeId) return;
       try {
         const products = await this.productsService.findAll(session.storeId, { active: true });
         await ctx.replyWithMarkdown(
           fmt.msgStockOverview(
-            products.map((p) => ({ nameRu: p.nameRu, stock: Number(p.stock), unit: p.unit })),
+            products.map((p) => ({
+              nameRu: p.nameRu,
+              nameUz: p.nameUz,
+              stock: Number(p.stock),
+              unit: p.unit,
+            })),
+            session.lang,
           ),
         );
       } catch (err) {
         this.logger.error('Stock overview error', err);
-        await ctx.reply(fmt.msgError('stock'));
+        await ctx.reply(fmt.msgError('stock', session.lang));
       }
     });
 
-    // ── Admin: Low stock ───────────────────────────────────────────────────
-    bot.hears(BTN.LOW_STOCK, async (ctx) => {
+    // ── Admin: Low stock ──────────────────────────────────────────────────
+    bot.hears(ALL_BTNS.LOW_STOCK, async (ctx) => {
       const session = this.sessions.get(ctx.chat.id);
-      if (!session || session.role === 'SUPPLIER') return;
+      if (!session || session.role === 'SUPPLIER' || session.role === 'SUPER_ADMIN') return;
       if (!session.storeId) return;
       try {
         const products = await this.inventoryService.getLowStock(session.storeId);
@@ -204,63 +313,60 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           fmt.msgLowStock(
             products.map((p) => ({
               nameRu: p.nameRu,
+              nameUz: p.nameUz,
               stock: Number(p.stock),
               minStock: Number(p.minStock),
               unit: p.unit,
             })),
+            session.lang,
           ),
         );
       } catch (err) {
         this.logger.error('Low stock error', err);
-        await ctx.reply(fmt.msgError('low-stock'));
+        await ctx.reply(fmt.msgError('low-stock', session.lang));
       }
     });
 
-    // ── Admin: Suppliers list ──────────────────────────────────────────────
-    bot.hears(BTN.SUPPLIERS, async (ctx) => {
+    // ── Admin: Suppliers list ─────────────────────────────────────────────
+    bot.hears(ALL_BTNS.SUPPLIERS, async (ctx) => {
       const session = this.sessions.get(ctx.chat.id);
-      if (!session || session.role === 'SUPPLIER') return;
+      if (!session || session.role === 'SUPPLIER' || session.role === 'SUPER_ADMIN') return;
       if (!session.storeId) return;
       try {
         const suppliers = await this.suppliersService.findAll(session.storeId, { active: true });
         await ctx.replyWithMarkdown(
           fmt.msgSuppliersList(
             suppliers.map((s) => ({ nameRu: s.nameRu, balance: Number(s.balance) })),
+            session.lang,
           ),
         );
       } catch (err) {
         this.logger.error('Suppliers list error', err);
-        await ctx.reply(fmt.msgError('suppliers'));
+        await ctx.reply(fmt.msgError('suppliers', session.lang));
       }
     });
 
-    // ── Supplier: Balance ──────────────────────────────────────────────────
-    bot.hears(BTN.BALANCE, async (ctx) => {
+    // ── Supplier: Balance ─────────────────────────────────────────────────
+    bot.hears(ALL_BTNS.BALANCE, async (ctx) => {
       const session = this.sessions.get(ctx.chat.id);
       if (!session || session.role !== 'SUPPLIER' || !session.supplierId) return;
       try {
-        const supplier = await this.suppliersService.findById(
-          session.supplierId,
-          session.storeId,
-        );
+        const supplier = await this.suppliersService.findById(session.supplierId, session.storeId);
         await ctx.replyWithMarkdown(
-          fmt.msgSupplierBalance(supplier.nameRu, Number(supplier.balance)),
+          fmt.msgSupplierBalance(supplier.nameRu, Number(supplier.balance), session.lang),
         );
       } catch (err) {
         this.logger.error('Supplier balance error', err);
-        await ctx.reply(fmt.msgError('balance'));
+        await ctx.reply(fmt.msgError('balance', session.lang));
       }
     });
 
-    // ── Supplier: Transactions ─────────────────────────────────────────────
-    bot.hears(BTN.TRANSACTIONS, async (ctx) => {
+    // ── Supplier: Transactions ────────────────────────────────────────────
+    bot.hears(ALL_BTNS.TRANSACTIONS, async (ctx) => {
       const session = this.sessions.get(ctx.chat.id);
       if (!session || session.role !== 'SUPPLIER' || !session.supplierId) return;
       try {
-        const supplier = await this.suppliersService.findById(
-          session.supplierId,
-          session.storeId,
-        );
+        const supplier = await this.suppliersService.findById(session.supplierId, session.storeId);
         await ctx.replyWithMarkdown(
           fmt.msgSupplierTransactions(
             supplier.nameRu,
@@ -270,51 +376,53 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
               description: tx.description,
               createdAt: tx.createdAt,
             })),
+            session.lang,
           ),
         );
       } catch (err) {
         this.logger.error('Transactions error', err);
-        await ctx.reply(fmt.msgError('transactions'));
+        await ctx.reply(fmt.msgError('transactions', session.lang));
       }
     });
 
-    // ── Supplier: My products ──────────────────────────────────────────────
-    bot.hears(BTN.MY_PRODUCTS, async (ctx) => {
+    // ── Supplier: My products ─────────────────────────────────────────────
+    bot.hears(ALL_BTNS.MY_PRODUCTS, async (ctx) => {
       const session = this.sessions.get(ctx.chat.id);
       if (!session || session.role !== 'SUPPLIER' || !session.supplierId) return;
       try {
-        const supplier = await this.suppliersService.findById(
-          session.supplierId,
-          session.storeId,
-        );
+        const supplier = await this.suppliersService.findById(session.supplierId, session.storeId);
         const products = (supplier as any).products ?? [];
-        await ctx.replyWithMarkdown(fmt.msgSupplierProducts(products));
+        await ctx.replyWithMarkdown(fmt.msgSupplierProducts(products, session.lang));
       } catch (err) {
         this.logger.error('Supplier products error', err);
-        await ctx.reply(fmt.msgError('products'));
+        await ctx.reply(fmt.msgError('products', session.lang));
       }
     });
 
-    // ── Web panel (both menus) ─────────────────────────────────────────────
-    bot.hears(BTN.WEB, async (ctx) => {
-      await ctx.reply(
-        fmt.t('Quyidagi tugmani bosing:', 'Нажмите кнопку ниже:'),
-        this.inlineWebButton(),
-      );
+    // ── Web panel ─────────────────────────────────────────────────────────
+    bot.hears(ALL_BTNS.WEB, async (ctx) => {
+      const lang = this.getLang(ctx.chat.id);
+      const label = lang === 'uz' ? 'Quyidagi tugmani bosing:' : 'Нажмите кнопку ниже:';
+      await ctx.reply(label, this.inlineWebButton());
     });
 
-    // ── Fallback: no session → ask phone ──────────────────────────────────
+    // ── Fallback: no session → ask language ───────────────────────────────
     bot.on('message', async (ctx) => {
       if (!this.sessions.has(ctx.chat.id)) {
-        await ctx.reply(fmt.msgAskPhone(), this.kbAskPhone());
+        await ctx.reply(
+          fmt.msgSelectLanguage(),
+          Markup.inlineKeyboard([
+            Markup.button.callback("O'zbek 🇺🇿", 'lang_uz'),
+            Markup.button.callback('Русский 🇷🇺', 'lang_ru'),
+          ]),
+        );
       }
     });
   }
 
-  // ─── Public notification helpers (existing callers) ───────────────────────
+  // ─── Public notification helpers ──────────────────────────────────────────
 
   async sendNotification(message: string) {
-    // No-op — bot runs in pull mode (users query the bot, not push)
     this.logger.debug(`[Telegram] Notification suppressed (pull mode): ${message}`);
   }
 

@@ -64,7 +64,7 @@ const ANTHROPIC_RATES = {
 };
 
 export interface ScanResult {
-  tier: 'free' | 'paid' | 'free-fallback';
+  tier: 'free' | 'paid';
   supplierName: string | null;
   receiptDate: string | null;
   items: ScannedItem[];
@@ -97,9 +97,8 @@ export class InvoiceScannerService {
       }
       return { ...data, tier: 'free' };
     } catch (err) {
-      this.logger.warn(`PaddleOCR failed, falling back to Claude: ${(err as Error).message}`);
-      const paid = await this.scanPaid(imageBase64, mimeType);
-      return { ...paid, tier: 'free-fallback' };
+      this.logger.warn(`PaddleOCR failed for free-plan store: ${(err as Error).message}`);
+      throw new Error('OCR service unavailable. Please try again later or upgrade to a paid plan.');
     }
   }
 

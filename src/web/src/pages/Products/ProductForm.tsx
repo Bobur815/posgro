@@ -212,6 +212,7 @@ interface ProductFormProps {
     cost?: number;
     stock?: number;
     internalCode?: string;
+    groupCode?: string;
   };
   onClose: () => void;
   onSuccess: () => void;
@@ -244,6 +245,7 @@ export function ProductForm({
     null,
   );
   const isMobile = window.matchMedia("(pointer: coarse)").matches;
+  const isBulkWeighted = initialData?.groupCode === "019";
 
   const [formData, setFormData] = useState({
     barcode: "",
@@ -253,7 +255,7 @@ export function ProductForm({
     cost: initialData?.cost ? String(initialData.cost) : "",
     stock: initialData?.stock ? String(initialData.stock) : "0",
     minStock: "0",
-    unit: "шт" as ProductUnit,
+    unit: isBulkWeighted ? "кг" as ProductUnit : "шт" as ProductUnit,
     categoryId: "",
     supplierId: "",
     productionDate: "",
@@ -262,10 +264,9 @@ export function ProductForm({
     isOnPromotion: false,
     active: true,
     mxik: initialData?.mxik || "",
-    productType: "REGULAR" as ProductType,
+    productType: isBulkWeighted ? "BULK_WEIGHTED" as ProductType : "REGULAR" as ProductType,
     internalCode: initialData?.internalCode || "",
   });
-
   const [existingProduct, setExistingProduct] = useState<Product | null>(null);
   const [showArrivalModal, setShowArrivalModal] = useState(false);
   const [arrivalData, setArrivalData] = useState({

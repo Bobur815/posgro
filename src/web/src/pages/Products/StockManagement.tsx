@@ -113,7 +113,9 @@ const SubmitButton = styled.button`
   justify-content: center;
   flex-shrink: 0;
   min-width: 46px;
-  transition: background-color 0.2s, transform 0.1s;
+  transition:
+    background-color 0.2s,
+    transform 0.1s;
   &:hover {
     opacity: 0.9;
   }
@@ -408,9 +410,7 @@ export function StockManagement() {
   return (
     <Container>
       <Header>
-        <Title>
-          {t("inventory.stockManagement")}
-        </Title>
+        <Title>{t("inventory.stockManagement")}</Title>
         {user?.role === "ADMIN" && (
           <Button size="medium" onClick={() => setShowReceiptScan(true)}>
             <ScanLine size={24} />
@@ -435,16 +435,14 @@ export function StockManagement() {
           )}
 
           <Button
-          size="medium"
-          style={{ padding: "9px 12px" }}
-          onClick={() => setIsFilterOpen(!isFilterOpen)}
-        >
-          {t("filters.filters")}{" "}
-          {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
-        </Button>
+            size="medium"
+            style={{ padding: "9px 12px" }}
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+          >
+            {t("filters.filters")}{" "}
+            {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
+          </Button>
         </SearchWrapper>
-
-        
 
         <SearchField>
           <SearchLabel>{t("pos.barcode")}</SearchLabel>

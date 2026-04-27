@@ -58,7 +58,7 @@ export class InvoiceScannerController {
   @ApiOperation({ summary: 'Scan an invoice image/PDF with OCR (tier based on store plan)' })
   async scan(
     @Body() body: ScanInvoiceDto,
-    @CurrentUser('storeId') storeId: string,
+    @CurrentStore() storeId: string,
   ) {
     const store = storeId
       ? await this.prisma.store.findUnique({
@@ -73,9 +73,10 @@ export class InvoiceScannerController {
       ? await this.scannerService.scanPaid(body.imageBase64, body.mimeType)
       : await this.scannerService.scanFree(body.imageBase64, body.mimeType);
 
-    // For paid plan: deduct billed cost (Anthropic cost × 1.3) from credit balance
-    if (plan === 'paid' && storeId && result.cost_usd) {
-      const billedAmount = result.cost_usd * 1.3;
+    // For paid plan: deduct billed cost (Anthropic cost × 1.3) from credit balance.
+    // Charge at scan time regardless of whether the user completes the flow.
+    if (plan === 'paid' && storeId) {
+      const billedAmount = (result.cost_usd ?? 0) * 1.3;
       const updated = await this.prisma.store.update({
         where: { id: storeId },
         data: { aiCredits: { decrement: billedAmount } },
@@ -111,14 +112,20 @@ export class InvoiceScannerController {
         return { scannedName: item.name, matchedProductId: String(match.id), matchedProductNameRu: match.nameRu, matchedProductNameUz: match.nameUz, confidence: 'exact' as const };
       }
 
-      // Partial contains match
-      match = products.find(
-        (p) =>
-          p.nameRu.toLowerCase().includes(needle) ||
-          p.nameUz.toLowerCase().includes(needle) ||
-          needle.includes(p.nameRu.toLowerCase()) ||
-          needle.includes(p.nameUz.toLowerCase()),
-      );
+      // Partial contains match — both sides must be at least 4 chars to avoid
+      // false positives from single-letter or very short product names.
+      const MIN_LEN = 4;
+      if (needle.length >= MIN_LEN) {
+        match = products.find((p) => {
+          const pRu = p.nameRu.toLowerCase();
+          const pUz = p.nameUz.toLowerCase();
+          if (pRu.length >= MIN_LEN && needle.includes(pRu)) return true;
+          if (pUz.length >= MIN_LEN && needle.includes(pUz)) return true;
+          if (pRu.length >= MIN_LEN && pRu.includes(needle)) return true;
+          if (pUz.length >= MIN_LEN && pUz.includes(needle)) return true;
+          return false;
+        });
+      }
       if (match) {
         return { scannedName: item.name, matchedProductId: String(match.id), matchedProductNameRu: match.nameRu, matchedProductNameUz: match.nameUz, confidence: 'medium' as const };
       }

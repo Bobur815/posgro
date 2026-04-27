@@ -48,7 +48,7 @@ export class AnalyticsService {
     // Sales by hour
     const salesByHour = sales.reduce(
       (acc: Record<number, { count: number; revenue: number }>, sale: SaleWithItems) => {
-        const hour = new Date(sale.createdAt).getHours();
+        const hour = new Date(new Date(sale.createdAt).getTime() + 5 * 60 * 60 * 1000).getUTCHours();
         if (!acc[hour]) {
           acc[hour] = { count: 0, revenue: 0 };
         }
@@ -157,13 +157,13 @@ export class AnalyticsService {
       `,
       this.prisma.$queryRaw<{ categoryRu: string; categoryUz: string; revenue: number; quantity: number }[]>`
         SELECT
-          COALESCE(c.name_ru, 'Uncategorized') AS "categoryRu",
-          COALESCE(c.name_uz, 'Uncategorized') AS "categoryUz",
+          COALESCE(c.name_ru, 'Без категории') AS "categoryRu",
+          COALESCE(c.name_uz, 'Kategoriyasiz') AS "categoryUz",
           SUM(si.subtotal)::float AS revenue,
           SUM(si.quantity)::float AS quantity
         FROM sale_items si
         JOIN sales s ON si.sale_id = s.id
-        LEFT JOIN products p ON si.product_id = p.id
+        JOIN products p ON si.product_id = p.id
         LEFT JOIN categories c ON p.category_id = c.id
         WHERE s.store_id = ${storeId}
           AND s.created_at >= ${startDate}
@@ -173,14 +173,14 @@ export class AnalyticsService {
       `,
       this.prisma.$queryRaw<{ hour: number; revenue: number; count: number }[]>`
         SELECT
-          EXTRACT(HOUR FROM created_at)::int AS hour,
+          EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Tashkent')::int AS hour,
           SUM(final_amount)::float AS revenue,
           COUNT(*)::int AS count
         FROM sales
         WHERE store_id = ${storeId}
           AND created_at >= ${startDate}
           AND created_at <= ${endDate}
-        GROUP BY EXTRACT(HOUR FROM created_at)
+        GROUP BY EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Tashkent')
         ORDER BY hour
       `,
       this.prisma.$queryRaw<{ name: string; quantity: number; revenue: number }[]>`
@@ -211,13 +211,13 @@ export class AnalyticsService {
       `,
       this.prisma.$queryRaw<{ categoryRu: string; categoryUz: string; revenue: number; cost: number }[]>`
         SELECT
-          COALESCE(c.name_ru, 'Uncategorized') AS "categoryRu",
-          COALESCE(c.name_uz, 'Uncategorized') AS "categoryUz",
+          COALESCE(c.name_ru, 'Без категории') AS "categoryRu",
+          COALESCE(c.name_uz, 'Kategoriyasiz') AS "categoryUz",
           SUM(si.subtotal)::float AS revenue,
           SUM(si.quantity * COALESCE(p.cost, 0))::float AS cost
         FROM sale_items si
         JOIN sales s ON si.sale_id = s.id
-        LEFT JOIN products p ON si.product_id = p.id
+        JOIN products p ON si.product_id = p.id
         LEFT JOIN categories c ON p.category_id = c.id
         WHERE s.store_id = ${storeId}
           AND s.created_at >= ${startDate}

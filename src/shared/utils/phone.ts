@@ -36,3 +36,10 @@ export function phoneToDigits(phone: string): string {
   const d = digitsOnly(phone);
   return d.startsWith('998') ? d.slice(3) : d;
 }
+
+/** Normalize any phone input to 12-digit storage format: 998XXXXXXXXX (no +, no spaces). */
+export function normalizeUzPhone(phone: string): string {
+  const d = digitsOnly(phone);
+  const subscriber = d.startsWith('998') ? d.slice(3) : d;
+  return '998' + subscriber.slice(0, 9);
+}

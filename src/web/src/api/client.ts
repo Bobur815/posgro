@@ -214,7 +214,7 @@ export const suppliers = {
     return data;
   },
   update: async (id: string, supplierData: unknown) => {
-    const { data } = await axiosInstance.put(`/suppliers/${id}`, supplierData);
+    const { data } = await axiosInstance.patch(`/suppliers/${id}`, supplierData);
     return data;
   },
   delete: async (id: string) => {
@@ -445,6 +445,14 @@ export const analytics = {
 
 // ─── MXIK ────────────────────────────────────────────────────────────────────
 
+export interface MxikScanInfo {
+  name: string;
+  brandName: string | null;
+  attributeName: string | null;
+  unitsName: string | null;
+  groupCode: string | null;
+}
+
 export const mxik = {
   lookupCode: async (code: string): Promise<{ code: string; name: string; nameRu: string; packageCode: string }> => {
     const { data } = await axiosInstance.get(`/mxik/code/${encodeURIComponent(code)}`);
@@ -469,6 +477,38 @@ export const mxik = {
       nameRu: brand + (d.attributeNameRu ?? d.subPositionNameRu),
       packageCode: String(d.packageNames?.[0]?.code ?? '796'),
     };
+  },
+  // Batch MXIK lookup via by-params endpoint (called directly from browser — VPS is geo-blocked)
+  lookupBatch: async (codes: string[]): Promise<Record<string, MxikScanInfo>> => {
+    const TASNIF = 'https://tasnif.soliq.uz/api/cls-api';
+    const results = await Promise.allSettled(
+      codes.map(async (code) => {
+        const res = await fetch(
+          `${TASNIF}/mxik/search/by-params?mxikCode=${encodeURIComponent(code)}&size=1&page=0&lang=uz_cyrl`,
+          { signal: AbortSignal.timeout(6000) },
+        );
+        const json = await res.json() as { success: boolean; data: Array<{ mxikCode: string; name: string; brandName: string; attributeName: string; unitsName: string; groupCode: string }> };
+        if (!json.success || !json.data?.length) return { code, info: null };
+        const d = json.data[0];
+        return {
+          code,
+          info: {
+            name: d.name,
+            brandName: d.brandName || null,
+            attributeName: d.attributeName || null,
+            unitsName: d.unitsName || null,
+            groupCode: d.groupCode || null,
+          } satisfies MxikScanInfo,
+        };
+      }),
+    );
+    const map: Record<string, MxikScanInfo> = {};
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value.info) {
+        map[r.value.code] = r.value.info;
+      }
+    }
+    return map;
   },
 };
 

@@ -8,7 +8,7 @@ import { UzbekPhoneInput } from "@components/common/UzbekPhoneInput";
 import { useSuppliers } from "../../hooks/useSuppliers";
 import { useToast } from "@context/ToastContext";
 import { convertUzbekText } from "@shared/utils/transliterator";
-import { digitsOnly, formatUzPhone } from "@shared/utils/phone";
+import { normalizeUzPhone, phoneToDigits } from "@shared/utils/phone";
 
 const Form = styled.form`
   display: flex;
@@ -56,7 +56,7 @@ export function SupplierForm({ supplierId, onClose, onSuccess }: SupplierFormPro
       setFormData({
         nameRu: supplier.nameRu,
         nameUz: supplier.nameUz,
-        phoneDigits: supplier.phone ? digitsOnly(supplier.phone) : "",
+        phoneDigits: supplier.phone ? phoneToDigits(supplier.phone) : "",
         balance: String(supplier.balance || 0),
         address: supplier.address || "",
       });
@@ -69,7 +69,7 @@ export function SupplierForm({ supplierId, onClose, onSuccess }: SupplierFormPro
     const baseData = {
       nameRu: formData.nameRu,
       nameUz: formData.nameUz,
-      phone: formData.phoneDigits ? formatUzPhone(formData.phoneDigits) : undefined,
+      phone: formData.phoneDigits ? normalizeUzPhone(formData.phoneDigits) : undefined,
       address: formData.address || undefined,
     };
 

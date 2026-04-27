@@ -5,9 +5,10 @@ import { InventoryModule } from '../inventory/inventory.module';
 import { UsersModule } from '../users/users.module';
 import { SuppliersModule } from '../suppliers/suppliers.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
+import { StoresModule } from '../stores/stores.module';
 
 @Module({
-  imports: [ProductsModule, InventoryModule, UsersModule, SuppliersModule, AnalyticsModule],
+  imports: [ProductsModule, InventoryModule, UsersModule, SuppliersModule, AnalyticsModule, StoresModule],
   providers: [TelegramService],
   exports: [TelegramService],
 })
