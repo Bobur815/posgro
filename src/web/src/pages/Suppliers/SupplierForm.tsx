@@ -24,11 +24,12 @@ const Actions = styled.div`
 
 interface SupplierFormProps {
   supplierId?: string;
+  initialName?: string;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export function SupplierForm({ supplierId, onClose, onSuccess }: SupplierFormProps) {
+export function SupplierForm({ supplierId, initialName, onClose, onSuccess }: SupplierFormProps) {
   const { t } = useTranslation();
   const toast = useToast();
   const isEdit = Boolean(supplierId);
@@ -36,8 +37,8 @@ export function SupplierForm({ supplierId, onClose, onSuccess }: SupplierFormPro
   const { getById, createSupplier, updateSupplier, isLoading, error } = useSuppliers();
 
   const [formData, setFormData] = useState({
-    nameRu: "",
-    nameUz: "",
+    nameRu: initialName ?? "",
+    nameUz: initialName ?? "",
     phoneDigits: "",
     balance: "0",
     address: "",

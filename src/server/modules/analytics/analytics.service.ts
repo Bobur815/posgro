@@ -173,14 +173,14 @@ export class AnalyticsService {
       `,
       this.prisma.$queryRaw<{ hour: number; revenue: number; count: number }[]>`
         SELECT
-          EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Tashkent')::int AS hour,
+          EXTRACT(HOUR FROM created_at + INTERVAL '5 hours')::int AS hour,
           SUM(final_amount)::float AS revenue,
           COUNT(*)::int AS count
         FROM sales
         WHERE store_id = ${storeId}
           AND created_at >= ${startDate}
           AND created_at <= ${endDate}
-        GROUP BY EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Tashkent')
+        GROUP BY EXTRACT(HOUR FROM created_at + INTERVAL '5 hours')
         ORDER BY hour
       `,
       this.prisma.$queryRaw<{ name: string; quantity: number; revenue: number }[]>`
@@ -235,8 +235,8 @@ export class AnalyticsService {
         SELECT
           COUNT(*)::int AS "totalSales",
           SUM(final_amount)::float AS "totalRevenue",
-          COUNT(*) FILTER (WHERE payment_method = 'CASH')::int AS "cashSales",
-          COUNT(*) FILTER (WHERE payment_method = 'CARD')::int AS "cardSales",
+          COUNT(*) FILTER (WHERE LOWER(payment_method) = 'cash')::int AS "cashSales",
+          COUNT(*) FILTER (WHERE LOWER(payment_method) = 'card')::int AS "cardSales",
           CASE WHEN COUNT(*) > 0 THEN (SUM(final_amount) / COUNT(*))::float ELSE 0 END AS "averageTransaction"
         FROM sales
         WHERE store_id = ${storeId}

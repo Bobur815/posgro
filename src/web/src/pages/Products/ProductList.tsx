@@ -56,7 +56,9 @@ const FAB = styled.button`
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   animation: ${pulse} 2s ease-out infinite;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 
   &:hover {
     transform: scale(1.1);
@@ -147,7 +149,9 @@ export function ProductList() {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && mobileCount < products.length) {
-          setMobileCount((c) => Math.min(c + MOBILE_PAGE_SIZE, products.length));
+          setMobileCount((c) =>
+            Math.min(c + MOBILE_PAGE_SIZE, products.length),
+          );
         }
       },
       { rootMargin: "150px" },
@@ -157,7 +161,7 @@ export function ProductList() {
   }, [mobileCount, products.length]);
 
   useEffect(() => {
-    loadProducts();
+    loadProducts(filters);
     loadCategories();
     loadSuppliers();
   }, [loadProducts, loadCategories, loadSuppliers]);
@@ -372,7 +376,12 @@ export function ProductList() {
                 value: product.id,
               },
               ...(product.internalCode
-                ? [{ label: t("products.internalCode") + " (PLU)", value: product.internalCode }]
+                ? [
+                    {
+                      label: t("products.internalCode") + " (PLU)",
+                      value: product.internalCode,
+                    },
+                  ]
                 : []),
               {
                 label: t("products.price"),

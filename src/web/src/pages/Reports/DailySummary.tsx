@@ -5,6 +5,8 @@ import { useSales } from "../../hooks/useSales";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { Modal } from "@components/common/Modal";
 import { Button } from "@renderer/components/common/Button";
+import { Pagination } from "@components/common/Pagination";
+import { usePagination } from "../../hooks/usePagination";
 import { Eraser } from "lucide-react";
 
 const Container = styled.div`
@@ -307,6 +309,17 @@ export function DailySummary() {
     [sales, paymentFilter],
   );
 
+  const {
+    pageData: pagedSales,
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    pageSizeOptions,
+    goToPage,
+    setPageSize,
+  } = usePagination(filteredSales);
+
   const summary = useMemo(() => {
     if (!filteredSales.length) return null;
     const totalRevenue = filteredSales.reduce(
@@ -362,6 +375,7 @@ export function DailySummary() {
           <FilterLabel>{t("reports.startDate")}</FilterLabel>
           <DateInput
             type="date"
+            lang={i18n.language}
             value={startDate}
             onKeyDown={(e) => e.preventDefault()}
             onChange={(e) => setStartDate(e.target.value)}
@@ -371,6 +385,7 @@ export function DailySummary() {
           <FilterLabel>{t("reports.endDate")}</FilterLabel>
           <DateInput
             type="date"
+            lang={i18n.language}
             value={endDate}
             onKeyDown={(e) => e.preventDefault()}
             onChange={(e) => setEndDate(e.target.value)}
@@ -461,7 +476,7 @@ export function DailySummary() {
               </tr>
             </thead>
             <tbody>
-              {filteredSales.map((sale) => (
+              {pagedSales.map((sale) => (
                 <Tr key={sale.id}>
                   <Td style={{ whiteSpace: "nowrap" }}>
                     {formatDateTime(sale.createdAt)}
@@ -505,6 +520,17 @@ export function DailySummary() {
               ))}
             </tbody>
           </Table>
+        )}
+        {filteredSales.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            pageSizeOptions={pageSizeOptions}
+            onPageChange={goToPage}
+            onPageSizeChange={setPageSize}
+          />
         )}
       </TableCard>
 

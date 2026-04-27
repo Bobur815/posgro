@@ -1,5 +1,7 @@
 {
   "common": {
+    "store":"Do'kon",
+    "storeId":"Do'kon ID",
     "noResults":"Hech narsa topilmadi",
     "save": "Saqlash",
     "cancel": "Bekor qilish",
@@ -31,6 +33,7 @@
     "exit": "Chiqish"
   },
   "auth": {
+    "rememberMe": "Meni eslab qol",
     "showPassword": "Parolni ko'rsatish",
     "hidePassword": "Parolni yashirish",
     "login": "Kirish",
@@ -609,6 +612,7 @@
     "cameraError": "Kameraga kirishda xatolik"
   },
   "receiptScan": {
+    "supplierNotFound": "Chekdagi yetkazib beruvchi topilmadi",
     "scanReceipt": "Chekni skanerlash",
     "uploadImage": "Faylni yuklash",
     "uploadDescription": "Yetkazib beruvchi cheki rasmini yoki PDF-fakturasini tanlang, yoki buferdan joylashtiring (Ctrl+V)",

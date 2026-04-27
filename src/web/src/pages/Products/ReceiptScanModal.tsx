@@ -14,6 +14,7 @@ import {
 import { Modal } from "@components/common/Modal";
 import { Button } from "@components/common/Button";
 import { ProductForm } from "./ProductForm";
+import { SupplierForm } from "../Suppliers/SupplierForm";
 import {
   Supplier,
   SupplierPaymentMethod,
@@ -29,6 +30,7 @@ import {
   receipt as receiptApi,
   inventory,
   products as productsApi,
+  suppliers as suppliersApi,
   mxik as mxikApi,
   MxikScanInfo,
 } from "../../api/client";
@@ -477,7 +479,7 @@ export function ReceiptScanModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // TODO: revert to "upload" before shipping
-  const [step, setStep] = useState<Step>("review");
+  const [step, setStep] = useState<Step>("upload");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [imageMimeType, setImageMimeType] = useState<string>("image/jpeg");
@@ -487,58 +489,7 @@ export function ReceiptScanModal({
 
   const [scanResult, setScanResult] = useState<ScannedReceiptData | null>(null);
   // TODO: revert to [] before shipping
-  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([
-    {
-      scannedName: "Coca Cola PET 0.5L",
-      mxik: "02202002001010007",
-      mxikInfo: { name: "Coca-Cola", brandName: "Coca-Cola", attributeName: "0.5L", unitsName: "шт", groupCode: "022" },
-      productId: "",
-      quantity: 96,
-      unitCost: 5859,
-      confidence: "none",
-      skip: false,
-    },
-    {
-      scannedName: "Lipton Ice Tea Peach 0.5L",
-      mxik: "02202001001010001",
-      mxikInfo: { name: "Lipton Ice Tea", brandName: "Lipton", attributeName: "Peach 0.5L", unitsName: "шт", groupCode: "022" },
-      productId: "",
-      quantity: 24,
-      unitCost: 6500,
-      confidence: "none",
-      skip: false,
-    },
-    {
-      scannedName: "Картошка белая кг",
-      mxik: "01905012001000000",
-      mxikInfo: { name: "Картошка", brandName: null, attributeName: "белая", unitsName: "кг", groupCode: "019" },
-      productId: "",
-      quantity: 50,
-      unitCost: 4500,
-      confidence: "none",
-      skip: false,
-    },
-    {
-      scannedName: "Unknown XYZ Product",
-      mxik: null,
-      mxikInfo: undefined,
-      productId: "",
-      quantity: 10,
-      unitCost: 15000,
-      confidence: "none",
-      skip: false,
-    },
-    {
-      scannedName: "Fanta Orange 1L",
-      mxik: "02202002001010010",
-      mxikInfo: { name: "Fanta", brandName: "Fanta", attributeName: "Orange 1L", unitsName: "шт", groupCode: "022" },
-      productId: "",
-      quantity: 12,
-      unitCost: 8500,
-      confidence: "none",
-      skip: true,
-    },
-  ]);
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [supplierId, setSupplierId] = useState("");
   const [paymentMethod, setPaymentMethod] =
     useState<SupplierPaymentMethod>("CASH");
@@ -549,6 +500,12 @@ export function ReceiptScanModal({
 
   const [localProducts, setLocalProducts] = useState<Product[]>(products);
   const [addingForRowIdx, setAddingForRowIdx] = useState<number | null>(null);
+
+  const [localSuppliers, setLocalSuppliers] = useState<Supplier[]>(suppliers);
+  const [unmatchedSupplierName, setUnmatchedSupplierName] = useState<string | null>(null);
+  const [addingSupplier, setAddingSupplier] = useState(false);
+  const [chargedUzs, setChargedUzs] = useState<number | null>(null);
+  const [balanceUzs, setBalanceUzs] = useState<number | null>(null);
 
   useEffect(() => {
     productsApi.getAll()
@@ -613,6 +570,24 @@ export function ReceiptScanModal({
         p.nameRu.toLowerCase().includes(filter) ||
         p.nameUz.toLowerCase().includes(filter),
     );
+  };
+
+  const handleSupplierCreated = async () => {
+    const updated = (await suppliersApi.getAll()) as Supplier[];
+    setLocalSuppliers(updated);
+    if (unmatchedSupplierName) {
+      const needle = unmatchedSupplierName.toLowerCase();
+      const found = updated.find(
+        (s) =>
+          s.nameRu.toLowerCase().includes(needle) ||
+          s.nameUz.toLowerCase().includes(needle) ||
+          needle.includes(s.nameRu.toLowerCase()) ||
+          needle.includes(s.nameUz.toLowerCase()),
+      );
+      if (found) setSupplierId(found.id);
+    }
+    setAddingSupplier(false);
+    setUnmatchedSupplierName(null);
   };
 
   const handleProductCreated = async () => {
@@ -754,6 +729,8 @@ export function ReceiptScanModal({
       }
 
       setScanResult(result);
+      if (result.charged_uzs != null) setChargedUzs(result.charged_uzs);
+      if (result.balance_uzs != null) setBalanceUzs(result.balance_uzs);
       setStep("matching");
 
       const matchItems = result.items.map((item) => ({
@@ -792,6 +769,8 @@ export function ReceiptScanModal({
         });
         if (matchedSupplier) {
           setSupplierId(matchedSupplier.id);
+        } else {
+          setUnmatchedSupplierName(result.supplierName);
         }
       }
 
@@ -964,6 +943,29 @@ export function ReceiptScanModal({
         {/* ── Review ── */}
         {step === "review" && (
           <>
+            {chargedUzs != null && (
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 12,
+                padding: "6px 10px",
+                borderRadius: 6,
+                background: "rgba(0,0,0,0.04)",
+                fontSize: 12,
+                color: "var(--color-text-secondary, #888)",
+              }}>
+                <CheckCircle size={13} style={{ flexShrink: 0, color: "#4caf50" }} />
+                <span>
+                  {t("receiptScan.scanCharged") || "Списано за сканирование"}:{" "}
+                  <strong>{chargedUzs.toLocaleString()} so'm</strong>
+                  {balanceUzs != null && (
+                    <> &nbsp;·&nbsp; {t("receiptScan.balance") || "Баланс"}:{" "}
+                    <strong>{Math.round(balanceUzs).toLocaleString()} so'm</strong></>
+                  )}
+                </span>
+              </div>
+            )}
             {scanResult?.supplierName && (
               <StepIndicator>
                 <AlertCircle size={16} />
@@ -980,12 +982,31 @@ export function ReceiptScanModal({
                   onChange={(e) => setSupplierId(e.target.value)}
                 >
                   <option value="">{t("products.noSupplier")}</option>
-                  {suppliers.map((s) => (
+                  {localSuppliers.map((s) => (
                     <option key={s.id} value={s.id}>
                       {i18n.language === "uz" ? s.nameUz : s.nameRu}
                     </option>
                   ))}
                 </FullSelect>
+                {unmatchedSupplierName && !supplierId && (
+                  <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                    <AlertCircle size={13} style={{ color: "orange", flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, color: "orange" }}>
+                      &ldquo;{unmatchedSupplierName}&rdquo;{" "}
+                      {t("receiptScan.supplierNotFound") || "не найден в базе."}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="small"
+                      style={{ flexShrink: 0 }}
+                      onClick={() => setAddingSupplier(true)}
+                    >
+                      <PlusCircle size={13} />
+                      {t("suppliers.add") || "Добавить"}
+                    </Button>
+                  </div>
+                )}
               </FormGroup>
               {supplierId && (
                 <FormGroup>
@@ -1110,7 +1131,7 @@ export function ReceiptScanModal({
                           </SearchDropdown>
                         )}
                       </SearchWrapper>
-                      {!item.productId && !item.skip && (
+                      {!item.skip && (
                         <Button
                           type="button"
                           variant="secondary"
@@ -1246,6 +1267,14 @@ export function ReceiptScanModal({
             />
           );
         })()}
+
+      {addingSupplier && (
+        <SupplierForm
+          initialName={unmatchedSupplierName ?? undefined}
+          onClose={() => setAddingSupplier(false)}
+          onSuccess={handleSupplierCreated}
+        />
+      )}
     </>
   );
 }

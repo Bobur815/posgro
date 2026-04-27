@@ -243,7 +243,7 @@ export function Analytics() {
   const { t, i18n } = useTranslation();
   const theme = useTheme();
 
-  const [preset, setPreset] = useState<DatePreset>("today");
+  const [preset, setPreset] = useState<DatePreset>("monthStart");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [data, setData] = useState<AnalyticsData | null>(null);
@@ -279,7 +279,7 @@ export function Analytics() {
       setIsLoading(false);
     }
   }, [preset, customStart, customEnd]);
-
+  
   useEffect(() => {
     fetchData();
   }, [fetchData]);

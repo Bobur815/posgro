@@ -10,6 +10,10 @@ export interface ScannedReceiptData {
   supplierName?: string;
   receiptDate?: string;
   items: ScannedReceiptItem[];
+  tier?: 'free' | 'paid';
+  cost_usd?: number;
+  charged_uzs?: number;
+  balance_uzs?: number;
 }
 
 export interface ProductMatch {

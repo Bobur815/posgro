@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from './store/auth-store';
 import { Layout } from './components/layout/Layout';
 import { LoginPage } from './pages/Login/LoginPage';
@@ -48,10 +49,15 @@ function IndexRedirect() {
 
 export function App() {
   const { restoreSession } = useAuthStore();
+  const { i18n } = useTranslation();
 
   useEffect(() => {
     restoreSession();
   }, [restoreSession]);
+
+  useEffect(() => {
+    document.documentElement.lang = i18n.language;
+  }, [i18n.language]);
 
   const basename = '/web';
 

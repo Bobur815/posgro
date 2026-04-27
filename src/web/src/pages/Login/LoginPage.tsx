@@ -59,6 +59,16 @@ const ErrorMessage = styled.div`
   border-radius: ${({ theme }) => theme.borderRadius};
 `;
 
+const RememberRow = styled.label`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.sm};
+  font-size: 14px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  cursor: pointer;
+  user-select: none;
+`;
+
 const LangRow = styled.div`
   display: flex;
   justify-content: center;
@@ -105,6 +115,7 @@ const EyeButton = styled.button`
 `;
 
 const ENV_STORE_ID = import.meta.env.VITE_STORE_ID as string | undefined;
+const SAVED_KEY = "login_saved";
 
 export function LoginPage() {
   const { t, i18n } = useTranslation();
@@ -119,10 +130,24 @@ export function LoginPage() {
     ENV_STORE_ID ?? localStorage.getItem("last_store_id") ?? ""
   );
   const [showStoreId, setShowStoreId] = useState(!ENV_STORE_ID && !localStorage.getItem("last_store_id"));
+  const [rememberMe, setRememberMe] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     clearError();
+    const raw = localStorage.getItem(SAVED_KEY);
+    if (raw) {
+      try {
+        const saved = JSON.parse(raw) as { phone?: string; password?: string; storeId?: string };
+        if (saved.phone) setPhoneDigits(saved.phone);
+        if (saved.password) setPassword(saved.password);
+        if (saved.storeId && !ENV_STORE_ID) {
+          setStoreId(saved.storeId);
+          setShowStoreId(false);
+        }
+        setRememberMe(true);
+      } catch { /* ignore */ }
+    }
   }, [clearError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -132,6 +157,11 @@ export function LoginPage() {
     const fullPhone = "998" + phoneDigits;
     const success = await login(fullPhone, password, storeId || undefined);
     if (success) {
+      if (rememberMe) {
+        localStorage.setItem(SAVED_KEY, JSON.stringify({ phone: phoneDigits, password, storeId: storeId || undefined }));
+      } else {
+        localStorage.removeItem(SAVED_KEY);
+      }
       if (storeId) localStorage.setItem("last_store_id", storeId);
       navigate("/");
     }
@@ -185,18 +215,27 @@ export function LoginPage() {
                   onClick={() => setShowStoreId(true)}
                   style={{ background: "none", border: "none", color: "inherit", opacity: 0.5, fontSize: 13, cursor: "pointer", textAlign: "left", padding: 0 }}
                 >
-                  {storeId ? `Store: ${storeId}` : "+ Enter store ID"}
+                  {storeId ? `${t("common.store")}: ${storeId}` : t("auth.enterStoreId") || "+ Enter store ID"}
                 </button>
               ) : (
                 <Input
-                  label="ID"
+                  label={t("common.storeId")}
                   value={storeId}
                   onChange={(e) => setStoreId(e.target.value)}
-                  placeholder="e.g. 1234"
+                  placeholder="XXXX"
                 />
               )}
             </>
           )}
+
+          <RememberRow>
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+            />
+            {t("auth.rememberMe") || "Запомнить меня"}
+          </RememberRow>
 
           {error && (
             <ErrorMessage>{t(error, { defaultValue: t("auth.errors.login_failed") })}</ErrorMessage>

@@ -1,5 +1,7 @@
 {
   "common": {
+    "store": "Магазин",
+    "storeId": "ID магазина",
     "noResults": "Ничего не найдено",
     "save": "Сохранить",
     "cancel": "Отмена",
@@ -31,6 +33,7 @@
     "exit": "Выйти"
   },
   "auth": {
+    "rememberMe": "Запомнить меня",
     "showPassword": "Показать пароль",
     "hidePassword": "Скрыть пароль",
     "login": "Войти",
@@ -608,6 +611,7 @@
     "drawerFailed": "Не удалось открыть ящик"
   },
   "receiptScan": {
+    "supplierNotFound": "Поставщик не найден",
     "scanReceipt": "Сканировать чек",
     "uploadImage": "Загрузить файл",
     "uploadDescription": "Выберите фото чека или PDF-накладную от поставщика, либо вставьте из буфера (Ctrl+V)",

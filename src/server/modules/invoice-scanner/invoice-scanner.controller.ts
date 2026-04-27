@@ -73,16 +73,17 @@ export class InvoiceScannerController {
       ? await this.scannerService.scanPaid(body.imageBase64, body.mimeType)
       : await this.scannerService.scanFree(body.imageBase64, body.mimeType);
 
-    // For paid plan: deduct billed cost (Anthropic cost × 1.3) from credit balance.
-    // Charge at scan time regardless of whether the user completes the flow.
+    // For paid plan: deduct billed cost (Anthropic cost × 1.3, converted to so'm) from credit balance.
+    // aiCredits is stored in UZS. Charge at scan time regardless of whether the user completes the flow.
     if (plan === 'paid' && storeId) {
-      const billedAmount = (result.cost_usd ?? 0) * 1.3;
+      const UZS_PER_USD = 12_700;
+      const chargedUzs = Math.round((result.cost_usd ?? 0) * 1.3 * UZS_PER_USD);
       const updated = await this.prisma.store.update({
         where: { id: storeId },
-        data: { aiCredits: { decrement: billedAmount } },
+        data: { aiCredits: { decrement: chargedUzs } },
         select: { aiCredits: true },
       });
-      return { ...result, balance_uzs: Number(updated.aiCredits) };
+      return { ...result, charged_uzs: chargedUzs, balance_uzs: Number(updated.aiCredits) };
     }
 
     return result;
