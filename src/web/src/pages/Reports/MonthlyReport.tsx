@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import styled from 'styled-components';
-import { Button } from '@components/common/Button';
-import { Pagination } from '@components/common/Pagination';
-import { usePagination } from '../../hooks/usePagination';
-import { useSales } from '../../hooks/useSales';
-import { formatCurrency as formatCurrencyBase } from '@shared/utils';
+import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
+import styled from "styled-components";
+import { Button } from "@components/common/Button";
+import { Pagination } from "@components/common/Pagination";
+import { usePagination } from "../../hooks/usePagination";
+import { useSales } from "../../hooks/useSales";
+import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 
 const Container = styled.div`
   display: flex;
@@ -25,7 +25,8 @@ const FilterRow = styled.div`
 `;
 
 const Select = styled.select`
-  padding: ${({ theme }) => theme.spacing.sm};
+  padding: ${({ theme }) => theme.spacing.md};
+  font-size: 16px;
   border: 1px solid ${({ theme }) => theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
   background-color: ${({ theme }) => theme.colors.surface};
@@ -122,9 +123,11 @@ const PaymentBadge = styled.span<{ $method: string }>`
   padding: 2px 8px;
   border-radius: 12px;
   background-color: ${({ theme, $method }) =>
-    $method === 'cash' ? theme.colors.success + '20' : theme.colors.primary + '20'};
+    $method === "cash"
+      ? theme.colors.success + "20"
+      : theme.colors.primary + "20"};
   color: ${({ theme, $method }) =>
-    $method === 'cash' ? theme.colors.success : theme.colors.primary};
+    $method === "cash" ? theme.colors.success : theme.colors.primary};
   font-weight: 500;
 `;
 
@@ -135,8 +138,18 @@ const EmptyCell = styled.div`
 `;
 
 const months = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 export function MonthlyReport() {
@@ -153,19 +166,38 @@ export function MonthlyReport() {
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
   const formatCurrency = (amount: number) =>
-    formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
+    formatCurrencyBase(amount, i18n.language as "ru" | "uz");
 
   const formatDateTime = (iso: string) => {
     const d = new Date(iso);
-    return d.toLocaleDateString(i18n.language, { day: '2-digit', month: '2-digit' }) +
-      ' ' +
-      d.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' });
+    return (
+      d.toLocaleDateString(i18n.language, {
+        day: "2-digit",
+        month: "2-digit",
+      }) +
+      " " +
+      d.toLocaleTimeString(i18n.language, {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    );
   };
 
   const handleGenerateReport = async () => {
     const startDate = new Date(selectedYear, selectedMonth, 1);
-    const endDate = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59, 999);
-    await loadSales({ startDate: startDate.toISOString(), endDate: endDate.toISOString() });
+    const endDate = new Date(
+      selectedYear,
+      selectedMonth + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
+    await loadSales({
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+    });
     setGenerated(true);
   };
 
@@ -182,19 +214,22 @@ export function MonthlyReport() {
 
   // Stats computed from loaded sales
   const totalRevenue = sales.reduce((sum, s) => sum + Number(s.finalAmount), 0);
-  const cashCount = sales.filter((s) => s.paymentMethod === 'cash').length;
-  const cardCount = sales.filter((s) => s.paymentMethod === 'card').length;
+  const cashCount = sales.filter((s) => s.paymentMethod === "cash").length;
+  const cardCount = sales.filter((s) => s.paymentMethod === "card").length;
   const totalItemsSold = sales.reduce((sum, s) => sum + s.items.length, 0);
   const avgTransaction = sales.length > 0 ? totalRevenue / sales.length : 0;
 
   return (
     <Container>
-      <Title>{t('reports.monthlyReport')}</Title>
+      <Title>{t("reports.monthlyReport")}</Title>
 
       <FilterRow>
         <Select
           value={selectedMonth}
-          onChange={(e) => { setSelectedMonth(Number(e.target.value)); setGenerated(false); }}
+          onChange={(e) => {
+            setSelectedMonth(Number(e.target.value));
+            setGenerated(false);
+          }}
         >
           {months.map((month, index) => (
             <option key={month} value={index}>
@@ -205,7 +240,10 @@ export function MonthlyReport() {
 
         <Select
           value={selectedYear}
-          onChange={(e) => { setSelectedYear(Number(e.target.value)); setGenerated(false); }}
+          onChange={(e) => {
+            setSelectedYear(Number(e.target.value));
+            setGenerated(false);
+          }}
         >
           {years.map((year) => (
             <option key={year} value={year}>
@@ -215,7 +253,7 @@ export function MonthlyReport() {
         </Select>
 
         <Button onClick={handleGenerateReport} disabled={isLoading}>
-          {isLoading ? t('common.loading') : t('reports.generateReport')}
+          {isLoading ? t("common.loading") : t("reports.generateReport")}
         </Button>
       </FilterRow>
 
@@ -223,75 +261,85 @@ export function MonthlyReport() {
         <>
           <StatsGrid>
             <StatCard>
-              <StatLabel>{t('reports.totalSales')}</StatLabel>
+              <StatLabel>{t("reports.totalSales")}</StatLabel>
               <StatValue>{sales.length}</StatValue>
-              <StatSubtext>{t('reports.transactions')}</StatSubtext>
+              <StatSubtext>{t("reports.transactions")}</StatSubtext>
             </StatCard>
 
             <StatCard>
-              <StatLabel>{t('reports.totalRevenue')}</StatLabel>
+              <StatLabel>{t("reports.totalRevenue")}</StatLabel>
               <StatValue>{formatCurrency(totalRevenue)}</StatValue>
-              <StatSubtext>{months[selectedMonth]} {selectedYear}</StatSubtext>
+              <StatSubtext>
+                {months[selectedMonth]} {selectedYear}
+              </StatSubtext>
             </StatCard>
 
             <StatCard>
-              <StatLabel>{t('reports.averageTransaction')}</StatLabel>
+              <StatLabel>{t("reports.averageTransaction")}</StatLabel>
               <StatValue>{formatCurrency(avgTransaction)}</StatValue>
-              <StatSubtext>{t('reports.perSale')}</StatSubtext>
+              <StatSubtext>{t("reports.perSale")}</StatSubtext>
             </StatCard>
 
             <StatCard>
-              <StatLabel>{t('reports.itemsSold')}</StatLabel>
+              <StatLabel>{t("reports.itemsSold")}</StatLabel>
               <StatValue>{totalItemsSold}</StatValue>
-              <StatSubtext>{t('reports.items')}</StatSubtext>
+              <StatSubtext>{t("reports.items")}</StatSubtext>
             </StatCard>
 
             <StatCard>
-              <StatLabel>{t('reports.cashPayments')}</StatLabel>
+              <StatLabel>{t("reports.cashPayments")}</StatLabel>
               <StatValue>{cashCount}</StatValue>
-              <StatSubtext>{t('reports.transactions')}</StatSubtext>
+              <StatSubtext>{t("reports.transactions")}</StatSubtext>
             </StatCard>
 
             <StatCard>
-              <StatLabel>{t('reports.cardPayments')}</StatLabel>
+              <StatLabel>{t("reports.cardPayments")}</StatLabel>
               <StatValue>{cardCount}</StatValue>
-              <StatSubtext>{t('reports.transactions')}</StatSubtext>
+              <StatSubtext>{t("reports.transactions")}</StatSubtext>
             </StatCard>
           </StatsGrid>
 
           <TableCard>
             <TableCardHeader>
-              <SectionTitle>{t('reports.receipts')}</SectionTitle>
+              <SectionTitle>{t("reports.receipts")}</SectionTitle>
             </TableCardHeader>
 
             {!sales.length ? (
-              <EmptyCell>{t('reports.noData')}</EmptyCell>
+              <EmptyCell>{t("reports.noData")}</EmptyCell>
             ) : (
               <Table>
                 <thead>
                   <tr>
-                    <Th>{t('reports.time')}</Th>
-                    <Th>{t('pos.receiptNumber')}</Th>
-                    <Th>{t('reports.cashier')}</Th>
-                    <Th style={{ textAlign: 'center' }}>{t('pos.items')}</Th>
-                    <Th>{t('reports.payment')}</Th>
-                    <Th style={{ textAlign: 'right' }}>{t('reports.amount')}</Th>
+                    <Th>{t("reports.time")}</Th>
+                    <Th>{t("pos.receiptNumber")}</Th>
+                    <Th>{t("reports.cashier")}</Th>
+                    <Th style={{ textAlign: "center" }}>{t("pos.items")}</Th>
+                    <Th>{t("reports.payment")}</Th>
+                    <Th style={{ textAlign: "right" }}>
+                      {t("reports.amount")}
+                    </Th>
                   </tr>
                 </thead>
                 <tbody>
                   {pagedSales.map((sale) => (
                     <Tr key={sale.id}>
-                      <Td style={{ whiteSpace: 'nowrap' }}>{formatDateTime(sale.createdAt)}</Td>
-                      <Td style={{ fontFamily: 'monospace' }}>#{sale.receiptNumber}</Td>
+                      <Td style={{ whiteSpace: "nowrap" }}>
+                        {formatDateTime(sale.createdAt)}
+                      </Td>
+                      <Td style={{ fontFamily: "monospace" }}>
+                        #{sale.receiptNumber}
+                      </Td>
                       <Td>{sale.cashierName}</Td>
-                      <Td style={{ textAlign: 'center' }}>{sale.items.length}</Td>
+                      <Td style={{ textAlign: "center" }}>
+                        {sale.items.length}
+                      </Td>
                       <Td>
                         <PaymentBadge $method={sale.paymentMethod}>
-                          {sale.paymentMethod === 'cash' ? '💵' : '💳'}{' '}
+                          {sale.paymentMethod === "cash" ? "💵" : "💳"}{" "}
                           {t(`pos.${sale.paymentMethod}`)}
                         </PaymentBadge>
                       </Td>
-                      <Td style={{ textAlign: 'right', fontWeight: 600 }}>
+                      <Td style={{ textAlign: "right", fontWeight: 600 }}>
                         {formatCurrency(Number(sale.finalAmount))}
                       </Td>
                     </Tr>
@@ -315,8 +363,8 @@ export function MonthlyReport() {
       )}
 
       {!generated && !isLoading && (
-        <EmptyCell style={{ background: 'transparent' }}>
-          {t('reports.selectPeriod')}
+        <EmptyCell style={{ background: "transparent" }}>
+          {t("reports.selectPeriod")}
         </EmptyCell>
       )}
     </Container>

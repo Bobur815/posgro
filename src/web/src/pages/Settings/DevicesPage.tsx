@@ -7,12 +7,13 @@ import {
   Tablet,
   ShoppingCart,
   Wifi,
-  WifiOff,
   LogOut,
   Shield,
+  ArrowLeft,
 } from 'lucide-react';
 import { Button } from '@components/common/Button';
 import { auth as authApi, DeviceSession } from '../../api/client';
+import { useNavigate } from 'react-router-dom';
 
 // ─── Styled components ────────────────────────────────────────────────────────
 
@@ -28,7 +29,7 @@ const Title = styled.h1`
   color: ${({ theme }) => theme.colors.text};
 `;
 
-const TopBar = styled.div`
+export const TopBar = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -197,7 +198,7 @@ export function DevicesPage() {
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<{ msg: string; error: boolean } | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
-
+  const navigate = useNavigate();
   const load = async () => {
     try {
       const data = await authApi.getSessions();
@@ -244,6 +245,9 @@ export function DevicesPage() {
   return (
     <Container>
       <TopBar>
+        <Button size='medium' variant="secondary" onClick={() => navigate('/settings')}>
+          <ArrowLeft size={24} />
+        </Button>
         <Title>{t('devices.title')}</Title>
         {otherSessions.length > 0 && (
           <Button

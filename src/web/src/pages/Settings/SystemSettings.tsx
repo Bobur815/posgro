@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
-import { RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw } from "lucide-react";
 import { Button } from "@components/common/Button";
 import { Input } from "@components/common/Input";
 import {
   settings as settingsApi,
   receipt as receiptApi,
 } from "../../api/client";
+import { useNavigate } from "react-router-dom";
+import { TopBar } from "./DevicesPage";
 
 const Container = styled.div`
   max-width: 800px;
@@ -100,6 +102,7 @@ export function SystemSettings() {
     storeName: "",
     storeAddress: "",
     storePhone: "",
+    storeStir: "",
     taxRate: "0",
   });
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">(
@@ -109,7 +112,7 @@ export function SystemSettings() {
   const [plan, setPlan] = useState<string | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [balanceUzs, setBalanceUzs] = useState<number | null>(null);
-
+  const navigate = useNavigate();
   useEffect(() => {
     loadSettings();
     loadPlan();
@@ -122,6 +125,7 @@ export function SystemSettings() {
         storeName: allSettings.store_name || "",
         storeAddress: allSettings.store_address || "",
         storePhone: allSettings.store_phone || "",
+        storeStir: allSettings.store_stir || "",
         taxRate: allSettings.tax_rate || "0",
       });
     } catch (error) {
@@ -153,6 +157,7 @@ export function SystemSettings() {
       await settingsApi.set("store_name", storeSettings.storeName);
       await settingsApi.set("store_address", storeSettings.storeAddress);
       await settingsApi.set("store_phone", storeSettings.storePhone);
+      await settingsApi.set("store_stir", storeSettings.storeStir);
       await settingsApi.set("tax_rate", storeSettings.taxRate);
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 2000);
@@ -164,7 +169,16 @@ export function SystemSettings() {
 
   return (
     <Container>
-      <Title>{t("settings.systemSettings")}</Title>
+      <TopBar>
+        <Button
+          size="medium"
+          variant="secondary"
+          onClick={() => navigate("/settings")}
+        >
+          <ArrowLeft size={24} />
+        </Button>
+        <Title>{t("settings.systemSettings")}</Title>
+      </TopBar>
 
       <Section>
         <SectionTitle>{t("settings.storeInformation")}</SectionTitle>
@@ -200,6 +214,18 @@ export function SystemSettings() {
                 }))
               }
             />
+            <Input
+              label={t("settings.storeStir")}
+              value={storeSettings.storeStir}
+              onChange={(e) =>
+                setStoreSettings((prev) => ({
+                  ...prev,
+                  storeStir: e.target.value,
+                }))
+              }
+            />
+          </Row>
+          <Row>
             <Input
               label={t("settings.taxRate")}
               type="number"

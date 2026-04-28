@@ -365,9 +365,10 @@ export interface StoreRecord {
   active: boolean;
   plan: string;
   aiCredits: number;
+  scheduledDeleteAt: string | null;
   createdAt: string;
   updatedAt: string;
-  _count?: { users: number; products: number; sales: number };
+  _count?: { users: number; products: number; sales: number; terminalHeartbeats: number };
 }
 
 export interface StoreStats {
@@ -416,6 +417,10 @@ export const stores = {
   },
   delete: async (id: string): Promise<{ success: boolean }> => {
     const { data } = await axiosInstance.delete(`/stores/${id}`);
+    return data;
+  },
+  cancelDelete: async (id: string): Promise<{ success: boolean }> => {
+    const { data } = await axiosInstance.put(`/stores/${id}/cancel-delete`);
     return data;
   },
   activate: async (id: string): Promise<{ success: boolean }> => {

@@ -453,6 +453,79 @@ const TotalDisplay = styled.div`
   text-align: right;
 `;
 
+// ─── Responsive layout wrappers ──────────────────────────────────────────────
+
+const MobileOnly = styled.div`
+  @media (min-width: 769px) { display: none; }
+`;
+
+const DesktopOnly = styled.div`
+  @media (max-width: 768px) { display: none; }
+`;
+
+// ─── Desktop table ────────────────────────────────────────────────────────────
+
+const ReviewTableWrap = styled.div`
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  overflow: visible;
+`;
+
+const ReviewTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+`;
+
+const ReviewTh = styled.th`
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
+  white-space: nowrap;
+  background: ${({ theme }) => theme.colors.background};
+`;
+
+const ReviewTr = styled.tr<{ $skip?: boolean }>`
+  opacity: ${({ $skip }) => ($skip ? 0.45 : 1)};
+  transition: opacity 0.15s;
+  &:not(:last-child) td { border-bottom: 1px solid ${({ theme }) => theme.colors.border}; }
+  &:hover td { background: ${({ theme }) => theme.colors.background}; }
+`;
+
+const ReviewTd = styled.td`
+  padding: 8px 10px;
+  font-size: 13px;
+  color: ${({ theme }) => theme.colors.text};
+  vertical-align: middle;
+`;
+
+const NameCell = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+`;
+
+const MxikMeta = styled.div`
+  font-size: 11px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
+const TableNumberInput = styled.input`
+  width: 80px;
+  padding: 5px 7px;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  background-color: ${({ theme }) => theme.colors.surface};
+  color: ${({ theme }) => theme.colors.text};
+  font-size: 13px;
+  text-align: right;
+  &:focus { outline: none; border-color: ${({ theme }) => theme.colors.primary}; }
+`;
+
 // ─── ReviewItem ───────────────────────────────────────────────────────────────
 
 interface ReviewItem {
@@ -479,7 +552,7 @@ export function ReceiptScanModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // TODO: revert to "upload" before shipping
-  const [step, setStep] = useState<Step>("upload");
+  const [step, setStep] = useState<Step>("review");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [imageMimeType, setImageMimeType] = useState<string>("image/jpeg");
@@ -489,7 +562,26 @@ export function ReceiptScanModal({
 
   const [scanResult, setScanResult] = useState<ScannedReceiptData | null>(null);
   // TODO: revert to [] before shipping
-  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([
+    {
+      scannedName: "Молоко 1л",
+      mxik: "12345678",
+      productId: "",
+      quantity: 2,
+      unitCost: 5000,
+      confidence: "medium",
+      skip: false,
+    },
+    {
+      scannedName: "Хлеб Дарницкий",
+      mxik: null,
+      productId: "",
+      quantity: 1,
+      unitCost: 3000,
+      confidence: "low",
+      skip: false,
+    },
+  ]);
   const [supplierId, setSupplierId] = useState("");
   const [paymentMethod, setPaymentMethod] =
     useState<SupplierPaymentMethod>("CASH");
@@ -1027,11 +1119,10 @@ export function ReceiptScanModal({
               )}
             </SupplierRow>
 
-            {/* Item cards */}
-            <div>
+            {/* ── Mobile: cards ── */}
+            <MobileOnly>
               {reviewItems.map((item, idx) => (
                 <ItemCard key={idx} $skip={item.skip}>
-                  {/* Header: checkbox + name + badges */}
                   <CardHeader>
                     <CardCheckbox
                       type="checkbox"
@@ -1056,7 +1147,6 @@ export function ReceiptScanModal({
                     </CardHeaderContent>
                   </CardHeader>
 
-                  {/* MXIK enrichment block */}
                   {item.mxikInfo && (
                     <MxikInfoBlock>
                       <MxikBrandRow>
@@ -1064,9 +1154,7 @@ export function ReceiptScanModal({
                           <MxikBrand>{item.mxikInfo.brandName}</MxikBrand>
                         )}
                         {item.mxikInfo.attributeName && (
-                          <MxikAttribute>
-                            {item.mxikInfo.attributeName}
-                          </MxikAttribute>
+                          <MxikAttribute>{item.mxikInfo.attributeName}</MxikAttribute>
                         )}
                       </MxikBrandRow>
                       {item.mxikInfo.unitsName && (
@@ -1080,39 +1168,24 @@ export function ReceiptScanModal({
 
                   <CardDivider />
 
-                  {/* Product match */}
                   <CardSection>
-                    <CardSectionLabel>
-                      {t("receiptScan.matchedProduct")}
-                    </CardSectionLabel>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "6px",
-                        alignItems: "center",
-                      }}
-                    >
+                    <CardSectionLabel>{t("receiptScan.matchedProduct")}</CardSectionLabel>
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                       <SearchWrapper>
                         <SearchInput
                           type="text"
                           placeholder={t("receiptScan.selectProduct")}
                           value={getInputDisplayValue(idx, item)}
-                          $selected={
-                            !!item.productId && openDropdownIdx !== idx
-                          }
+                          $selected={!!item.productId && openDropdownIdx !== idx}
                           onFocus={() => handleInputFocus(idx)}
                           onBlur={() => handleInputBlur(idx)}
-                          onChange={(e) =>
-                            handleInputChange(idx, e.target.value)
-                          }
+                          onChange={(e) => handleInputChange(idx, e.target.value)}
                           disabled={item.skip}
                         />
                         {openDropdownIdx === idx && (
                           <SearchDropdown>
                             {getFilteredProducts(idx).length === 0 ? (
-                              <SearchDropdownItem
-                                style={{ opacity: 0.5, cursor: "default" }}
-                              >
+                              <SearchDropdownItem style={{ opacity: 0.5, cursor: "default" }}>
                                 {t("common.noResults") || "No results"}
                               </SearchDropdownItem>
                             ) : (
@@ -1120,9 +1193,7 @@ export function ReceiptScanModal({
                                 <SearchDropdownItem
                                   key={p.id}
                                   $active={String(p.id) === item.productId}
-                                  onMouseDown={() =>
-                                    handleProductSelect(idx, String(p.id))
-                                  }
+                                  onMouseDown={() => handleProductSelect(idx, String(p.id))}
                                 >
                                   {getProductName(p)}
                                 </SearchDropdownItem>
@@ -1132,61 +1203,37 @@ export function ReceiptScanModal({
                         )}
                       </SearchWrapper>
                       {!item.skip && (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="small"
-                          title={t("products.add")}
-                          style={{ flexShrink: 0, padding: "8px 10px" }}
-                          onClick={() => setAddingForRowIdx(idx)}
-                        >
+                        <Button type="button" variant="secondary" size="small"
+                          title={t("products.add")} style={{ flexShrink: 0, padding: "8px 10px" }}
+                          onClick={() => setAddingForRowIdx(idx)}>
                           <PlusCircle size={18} />
                         </Button>
                       )}
                     </div>
                   </CardSection>
 
-                  {/* Qty / Cost / Total */}
                   <CardAmountRow>
-                    <div style={{ display: 'flex', gap: '8px'}}>
+                    <div style={{ display: "flex", gap: "8px" }}>
                       <AmountField>
-                      <AmountLabel>
-                        {t("receiptScan.quantity")}
-                        {isBulkWeighted(item.mxikInfo) && (
-                          <span style={{ marginLeft: 4, fontWeight: 700 }}>(кг)</span>
-                        )}
-                      </AmountLabel>
-                      <NumberInput
-                        type="number"
-                        step="any"
-                        value={item.quantity}
-                        onChange={(e) =>
-                          updateReviewItem(idx, {
-                            quantity: parseFloat(e.target.value) || 0,
-                          })
-                        }
-                        disabled={item.skip}
-                      />
-                    </AmountField>
-                    <AmountField>
-                      <AmountLabel>{t("receiptScan.unitCost")}</AmountLabel>
-                      <NumberInput
-                        type="number"
-                        step="any"
-                        value={item.unitCost}
-                        onChange={(e) =>
-                          updateReviewItem(idx, {
-                            unitCost: parseFloat(e.target.value) || 0,
-                          })
-                        }
-                        disabled={item.skip}
-                      />
-                    </AmountField>
+                        <AmountLabel>
+                          {t("receiptScan.quantity")}
+                          {isBulkWeighted(item.mxikInfo) && (
+                            <span style={{ marginLeft: 4, fontWeight: 700 }}>(кг)</span>
+                          )}
+                        </AmountLabel>
+                        <NumberInput type="number" step="any" value={item.quantity}
+                          onChange={(e) => updateReviewItem(idx, { quantity: parseFloat(e.target.value) || 0 })}
+                          disabled={item.skip} />
+                      </AmountField>
+                      <AmountField>
+                        <AmountLabel>{t("receiptScan.unitCost")}</AmountLabel>
+                        <NumberInput type="number" step="any" value={item.unitCost}
+                          onChange={(e) => updateReviewItem(idx, { unitCost: parseFloat(e.target.value) || 0 })}
+                          disabled={item.skip} />
+                      </AmountField>
                     </div>
                     <TotalDisplay>
-                      <AmountLabel style={{ textAlign: "right" }}>
-                        {t("receiptScan.totalCost")}
-                      </AmountLabel>
+                      <AmountLabel style={{ textAlign: "right" }}>{t("receiptScan.totalCost")}</AmountLabel>
                       <div style={{ fontWeight: 700, fontSize: 14 }}>
                         {(item.quantity * item.unitCost).toLocaleString()}
                       </div>
@@ -1194,7 +1241,136 @@ export function ReceiptScanModal({
                   </CardAmountRow>
                 </ItemCard>
               ))}
-            </div>
+            </MobileOnly>
+
+            {/* ── Desktop: table ── */}
+            <DesktopOnly>
+              <ReviewTableWrap>
+                <ReviewTable>
+                  <thead>
+                    <tr>
+                      <ReviewTh style={{ width: 32 }}></ReviewTh>
+                      <ReviewTh>{t("receiptScan.scannedName") || "Наименование"}</ReviewTh>
+                      <ReviewTh style={{ width: "28%" }}>{t("receiptScan.matchedProduct")}</ReviewTh>
+                      <ReviewTh style={{ width: 90, textAlign: "right" }}>
+                        {t("receiptScan.quantity")}
+                      </ReviewTh>
+                      <ReviewTh style={{ width: 100, textAlign: "right" }}>
+                        {t("receiptScan.unitCost")}
+                      </ReviewTh>
+                      <ReviewTh style={{ width: 100, textAlign: "right" }}>
+                        {t("receiptScan.totalCost")}
+                      </ReviewTh>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reviewItems.map((item, idx) => (
+                      <ReviewTr key={idx} $skip={item.skip}>
+                        {/* Checkbox */}
+                        <ReviewTd>
+                          <CardCheckbox
+                            type="checkbox"
+                            checked={!item.skip}
+                            onChange={(e) => updateReviewItem(idx, { skip: !e.target.checked })}
+                          />
+                        </ReviewTd>
+
+                        {/* Scanned name + MXIK + confidence */}
+                        <ReviewTd>
+                          <NameCell>
+                            <div style={{ fontWeight: 600, fontSize: 13 }}>{item.scannedName}</div>
+                            <CardBadgeRow>
+                              {item.mxik && (
+                                <MxikChip><Tag size={9} />{item.mxik}</MxikChip>
+                              )}
+                              <ConfidenceBadge $level={item.confidence}>
+                                {getConfidenceLabel(item.confidence)}
+                              </ConfidenceBadge>
+                            </CardBadgeRow>
+                            {item.mxikInfo && (
+                              <MxikMeta>
+                                {[item.mxikInfo.brandName, item.mxikInfo.attributeName, item.mxikInfo.unitsName]
+                                  .filter(Boolean).join(" · ")}
+                              </MxikMeta>
+                            )}
+                          </NameCell>
+                        </ReviewTd>
+
+                        {/* Product search */}
+                        <ReviewTd>
+                          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                            <SearchWrapper>
+                              <SearchInput
+                                type="text"
+                                placeholder={t("receiptScan.selectProduct")}
+                                value={getInputDisplayValue(idx, item)}
+                                $selected={!!item.productId && openDropdownIdx !== idx}
+                                onFocus={() => handleInputFocus(idx)}
+                                onBlur={() => handleInputBlur(idx)}
+                                onChange={(e) => handleInputChange(idx, e.target.value)}
+                                disabled={item.skip}
+                              />
+                              {openDropdownIdx === idx && (
+                                <SearchDropdown>
+                                  {getFilteredProducts(idx).length === 0 ? (
+                                    <SearchDropdownItem style={{ opacity: 0.5, cursor: "default" }}>
+                                      {t("common.noResults") || "No results"}
+                                    </SearchDropdownItem>
+                                  ) : (
+                                    getFilteredProducts(idx).map((p) => (
+                                      <SearchDropdownItem
+                                        key={p.id}
+                                        $active={String(p.id) === item.productId}
+                                        onMouseDown={() => handleProductSelect(idx, String(p.id))}
+                                      >
+                                        {getProductName(p)}
+                                      </SearchDropdownItem>
+                                    ))
+                                  )}
+                                </SearchDropdown>
+                              )}
+                            </SearchWrapper>
+                            {!item.skip && (
+                              <Button type="button" variant="secondary" size="small"
+                                title={t("products.add")} style={{ flexShrink: 0, padding: "6px 8px" }}
+                                onClick={() => setAddingForRowIdx(idx)}>
+                                <PlusCircle size={15} />
+                              </Button>
+                            )}
+                          </div>
+                        </ReviewTd>
+
+                        {/* Qty */}
+                        <ReviewTd style={{ textAlign: "right" }}>
+                          <TableNumberInput
+                            type="number" step="any" value={item.quantity}
+                            onChange={(e) => updateReviewItem(idx, { quantity: parseFloat(e.target.value) || 0 })}
+                            disabled={item.skip}
+                          />
+                          {isBulkWeighted(item.mxikInfo) && (
+                            <div style={{ fontSize: 10, color: "gray", marginTop: 2 }}>кг</div>
+                          )}
+                        </ReviewTd>
+
+                        {/* Unit cost */}
+                        <ReviewTd style={{ textAlign: "right" }}>
+                          <TableNumberInput
+                            type="number" step="any" value={item.unitCost}
+                            onChange={(e) => updateReviewItem(idx, { unitCost: parseFloat(e.target.value) || 0 })}
+                            disabled={item.skip}
+                          />
+                        </ReviewTd>
+
+                        {/* Total */}
+                        <ReviewTd style={{ textAlign: "right", fontWeight: 700 }}>
+                          {(item.quantity * item.unitCost).toLocaleString()}
+                        </ReviewTd>
+                      </ReviewTr>
+                    ))}
+                  </tbody>
+                </ReviewTable>
+              </ReviewTableWrap>
+            </DesktopOnly>
 
             {error && <ErrorText>{error}</ErrorText>}
 

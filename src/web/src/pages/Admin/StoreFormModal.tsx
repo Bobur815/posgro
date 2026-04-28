@@ -143,8 +143,8 @@ export function StoreFormModal({ store, onClose, onSaved }: Props) {
       }
       onSaved();
       onClose();
-    } catch (e) {
-      setError((e as Error).message);
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? (e as Error).message);
     } finally {
       setSaving(false);
     }

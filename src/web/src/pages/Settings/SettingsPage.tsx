@@ -1,8 +1,14 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import styled from 'styled-components';
-import { UserCog, Settings, Users, Package, MonitorSmartphone } from 'lucide-react';
+import React from "react";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import styled from "styled-components";
+import {
+  UserCog,
+  Settings,
+  Users,
+  Package,
+  MonitorSmartphone,
+} from "lucide-react";
 
 const Container = styled.div`
   display: flex;
@@ -63,42 +69,33 @@ export function SettingsPage() {
   const settingsSections = [
     {
       icon: <UserCog size={32} />,
-      title: t('settings.userSettings'),
-      description: t('settings.userSettingsDescription'),
-      path: '/settings/user',
+      title: t("settings.userSettings"),
+      description: t("settings.userSettingsDescription"),
+      path: "/settings/user",
     },
     {
       icon: <Settings size={32} />,
-      title: t('settings.systemSettings'),
-      description: t('settings.systemSettingsDescription'),
-      path: '/settings/system',
-    },
-    {
-      icon: <Users size={32} />,
-      title: t('settings.userManagement'),
-      description: t('settings.userManagementDescription'),
-      path: '/users',
-    },
-    {
-      icon: <Package size={32} />,
-      title: t('settings.inventorySettings'),
-      description: t('settings.inventorySettingsDescription'),
-      path: '/products/stock',
+      title: t("settings.systemSettings"),
+      description: t("settings.systemSettingsDescription"),
+      path: "/settings/system",
     },
     {
       icon: <MonitorSmartphone size={32} />,
-      title: t('settings.devicesSettings'),
-      description: t('settings.devicesSettingsDescription'),
-      path: '/settings/devices',
+      title: t("settings.devicesSettings"),
+      description: t("settings.devicesSettingsDescription"),
+      path: "/settings/devices",
     },
   ];
 
   return (
     <Container>
-      <Title>{t('settings.title')}</Title>
+      <Title>{t("settings.title")}</Title>
       <SettingsGrid>
         {settingsSections.map((section) => (
-          <SettingsCard key={section.path} onClick={() => navigate(section.path)}>
+          <SettingsCard
+            key={section.path}
+            onClick={() => navigate(section.path)}
+          >
             <CardIcon>{section.icon}</CardIcon>
             <CardTitle>{section.title}</CardTitle>
             <CardDescription>{section.description}</CardDescription>

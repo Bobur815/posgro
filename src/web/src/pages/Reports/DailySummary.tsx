@@ -6,6 +6,7 @@ import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { Modal } from "@components/common/Modal";
 import { Button } from "@renderer/components/common/Button";
 import { Pagination } from "@components/common/Pagination";
+import { DateInput } from "@components/common/DateInput";
 import { usePagination } from "../../hooks/usePagination";
 import { Eraser } from "lucide-react";
 
@@ -46,6 +47,7 @@ const FilterGroup = styled.div`
   display: flex;
   flex-direction: column;
   gap: 4px;
+  
 `;
 
 const FilterLabel = styled.label`
@@ -56,49 +58,18 @@ const FilterLabel = styled.label`
   letter-spacing: 0.5px;
 `;
 
-const DateInput = styled.input`
-  padding: 6px 10px;
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  border-radius: ${({ theme }) => theme.borderRadius};
-  background-color: ${({ theme }) => theme.colors.background};
-  color: ${({ theme }) => theme.colors.text};
-  font-size: 14px;
-  cursor: pointer;
-
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme.colors.primary};
-  }
-`;
-
 const FilterSelect = styled.select`
-  padding: 6px 10px;
+  padding: 8px 10px;
   border: 1px solid ${({ theme }) => theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
-  background-color: ${({ theme }) => theme.colors.background};
+  background-color: ${({ theme }) => theme.colors.surface};
   color: ${({ theme }) => theme.colors.text};
-  font-size: 14px;
+  font-size: 15px;
   cursor: pointer;
 
   &:focus {
     outline: none;
     border-color: ${({ theme }) => theme.colors.primary};
-  }
-`;
-
-const ResetButton = styled.button`
-  padding: 6px 14px;
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  border-radius: ${({ theme }) => theme.borderRadius};
-  background-color: ${({ theme }) => theme.colors.background};
-  color: ${({ theme }) => theme.colors.textSecondary};
-  font-size: 14px;
-  cursor: pointer;
-  align-self: flex-end;
-
-  &:hover {
-    background-color: ${({ theme }) => theme.colors.border};
-    color: ${({ theme }) => theme.colors.text};
   }
 `;
 
@@ -374,21 +345,15 @@ export function DailySummary() {
         <FilterGroup>
           <FilterLabel>{t("reports.startDate")}</FilterLabel>
           <DateInput
-            type="date"
-            lang={i18n.language}
             value={startDate}
-            onKeyDown={(e) => e.preventDefault()}
-            onChange={(e) => setStartDate(e.target.value)}
+            onChange={(val) => setStartDate(val)}
           />
         </FilterGroup>
         <FilterGroup>
           <FilterLabel>{t("reports.endDate")}</FilterLabel>
           <DateInput
-            type="date"
-            lang={i18n.language}
             value={endDate}
-            onKeyDown={(e) => e.preventDefault()}
-            onChange={(e) => setEndDate(e.target.value)}
+            onChange={(val) => setEndDate(val)}
           />
         </FilterGroup>
         <FilterGroup>
