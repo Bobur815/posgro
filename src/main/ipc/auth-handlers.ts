@@ -21,28 +21,65 @@ export function setupAuthHandlers(): void {
     const prisma = getPrismaClient();
     const config = getAppConfig();
 
-    // Find user in local database
-    const user = await prisma.user.findUnique({
-      where: { phone },
-    });
-
-    if (!user) {
-      throw new Error('auth.errors.user_not_found');
-    }
-
-    if (!user.active) {
-      throw new Error('auth.errors.user_deactivated');
-    }
-
-    // Verify password against local hash
-    const isValidPassword = await bcrypt.compare(password, user.password);
-
     // Use storeId from LocalConfig (authoritative) rather than env-based app-config
     const localConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
     const storeId = localConfig?.storeId || config.storeId;
     const vpsApiUrl = localConfig?.apiUrl || config.vpsApiUrl;
 
+    // Find user in local database
+    let user = await prisma.user.findUnique({ where: { phone } });
+
     let serverTokenObtained = false;
+
+    if (!user) {
+      // User not in local DB — try VPS (covers new terminal setup or user only on server)
+      let synced = false;
+      try {
+        const serverRes = await fetch(`${vpsApiUrl}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storeId, phone, password }),
+        });
+        if (serverRes.ok) {
+          const body = await serverRes.json() as { token: string; user: { id: string; phone: string; role: string; nameUz: string; nameRu: string } };
+          setServerToken(body.token);
+          serverTokenObtained = true;
+          await prisma.systemSetting.upsert({
+            where: { key: 'server_token' },
+            update: { value: body.token },
+            create: { key: 'server_token', value: body.token },
+          });
+          // Create user locally so offline logins work in future
+          const hashedPassword = await bcrypt.hash(password, 10);
+          user = await prisma.user.upsert({
+            where: { phone },
+            update: { password: hashedPassword, role: body.user.role, nameUz: body.user.nameUz, nameRu: body.user.nameRu, active: true },
+            create: {
+              id: body.user.id,
+              phone: body.user.phone,
+              password: hashedPassword,
+              role: body.user.role,
+              nameUz: body.user.nameUz,
+              nameRu: body.user.nameRu,
+              active: true,
+            },
+          });
+          synced = true;
+        }
+      } catch {
+        // VPS unreachable
+      }
+      if (!synced) {
+        throw new Error('auth.errors.user_not_found');
+      }
+    }
+
+    if (!user!.active) {
+      throw new Error('auth.errors.user_deactivated');
+    }
+
+    // Verify password against local hash
+    const isValidPassword = await bcrypt.compare(password, user!.password);
 
     if (!isValidPassword) {
       // Local hash may be stale (password changed on web) — try VPS as fallback

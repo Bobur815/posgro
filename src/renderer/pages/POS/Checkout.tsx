@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import { useCartStore } from "../../store/cart-store";
 import { useSales } from "../../hooks/useSales";
@@ -28,6 +29,9 @@ function parseSaleError(
         available: parsed.available,
         requested: parsed.requested,
       });
+    }
+    if (parsed.code === "NO_SMENA_OPEN") {
+      return t("smena.noOpenSmena");
     }
   } catch {
     // not JSON, fall through
@@ -275,6 +279,21 @@ const CustomAmountInput = styled.input`
   -moz-appearance: textfield;
 `;
 
+const SmenaBlock = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.lg};
+  padding: ${({ theme }) => theme.spacing.xl};
+  text-align: center;
+`;
+
+const SmenaBlockText = styled.p`
+  font-size: 16px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  margin: 0;
+`;
+
 const DENOMINATIONS = [20000, 50000, 100000, 200000];
 
 interface CheckoutProps {
@@ -284,10 +303,19 @@ interface CheckoutProps {
 
 export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const { items, subtotal, tax, taxRate, discount, total, clearCart, editingSaleId } =
     useCartStore();
   const { createSale, updateSale, isLoading } = useSales();
   const toast = useToast();
+
+  const [smenaOpen, setSmenaOpen] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    window.electronAPI.smena.getCurrent().then(s => {
+      setSmenaOpen(s != null);
+    }).catch(() => setSmenaOpen(false));
+  }, []);
 
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">("cash");
   const [printCheck, setPrintCheck] = useState(total >= 10000);
@@ -370,6 +398,19 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   };
 
   handlePaymentRef.current = handlePayment;
+
+  if (smenaOpen === false) {
+    return (
+      <Modal title={t("pos.checkout")} onClose={onCancel} width="500px">
+        <SmenaBlock>
+          <SmenaBlockText>{t("smena.noOpenSmena")}</SmenaBlockText>
+          <Button onClick={() => { onCancel(); navigate('/smena'); }}>
+            {t("smena.goToSmena")} →
+          </Button>
+        </SmenaBlock>
+      </Modal>
+    );
+  }
 
   return (
     <Modal title={t("pos.checkout")} onClose={onCancel} width="860px">

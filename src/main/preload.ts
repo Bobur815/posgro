@@ -223,6 +223,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
     }) => ipcRenderer.invoke("config:updateLocalConfig", data),
   },
 
+  // Smena (shift) management
+  smena: {
+    getCurrent: () => ipcRenderer.invoke('smena:getCurrent'),
+    open: (data: { initialCash: number }) => ipcRenderer.invoke('smena:open', data),
+    addMovement: (data: { smenaId: string; type: 'PAY_IN' | 'PAY_OUT'; amount: number; note?: string }) =>
+      ipcRenderer.invoke('smena:addMovement', data),
+    close: (data: { smenaId: string; finalCash: number }) => ipcRenderer.invoke('smena:close', data),
+    printZReport: (smenaId: string) => ipcRenderer.invoke('smena:printZReport', smenaId),
+    printXReport: (smenaId: string) => ipcRenderer.invoke('smena:printXReport', smenaId),
+    getHistory: (filters?: { limit?: number }) => ipcRenderer.invoke('smena:getHistory', filters),
+  },
+
   // Auto-updater
   updater: {
     checkForUpdates: () => ipcRenderer.invoke("updater:checkForUpdates"),
@@ -407,6 +419,15 @@ declare global {
           storeName?: string;
           terminalId?: string;
         }) => Promise<unknown>;
+      };
+      smena: {
+        getCurrent: () => Promise<unknown | null>;
+        open: (data: { initialCash: number }) => Promise<unknown>;
+        addMovement: (data: { smenaId: string; type: 'PAY_IN' | 'PAY_OUT'; amount: number; note?: string }) => Promise<unknown>;
+        close: (data: { smenaId: string; finalCash: number }) => Promise<unknown>;
+        printZReport: (smenaId: string) => Promise<boolean>;
+        printXReport: (smenaId: string) => Promise<boolean>;
+        getHistory: (filters?: { limit?: number }) => Promise<unknown[]>;
       };
       updater: {
         checkForUpdates: () => Promise<void>;

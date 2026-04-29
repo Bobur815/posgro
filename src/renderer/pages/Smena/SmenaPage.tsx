@@ -1,0 +1,692 @@
+import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import styled from 'styled-components';
+import { Clock, ArrowDownCircle, ArrowUpCircle, Printer, X, Check } from 'lucide-react';
+import { useSmena } from '../../hooks/useSmena';
+import type { Smena, SmenaStats, SmenaMovement } from '../../hooks/useSmena';
+import { Button } from '../../components/common/Button';
+import { Modal } from '../../components/common/Modal';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmt(n: number): string {
+  return Math.round(n).toLocaleString('ru-RU');
+}
+
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleString('ru-RU', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
+// ─── Styled ────────────────────────────────────────────────────────────────────
+
+const Container = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.spacing.lg};
+  padding-left: 4px;
+`;
+
+const PageTitle = styled.h1`
+  margin: 0;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const TabRow = styled.div`
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid ${({ theme }) => theme.colors.border};
+`;
+
+const Tab = styled.button<{ $active: boolean }>`
+  padding: 10px 24px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid ${({ $active, theme }) => $active ? theme.colors.primary : 'transparent'};
+  margin-bottom: -2px;
+  font-size: 14px;
+  font-weight: ${({ $active }) => $active ? 600 : 400};
+  color: ${({ $active, theme }) => $active ? theme.colors.primary : theme.colors.textSecondary};
+  cursor: pointer;
+`;
+
+const Card = styled.div`
+  background: ${({ theme }) => theme.colors.surface};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  box-shadow: ${({ theme }) => theme.shadows.sm};
+  padding: ${({ theme }) => theme.spacing.lg};
+`;
+
+const InfoGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: ${({ theme }) => theme.spacing.md};
+`;
+
+const InfoItem = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+`;
+
+const InfoLabel = styled.span`
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
+const InfoValue = styled.span`
+  font-size: 15px;
+  font-weight: 600;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const StatsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: ${({ theme }) => theme.spacing.md};
+  margin-top: ${({ theme }) => theme.spacing.md};
+`;
+
+const StatCard = styled.div<{ $accent?: string }>`
+  background: ${({ theme }) => theme.colors.background};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  padding: ${({ theme }) => theme.spacing.md};
+  border-left: 3px solid ${({ $accent, theme }) => $accent || theme.colors.primary};
+`;
+
+const StatLabel = styled.div`
+  font-size: 11px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+`;
+
+const StatValue = styled.div`
+  font-size: 18px;
+  font-weight: 700;
+  color: ${({ theme }) => theme.colors.text};
+  margin-top: 4px;
+`;
+
+const StatSub = styled.div`
+  font-size: 11px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  margin-top: 2px;
+`;
+
+const SectionTitle = styled.h3`
+  margin: ${({ theme }) => theme.spacing.lg} 0 ${({ theme }) => theme.spacing.sm};
+  color: ${({ theme }) => theme.colors.text};
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+`;
+
+const MovementsRow = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.md};
+  align-items: flex-start;
+`;
+
+const MovementForm = styled.form`
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.sm};
+  align-items: flex-end;
+  flex: 1;
+`;
+
+const MovementInput = styled.input`
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  background: ${({ theme }) => theme.colors.background};
+  color: ${({ theme }) => theme.colors.text};
+  font-size: 14px;
+  &:focus { outline: none; border-color: ${({ theme }) => theme.colors.primary}; }
+`;
+
+const MovementList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+`;
+
+const MovementItem = styled.div<{ $type: string }>`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: ${({ theme }) => theme.borderRadius};
+  background: ${({ $type, theme }) =>
+    $type === 'PAY_IN'
+      ? theme.colors.success + '18'
+      : theme.colors.error + '18'};
+  font-size: 13px;
+`;
+
+const MovementAmount = styled.span<{ $type: string }>`
+  font-weight: 600;
+  color: ${({ $type, theme }) =>
+    $type === 'PAY_IN' ? theme.colors.success : theme.colors.error};
+`;
+
+const ActionRow = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.md};
+  margin-top: ${({ theme }) => theme.spacing.lg};
+  flex-wrap: wrap;
+`;
+
+const OpenCard = styled.div`
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.spacing.md};
+`;
+
+const Label = styled.label`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
+const NumberInput = styled.input`
+  padding: 10px 14px;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  background: ${({ theme }) => theme.colors.background};
+  color: ${({ theme }) => theme.colors.text};
+  font-size: 16px;
+  font-weight: 600;
+  &:focus { outline: none; border-color: ${({ theme }) => theme.colors.primary}; }
+`;
+
+const Divider = styled.hr`
+  border: none;
+  border-top: 1px solid ${({ theme }) => theme.colors.border};
+  margin: ${({ theme }) => theme.spacing.sm} 0;
+`;
+
+const CloseCalc = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: ${({ theme }) => theme.spacing.md} 0;
+`;
+
+const CloseRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const DiffRow = styled.div<{ $positive: boolean }>`
+  display: flex;
+  justify-content: space-between;
+  font-size: 15px;
+  font-weight: 700;
+  color: ${({ $positive, theme }) => $positive ? theme.colors.success : theme.colors.error};
+`;
+
+// History table
+const Table = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+`;
+
+const Th = styled.th`
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 2px solid ${({ theme }) => theme.colors.border};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+`;
+
+const Td = styled.td`
+  padding: 8px 12px;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const StatusBadge = styled.span<{ $open: boolean }>`
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  background: ${({ $open, theme }) => $open ? theme.colors.success + '30' : theme.colors.textSecondary + '20'};
+  color: ${({ $open, theme }) => $open ? theme.colors.success : theme.colors.textSecondary};
+`;
+
+const ErrorMsg = styled.div`
+  background: ${({ theme }) => theme.colors.error + '18'};
+  color: ${({ theme }) => theme.colors.error};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  padding: ${({ theme }) => theme.spacing.md};
+  font-size: 13px;
+`;
+
+// ─── Component ─────────────────────────────────────────────────────────────────
+
+export function SmenaPage() {
+  const { t } = useTranslation();
+  const {
+    currentSmena, history, isLoading, error,
+    loadCurrent, openSmena, closeSmena, addMovement, loadHistory,
+    printXReport, printZReport,
+  } = useSmena();
+
+  const [tab, setTab] = useState<'current' | 'history'>('current');
+  const [initialCash, setInitialCash] = useState('');
+  const [payInAmount, setPayInAmount] = useState('');
+  const [payInNote, setPayInNote] = useState('');
+  const [payOutAmount, setPayOutAmount] = useState('');
+  const [payOutNote, setPayOutNote] = useState('');
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [finalCash, setFinalCash] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadCurrent();
+  }, [loadCurrent]);
+
+  useEffect(() => {
+    if (tab === 'history') loadHistory();
+  }, [tab, loadHistory]);
+
+  const smena = currentSmena;
+  const stats: SmenaStats | undefined = smena?.stats;
+  const movements: SmenaMovement[] = smena?.movements ?? [];
+
+  const expectedCash = smena && stats
+    ? smena.initialCash + stats.cashSalesAmount + stats.payInTotal - stats.payOutTotal - stats.returnAmount
+    : 0;
+
+  const finalCashNum = parseFloat(finalCash.replace(/\s/g, '')) || 0;
+  const diff = finalCashNum - expectedCash;
+
+  async function handleOpen(e: React.FormEvent) {
+    e.preventDefault();
+    setLocalError(null);
+    const val = parseFloat(initialCash.replace(/\s/g, '')) || 0;
+    try {
+      await openSmena(val);
+      setInitialCash('');
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handlePayIn(e: React.FormEvent) {
+    e.preventDefault();
+    if (!smena) return;
+    setLocalError(null);
+    const val = parseFloat(payInAmount.replace(/\s/g, '')) || 0;
+    if (!val) return;
+    try {
+      await addMovement(smena.id, 'PAY_IN', val, payInNote || undefined);
+      setPayInAmount(''); setPayInNote('');
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handlePayOut(e: React.FormEvent) {
+    e.preventDefault();
+    if (!smena) return;
+    setLocalError(null);
+    const val = parseFloat(payOutAmount.replace(/\s/g, '')) || 0;
+    if (!val) return;
+    try {
+      await addMovement(smena.id, 'PAY_OUT', val, payOutNote || undefined);
+      setPayOutAmount(''); setPayOutNote('');
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleClose() {
+    if (!smena) return;
+    setLocalError(null);
+    try {
+      await closeSmena(smena.id, finalCashNum);
+      setShowCloseModal(false);
+      setFinalCash('');
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  return (
+    <Container>
+      <PageTitle>{t('smena.title')}</PageTitle>
+
+      <TabRow>
+        <Tab $active={tab === 'current'} onClick={() => setTab('current')}>
+          {t('smena.currentShift')}
+        </Tab>
+        <Tab $active={tab === 'history'} onClick={() => setTab('history')}>
+          {t('smena.history')}
+        </Tab>
+      </TabRow>
+
+      {(error || localError) && (
+        <ErrorMsg>{error || localError}</ErrorMsg>
+      )}
+
+      {tab === 'current' && (
+        <>
+          {!smena ? (
+            <Card>
+              <OpenCard>
+                <p style={{ margin: 0, color: 'inherit' }}>{t('smena.noOpenSmena')}</p>
+                <form onSubmit={handleOpen} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <Label>
+                    {t('smena.initialCash')}
+                    <NumberInput
+                      type="number"
+                      min={0}
+                      step="1"
+                      value={initialCash}
+                      onChange={e => setInitialCash(e.target.value)}
+                      placeholder="0"
+                    />
+                  </Label>
+                  <Button type="submit" disabled={isLoading}>
+                    {t('smena.openSmena')}
+                  </Button>
+                </form>
+              </OpenCard>
+            </Card>
+          ) : (
+            <>
+              <Card>
+                <InfoGrid>
+                  <InfoItem>
+                    <InfoLabel>{t('smena.openedAt')}</InfoLabel>
+                    <InfoValue>{fmtDate(smena.openedAt)}</InfoValue>
+                  </InfoItem>
+                  <InfoItem>
+                    <InfoLabel>{t('smena.cashier')}</InfoLabel>
+                    <InfoValue>{smena.cashierName}</InfoValue>
+                  </InfoItem>
+                  <InfoItem>
+                    <InfoLabel>{t('smena.terminal')}</InfoLabel>
+                    <InfoValue>{smena.terminalId}</InfoValue>
+                  </InfoItem>
+                  <InfoItem>
+                    <InfoLabel>{t('smena.zReportNumber')}</InfoLabel>
+                    <InfoValue>№{smena.zReportNumber}</InfoValue>
+                  </InfoItem>
+                  <InfoItem>
+                    <InfoLabel>{t('smena.initialCash')}</InfoLabel>
+                    <InfoValue>{fmt(smena.initialCash)} so'm</InfoValue>
+                  </InfoItem>
+                </InfoGrid>
+
+                {stats && (
+                  <StatsGrid>
+                    <StatCard $accent="#22c55e">
+                      <StatLabel>{t('smena.cashSales')}</StatLabel>
+                      <StatValue>{fmt(stats.cashSalesAmount)}</StatValue>
+                      <StatSub>{stats.cashSalesCount} {t('smena.receipts')}</StatSub>
+                    </StatCard>
+                    <StatCard $accent="#3b82f6">
+                      <StatLabel>{t('smena.cardSales')}</StatLabel>
+                      <StatValue>{fmt(stats.cardSalesAmount)}</StatValue>
+                      <StatSub>{stats.cardSalesCount} {t('smena.receipts')}</StatSub>
+                    </StatCard>
+                    <StatCard $accent="#f59e0b">
+                      <StatLabel>{t('smena.returns')}</StatLabel>
+                      <StatValue>{fmt(stats.returnAmount)}</StatValue>
+                      <StatSub>{stats.returnCount} {t('smena.receipts')}</StatSub>
+                    </StatCard>
+                    <StatCard $accent="#8b5cf6">
+                      <StatLabel>{t('smena.discounts')}</StatLabel>
+                      <StatValue>{fmt(stats.totalDiscounts)}</StatValue>
+                    </StatCard>
+                    <StatCard>
+                      <StatLabel>{t('smena.totalRevenue')}</StatLabel>
+                      <StatValue>{fmt(stats.totalRevenue)}</StatValue>
+                    </StatCard>
+                    <StatCard $accent="#06b6d4">
+                      <StatLabel>{t('smena.payIn')} / {t('smena.payOut')}</StatLabel>
+                      <StatValue>+{fmt(stats.payInTotal)} / -{fmt(stats.payOutTotal)}</StatValue>
+                    </StatCard>
+                  </StatsGrid>
+                )}
+              </Card>
+
+              <Card>
+                <SectionTitle>{t('smena.movements')}</SectionTitle>
+
+                <MovementsRow>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                      <ArrowDownCircle size={14} style={{ marginRight: 4, verticalAlign: 'middle', color: '#22c55e' }} />
+                      {t('smena.payInTitle')}
+                    </div>
+                    <MovementForm onSubmit={handlePayIn}>
+                      <MovementInput
+                        type="number"
+                        min={0}
+                        step="1"
+                        placeholder={t('smena.amount')}
+                        value={payInAmount}
+                        onChange={e => setPayInAmount(e.target.value)}
+                      />
+                      <MovementInput
+                        type="text"
+                        placeholder={t('smena.note')}
+                        value={payInNote}
+                        onChange={e => setPayInNote(e.target.value)}
+                        style={{ maxWidth: 150 }}
+                      />
+                      <Button type="submit" disabled={isLoading || !payInAmount} style={{ whiteSpace: 'nowrap' }}>
+                        <Check size={14} /> {t('smena.payIn')}
+                      </Button>
+                    </MovementForm>
+                  </div>
+
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                      <ArrowUpCircle size={14} style={{ marginRight: 4, verticalAlign: 'middle', color: '#ef4444' }} />
+                      {t('smena.payOutTitle')}
+                    </div>
+                    <MovementForm onSubmit={handlePayOut}>
+                      <MovementInput
+                        type="number"
+                        min={0}
+                        step="1"
+                        placeholder={t('smena.amount')}
+                        value={payOutAmount}
+                        onChange={e => setPayOutAmount(e.target.value)}
+                      />
+                      <MovementInput
+                        type="text"
+                        placeholder={t('smena.note')}
+                        value={payOutNote}
+                        onChange={e => setPayOutNote(e.target.value)}
+                        style={{ maxWidth: 150 }}
+                      />
+                      <Button type="submit" disabled={isLoading || !payOutAmount} style={{ whiteSpace: 'nowrap' }}>
+                        <Check size={14} /> {t('smena.payOut')}
+                      </Button>
+                    </MovementForm>
+                  </div>
+                </MovementsRow>
+
+                {movements.length > 0 ? (
+                  <MovementList style={{ marginTop: 12 }}>
+                    {movements.map((m: SmenaMovement) => (
+                      <MovementItem key={m.id} $type={m.type}>
+                        <span>{fmtDate(m.createdAt)} {m.note ? `— ${m.note}` : ''}</span>
+                        <MovementAmount $type={m.type}>
+                          {m.type === 'PAY_IN' ? '+' : '-'}{fmt(m.amount)}
+                        </MovementAmount>
+                      </MovementItem>
+                    ))}
+                  </MovementList>
+                ) : (
+                  <p style={{ color: 'gray', fontSize: 13, marginTop: 8 }}>{t('smena.noMovements')}</p>
+                )}
+              </Card>
+
+              <ActionRow>
+                <Button
+                  onClick={() => printXReport(smena.id)}
+                  disabled={isLoading}
+                >
+                  <Printer size={14} /> {t('smena.printXReport')}
+                </Button>
+                <Button
+                  onClick={() => setShowCloseModal(true)}
+                  disabled={isLoading}
+                  style={{ backgroundColor: '#ef4444', borderColor: '#ef4444', color: '#fff' }}
+                >
+                  <X size={14} /> {t('smena.closeSmena')}
+                </Button>
+              </ActionRow>
+            </>
+          )}
+        </>
+      )}
+
+      {tab === 'history' && (
+        <Card>
+          {isLoading ? (
+            <p>{t('common.loading', 'Loading...')}</p>
+          ) : history.length === 0 ? (
+            <p style={{ color: 'gray', fontSize: 13 }}>{t('smena.noHistory')}</p>
+          ) : (
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Z#</Th>
+                  <Th>{t('smena.openedAt')}</Th>
+                  <Th>{t('smena.closedAt')}</Th>
+                  <Th>{t('smena.cashier')}</Th>
+                  <Th>{t('smena.totalRevenue')}</Th>
+                  <Th>{t('smena.status')}</Th>
+                  <Th></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {(history as (Smena & { stats?: SmenaStats })[]).map(s => (
+                  <tr key={s.id}>
+                    <Td>№{s.zReportNumber}</Td>
+                    <Td>{fmtDate(s.openedAt)}</Td>
+                    <Td>{s.closedAt ? fmtDate(s.closedAt) : '—'}</Td>
+                    <Td>{s.cashierName}</Td>
+                    <Td>{s.stats ? fmt(s.stats.totalRevenue) + ' so\'m' : '—'}</Td>
+                    <Td>
+                      <StatusBadge $open={s.status === 'OPEN'}>
+                        {s.status === 'OPEN' ? t('smena.statusOpen') : t('smena.statusClosed')}
+                      </StatusBadge>
+                    </Td>
+                    <Td>
+                      <Button
+                        onClick={() => printZReport(s.id)}
+                        style={{ padding: '4px 10px', fontSize: 12 }}
+                      >
+                        <Printer size={12} /> {t('smena.printZReport')}
+                      </Button>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </Card>
+      )}
+
+      {showCloseModal && smena && (
+        <Modal
+          onClose={() => setShowCloseModal(false)}
+          title={t('smena.confirmClose')}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <Label>
+              {t('smena.finalCash')}
+              <NumberInput
+                type="number"
+                min={0}
+                step="1"
+                value={finalCash}
+                onChange={e => setFinalCash(e.target.value)}
+                placeholder="0"
+                autoFocus
+              />
+            </Label>
+
+            <CloseCalc>
+              <CloseRow>
+                <span>{t('smena.initialCash')}</span>
+                <span>{fmt(smena.initialCash)} so'm</span>
+              </CloseRow>
+              {stats && (
+                <>
+                  <CloseRow>
+                    <span>{t('smena.cashSales')}</span>
+                    <span>+{fmt(stats.cashSalesAmount)}</span>
+                  </CloseRow>
+                  <CloseRow>
+                    <span>{t('smena.payIn')}</span>
+                    <span>+{fmt(stats.payInTotal)}</span>
+                  </CloseRow>
+                  <CloseRow>
+                    <span>{t('smena.payOut')}</span>
+                    <span>-{fmt(stats.payOutTotal)}</span>
+                  </CloseRow>
+                  <CloseRow>
+                    <span>{t('smena.returns')}</span>
+                    <span>-{fmt(stats.returnAmount)}</span>
+                  </CloseRow>
+                </>
+              )}
+              <Divider />
+              <CloseRow>
+                <span style={{ fontWeight: 600 }}>{t('smena.expectedCash')}</span>
+                <span style={{ fontWeight: 600 }}>{fmt(expectedCash)} so'm</span>
+              </CloseRow>
+              {finalCash && (
+                <DiffRow $positive={diff >= 0}>
+                  <span>{diff >= 0 ? t('smena.overage') : t('smena.shortage')}</span>
+                  <span>{diff >= 0 ? '+' : ''}{fmt(diff)} so'm</span>
+                </DiffRow>
+              )}
+            </CloseCalc>
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <Button onClick={() => setShowCloseModal(false)}>
+                {t('common.cancel', 'Cancel')}
+              </Button>
+              <Button
+                onClick={handleClose}
+                disabled={isLoading}
+                style={{ backgroundColor: '#ef4444', borderColor: '#ef4444', color: '#fff' }}
+              >
+                {t('smena.closeSmena')}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </Container>
+  );
+}

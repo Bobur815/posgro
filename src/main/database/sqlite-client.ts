@@ -431,6 +431,42 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_pre_weighed_barcode ON pre_weighed_items(barcode)`;
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_pre_weighed_status ON pre_weighed_items(status)`;
   }
+
+  // Migration 12: Smena (shift) management
+  try {
+    await prisma.$queryRaw`SELECT id FROM smenas LIMIT 1`;
+  } catch {
+    await prisma.$executeRaw`
+      CREATE TABLE IF NOT EXISTS smenas (
+        id TEXT PRIMARY KEY,
+        terminal_id TEXT NOT NULL,
+        cashier_id TEXT NOT NULL,
+        cashier_name TEXT NOT NULL,
+        status TEXT DEFAULT 'OPEN',
+        initial_cash REAL NOT NULL,
+        final_cash REAL,
+        z_report_number INTEGER NOT NULL DEFAULT 0,
+        opened_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        closed_at DATETIME,
+        synced INTEGER DEFAULT 0
+      )
+    `;
+    await prisma.$executeRaw`
+      CREATE TABLE IF NOT EXISTS smena_movements (
+        id TEXT PRIMARY KEY,
+        smena_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        amount REAL NOT NULL,
+        note TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (smena_id) REFERENCES smenas(id)
+      )
+    `;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN smena_id TEXT`;
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_smenas_status ON smenas(terminal_id, status)`;
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_smena_movements ON smena_movements(smena_id)`;
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_sales_smena ON sales(smena_id)`;
+  }
 }
 
 export async function closeDatabase(): Promise<void> {

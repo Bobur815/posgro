@@ -8,7 +8,7 @@ const TabBarContainer = styled.div`
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 28px;
+  padding: 4px 10px;
   background-color: ${({ theme }) => theme.colors.surface};
   border-radius: ${({ theme }) => theme.borderRadius};
   box-shadow: ${({ theme }) => theme.shadows.sm};

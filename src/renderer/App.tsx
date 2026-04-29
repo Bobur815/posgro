@@ -30,6 +30,7 @@ import { ScaleSettings } from "./pages/Settings/ScaleSettings";
 import { SyncSettings } from "./pages/Settings/SyncSettings";
 import { TerminalStatus } from "./pages/Settings/TerminalStatus";
 import { AppUpdatePage } from "./pages/Settings/AppUpdatePage";
+import { SmenaPage } from "./pages/Smena/SmenaPage";
 
 function App() {
   const { isAuthenticated } = useAuthStore();
@@ -77,6 +78,9 @@ function App() {
       >
         {/* Default route - POS Screen */}
         <Route index element={<POSScreen />} />
+
+        {/* Smena (shift management) - accessible to all authenticated users */}
+        <Route path="smena" element={<SmenaPage />} />
 
         {/* Products */}
         <Route path="products" element={<ProductList />} />

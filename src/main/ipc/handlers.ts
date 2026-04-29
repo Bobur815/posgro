@@ -4,6 +4,7 @@ import { setupProductsHandlers } from "./products-handlers";
 import { setupSalesHandlers } from "./sales-handlers";
 import { setupWeighedItemsHandlers } from "./weighed-items-handlers";
 import { setupScaleHandlers } from "./scale-handlers";
+import { setupSmenaHandlers } from "./smena-handlers";
 import { getAppConfig, updateConfig } from "../config/app-config";
 import { getAuthToken, getServerToken } from "../sync/queue-manager";
 import { getPrismaClient } from "../database/sqlite-client";
@@ -25,6 +26,7 @@ export function setupIpcHandlers(): void {
   setupSuppliersHandlers();
   setupSettingsHandlers();
   setupPrinterHandlers();
+  setupSmenaHandlers();
   setupAppHandlers();
   setupReceiptHandlers();
 

@@ -45,6 +45,15 @@ export function setupSalesHandlers(): void {
       }
     }
 
+    // Hard-block if no smena is open
+    const currentSmena = await prisma.smena.findFirst({
+      where: { terminalId: config.terminalId, status: 'OPEN' },
+      select: { id: true },
+    });
+    if (!currentSmena) {
+      throw new Error(JSON.stringify({ code: 'NO_SMENA_OPEN' }));
+    }
+
     // Calculate totals
     let totalAmount = 0;
     const items = data.items.map((item: {
@@ -85,6 +94,7 @@ export function setupSalesHandlers(): void {
         cashierId: currentUser.id,
         cashierName: currentUser.nameRu,
         terminalId: config.terminalId,
+        smenaId: currentSmena.id,
         synced: false,
         items: {
           create: items,
@@ -447,6 +457,8 @@ export function setupSalesHandlers(): void {
         details: JSON.stringify({
           receiptNumber: sale.receiptNumber,
           totalAmount: Number(sale.finalAmount),
+          finalAmount: Number(sale.finalAmount),
+          smenaId: (sale as { smenaId?: string | null }).smenaId ?? null,
           itemCount: sale.items.length,
         }),
       },

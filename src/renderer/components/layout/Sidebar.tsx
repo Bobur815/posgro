@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styled, { keyframes } from "styled-components";
 import {
@@ -11,11 +11,8 @@ import {
   Users,
   Settings,
   User,
-  LogIn,
-  LogOut,
-  ChevronLeft,
-  ChevronRight,
   Truck,
+  Clock,
   type LucideIcon,
   ReceiptText,
   RefreshCw,
@@ -23,12 +20,16 @@ import {
 import { useAuthStore } from "../../store/auth-store";
 import { useSidebar } from "../../context/SidebarContext";
 import { useSync } from "../../hooks/useSync";
+import { APP_BAR_HEIGHT } from "./AppBar";
 
 const SIDEBAR_WIDTH = 240;
 
 const Backdrop = styled.div<{ $visible: boolean }>`
   position: fixed;
-  inset: 0;
+  top: ${APP_BAR_HEIGHT}px;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 99;
   background: rgba(0, 0, 0, 0.4);
   opacity: ${({ $visible }) => ($visible ? 1 : 0)};
@@ -40,8 +41,8 @@ const Backdrop = styled.div<{ $visible: boolean }>`
 const Container = styled.aside`
   position: fixed;
   left: 0;
-  top: 0;
-  height: 100%;
+  top: ${APP_BAR_HEIGHT}px;
+  height: calc(100% - ${APP_BAR_HEIGHT}px);
   width: ${SIDEBAR_WIDTH}px;
   z-index: 100;
   pointer-events: none;
@@ -64,47 +65,6 @@ const SidebarInner = styled.div<{ $collapsed: boolean }>`
     $collapsed ? "none" : "4px 0 24px rgba(0,0,0,0.18)"};
 `;
 
-// Tab that sticks out from the right edge of the drawer
-const ToggleTab = styled.button<{$collapsed: boolean}>`
-  position: absolute;
-  right: ${({ $collapsed }) => ($collapsed ? "215px" : "-26px")};
-  top: 5px;
-  width: 26px;
-  height: 52px;
-  background-color: ${({ theme }) => theme.colors.surface};
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  border-left: none;
-  border-radius: 0 8px 8px 0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: auto;
-  box-shadow: 3px 0 8px rgba(0, 0, 0, 0.08);
-  color: ${({ theme }) => theme.colors.textSecondary};
-  transition: all 0.2s;
-
-  &:hover {
-    background-color: ${({ theme }) => theme.colors.primary}12;
-    color: ${({ theme }) => theme.colors.primary};
-    border-color: ${({ theme }) => theme.colors.primary}60;
-  }
-`;
-
-const LogoSection = styled.div`
-  padding: ${({ theme }) => theme.spacing.md} ${({ theme }) => theme.spacing.lg};
-  display: flex;
-  align-items: center;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
-  min-height: 56px;
-`;
-
-const Logo = styled.div`
-  font-size: 18px;
-  font-weight: bold;
-  color: ${({ theme }) => theme.colors.primary};
-  white-space: nowrap;
-`;
 
 const Nav = styled.nav`
   flex: 1;
@@ -217,76 +177,6 @@ const SyncText = styled.span`
   flex: 1;
 `;
 
-const UserSection = styled.div`
-  display: flex;
-  align-items: center;
-  gap: ${({ theme }) => theme.spacing.sm};
-  padding: ${({ theme }) => theme.spacing.sm};
-`;
-
-const UserName = styled.span`
-  font-weight: 500;
-  font-size: 13px;
-  color: ${({ theme }) => theme.colors.text};
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-`;
-
-const UserRole = styled.span`
-  font-size: 11px;
-  color: ${({ theme }) => theme.colors.textSecondary};
-  background-color: ${({ theme }) => theme.colors.primary}20;
-  padding: 1px 6px;
-  border-radius: 10px;
-  white-space: nowrap;
-`;
-
-const UserDetails = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  overflow: hidden;
-  min-width: 0;
-`;
-
-const LoginButton = styled.button`
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: ${({ theme }) => theme.spacing.md};
-  padding: ${({ theme }) => theme.spacing.sm};
-  border-radius: ${({ theme }) => theme.borderRadius};
-  background: none;
-  border: 1px dashed ${({ theme }) => theme.colors.border};
-  color: ${({ theme }) => theme.colors.textSecondary};
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background-color: ${({ theme }) => theme.colors.background};
-    border-color: ${({ theme }) => theme.colors.primary};
-    color: ${({ theme }) => theme.colors.primary};
-  }
-`;
-
-const LogoutButton = styled.button`
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: ${({ theme }) => theme.spacing.sm};
-  padding: ${({ theme }) => theme.spacing.sm};
-  border-radius: ${({ theme }) => theme.borderRadius};
-  background: none;
-  border: none;
-  color: ${({ theme }) => theme.colors.error};
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background-color: ${({ theme }) => theme.colors.error}10;
-  }
-`;
 
 const UpdateDot = styled.span`
   width: 8px;
@@ -298,10 +188,9 @@ const UpdateDot = styled.span`
 `;
 
 export function Sidebar() {
-  const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
-  const { user, isPinLogin, logout } = useAuthStore();
-  const { isCollapsed, toggleSidebar, collapseSidebar } = useSidebar();
+  const { t } = useTranslation();
+  const { user } = useAuthStore();
+  const { isCollapsed, collapseSidebar } = useSidebar();
   const { status, refreshStatus } = useSync();
   const isAdmin = user?.role === "ADMIN";
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -312,11 +201,6 @@ export function Sidebar() {
     return unsub;
   }, []);
 
-  const handleLogin = async () => {
-    await logout();
-    navigate("/login");
-  };
-
   const handleSyncNow = async () => {
     try {
       await window.electronAPI.sync.trigger();
@@ -324,15 +208,6 @@ export function Sidebar() {
     } catch (err) {
       console.error("Sync failed:", err);
     }
-  };
-
-  const handleLogout = async () => {
-    await logout();
-  };
-
-  const getUserName = () => {
-    if (!user) return "";
-    return i18n.language === "uz" ? user.nameUz : user.nameRu;
   };
 
   const renderNavItem = (
@@ -353,23 +228,12 @@ export function Sidebar() {
     <>
       <Backdrop $visible={!isCollapsed} onClick={collapseSidebar} />
       <Container>
-      {/* Toggle tab — always visible regardless of collapsed state */}
-      <ToggleTab $collapsed={isCollapsed}
-        onClick={toggleSidebar}
-        title={isCollapsed ? t("nav.expand") : t("nav.collapse")}
-      >
-        {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-      </ToggleTab>
-
       <SidebarInner $collapsed={isCollapsed}>
-        <LogoSection>
-          <Logo>Yangi Asr</Logo>
-        </LogoSection>
-
         <Nav>
           <NavSection>
             <SectionTitle>{t("nav.main")}</SectionTitle>
             {renderNavItem("/", ShoppingCart, t("nav.pos"), true)}
+            {renderNavItem("/smena", Clock, t("nav.smena"))}
             {renderNavItem("/products", Package, t("nav.products"))}
           </NavSection>
 
@@ -378,16 +242,8 @@ export function Sidebar() {
             {renderNavItem("/reports/daily", ReceiptText, t("nav.receipts"))}
             {isAdmin && (
               <>
-                {renderNavItem(
-                  "/reports/monthly",
-                  TrendingUp,
-                  t("nav.monthlyReport"),
-                )}
-                {renderNavItem(
-                  "/reports/analytics",
-                  LineChart,
-                  t("nav.analytics"),
-                )}
+                {renderNavItem("/reports/monthly", TrendingUp, t("nav.monthlyReport"))}
+                {renderNavItem("/reports/analytics", LineChart, t("nav.analytics"))}
               </>
             )}
           </NavSection>
@@ -395,11 +251,7 @@ export function Sidebar() {
           {isAdmin && (
             <NavSection>
               <SectionTitle>{t("nav.management")}</SectionTitle>
-              {renderNavItem(
-                "/products/stock",
-                ClipboardList,
-                t("nav.inventory"),
-              )}
+              {renderNavItem("/products/stock", ClipboardList, t("nav.inventory"))}
               {renderNavItem("/suppliers", Truck, t("suppliers.title"))}
               {renderNavItem("/users", Users, t("nav.users"))}
               <StyledNavLink to="/settings" onClick={collapseSidebar}>
@@ -437,39 +289,6 @@ export function Sidebar() {
               <RefreshCw size={15} />
             </SyncButton>
           </SyncStatus>
-
-          {isPinLogin ? (
-            <LoginButton onClick={handleLogin}>
-              <IconWrapper>
-                <LogIn size={17} />
-              </IconWrapper>
-              <NavText>{t("auth.login")}</NavText>
-            </LoginButton>
-          ) : (
-            <>
-              {user && (
-                <UserSection>
-                  <IconWrapper>
-                    <User size={17} />
-                  </IconWrapper>
-                  <UserDetails>
-                    <UserName>{getUserName()}</UserName>
-                    <UserRole>
-                      {user.role === "ADMIN"
-                        ? t("users.admin")
-                        : t("users.cashier")}
-                    </UserRole>
-                  </UserDetails>
-                </UserSection>
-              )}
-              <LogoutButton onClick={handleLogout}>
-                <IconWrapper>
-                  <LogOut size={17} />
-                </IconWrapper>
-                <NavText>{t("auth.logout")}</NavText>
-              </LogoutButton>
-            </>
-          )}
         </BottomSection>
       </SidebarInner>
     </Container>

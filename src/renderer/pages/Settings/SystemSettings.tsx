@@ -118,9 +118,9 @@ export function SystemSettings() {
   });
 
   const [terminalId, setTerminalId] = useState("");
-console.log(terminalId);
+  const [storeId, setStoreId] = useState("");
 
-const [syncStatus, setSyncStatus] = useState<{
+  const [syncStatus, setSyncStatus] = useState<{
     isSyncing: boolean;
     lastSyncTime: string | null;
   }>({ isSyncing: false, lastSyncTime: null });
@@ -180,8 +180,11 @@ const [syncStatus, setSyncStatus] = useState<{
 
   const loadTerminalId = async () => {
     try {
-      const config = await window.electronAPI.config.getLocalConfig();
-      if (config) setTerminalId((config as { terminalId: string }).terminalId || "");
+      const config = await window.electronAPI.config.getLocalConfig() as { terminalId?: string; storeId?: string } | null;
+      if (config) {
+        setTerminalId(config.terminalId || "");
+        setStoreId(config.storeId || "");
+      }
     } catch (error) {
       console.error("Failed to load terminal id:", error);
     }
@@ -190,7 +193,7 @@ const [syncStatus, setSyncStatus] = useState<{
   const handleSaveTerminalId = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await window.electronAPI.config.updateLocalConfig({ terminalId });
+      await window.electronAPI.config.updateLocalConfig({ terminalId, storeId });
       alert(t("common.saved"));
     } catch (error) {
       console.error("Failed to save terminal id:", error);
@@ -283,13 +286,22 @@ const [syncStatus, setSyncStatus] = useState<{
       </Section>
 
       <Section>
-        <SectionTitle>{t("settings.terminalId")}</SectionTitle>
+        <SectionTitle>{t("settings.connection")}</SectionTitle>
         <Form onSubmit={handleSaveTerminalId}>
-          <Input
-            label={t("settings.terminalId")}
-            value={terminalId}
-            onChange={(e) => setTerminalId(e.target.value)}
-          />
+          <Row>
+            <Input
+              label={t("settings.storeId")}
+              value={storeId}
+              onChange={(e) => setStoreId(e.target.value)}
+              placeholder="1000"
+            />
+            <Input
+              label={t("settings.terminalId")}
+              value={terminalId}
+              onChange={(e) => setTerminalId(e.target.value)}
+              placeholder="T1"
+            />
+          </Row>
           <InfoText>{t("settings.terminalIdHint")}</InfoText>
           <Actions>
             <Button type="submit">{t("common.save")}</Button>

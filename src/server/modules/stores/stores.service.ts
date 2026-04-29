@@ -75,45 +75,104 @@ export class StoresService {
     const id = await this.generateStoreId();
 
     if (createStoreDto.phone) {
-      const existing = await this.prisma.store.findFirst({
+      const existingStore = await this.prisma.store.findFirst({
         where: { phone: createStoreDto.phone },
       });
-      if (existing) {
+      if (existingStore) {
         throw new ConflictException(
           "Store with this phone number already exists",
         );
       }
+
+      const existingUser = await this.prisma.user.findUnique({
+        where: { phone: createStoreDto.phone },
+      });
+      if (existingUser) {
+        throw new ConflictException(
+          "A user with this phone number already exists",
+        );
+      }
     }
 
-    const store = await this.prisma.store.create({
-      data: {
-        id,
-        name: createStoreDto.name,
-        address: createStoreDto.address,
-        phone: createStoreDto.phone,
-        settings: createStoreDto.settings
-          ? JSON.stringify(createStoreDto.settings)
-          : null,
-        active: true,
-      },
-    });
+    const hashedPassword = createStoreDto.phone
+      ? await bcrypt.hash("123456", 10)
+      : null;
 
-    if (createStoreDto.phone) {
-      const hashedPassword = await bcrypt.hash("123456", 10);
-      await this.prisma.user.create({
+    // Wrap both creates in a transaction so no orphaned store is left if user creation fails
+    const store = await this.prisma.$transaction(async (tx) => {
+      const s = await tx.store.create({
         data: {
-          storeId: store.id,
+          id,
+          name: createStoreDto.name,
+          address: createStoreDto.address,
           phone: createStoreDto.phone,
-          password: hashedPassword,
-          role: UserRole.ADMIN,
-          nameUz: "admin",
-          nameRu: "админ",
+          settings: createStoreDto.settings
+            ? JSON.stringify(createStoreDto.settings)
+            : null,
           active: true,
         },
       });
-    }
+
+      if (createStoreDto.phone && hashedPassword) {
+        await tx.user.create({
+          data: {
+            storeId: s.id,
+            phone: createStoreDto.phone,
+            password: hashedPassword,
+            role: UserRole.ADMIN,
+            nameUz: "Administrator",
+            nameRu: "Администратор",
+            active: true,
+          },
+        });
+      }
+
+      return s;
+    });
 
     return store;
+  }
+
+  async resetAdminUser(storeId: string, phone: string) {
+    await this.findById(storeId);
+
+    const existingUser = await this.prisma.user.findUnique({
+      where: { phone },
+    });
+    if (existingUser && existingUser.storeId !== storeId) {
+      throw new ConflictException(
+        "A user with this phone already exists in another store",
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash("123456", 10);
+
+    if (existingUser) {
+      // Update the existing user to ADMIN and reset password
+      return this.prisma.user.update({
+        where: { phone },
+        data: {
+          role: UserRole.ADMIN,
+          password: hashedPassword,
+          storeId,
+          active: true,
+        },
+        select: { id: true, phone: true, role: true, nameRu: true },
+      });
+    }
+
+    return this.prisma.user.create({
+      data: {
+        storeId,
+        phone,
+        password: hashedPassword,
+        role: UserRole.ADMIN,
+        nameUz: "Administrator",
+        nameRu: "Администратор",
+        active: true,
+      },
+      select: { id: true, phone: true, role: true, nameRu: true },
+    });
   }
 
   async update(id: string, updateStoreDto: UpdateStoreDto) {

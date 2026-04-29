@@ -126,6 +126,38 @@ model PreWeighedItem {
 
 // ==================== SALES ====================
 
+model Smena {
+  id            String    @id @default(cuid())
+  terminalId    String    @map("terminal_id")
+  cashierId     String    @map("cashier_id")
+  cashierName   String    @map("cashier_name")
+  status        String    @default("OPEN")
+  initialCash   Decimal   @map("initial_cash")
+  finalCash     Decimal?  @map("final_cash")
+  zReportNumber Int       @map("z_report_number")
+  openedAt      DateTime  @default(now()) @map("opened_at")
+  closedAt      DateTime? @map("closed_at")
+  synced        Boolean   @default(false)
+  sales         Sale[]
+  movements     SmenaMovement[]
+
+  @@index([terminalId, status])
+  @@map("smenas")
+}
+
+model SmenaMovement {
+  id        String   @id @default(cuid())
+  smenaId   String   @map("smena_id")
+  smena     Smena    @relation(fields: [smenaId], references: [id])
+  type      String
+  amount    Decimal
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([smenaId])
+  @@map("smena_movements")
+}
+
 model Sale {
   id             String   @id @default(cuid())
   receiptNumber  String   @unique @map("receipt_number")
@@ -138,6 +170,9 @@ model Sale {
   cashierName String @map("cashier_name")
   terminalId  String @map("terminal_id")
 
+  smenaId  String?  @map("smena_id")
+  smena    Smena?   @relation(fields: [smenaId], references: [id])
+
   // Sync tracking
   synced   Boolean   @default(false)
   syncedAt DateTime? @map("synced_at")
@@ -148,6 +183,7 @@ model Sale {
 
   @@index([synced])
   @@index([createdAt])
+  @@index([smenaId])
   @@map("sales")
 }
 

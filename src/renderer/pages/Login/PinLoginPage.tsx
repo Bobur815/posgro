@@ -12,6 +12,8 @@ import { isUzPhoneComplete } from "@shared/utils/phone";
 
 type LoginMode = "pin" | "phone";
 
+const SAVED_KEY = "login_saved_pos";
+
 const Container = styled.div`
   display: flex;
   min-height: 100vh;
@@ -199,6 +201,16 @@ const PhoneForm = styled.form`
   text-align: left;
 `;
 
+const RememberRow = styled.label`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.sm};
+  font-size: 14px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  cursor: pointer;
+  user-select: none;
+`;
+
 const PhoneRow = styled.div`
   display: flex;
   align-items: flex-end;
@@ -244,6 +256,7 @@ export function PinLoginPage() {
   // Phone login state
   const [phoneDigits, setPhoneDigits] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [focusedField, setFocusedField] = useState<"phone" | "password">(
@@ -252,6 +265,15 @@ export function PinLoginPage() {
 
   useEffect(() => {
     clearError();
+    const raw = localStorage.getItem(SAVED_KEY);
+    if (raw) {
+      try {
+        const saved = JSON.parse(raw) as { phone?: string; password?: string };
+        if (saved.phone) setPhoneDigits(saved.phone);
+        if (saved.password) setPassword(saved.password);
+        setRememberMe(true);
+      } catch { /* ignore */ }
+    }
   }, [clearError]);
 
   const switchMode = (newMode: LoginMode) => {
@@ -340,6 +362,11 @@ export function PinLoginPage() {
     const fullPhone = "998" + phoneDigits;
     const success = await login(fullPhone, password);
     if (success) {
+      if (rememberMe) {
+        localStorage.setItem(SAVED_KEY, JSON.stringify({ phone: phoneDigits, password }));
+      } else {
+        localStorage.removeItem(SAVED_KEY);
+      }
       navigate("/");
     }
   };
@@ -369,7 +396,14 @@ export function PinLoginPage() {
       ) {
         const fullPhone = "998" + phoneDigits;
         login(fullPhone, password).then((success) => {
-          if (success) navigate("/");
+          if (success) {
+            if (rememberMe) {
+              localStorage.setItem(SAVED_KEY, JSON.stringify({ phone: phoneDigits, password }));
+            } else {
+              localStorage.removeItem(SAVED_KEY);
+            }
+            navigate("/");
+          }
         });
       }
       return;
@@ -482,6 +516,14 @@ export function PinLoginPage() {
                   ref={passwordRef}
                   required
                 />
+                <RememberRow>
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                  />
+                  {t("auth.rememberMe")}
+                </RememberRow>
                 {error && <ErrorMessage>{t(error, { defaultValue: error })}</ErrorMessage>}
                 <Button
                   type="submit"

@@ -475,3 +475,9 @@ export function setPrinterConfig(config: Partial<PrinterConfig>): void {
 export function getPrinterConfig(): PrinterConfig {
   return { ...printerConfig };
 }
+
+export { loadReceiptSettings };
+
+export async function printRawHTML(html: string, widthMm: number): Promise<boolean> {
+  return printHTML(html, widthMm);
+}

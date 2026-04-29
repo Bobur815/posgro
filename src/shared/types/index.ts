@@ -73,3 +73,5 @@ export type {
   ProductMatch,
   ReceiptLineItem,
 } from './receipt.types';
+
+export type { Smena, SmenaMovement, SmenaStats } from './smena.types';

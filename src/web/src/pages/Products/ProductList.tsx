@@ -210,6 +210,7 @@ export function ProductList() {
       render: (_: Product, index: number) => pageOffset + index + 1,
     },
     { key: "id", header: t("pos.id") },
+    { key: "mxik", header: "MXIK" },
     { key: "barcode", header: t("products.barcode") },
     {
       key: "internalCode",

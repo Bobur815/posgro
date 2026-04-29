@@ -111,6 +111,17 @@ export class StoresController {
     return this.storesService.deactivate(id);
   }
 
+  @Post(':id/reset-admin')
+  @ApiOperation({ summary: 'Create or reset ADMIN user for a store (Super Admin only). Sets password to 123456.' })
+  @ApiParam({ name: 'id', description: 'Store ID' })
+  @ApiResponse({ status: 201, description: 'Admin user created or updated' })
+  async resetAdmin(@Param('id') id: string, @Body() body: { phone: string }) {
+    if (!body.phone) {
+      throw new BadRequestException('phone is required');
+    }
+    return this.storesService.resetAdminUser(id, body.phone);
+  }
+
   @Post(':id/credits')
   @ApiOperation({ summary: 'Add AI credit balance to a store (Super Admin only)' })
   @ApiParam({ name: 'id', description: 'Store ID' })
