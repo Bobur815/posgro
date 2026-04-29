@@ -552,7 +552,7 @@ export function ReceiptScanModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // TODO: revert to "upload" before shipping
-  const [step, setStep] = useState<Step>("review");
+  const [step, setStep] = useState<Step>("upload");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [imageMimeType, setImageMimeType] = useState<string>("image/jpeg");
@@ -563,24 +563,6 @@ export function ReceiptScanModal({
   const [scanResult, setScanResult] = useState<ScannedReceiptData | null>(null);
   // TODO: revert to [] before shipping
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([
-    {
-      scannedName: "Молоко 1л",
-      mxik: "12345678",
-      productId: "",
-      quantity: 2,
-      unitCost: 5000,
-      confidence: "medium",
-      skip: false,
-    },
-    {
-      scannedName: "Хлеб Дарницкий",
-      mxik: null,
-      productId: "",
-      quantity: 1,
-      unitCost: 3000,
-      confidence: "low",
-      skip: false,
-    },
   ]);
   const [supplierId, setSupplierId] = useState("");
   const [paymentMethod, setPaymentMethod] =
@@ -1435,7 +1417,6 @@ export function ReceiptScanModal({
                 nameUz: row.scannedName,
                 mxik: row.mxik || undefined,
                 cost: row.unitCost || undefined,
-                stock: row.quantity || undefined,
                 groupCode: row.mxikInfo?.groupCode || undefined,
               }}
               onClose={() => setAddingForRowIdx(null)}

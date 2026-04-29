@@ -4,6 +4,7 @@ export interface DeviceSession {
   id: string;
   userAgent: string | null;
   ipAddress: string | null;
+  deviceName: string | null;
   createdAt: string;
   isCurrent: boolean;
   isRevoked: boolean;
@@ -85,6 +86,10 @@ export const auth = {
   },
   revokeOtherSessions: async () => {
     const { data } = await axiosInstance.delete("/auth/sessions/others");
+    return data;
+  },
+  nameDevice: async (ipAddress: string, name: string) => {
+    const { data } = await axiosInstance.patch("/auth/sessions/device-name", { ipAddress, name });
     return data;
   },
 };
