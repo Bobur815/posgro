@@ -284,7 +284,7 @@ interface CheckoutProps {
 
 export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   const { t, i18n } = useTranslation();
-  const { items, subtotal, tax, discount, total, clearCart, editingSaleId } =
+  const { items, subtotal, tax, taxRate, discount, total, clearCart, editingSaleId } =
     useCartStore();
   const { createSale, updateSale, isLoading } = useSales();
   const toast = useToast();
@@ -387,7 +387,7 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
             </SummaryRow>
             {tax > 0 && (
               <SummaryRow>
-                <span>{t("pos.tax")}</span>
+                <span>sh.j. QQS {taxRate}%</span>
                 <span>{formatCurrency(tax)}</span>
               </SummaryRow>
             )}

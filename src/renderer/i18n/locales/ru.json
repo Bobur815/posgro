@@ -374,7 +374,8 @@
     "storeName": "Название магазина",
     "storeAddress": "Адрес",
     "storePhone": "Телефон",
-    "taxRate": "Ставка налога",
+    "storeStir": "ИНН/СТИР",
+    "taxRate": "QQS (%)",
     "receiptSettings": "Настройки чека",
     "receiptHeader": "Заголовок чека",
     "receiptFooter": "Подвал чека",
@@ -422,7 +423,15 @@
     "loadError": "Не удалось загрузить сессии",
     "revokeSuccess": "Сессия завершена",
     "revokeOthersSuccess": "Все другие сессии завершены",
-    "revokeError": "Не удалось завершить сессию"
+    "revokeError": "Не удалось завершить сессию",
+    "sessions": "сессий",
+    "details": "Сессии",
+    "revokeAll": "Завершить все",
+    "deviceName": "Название устройства",
+    "deviceNamePlaceholder": "Мой ПК, Касса 1...",
+    "saveName": "Сохранить",
+    "nameSaved": "Название сохранено",
+    "nameSaveError": "Не удалось сохранить название"
   },
   "pagination": {
     "showing": "Показано {{from}}–{{to}} из {{total}}",
@@ -526,6 +535,7 @@
     "back": "Назад"
   },
   "suppliers": {
+    "status": "Статус",
     "title": "Поставщики",
     "supplier": "Поставщик",
     "nameRu": "Название (RU)",
@@ -611,6 +621,8 @@
     "drawerFailed": "Не удалось открыть ящик"
   },
   "receiptScan": {
+    "scanCharged":"Сканирование чека оплачено",
+    "balance":"Баланс",
     "supplierNotFound": "Поставщик не найден",
     "scanReceipt": "Сканировать чек",
     "uploadImage": "Загрузить файл",

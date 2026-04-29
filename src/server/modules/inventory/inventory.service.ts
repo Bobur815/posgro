@@ -103,33 +103,49 @@ export class InventoryService {
       data: productUpdate,
     });
 
-    // For debt-creating payment methods (INSTALLMENT, ONE_TO_ONE), record the
-    // purchase as a SupplierTransaction and decrement the supplier balance.
-    // CASH / CARD / BANK_TRANSFER are assumed paid immediately — no debt recorded.
-    if (
-      createArrivalDto.supplierId &&
-      createArrivalDto.paymentMethod &&
-      DEBT_PAYMENT_METHODS.includes(createArrivalDto.paymentMethod as SupplierPaymentMethod)
-    ) {
+    if (createArrivalDto.supplierId && createArrivalDto.paymentMethod) {
       const paymentMethod = createArrivalDto.paymentMethod as SupplierPaymentMethod;
+      const isDebt = DEBT_PAYMENT_METHODS.includes(paymentMethod);
+      const description = `Arrival: ${product.nameRu} x${createArrivalDto.quantity}`;
+
       await this.prisma.supplierTransaction.create({
         data: {
           storeId,
           supplierId: createArrivalDto.supplierId,
           type: SupplierTransactionType.PURCHASE,
           paymentMethod,
-          amount: -totalCost, // negative = we owe more
-          description: `Arrival: ${product.nameRu} x${createArrivalDto.quantity}`,
+          amount: -totalCost,
+          description,
           referenceId: arrival.id,
           referenceType: 'ARRIVAL',
           createdBy: userId,
         },
       });
 
-      await this.prisma.supplier.update({
-        where: { id: createArrivalDto.supplierId },
-        data: { balance: { decrement: totalCost } },
-      });
+      if (isDebt) {
+        // Debt methods: supplier balance decrements (we owe more)
+        await this.prisma.supplier.update({
+          where: { id: createArrivalDto.supplierId },
+          data: { balance: { decrement: totalCost } },
+        });
+      } else {
+        // Immediate payment (CASH/BANK_TRANSFER): record payment transaction so
+        // both sides of the exchange appear in transaction history; balance stays 0.
+        await this.prisma.supplierTransaction.create({
+          data: {
+            storeId,
+            supplierId: createArrivalDto.supplierId,
+            type: SupplierTransactionType.PAYMENT,
+            paymentMethod,
+            amount: totalCost,
+            description: `Payment for: ${description}`,
+            referenceId: arrival.id,
+            referenceType: 'ARRIVAL',
+            createdBy: userId,
+            paidAt: new Date(),
+          },
+        });
+      }
     }
 
     return arrival;

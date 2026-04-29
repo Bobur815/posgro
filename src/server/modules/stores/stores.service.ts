@@ -1,7 +1,13 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateStoreDto } from "./dto/create-store.dto";
 import { UpdateStoreDto } from "./dto/update-store.dto";
+import * as bcrypt from "bcryptjs";
+import { UserRole } from "@prisma/client";
 
 @Injectable()
 export class StoresService {
@@ -16,6 +22,7 @@ export class StoresService {
             users: true,
             products: true,
             sales: true,
+            terminalHeartbeats: true,
           },
         },
       },
@@ -31,6 +38,7 @@ export class StoresService {
             users: true,
             products: true,
             sales: true,
+            terminalHeartbeats: true,
           },
         },
       },
@@ -66,7 +74,18 @@ export class StoresService {
   async create(createStoreDto: CreateStoreDto) {
     const id = await this.generateStoreId();
 
-    return this.prisma.store.create({
+    if (createStoreDto.phone) {
+      const existing = await this.prisma.store.findFirst({
+        where: { phone: createStoreDto.phone },
+      });
+      if (existing) {
+        throw new ConflictException(
+          "Store with this phone number already exists",
+        );
+      }
+    }
+
+    const store = await this.prisma.store.create({
       data: {
         id,
         name: createStoreDto.name,
@@ -78,6 +97,23 @@ export class StoresService {
         active: true,
       },
     });
+
+    if (createStoreDto.phone) {
+      const hashedPassword = await bcrypt.hash("123456", 10);
+      await this.prisma.user.create({
+        data: {
+          storeId: store.id,
+          phone: createStoreDto.phone,
+          password: hashedPassword,
+          role: UserRole.ADMIN,
+          nameUz: "admin",
+          nameRu: "админ",
+          active: true,
+        },
+      });
+    }
+
+    return store;
   }
 
   async update(id: string, updateStoreDto: UpdateStoreDto) {
@@ -115,8 +151,53 @@ export class StoresService {
 
   async delete(id: string) {
     await this.findById(id);
-    await this.prisma.store.delete({ where: { id } });
+
+    const scheduledDeleteAt = new Date();
+    scheduledDeleteAt.setDate(scheduledDeleteAt.getDate() + 30);
+
+    await this.prisma.store.update({
+      where: { id },
+      data: { active: false, scheduledDeleteAt },
+    });
+
+    return { success: true, scheduledDeleteAt };
+  }
+
+  async cancelDelete(id: string) {
+    await this.findById(id);
+
+    await this.prisma.store.update({
+      where: { id },
+      data: { active: true, scheduledDeleteAt: null },
+    });
+
     return { success: true };
+  }
+
+  async purgeExpired() {
+    const expired = await this.prisma.store.findMany({
+      where: { scheduledDeleteAt: { lte: new Date() } },
+      select: { id: true },
+    });
+
+    for (const { id } of expired) {
+      await this.prisma.$transaction([
+        this.prisma.auditLog.deleteMany({ where: { storeId: id } }),
+        this.prisma.terminalHeartbeat.deleteMany({ where: { storeId: id } }),
+        this.prisma.systemSetting.deleteMany({ where: { storeId: id } }),
+        this.prisma.supplierTransaction.deleteMany({ where: { storeId: id } }),
+        this.prisma.inventoryArrival.deleteMany({ where: { storeId: id } }),
+        this.prisma.sale.deleteMany({ where: { storeId: id } }),
+        // UserSessions cascade-delete with User (onDelete: Cascade on userId)
+        this.prisma.product.deleteMany({ where: { storeId: id } }),
+        this.prisma.supplier.deleteMany({ where: { storeId: id } }),
+        this.prisma.category.deleteMany({ where: { storeId: id } }),
+        this.prisma.user.deleteMany({ where: { storeId: id } }),
+        this.prisma.store.delete({ where: { id } }),
+      ]);
+    }
+
+    return { purged: expired.length };
   }
 
   async deactivate(id: string) {

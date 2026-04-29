@@ -14,6 +14,7 @@ import {
   Legend,
 } from 'recharts';
 import { Select } from '../../components/common/Select';
+import { DateInput } from '../../components/common/DateInput';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -138,19 +139,6 @@ const PresetSelect = styled(Select)`
   min-width: 200px;
 `;
 
-const DateInput = styled.input`
-  padding: ${({ theme }) => theme.spacing.sm};
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  border-radius: ${({ theme }) => theme.borderRadius};
-  background-color: ${({ theme }) => theme.colors.surface};
-  color: ${({ theme }) => theme.colors.text};
-  font-size: 14px;
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme.colors.primary};
-  }
-`;
-
 const DateSep = styled.span`
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
@@ -224,7 +212,7 @@ export function Analytics() {
   const { t, i18n } = useTranslation();
   const theme = useTheme();
 
-  const [preset, setPreset] = useState<DatePreset>('today');
+  const [preset, setPreset] = useState<DatePreset>('monthStart');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [data, setData] = useState<AnalyticsData | null>(null);
@@ -296,6 +284,19 @@ export function Analytics() {
 
   const tickStyle = { fontSize: 11, fill: TEXT_SEC };
 
+  const isDark = theme.colors.text === '#ffffff';
+  const tooltipStyle = {
+    backgroundColor: theme.colors.surface,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: '6px',
+    color: theme.colors.text,
+    fontSize: 13,
+  };
+  const tooltipCursor = {
+    stroke: BORDER,
+    fill: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
+  };
+
   return (
     <Container>
       {/* ── Header / Filters ── */}
@@ -311,15 +312,13 @@ export function Analytics() {
           {preset === 'custom' && (
             <>
               <DateInput
-                type="date"
                 value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
+                onChange={(val) => setCustomStart(val)}
               />
               <DateSep>—</DateSep>
               <DateInput
-                type="date"
                 value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
+                onChange={(val) => setCustomEnd(val)}
               />
             </>
           )}
@@ -381,6 +380,8 @@ export function Analytics() {
                   />
                   <Tooltip
                     formatter={(v: number | undefined) => [fmt(v ?? 0), t('reports.revenue')]}
+                    contentStyle={tooltipStyle}
+                    cursor={{ stroke: BORDER }}
                   />
                   <Area
                     type="monotone"
@@ -416,6 +417,8 @@ export function Analytics() {
                     <Tooltip
                       formatter={(v: number | undefined) => [v ?? 0, t('reports.transactions')]}
                       labelFormatter={(h) => `${h}:00 – ${(Number(h) + 1) % 24}:00`}
+                      contentStyle={tooltipStyle}
+                      cursor={tooltipCursor}
                     />
                     <Bar dataKey="count" fill={PRIMARY} radius={[3, 3, 0, 0]} />
                   </BarChart>
@@ -448,6 +451,8 @@ export function Analytics() {
                     />
                     <Tooltip
                       formatter={(v: number | undefined) => [fmt(v ?? 0), t('reports.revenue')]}
+                      contentStyle={tooltipStyle}
+                      cursor={tooltipCursor}
                     />
                     <Bar dataKey="revenue" fill={INFO} radius={[0, 3, 3, 0]} />
                   </BarChart>
@@ -479,6 +484,8 @@ export function Analytics() {
                     />
                     <Tooltip
                       formatter={(v: number | undefined) => [v ?? 0, t('reports.items')]}
+                      contentStyle={tooltipStyle}
+                      cursor={tooltipCursor}
                     />
                     <Bar dataKey="quantity" fill={SUCCESS} radius={[0, 3, 3, 0]} />
                   </BarChart>
@@ -505,6 +512,8 @@ export function Analytics() {
                     />
                     <Tooltip
                       formatter={(v: number | undefined) => [fmt(v ?? 0), t('reports.revenue')]}
+                      contentStyle={tooltipStyle}
+                      cursor={tooltipCursor}
                     />
                     <Bar dataKey="revenue" fill={WARNING} radius={[3, 3, 0, 0]} />
                   </BarChart>
@@ -533,6 +542,8 @@ export function Analytics() {
                   />
                   <Tooltip
                     formatter={(v: number | undefined) => [fmt(v ?? 0), '']}
+                    contentStyle={tooltipStyle}
+                    cursor={tooltipCursor}
                   />
                   <Legend />
                   <Bar

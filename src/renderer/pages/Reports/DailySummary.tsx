@@ -5,7 +5,11 @@ import { useSales } from "../../hooks/useSales";
 import { useAuthStore } from "../../store/auth-store";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { Modal } from "../../components/common/Modal";
-import { Printer, Trash } from "lucide-react";
+import { Button } from "../../components/common/Button";
+import { Pagination } from "../../components/common/Pagination";
+import { DateInput } from "../../components/common/DateInput";
+import { usePagination } from "../../hooks/usePagination";
+import { Printer, Trash, Eraser } from "lucide-react";
 
 const Container = styled.div`
   display: flex;
@@ -50,26 +54,11 @@ const FilterLabel = styled.label`
   letter-spacing: 0.5px;
 `;
 
-const DateInput = styled.input`
-  padding: 6px 10px;
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  border-radius: ${({ theme }) => theme.borderRadius};
-  background-color: ${({ theme }) => theme.colors.background};
-  color: ${({ theme }) => theme.colors.text};
-  font-size: 14px;
-  cursor: pointer;
-
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme.colors.primary};
-  }
-`;
-
 const FilterSelect = styled.select`
-  padding: 6px 10px;
+  padding: 7px 10px;
   border: 1px solid ${({ theme }) => theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
-  background-color: ${({ theme }) => theme.colors.background};
+  background-color: ${({ theme }) => theme.colors.surface};
   color: ${({ theme }) => theme.colors.text};
   font-size: 14px;
   cursor: pointer;
@@ -77,22 +66,6 @@ const FilterSelect = styled.select`
   &:focus {
     outline: none;
     border-color: ${({ theme }) => theme.colors.primary};
-  }
-`;
-
-const ResetButton = styled.button`
-  padding: 6px 14px;
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  border-radius: ${({ theme }) => theme.borderRadius};
-  background-color: ${({ theme }) => theme.colors.background};
-  color: ${({ theme }) => theme.colors.textSecondary};
-  font-size: 14px;
-  cursor: pointer;
-  align-self: flex-end;
-
-  &:hover {
-    background-color: ${({ theme }) => theme.colors.border};
-    color: ${({ theme }) => theme.colors.text};
   }
 `;
 
@@ -353,6 +326,17 @@ export function ReceiptsSummary() {
     };
   }, [filteredSales]);
 
+  const {
+    pageData: pagedSales,
+    currentPage,
+    totalPages,
+    totalItems: paginationTotalItems,
+    pageSize,
+    pageSizeOptions,
+    goToPage,
+    setPageSize,
+  } = usePagination(filteredSales);
+
   const handlePrint = async (saleId: string) => {
     try {
       await window.electronAPI.printer.printReceipt(saleId);
@@ -383,19 +367,15 @@ export function ReceiptsSummary() {
         <FilterGroup>
           <FilterLabel>{t("reports.startDate")}</FilterLabel>
           <DateInput
-            type="date"
             value={startDate}
-            onKeyDown={(e) => e.preventDefault()}
-            onChange={(e) => setStartDate(e.target.value)}
+            onChange={(val) => setStartDate(val)}
           />
         </FilterGroup>
         <FilterGroup>
           <FilterLabel>{t("reports.endDate")}</FilterLabel>
           <DateInput
-            type="date"
             value={endDate}
-            onKeyDown={(e) => e.preventDefault()}
-            onChange={(e) => setEndDate(e.target.value)}
+            onChange={(val) => setEndDate(val)}
           />
         </FilterGroup>
         <FilterGroup>
@@ -427,7 +407,9 @@ export function ReceiptsSummary() {
             </FilterSelect>
           </FilterGroup>
         )}
-        <ResetButton onClick={handleReset}>{t("common.refresh")}</ResetButton>
+        <Button variant="secondary" size="medium" onClick={handleReset}>
+          <Eraser size={18} /> {t("common.refresh")}
+        </Button>
       </FilterBar>
 
       {summary && (
@@ -497,7 +479,7 @@ export function ReceiptsSummary() {
               </tr>
             </thead>
             <tbody>
-              {filteredSales.map((sale) => (
+              {pagedSales.map((sale) => (
                 <Tr key={sale.id}>
                   <Td style={{ whiteSpace: "nowrap" }}>
                     {formatDateTime(sale.createdAt)}
@@ -544,6 +526,17 @@ export function ReceiptsSummary() {
               ))}
             </tbody>
           </Table>
+        )}
+        {filteredSales.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={paginationTotalItems}
+            pageSize={pageSize}
+            pageSizeOptions={pageSizeOptions}
+            onPageChange={goToPage}
+            onPageSizeChange={setPageSize}
+          />
         )}
       </TableCard>
 

@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
 import { Button } from '../../components/common/Button';
+import { Pagination } from '../../components/common/Pagination';
 import { useSales } from '../../hooks/useSales';
+import { usePagination } from '../../hooks/usePagination';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 
 const Container = styled.div`
@@ -25,7 +27,8 @@ const FilterRow = styled.div`
 `;
 
 const Select = styled.select`
-  padding: ${({ theme }) => theme.spacing.sm};
+  padding: ${({ theme }) => theme.spacing.md};
+  font-size: 16px;
   border: 1px solid ${({ theme }) => theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
   background-color: ${({ theme }) => theme.colors.surface};
@@ -175,11 +178,22 @@ export function MonthlyReport() {
     setGenerated(true);
   };
 
+  const {
+    pageData: pagedSales,
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    pageSizeOptions,
+    goToPage,
+    setPageSize,
+  } = usePagination(sales);
+
   // Stats computed from loaded sales
   const totalRevenue = sales.reduce((sum, s) => sum + Number(s.finalAmount), 0);
   const cashCount = sales.filter((s) => s.paymentMethod === 'cash').length;
   const cardCount = sales.filter((s) => s.paymentMethod === 'card').length;
-  const totalItems = sales.reduce((sum, s) => sum + s.items.length, 0);
+  const totalItemsSold = sales.reduce((sum, s) => sum + s.items.length, 0);
   const avgTransaction = sales.length > 0 ? totalRevenue / sales.length : 0;
 
   return (
@@ -249,7 +263,7 @@ export function MonthlyReport() {
 
             <StatCard>
               <StatLabel>{t('reports.itemsSold')}</StatLabel>
-              <StatValue>{totalItems}</StatValue>
+              <StatValue>{totalItemsSold}</StatValue>
               <StatSubtext>{t('reports.items')}</StatSubtext>
             </StatCard>
 
@@ -286,7 +300,7 @@ export function MonthlyReport() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sales.map((sale) => (
+                  {pagedSales.map((sale) => (
                     <Tr key={sale.id}>
                       <Td style={{ whiteSpace: 'nowrap' }}>{formatDateTime(sale.createdAt)}</Td>
                       <Td style={{ fontFamily: 'monospace' }}>#{sale.receiptNumber}</Td>
@@ -305,6 +319,17 @@ export function MonthlyReport() {
                   ))}
                 </tbody>
               </Table>
+            )}
+            {sales.length > 0 && (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                pageSize={pageSize}
+                pageSizeOptions={pageSizeOptions}
+                onPageChange={goToPage}
+                onPageSizeChange={setPageSize}
+              />
             )}
           </TableCard>
         </>

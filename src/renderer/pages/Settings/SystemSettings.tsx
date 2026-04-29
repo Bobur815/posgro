@@ -112,6 +112,7 @@ export function SystemSettings() {
     storeName: "",
     storeAddress: "",
     storePhone: "",
+    storeStir: "",
     taxRate: "0",
     syncInterval: "5",
   });
@@ -143,6 +144,7 @@ const [syncStatus, setSyncStatus] = useState<{
         storeName: allSettings.store_name || "",
         storeAddress: allSettings.store_address || "",
         storePhone: allSettings.store_phone || "",
+        storeStir: allSettings.store_stir || "",
         taxRate: allSettings.tax_rate || "0",
         syncInterval: allSettings.sync_interval || "5",
       }));
@@ -166,11 +168,9 @@ const [syncStatus, setSyncStatus] = useState<{
     e.preventDefault();
     try {
       await window.electronAPI.settings.set("store_name", settings.storeName);
-      await window.electronAPI.settings.set(
-        "store_address",
-        settings.storeAddress,
-      );
+      await window.electronAPI.settings.set("store_address", settings.storeAddress);
       await window.electronAPI.settings.set("store_phone", settings.storePhone);
+      await window.electronAPI.settings.set("store_stir", settings.storeStir);
       await window.electronAPI.settings.set("tax_rate", settings.taxRate);
       alert(t("common.saved"));
     } catch (error) {
@@ -257,6 +257,15 @@ const [syncStatus, setSyncStatus] = useState<{
                 setSettings((prev) => ({ ...prev, storePhone: e.target.value }))
               }
             />
+            <Input
+              label={t("settings.storeStir")}
+              value={settings.storeStir}
+              onChange={(e) =>
+                setSettings((prev) => ({ ...prev, storeStir: e.target.value }))
+              }
+            />
+          </Row>
+          <Row>
             <Input
               label={t("settings.taxRate")}
               type="number"

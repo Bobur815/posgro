@@ -36,8 +36,9 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    const deviceName = await this.resolveDeviceName(user.id, ipAddress);
     const session = await this.prisma.userSession.create({
-      data: { userId: user.id, userAgent, ipAddress },
+      data: { userId: user.id, userAgent, ipAddress, deviceName },
     });
 
     const payload: JwtPayload = {
@@ -120,5 +121,23 @@ export class AuthService {
       data: { isRevoked: true },
     });
     return { success: true };
+  }
+
+  async nameDevice(userId: string, ipAddress: string, name: string) {
+    await this.prisma.userSession.updateMany({
+      where: { userId, ipAddress, isRevoked: false },
+      data: { deviceName: name.trim() || null },
+    });
+    return { success: true };
+  }
+
+  private async resolveDeviceName(userId: string, ipAddress?: string): Promise<string | null> {
+    if (!ipAddress) return null;
+    const prev = await this.prisma.userSession.findFirst({
+      where: { userId, ipAddress, deviceName: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      select: { deviceName: true },
+    });
+    return prev?.deviceName ?? null;
   }
 }

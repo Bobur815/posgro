@@ -78,6 +78,21 @@ export class StoresController {
     return this.storesService.delete(id);
   }
 
+  @Put(':id/cancel-delete')
+  @ApiOperation({ summary: 'Cancel scheduled deletion and reactivate store (Super Admin only)' })
+  @ApiParam({ name: 'id', description: 'Store ID' })
+  @ApiResponse({ status: 200, description: 'Deletion cancelled, store reactivated' })
+  async cancelDelete(@Param('id') id: string) {
+    return this.storesService.cancelDelete(id);
+  }
+
+  @Post('purge-expired')
+  @ApiOperation({ summary: 'Permanently delete all stores past their 30-day grace period (Super Admin only)' })
+  @ApiResponse({ status: 200, description: 'Returns number of purged stores' })
+  async purgeExpired() {
+    return this.storesService.purgeExpired();
+  }
+
   @Put(':id/activate')
   @ApiOperation({ summary: 'Activate store (Super Admin only)' })
   @ApiParam({ name: 'id', description: 'Store ID', example: 'clxyz123' })

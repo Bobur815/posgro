@@ -365,7 +365,8 @@
     "storeName": "Do'kon nomi",
     "storeAddress": "Manzil",
     "storePhone": "Telefon",
-    "taxRate": "Soliq stavkasi",
+    "storeStir": "STIR/INN",
+    "taxRate": "QQS (%)",
     "receiptSettings": "Chek sozlamalari",
     "receiptHeader": "Chek sarlavhasi",
     "receiptFooter": "Chek pastki qismi",
@@ -411,7 +412,15 @@
     "loadError": "Sessiyalarni yuklashda xato",
     "revokeSuccess": "Sessiya tugatildi",
     "revokeOthersSuccess": "Barcha boshqa sessiyalar tugatildi",
-    "revokeError": "Sessiyani tugatishda xato"
+    "revokeError": "Sessiyani tugatishda xato",
+    "sessions": "sessiya",
+    "details": "Sessiyalar",
+    "revokeAll": "Hammasini tugatish",
+    "deviceName": "Qurilma nomi",
+    "deviceNamePlaceholder": "Mening kompyuterim, Kassa 1...",
+    "saveName": "Saqlash",
+    "nameSaved": "Nom saqlandi",
+    "nameSaveError": "Nomni saqlashda xato"
   },
   "pagination": {
     "showing": "{{from}}–{{to}} / {{total}} ta",
@@ -515,6 +524,7 @@
     "back": "Orqaga"
   },
   "suppliers": {
+    "status":"Holat",
     "add":"Qo'shish",
     "title": "Yetkazib beruvchilar",
     "supplier": "Yetkazib beruvchi",
@@ -612,6 +622,8 @@
     "cameraError": "Kameraga kirishda xatolik"
   },
   "receiptScan": {
+    "scanCharged":"Skaner narxi",
+    "balance":"Balans",
     "supplierNotFound": "Chekdagi yetkazib beruvchi topilmadi",
     "scanReceipt": "Chekni skanerlash",
     "uploadImage": "Faylni yuklash",

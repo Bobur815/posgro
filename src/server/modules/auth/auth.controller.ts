@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Patch,
   Delete,
   Body,
   Get,
@@ -79,6 +80,18 @@ export class AuthController {
   async getSessions(@CurrentUser() user: User & { sessionId?: string }) {
     const sessions = await this.authService.getSessions(user.id);
     return sessions.map((s) => ({ ...s, isCurrent: s.id === user.sessionId }));
+  }
+
+  @Patch('sessions/device-name')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Set a name for all sessions from a given IP' })
+  async nameDevice(
+    @CurrentUser() user: User & { sessionId?: string },
+    @Body() body: { ipAddress: string; name: string },
+  ) {
+    return this.authService.nameDevice(user.id, body.ipAddress, body.name);
   }
 
   @Delete('sessions/others')

@@ -107,6 +107,8 @@ export function ReceiptSettings() {
     store_name: '',
     store_address: '',
     store_phone: '',
+    store_stir: '',
+    tax_rate: '0',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -123,6 +125,8 @@ export function ReceiptSettings() {
           store_name: all.store_name || '',
           store_address: all.store_address || '',
           store_phone: all.store_phone || '',
+          store_stir: all.store_stir || '',
+          tax_rate: all.tax_rate || '0',
         });
       } catch (err) {
         console.error('Failed to load receipt settings:', err);
@@ -224,6 +228,7 @@ export function ReceiptSettings() {
               {settings.store_name && <div><strong>{settings.store_name}</strong></div>}
               {settings.store_address && <div>{settings.store_address}</div>}
               {settings.store_phone && <div>{settings.store_phone}</div>}
+              {settings.store_stir && <div>STIR: {settings.store_stir}</div>}
               {!settings.store_name && !settings.store_address && (
                 <div>{t('receipt.storeInfoHint')}</div>
               )}

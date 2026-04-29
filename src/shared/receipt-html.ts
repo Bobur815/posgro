@@ -31,6 +31,8 @@ export interface ReceiptSettings {
   store_name: string;
   store_address: string;
   store_phone: string;
+  store_stir?: string;
+  tax_rate?: string;
 }
 
 const labels: Record<string, Record<string, string>> = {
@@ -171,6 +173,7 @@ export function buildReceiptHTML(
   const widthMm = Number(settings.receipt_width) || 80;
   const l = labels[lang] || labels.ru;
   const cur = l.currency;
+  const taxRate = parseFloat(settings.tax_rate || "0") || 0;
 
   const dateObj = new Date(sale.createdAt);
   const dateStr = dateObj.toLocaleDateString(lang === "ru" ? "ru-RU" : "uz-UZ");
@@ -192,6 +195,7 @@ export function buildReceiptHTML(
   let itemsHTML = "";
   sale.items.forEach((item, idx) => {
     const isLast = idx === sale.items.length - 1;
+    const itemVat = taxRate > 0 ? item.subtotal * taxRate / 100 : 0;
     itemsHTML += `
       <div class="item-row">
         <div class="item-name">${idx + 1}. ${escapeHtml(item.productName)}</div>
@@ -199,10 +203,19 @@ export function buildReceiptHTML(
           <span>${item.quantity} × ${fmt(item.unitPrice, cur)}</span>
           <span>${fmt(item.subtotal, cur)}</span>
         </div>
+        ${taxRate > 0 ? `<div class="item-meta">sh.j. QQS ${taxRate}%: ${fmt(itemVat, cur)}</div>` : ""}
         ${item.barcode ? `<div class="item-meta">Shtrix-kod: ${escapeHtml(item.barcode)}</div>` : ""}
         ${item.mxik ? `<div class="item-meta">MXIK: ${escapeHtml(item.mxik)}</div>` : ""}
       </div>${isLast ? "" : '<hr class="item-sep">'}`;
   });
+
+  const totalVat = taxRate > 0 ? sale.totalAmount * taxRate / 100 : 0;
+  const vatHTML = taxRate > 0
+    ? `<div class="total-row">
+        <span>sh.j. QQS ${taxRate}%</span><span class="dots">.....................................................</span>
+        <span>${fmt(totalVat, cur)}</span>
+      </div>`
+    : "";
 
   const discountHTML =
     sale.discountAmount > 0
@@ -221,6 +234,7 @@ export function buildReceiptHTML(
     ${settings.store_name ? `<div class="brand">${escapeHtml(settings.store_name)}</div>` : ""}
     ${settings.store_address ? `<div class="sub">${escapeHtml(settings.store_address)}</div>` : ""}
     ${settings.store_phone ? `<div class="sub">${escapeHtml(settings.store_phone)}</div>` : ""}
+    ${settings.store_stir ? `<div class="sub">STIR: ${escapeHtml(settings.store_stir)}</div>` : ""}
     ${settings.receipt_header ? `<div class="sub">${escapeHtml(settings.receipt_header)}</div>` : ""}
   </div>
 
@@ -247,6 +261,7 @@ export function buildReceiptHTML(
     <span>${fmt(sale.totalAmount, cur)}</span>
   </div>
   ${discountHTML}
+  ${vatHTML}
   <div class="total-row grand">
     <span>${l.total}</span><span class="dots">.....................................................</span>
     <span>${fmt(sale.finalAmount, cur)}</span>
