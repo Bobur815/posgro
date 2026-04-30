@@ -84,7 +84,7 @@ export class StoresService {
         );
       }
 
-      const existingUser = await this.prisma.user.findUnique({
+      const existingUser = await this.prisma.user.findFirst({
         where: { phone: createStoreDto.phone },
       });
       if (existingUser) {
@@ -136,7 +136,7 @@ export class StoresService {
   async resetAdminUser(storeId: string, phone: string) {
     await this.findById(storeId);
 
-    const existingUser = await this.prisma.user.findUnique({
+    const existingUser = await this.prisma.user.findFirst({
       where: { phone },
     });
     if (existingUser && existingUser.storeId !== storeId) {
@@ -150,7 +150,7 @@ export class StoresService {
     if (existingUser) {
       // Update the existing user to ADMIN and reset password
       return this.prisma.user.update({
-        where: { phone },
+        where: { id: existingUser.id },
         data: {
           role: UserRole.ADMIN,
           password: hashedPassword,
