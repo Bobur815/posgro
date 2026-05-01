@@ -6,6 +6,7 @@ import { ProductSearch } from "./ProductSearch";
 import { Checkout } from "./Checkout";
 import { PosTabBar } from "./PosTabBar";
 import { useCartStore } from "../../store/cart-store";
+import { APP_BAR_HEIGHT } from "../../components/layout/AppBar";
 import { useProducts } from "../../hooks/useProducts";
 import { useSales } from "../../hooks/useSales";
 import { useToast } from "../../context/ToastContext";
@@ -23,6 +24,8 @@ import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { Product } from "@shared/types";
 import { parseBarcode } from "../../../shared/utils/barcode-parser";
 import { parseWeightBarcode } from "../../../shared/utils/weightBarcode";
+import { Modal } from "@renderer/components/common/Modal";
+import { useSidebar } from "@renderer/context/SidebarContext";
 
 function parseSaleError(
   err: unknown,
@@ -54,7 +57,7 @@ const PageWrapper = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${({ theme }) => theme.spacing.sm};
-  height: calc(100vh - 20px);
+  height: calc(100vh - ${APP_BAR_HEIGHT}px - 20px);
 `;
 
 const Container = styled.div`
@@ -279,6 +282,21 @@ const ShortcutHint = styled.span`
   font-weight: 500;
 `;
 
+const SmenaBlock = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.lg};
+  padding: ${({ theme }) => theme.spacing.xl};
+  text-align: center;
+`;
+
+const SmenaBlockText = styled.p`
+  font-size: 16px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  margin: 0;
+`;
+
 type InputMode = "barcode" | "quantity" | "id";
 
 export function POSScreen() {
@@ -289,6 +307,18 @@ export function POSScreen() {
   const [inputMode, setInputMode] = useState<InputMode>("barcode");
   const [showCheckout, setShowCheckout] = useState(false);
   const [error, setError] = useState("");
+  const { openSmenaModal } = useSidebar();
+
+  const [showSmenaModal, setShowSmenaModal] = useState(false);
+
+  const checkSmena = useCallback(async (): Promise<boolean> => {
+    try {
+      const s = await window.electronAPI.smena.getCurrent();
+      return s != null;
+    } catch {
+      return false;
+    }
+  }, []);
 
   const {
     addItem,
@@ -605,6 +635,7 @@ export function POSScreen() {
   const handleQuickPay = useCallback(
     async (method: "cash" | "card") => {
       if (items.length === 0 || payingRef.current) return;
+      if (!await checkSmena()) { setShowSmenaModal(true); return; }
       payingRef.current = true;
 
       try {
@@ -652,6 +683,7 @@ export function POSScreen() {
       }
     },
     [
+      checkSmena,
       items,
       discount,
       editingSaleId,
@@ -727,7 +759,7 @@ export function POSScreen() {
       else if (e.key === "F10") {
         e.preventDefault();
         if (items.length > 0) {
-          setShowCheckout(true);
+          handleCheckoutClick();
         }
       }
       // F11 - quick pay cash
@@ -812,6 +844,11 @@ export function POSScreen() {
       ? "barcode"
       : "qr"
     : null;
+
+  const handleCheckoutClick = async () => {
+    if (!await checkSmena()) { setShowSmenaModal(true); return; }
+    setShowCheckout(true);
+  };
 
   return (
     <PageWrapper>
@@ -915,7 +952,7 @@ export function POSScreen() {
             </NumberPadSection>
             <Button
               fullWidth
-              onClick={() => setShowCheckout(true)}
+              onClick={handleCheckoutClick}
               disabled={items.length === 0}
             >
               {editingSaleId
@@ -955,6 +992,22 @@ export function POSScreen() {
             onComplete={handleCheckoutComplete}
             onCancel={() => setShowCheckout(false)}
           />
+        )}
+
+        {showSmenaModal && (
+          <Modal title={t("smena.title")} onClose={() => setShowSmenaModal(false)} width="400px">
+            <SmenaBlock>
+              <SmenaBlockText>{t("smena.noOpenSmena")}</SmenaBlockText>
+              <Button
+                onClick={() => {
+                  setShowSmenaModal(false);
+                  openSmenaModal();
+                }}
+              >
+                {t("smena.goToSmena")} →
+              </Button>
+            </SmenaBlock>
+          </Modal>
         )}
       </Container>
     </PageWrapper>

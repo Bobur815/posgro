@@ -53,7 +53,6 @@ export function UserList() {
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userToToggle, setUserToToggle] = useState<UserListItem | null>(null);
-
   useEffect(() => {
     loadUsers();
   }, []);
@@ -68,7 +67,7 @@ export function UserList() {
       setIsLoading(false);
     }
   };
-
+  
   const handleToggleActive = async (user: UserListItem) => {
     try {
       await window.electronAPI.users.update(user.id, { active: !user.active });

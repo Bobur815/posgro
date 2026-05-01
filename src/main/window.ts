@@ -1,6 +1,51 @@
 import { BrowserWindow, screen, Menu, globalShortcut, ipcMain } from 'electron';
 import path from 'path';
 
+export function createSetupWindow(): BrowserWindow {
+  const setupWindow = new BrowserWindow({
+    width: 920,
+    height: 680,
+    center: true,
+    resizable: false,
+    maximizable: false,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+    },
+    show: false,
+    title: 'Yangi Asr — Sozlash',
+    icon: path.join(__dirname, '../../build/icon.ico'),
+    autoHideMenuBar: true,
+  });
+
+  setupWindow.once('ready-to-show', () => {
+    setupWindow.show();
+    setupWindow.focus();
+  });
+
+  globalShortcut.register('CommandOrControl+Shift+I', () => {
+    if (!setupWindow.isDestroyed()) setupWindow.webContents.toggleDevTools();
+  });
+
+  setupWindow.on('closed', () => {
+    globalShortcut.unregister('CommandOrControl+Shift+I');
+  });
+
+  if (process.env.NODE_ENV === 'development') {
+    setupWindow.loadURL('http://localhost:5174/#/setup');
+  } else {
+    setupWindow.loadFile(path.join(__dirname, '../../dist-renderer/index.html'), { hash: 'setup' });
+  }
+
+  setupWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    console.error(`[SetupWindow] did-fail-load: code=${code} desc=${desc} url=${url}`);
+  });
+
+  return setupWindow;
+}
+
 export function createWindow(): BrowserWindow {
   // Get full primary display size (including taskbar area)
   const { width, height } = screen.getPrimaryDisplay().bounds;

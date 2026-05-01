@@ -59,6 +59,7 @@ export async function uploadLocalData(): Promise<void> {
   await uploadSuppliers(prisma, token, since);
   await uploadProducts(prisma, token, since);
   await uploadArrivals(prisma, token, since);
+  await uploadSettings(prisma, token);
 
   await setLastUploadTime(prisma);
 }
@@ -67,7 +68,10 @@ async function uploadUsers(
   prisma: ReturnType<typeof getPrismaClient>,
   token: string,
 ): Promise<void> {
-  const users = await prisma.user.findMany({});
+  const localConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+  const storeId = localConfig?.storeId;
+  // Only upload users that belong to this store — never push cross-store cached users
+  const users = await prisma.user.findMany({ where: storeId ? { storeId } : {} });
 
   if (users.length === 0) return;
 
@@ -241,4 +245,36 @@ async function uploadArrivals(
     skipped: number;
     errors: number;
   };
+}
+
+// Keys that should never be pushed to VPS (terminal-local only)
+const LOCAL_ONLY_SETTINGS = new Set([
+  'server_token',
+  'last_product_sync',
+  'last_sale_sync',
+  'last_upload_sync',
+  'ai_token_limit_daily',
+]);
+
+async function uploadSettings(
+  prisma: ReturnType<typeof getPrismaClient>,
+  token: string,
+): Promise<void> {
+  const settings = await prisma.systemSetting.findMany();
+
+  const config = getAppConfig();
+
+  for (const s of settings) {
+    if (LOCAL_ONLY_SETTINGS.has(s.key)) continue;
+
+    try {
+      await fetch(`${config.vpsApiUrl}/settings/${encodeURIComponent(s.key)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ value: s.value }),
+      });
+    } catch {
+      // Non-fatal — will retry next cycle
+    }
+  }
 }

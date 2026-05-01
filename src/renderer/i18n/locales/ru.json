@@ -42,6 +42,9 @@
     "phone": "Телефон",
     "password": "Пароль",
     "enterPin": "Введите PIN-код",
+    "setupPin": "Настройка PIN-кода",
+    "setupPinSubtitle": "Придумайте 4-значный PIN-код для быстрого входа",
+    "confirmPinSubtitle": "Введите PIN-код ещё раз для подтверждения",
     "usePhoneLogin": "Войти с телефоном и паролем",
     "switchUser": "Сменить пользователя",
     "keyboardHint": "Введите цифры с клавиатуры",
@@ -51,9 +54,15 @@
       "invalid_password": "Неверный пароль",
       "invalid_pin": "Неверный PIN-код",
       "pin_not_configured": "PIN-код магазина не настроен",
+      "pin_mismatch": "PIN-коды не совпадают. Попробуйте снова",
+      "invalid_pin_format": "PIN-код должен состоять из 4 цифр",
       "no_cashier_found": "Не найден активный аккаунт кассира",
-      "login_failed": "Ошибка входа"
-    }
+      "login_failed": "Ошибка входа",
+      "server_not_configured": "Неверный Store ID. Проверьте настройки сервера."
+    },
+    "serverSettings": "Настройки сервера",
+    "storeId": "Store ID",
+    "serverSettingsSaved": "Сохранено"
   },
   "nav": {
     "main": "Главное",
@@ -678,6 +687,8 @@
     "contactSupport": "Служба поддержки"
   },
   "smena": {
+    "viewDetails":"Подробнее",
+    "actions":"Действия",
     "title": "Смена",
     "currentShift": "Текущая смена",
     "history": "История",
@@ -723,5 +734,70 @@
     "movementAdded": "Запись добавлена",
     "noHistory": "История смен пуста",
     "receipts": "чеков"
+  },
+  "setup": {
+    "title": "Добро пожаловать",
+    "subtitle": "Начальная настройка системы",
+    "step": "Шаг",
+    "of": "из",
+    "steps": {
+      "login": "Вход",
+      "storeInfo": "Магазин",
+      "password": "Пароль",
+      "pin": "PIN-код"
+    },
+    "login": {
+      "title": "Войдите в систему",
+      "subtitle": "Введите данные администратора и ID магазина",
+      "phone": "Телефон администратора",
+      "password": "Пароль",
+      "storeId": "ID магазина",
+      "storeIdPlaceholder": "Например: 1000",
+      "submit": "Войти",
+      "loading": "Проверка..."
+    },
+    "storeInfo": {
+      "title": "Информация о магазине",
+      "subtitle": "Заполните данные магазина для чеков и отчётов",
+      "storeName": "Название магазина",
+      "storeAddress": "Адрес магазина",
+      "storePhone": "Телефон магазина",
+      "storeStir": "ИНН (СТИР)",
+      "taxRate": "Ставка налога (%)",
+      "syncInterval": "Интервал синхронизации (мин)",
+      "terminalId": "ID терминала",
+      "terminalIdHint": "Уникальный идентификатор этого кассового терминала (например: T1, T2)",
+      "next": "Далее"
+    },
+    "password": {
+      "title": "Смена пароля",
+      "subtitle": "Рекомендуем сменить пароль для безопасности",
+      "currentPassword": "Текущий пароль",
+      "newPassword": "Новый пароль",
+      "confirmPassword": "Подтвердите пароль",
+      "skip": "Пропустить",
+      "submit": "Сменить пароль",
+      "mismatch": "Пароли не совпадают",
+      "tooShort": "Минимум 6 символов",
+      "loading": "Сохранение..."
+    },
+    "pin": {
+      "title": "Настройка PIN-кода",
+      "subtitle": "Установите PIN-код для быстрого входа кассиров",
+      "skip": "Пропустить",
+      "finish": "Завершить"
+    },
+    "complete": {
+      "loading": "Настройка системы...",
+      "success": "Настройка завершена!"
+    },
+    "errors": {
+      "invalid_credentials": "Неверные данные входа или ID магазина",
+      "store_mismatch": "Пользователь не принадлежит указанному магазину",
+      "admin_required": "Для настройки требуется учётная запись администратора",
+      "network_error": "Ошибка подключения к серверу",
+      "login_failed": "Ошибка входа",
+      "required_fields": "Заполните все обязательные поля"
+    }
   }
 }

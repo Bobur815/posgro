@@ -110,7 +110,12 @@ export function setupSmenaHandlers(): void {
 
     const stats = await computeSmenaStats(smena.id);
 
-    return ipcSafe({ ...smena, stats });
+    return ipcSafe({
+      ...smena,
+      initialCash: Number(smena.initialCash),
+      finalCash: smena.finalCash != null ? Number(smena.finalCash) : null,
+      stats,
+    });
   });
 
   ipcMain.handle('smena:open', async (_event, data: { initialCash: number }) => {
@@ -130,8 +135,8 @@ export function setupSmenaHandlers(): void {
     const maxRow = (await prisma.$queryRawUnsafe(
       `SELECT MAX(z_report_number) as max_z FROM smenas WHERE terminal_id = ?`,
       config.terminalId
-    )) as Array<{ max_z: number | null }>;
-    const nextZ = (maxRow[0]?.max_z ?? 0) + 1;
+    )) as Array<{ max_z: number | bigint | null }>;
+    const nextZ = Number(maxRow[0]?.max_z ?? 0) + 1;
 
     const smena = await prisma.smena.create({
       data: {
@@ -278,6 +283,7 @@ export function setupSmenaHandlers(): void {
       where: { terminalId: config.terminalId },
       orderBy: { openedAt: 'desc' },
       take: filters?.limit ?? 50,
+      include: { movements: { orderBy: { createdAt: 'asc' } } },
     });
 
     const results = await Promise.all(
@@ -287,6 +293,10 @@ export function setupSmenaHandlers(): void {
           ...s,
           initialCash: Number(s.initialCash),
           finalCash: s.finalCash != null ? Number(s.finalCash) : null,
+          movements: s.movements.map((m: typeof s.movements[number]) => ({
+            ...m,
+            amount: Number(m.amount),
+          })),
           stats,
         };
       })

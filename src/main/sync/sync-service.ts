@@ -1,11 +1,22 @@
 import { BrowserWindow } from 'electron';
 import { syncSales, SalesSyncResult } from './sales-sync';
-import { syncProducts, syncCategories, syncSuppliers, syncUsers } from './products-sync';
+import { syncProducts, syncCategories, syncSuppliers, syncUsers, syncSettings } from './products-sync';
 import { getCurrentUser } from '../ipc/auth-handlers';
 import { uploadLocalData } from './upload-sync';
 import { getAppConfig } from '../config/app-config';
 import { getPrismaClient } from '../database/sqlite-client';
-import { getServerToken } from './queue-manager';
+import { getServerToken, clearServerToken } from './queue-manager';
+
+function decodeTokenStoreId(token: string): string | null | undefined {
+  try {
+    const parts = token.split('.');
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString()) as { storeId?: string | null; exp?: number };
+    if (payload.exp && payload.exp * 1000 <= Date.now()) return undefined;
+    return payload.storeId ?? null;
+  } catch {
+    return undefined;
+  }
+}
 
 export class SyncService {
   private syncInterval: NodeJS.Timeout | null = null;
@@ -45,6 +56,25 @@ export class SyncService {
     this.lastError = null;
 
     try {
+      const token = getServerToken();
+      if (!token) {
+        // Not logged in yet — skip silently until user authenticates
+        return;
+      }
+
+      // Guard: verify the server token is scoped to this terminal's store
+      const prisma = getPrismaClient();
+      const localConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+      if (localConfig?.storeId) {
+        const tokenStoreId = decodeTokenStoreId(token);
+        console.log(`[sync] guard — token.storeId=${tokenStoreId ?? 'null'} localConfig.storeId=${localConfig.storeId}`);
+        if (tokenStoreId !== undefined && tokenStoreId !== localConfig.storeId) {
+          console.warn(`[sync] Token storeId (${tokenStoreId ?? 'null'}) ≠ LocalConfig storeId (${localConfig.storeId}) — clearing stale token, skipping sync`);
+          clearServerToken();
+          return;
+        }
+      }
+
       // Check internet connectivity
       const isOnline = await this.checkConnectivity();
       if (!isOnline) {
@@ -53,8 +83,8 @@ export class SyncService {
       }
 
       const currentUser = getCurrentUser();
-      const token = getServerToken();
-      console.log(`[sync] Cycle start — user: ${currentUser?.phone ?? 'none'}, role: ${currentUser?.role ?? 'none'}, token: ${token ? 'present' : 'MISSING'}`);
+
+      console.log(`[sync] Cycle start — user: ${currentUser?.phone ?? 'none'}, role: ${currentUser?.role ?? 'none'}`);
 
       // Upload locally-created categories, suppliers, products, and arrivals to VPS
       // Only ADMIN users have permission to upload product/supplier/category data
@@ -79,9 +109,10 @@ export class SyncService {
       // Sync categories (download from VPS — must come before products)
       await syncCategories();
 
-      // Sync suppliers and users (download from VPS to all terminals)
+      // Sync suppliers, users, and store settings (download from VPS to all terminals)
       await syncSuppliers();
       await syncUsers();
+      await syncSettings();
 
       // Sync products (download updated products from VPS)
       const stockConflicts = await syncProducts();

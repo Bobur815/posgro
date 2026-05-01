@@ -42,6 +42,9 @@
     "phone": "Telefon",
     "password": "Parol",
     "enterPin": "PIN-kodni kiriting",
+    "setupPin": "PIN-kodni sozlash",
+    "setupPinSubtitle": "Tez kirish uchun 4 raqamli PIN-kod o'rnating",
+    "confirmPinSubtitle": "Tasdiqlash uchun PIN-kodni qayta kiriting",
     "usePhoneLogin": "Telefon va parol bilan kirish",
     "switchUser": "Foydalanuvchini almashtirish",
     "keyboardHint": "Klaviaturadan raqamlarni kiriting",
@@ -51,9 +54,15 @@
       "invalid_password": "Noto'g'ri parol",
       "invalid_pin": "Noto'g'ri PIN-kod",
       "pin_not_configured": "Do'kon PIN-kodi sozlanmagan",
+      "pin_mismatch": "PIN-kodlar mos kelmadi. Qayta urining",
+      "invalid_pin_format": "PIN-kod 4 raqamdan iborат bo'lishi kerak",
       "no_cashier_found": "Faol kassir hisobi topilmadi",
-      "login_failed": "Kirish xatosi"
-    }
+      "login_failed": "Kirish xatosi",
+      "server_not_configured": "Noto'g'ri Store ID. Server sozlamalarini tekshiring."
+    },
+    "serverSettings": "Server sozlamalari",
+    "storeId": "Store ID",
+    "serverSettingsSaved": "Saqlandi"
   },
   "nav": {
     "main": "Asosiy",
@@ -679,6 +688,8 @@
     "contactSupport": "Qo'llab-quvvatlash xizmati"
   },
   "smena": {
+    "viewDetails":"Batafsil",
+    "actions":"Harakatlar",
     "title": "Smena",
     "currentShift": "Joriy smena",
     "history": "Tarix",
@@ -724,5 +735,70 @@
     "movementAdded": "Yozuv qo'shildi",
     "noHistory": "Smena tarixi bo'sh",
     "receipts": "chek"
+  },
+  "setup": {
+    "title": "Xush kelibsiz",
+    "subtitle": "Tizimni dastlabki sozlash",
+    "step": "Qadam",
+    "of": "dan",
+    "steps": {
+      "login": "Kirish",
+      "storeInfo": "Do'kon",
+      "password": "Parol",
+      "pin": "PIN-kod"
+    },
+    "login": {
+      "title": "Tizimga kiring",
+      "subtitle": "Administrator ma'lumotlari va Do'kon ID'sini kiriting",
+      "phone": "Administrator telefoni",
+      "password": "Parol",
+      "storeId": "Do'kon ID",
+      "storeIdPlaceholder": "Masalan: 1000",
+      "submit": "Kirish",
+      "loading": "Tekshirilmoqda..."
+    },
+    "storeInfo": {
+      "title": "Do'kon ma'lumotlari",
+      "subtitle": "Cheklar va hisobotlar uchun do'kon ma'lumotlarini to'ldiring",
+      "storeName": "Do'kon nomi",
+      "storeAddress": "Do'kon manzili",
+      "storePhone": "Do'kon telefoni",
+      "storeStir": "STIR (INN)",
+      "taxRate": "Soliq stavkasi (%)",
+      "syncInterval": "Sinxronlash oralig'i (daq)",
+      "terminalId": "Terminal ID",
+      "terminalIdHint": "Ushbu kassa terminalining noyob identifikatori (masalan: T1, T2)",
+      "next": "Keyingisi"
+    },
+    "password": {
+      "title": "Parolni o'zgartirish",
+      "subtitle": "Xavfsizlik uchun parolni o'zgartirishni tavsiya qilamiz",
+      "currentPassword": "Joriy parol",
+      "newPassword": "Yangi parol",
+      "confirmPassword": "Parolni tasdiqlang",
+      "skip": "O'tkazib yuborish",
+      "submit": "Parolni o'zgartirish",
+      "mismatch": "Parollar mos kelmadi",
+      "tooShort": "Kamida 6 ta belgi",
+      "loading": "Saqlanmoqda..."
+    },
+    "pin": {
+      "title": "PIN-kodni sozlash",
+      "subtitle": "Kassirlar uchun tez kirish PIN-kodini o'rnating",
+      "skip": "O'tkazib yuborish",
+      "finish": "Yakunlash"
+    },
+    "complete": {
+      "loading": "Tizim sozlanmoqda...",
+      "success": "Sozlash yakunlandi!"
+    },
+    "errors": {
+      "invalid_credentials": "Login ma'lumotlari yoki Do'kon ID noto'g'ri",
+      "store_mismatch": "Foydalanuvchi ko'rsatilgan do'konga tegishli emas",
+      "admin_required": "Sozlash uchun administrator hisobi kerak",
+      "network_error": "Serverga ulanishda xato",
+      "login_failed": "Kirish xatosi",
+      "required_fields": "Barcha majburiy maydonlarni to'ldiring"
+    }
   }
 }

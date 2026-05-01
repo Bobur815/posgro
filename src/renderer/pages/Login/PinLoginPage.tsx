@@ -194,6 +194,7 @@ const ContentWrapper = styled.div`
   }
 `;
 
+
 const PhoneForm = styled.form`
   display: flex;
   flex-direction: column;
@@ -246,35 +247,51 @@ const KbToggle = styled.button<{ $active?: boolean }>`
   }
 `;
 
+function loadSaved(): { phone: string; password: string } | null {
+  try {
+    const raw = localStorage.getItem(SAVED_KEY);
+    if (raw) return JSON.parse(raw) as { phone: string; password: string };
+  } catch { /* ignore */ }
+  return null;
+}
+
 export function PinLoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { loginWithPin, login, isLoading, error, clearError } = useAuthStore();
-  const [mode, setMode] = useState<LoginMode>("pin");
+
+  // null = still checking, true/false = result
+  const [pinConfigured, setPinConfigured] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    window.electronAPI.auth.isPinConfigured().then(setPinConfigured);
+  }, []);
+
+  const [saved] = useState(loadSaved);
+  const [mode, setMode] = useState<LoginMode>(saved ? "phone" : "pin");
   const [pin, setPin] = useState("");
 
   // Phone login state
-  const [phoneDigits, setPhoneDigits] = useState("");
-  const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(false);
+  const [phoneDigits, setPhoneDigits] = useState(saved?.phone ?? "");
+  const [password, setPassword] = useState(saved?.password ?? "");
+  const [rememberMe, setRememberMe] = useState(!!saved);
   const passwordRef = useRef<HTMLInputElement>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [focusedField, setFocusedField] = useState<"phone" | "password">(
     "phone",
   );
 
+  // When PIN status loads: if not configured, force phone mode
+  useEffect(() => {
+    if (pinConfigured === false && !saved) {
+      setMode("phone");
+    }
+  }, [pinConfigured, saved]);
+
   useEffect(() => {
     clearError();
-    const raw = localStorage.getItem(SAVED_KEY);
-    if (raw) {
-      try {
-        const saved = JSON.parse(raw) as { phone?: string; password?: string };
-        if (saved.phone) setPhoneDigits(saved.phone);
-        if (saved.password) setPassword(saved.password);
-        setRememberMe(true);
-      } catch { /* ignore */ }
-    }
   }, [clearError]);
+
 
   const switchMode = (newMode: LoginMode) => {
     setPin("");
@@ -367,7 +384,8 @@ export function PinLoginPage() {
       } else {
         localStorage.removeItem(SAVED_KEY);
       }
-      navigate("/");
+      // Redirect to PIN setup if PIN not yet configured
+      navigate(pinConfigured === false ? "/setup-pin" : "/");
     }
   };
 
@@ -402,7 +420,7 @@ export function PinLoginPage() {
             } else {
               localStorage.removeItem(SAVED_KEY);
             }
-            navigate("/");
+            navigate(pinConfigured === false ? "/setup-pin" : "/");
           }
         });
       }
@@ -534,9 +552,12 @@ export function PinLoginPage() {
                 </Button>
               </PhoneForm>
 
-              <SwitchLink onClick={() => switchMode("pin")}>
-                ← {t("auth.enterPin")}
-              </SwitchLink>
+              {pinConfigured !== false && (
+                <SwitchLink onClick={() => switchMode("pin")}>
+                  ← {t("auth.enterPin")}
+                </SwitchLink>
+              )}
+
             </ContentWrapper>
           )}
         </LoginCard>

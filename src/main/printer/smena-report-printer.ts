@@ -110,23 +110,29 @@ export async function printZXReport(params: {
     .map((r) => `<div class="line">${escHtml(r)}</div>`)
     .join('\n');
 
+  const sm = widthMm < 70;
   const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  @page { size: ${widthMm}mm auto; margin: 0; padding: 0; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { margin: 0 !important; padding: 0 !important; }
   body {
     width: ${widthMm}mm;
+    max-width: 100%;
     font-family: 'Courier New', Courier, monospace;
-    font-size: 9pt;
-    padding: 2mm;
+    font-size: ${sm ? '8pt' : '9pt'};
+    font-weight: 400;
+    padding: 2mm !important;
     background: #fff;
     color: #000;
+    -webkit-print-color-adjust: exact;
   }
   .line {
     white-space: pre;
-    line-height: 1.3;
+    line-height: 1.4;
     display: block;
   }
 </style>

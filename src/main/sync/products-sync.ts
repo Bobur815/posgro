@@ -231,21 +231,30 @@ export async function syncUsers(): Promise<void> {
   const token = getServerToken();
   if (!token) return;
 
+  // Extract storeId from the server token so we can tag synced users
+  let tokenStoreId: string | null = null;
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString()) as { storeId?: string | null };
+    tokenStoreId = payload.storeId ?? null;
+  } catch { /* ignore */ }
+
+  console.log(`[syncUsers] token storeId=${tokenStoreId}`);
+
   try {
     const response = await fetch(`${config.vpsApiUrl}/users/sync`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    console.log(`[syncUsers] VPS /users/sync status: ${response.status}`);
     if (!response.ok) return;
 
     const users = await response.json();
+    console.log(`[syncUsers] VPS returned ${Array.isArray(users) ? users.length : 'non-array'} users:`, Array.isArray(users) ? users.map((u: { phone: string; role: string }) => `${u.phone}(${u.role})`).join(', ') : users);
     if (!Array.isArray(users) || users.length === 0) return;
+
+    const syncedPhones: string[] = [];
 
     for (const u of users) {
       try {
-        // Upsert by phone (unique in local schema) rather than id.
-        // A user created locally before the first VPS sync will have a different id
-        // than the VPS record for the same phone — upserting by id would miss the
-        // existing row and then crash on the phone unique constraint.
         await prisma.user.upsert({
           where: { phone: u.phone },
           update: {
@@ -254,6 +263,7 @@ export async function syncUsers(): Promise<void> {
             nameUz: u.nameUz,
             nameRu: u.nameRu,
             active: u.active ?? true,
+            storeId: tokenStoreId,
           },
           create: {
             id: u.id,
@@ -263,11 +273,21 @@ export async function syncUsers(): Promise<void> {
             nameUz: u.nameUz,
             nameRu: u.nameRu,
             active: u.active ?? true,
+            storeId: tokenStoreId,
           },
         });
+        syncedPhones.push(u.phone);
       } catch (userError) {
         console.error(`Failed to sync user phone=${u.phone}:`, userError instanceof Error ? userError.message : userError);
       }
+    }
+
+    // Mirror VPS: remove any local user not returned by this sync (both cross-store
+    // pollution and users deleted on the server side)
+    if (tokenStoreId && syncedPhones.length > 0) {
+      await prisma.user.deleteMany({
+        where: { phone: { notIn: syncedPhones } },
+      });
     }
   } catch (error) {
     console.error('Failed to sync users:', error instanceof Error ? error.message : error);
@@ -340,5 +360,43 @@ export async function syncCategories(): Promise<void> {
   } catch (error) {
     console.error('Failed to sync categories:', error);
     throw error;
+  }
+}
+
+// Keys that live only on the terminal and must never be overwritten by VPS sync
+const LOCAL_ONLY_SETTINGS = new Set([
+  'server_token',
+  'last_product_sync',
+  'last_sale_sync',
+  'last_upload_sync',
+  'ai_token_limit_daily',
+]);
+
+export async function syncSettings(): Promise<void> {
+  const prisma = getPrismaClient();
+  const config = getAppConfig();
+  const token = getServerToken();
+  if (!token) return;
+
+  try {
+    const response = await fetch(`${config.vpsApiUrl}/settings`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return;
+
+    const settings = await response.json() as Record<string, string>;
+
+    for (const [key, value] of Object.entries(settings)) {
+      if (LOCAL_ONLY_SETTINGS.has(key)) continue;
+      if (typeof value !== 'string') continue;
+
+      await prisma.systemSetting.upsert({
+        where: { key },
+        update: { value },
+        create: { key, value },
+      });
+    }
+  } catch (error) {
+    console.error('Failed to sync settings:', error instanceof Error ? error.message : error);
   }
 }

@@ -1,6 +1,6 @@
 // src/main/database/seed.ts
 import { getPrismaClient } from './sqlite-client';
-import * as bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcryptjs'; // still used for seeding test users
 
 export async function seedLocalDatabase(): Promise<void> {
   const prisma = getPrismaClient();
@@ -13,7 +13,6 @@ export async function seedLocalDatabase(): Promise<void> {
   });
 
   if (!existingConfig) {
-    const hashedStorePin = await bcrypt.hash('1234', 10);
     await prisma.localConfig.create({
       data: {
         id: 'config',
@@ -21,14 +20,8 @@ export async function seedLocalDatabase(): Promise<void> {
         storeName: process.env.STORE_NAME || 'Yangi asr market',
         terminalId: process.env.TERMINAL_ID || 'T1',
         apiUrl: process.env.VPS_API_URL || 'https://pos.bobur-dev.uz/api',
-        storePin: hashedStorePin,
+        storePin: null,
       },
-    });
-  } else if (!existingConfig.storePin) {
-    const hashedStorePin = await bcrypt.hash('1234', 10);
-    await prisma.localConfig.update({
-      where: { id: 'config' },
-      data: { storePin: hashedStorePin },
     });
   }
 

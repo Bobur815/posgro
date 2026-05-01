@@ -1,0 +1,154 @@
+import { ipcMain, BrowserWindow } from 'electron';
+import * as bcrypt from 'bcryptjs';
+import { getAppConfig, updateConfig } from '../config/app-config';
+import { getPrismaClient, writeStoreBootstrap, closeDatabase, initializeDatabase } from '../database/sqlite-client';
+import { setServerToken } from '../sync/queue-manager';
+import { seedLocalDatabase } from '../database/seed';
+
+interface SetupCompleteData {
+  storeId: string;
+  terminalId: string;
+  storeName: string;
+  storeAddress: string;
+  storePhone: string;
+  storeStir: string;
+  taxRate: string;
+  syncInterval: string;
+  token: string;
+  pin?: string;
+}
+
+export function setupSetupHandlers(getSetupWindow: () => BrowserWindow | null, openMainWindow: () => Promise<void>): void {
+  ipcMain.handle('setup:authenticate', async (_event, data: { phone: string; password: string; storeId: string }) => {
+    const config = getAppConfig();
+    const vpsApiUrl = config.vpsApiUrl;
+
+    try {
+      const response = await fetch(`${vpsApiUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: data.phone, password: data.password, storeId: data.storeId }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 404 || response.status === 400 || response.status === 401) {
+          throw new Error('setup.errors.invalid_credentials');
+        }
+        const body = await response.json() as { message?: string };
+        throw new Error(body.message || 'setup.errors.login_failed');
+      }
+
+      const body = await response.json() as {
+        token: string;
+        user: { id: string; phone: string; role: string; nameUz: string; nameRu: string };
+      };
+
+      // Validate that the returned token belongs to the requested storeId
+      try {
+        const parts = body.token.split('.');
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString()) as { storeId?: string | null; role?: string };
+        if (payload.storeId && payload.storeId !== data.storeId) {
+          throw new Error('setup.errors.store_mismatch');
+        }
+        // Only admins can do initial setup
+        if (payload.role && payload.role !== 'ADMIN') {
+          throw new Error('setup.errors.admin_required');
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message.startsWith('setup.errors.')) throw e;
+        // Ignore decode errors — token format may vary
+      }
+
+      return {
+        success: true,
+        token: body.token,
+        user: {
+          phone: body.user.phone,
+          nameRu: body.user.nameRu,
+          nameUz: body.user.nameUz,
+          role: body.user.role,
+        },
+      };
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith('setup.errors.')) throw e;
+      throw new Error('setup.errors.network_error');
+    }
+  });
+
+  ipcMain.handle('setup:complete', async (_event, data: SetupCompleteData) => {
+    // 1. Write bootstrap so next launch opens the correct DB
+    writeStoreBootstrap(data.storeId);
+
+    // 2. Close existing DB (pos-local.db)
+    await closeDatabase();
+
+    // 3. Re-initialize with store-specific DB (pos-{storeId}.db)
+    await initializeDatabase();
+
+    // 4. Seed defaults (categories, system settings, etc.)
+    await seedLocalDatabase();
+
+    const prisma = getPrismaClient();
+
+    // 5. Update LocalConfig with user-provided values
+    await prisma.localConfig.update({
+      where: { id: 'config' },
+      data: {
+        storeId: data.storeId,
+        storeName: data.storeName,
+        terminalId: data.terminalId,
+      },
+    });
+
+    // 6. Override system settings with user-provided values
+    const settingsToSet = [
+      { key: 'store_name', value: data.storeName },
+      { key: 'store_address', value: data.storeAddress },
+      { key: 'store_phone', value: data.storePhone },
+      { key: 'store_stir', value: data.storeStir },
+      { key: 'tax_rate', value: data.taxRate },
+      { key: 'sync_interval', value: data.syncInterval },
+      { key: 'receipt_header', value: data.storeName },
+    ];
+    for (const s of settingsToSet) {
+      await prisma.systemSetting.upsert({
+        where: { key: s.key },
+        update: { value: s.value },
+        create: { key: s.key, value: s.value },
+      });
+    }
+
+    // 7. Persist server token
+    setServerToken(data.token);
+    await prisma.systemSetting.upsert({
+      where: { key: 'server_token' },
+      update: { value: data.token },
+      create: { key: 'server_token', value: data.token },
+    });
+
+    // 8. Hash and save PIN if provided
+    if (data.pin && data.pin.length === 4) {
+      const hashed = await bcrypt.hash(data.pin, 10);
+      await prisma.localConfig.update({
+        where: { id: 'config' },
+        data: { storePin: hashed },
+      });
+    }
+
+    // 9. Update AppConfig to reflect new storeId/terminalId
+    updateConfig({ storeId: data.storeId, terminalId: data.terminalId });
+
+    return { success: true };
+  });
+
+  ipcMain.handle('setup:launchApp', async () => {
+    await openMainWindow();
+    // Close setup window after a short delay to allow main window to load
+    setTimeout(() => {
+      const sw = getSetupWindow();
+      if (sw && !sw.isDestroyed()) {
+        sw.close();
+      }
+    }, 800);
+  });
+}

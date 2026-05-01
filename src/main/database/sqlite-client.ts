@@ -21,17 +21,48 @@ export function getPrismaClient(): PrismaClientType {
   return prisma;
 }
 
+const BOOTSTRAP_FILE = 'store-bootstrap.json';
+
+export function getUserDataPath(): string {
+  return app.getPath('userData');
+}
+
+export function readStoreBootstrap(): string | null {
+  try {
+    const raw = fs.readFileSync(path.join(getUserDataPath(), BOOTSTRAP_FILE), 'utf-8');
+    const parsed = JSON.parse(raw) as { storeId?: string };
+    return parsed.storeId || null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoreBootstrap(storeId: string): void {
+  fs.writeFileSync(
+    path.join(getUserDataPath(), BOOTSTRAP_FILE),
+    JSON.stringify({ storeId }),
+    'utf-8',
+  );
+}
+
 export async function initializeDatabase(): Promise<void> {
   // Get the user data path for the database file
   const userDataPath = app.getPath('userData');
-  const dbPath = path.join(userDataPath, 'pos-local.db');
+
+  // Determine which DB file to use based on the bootstrap config.
+  // Each store gets its own isolated SQLite file (pos-{storeId}.db).
+  // Falls back to pos-local.db for existing installs without a bootstrap file.
+  const bootstrapStoreId = readStoreBootstrap();
+  const dbFileName = bootstrapStoreId ? `pos-${bootstrapStoreId}.db` : 'pos-local.db';
+  const dbPath = path.join(userDataPath, dbFileName);
+
+  console.log(`[db] Opening database: ${dbFileName} (storeId=${bootstrapStoreId ?? 'unset'})`);
 
   // Ensure directory exists
   const dbDir = path.dirname(dbPath);
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
   }
-
 
   // Set environment variable for Prisma
   process.env.DATABASE_URL = `file:${dbPath}`;
@@ -432,7 +463,7 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_pre_weighed_status ON pre_weighed_items(status)`;
   }
 
-  // Migration 12: Smena (shift) management
+  // Migration 12: Smena (shift) management — tables
   try {
     await prisma.$queryRaw`SELECT id FROM smenas LIMIT 1`;
   } catch {
@@ -462,10 +493,24 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
         FOREIGN KEY (smena_id) REFERENCES smenas(id)
       )
     `;
-    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN smena_id TEXT`;
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_smenas_status ON smenas(terminal_id, status)`;
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_smena_movements ON smena_movements(smena_id)`;
+  }
+
+  // Migration 12b: smena_id column on sales (separate guard — runs even if smenas table already existed)
+  try {
+    await prisma.$queryRaw`SELECT smena_id FROM sales LIMIT 1`;
+  } catch {
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN smena_id TEXT`;
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_sales_smena ON sales(smena_id)`;
+  }
+
+  // Migration 13: store_id column on users for per-store filtering
+  try {
+    await prisma.$queryRaw`SELECT store_id FROM users LIMIT 1`;
+  } catch {
+    await prisma.$executeRaw`ALTER TABLE users ADD COLUMN store_id TEXT`;
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_users_store ON users(store_id)`;
   }
 }
 

@@ -9,6 +9,7 @@ import { ConfirmDialog } from "./components/common/ConfirmDialog";
 
 // Pages
 import { PinLoginPage } from "./pages/Login/PinLoginPage";
+import { SetupPinPage } from "./pages/Login/SetupPinPage";
 import { POSScreen } from "./pages/POS/POSScreen";
 import { ProductList } from "./pages/Products/ProductList";
 import { ProductDetails } from "./pages/Products/ProductDetails";
@@ -30,7 +31,7 @@ import { ScaleSettings } from "./pages/Settings/ScaleSettings";
 import { SyncSettings } from "./pages/Settings/SyncSettings";
 import { TerminalStatus } from "./pages/Settings/TerminalStatus";
 import { AppUpdatePage } from "./pages/Settings/AppUpdatePage";
-import { SmenaPage } from "./pages/Smena/SmenaPage";
+import { SetupWizard } from "./pages/Setup/SetupWizard";
 
 function App() {
   const { isAuthenticated } = useAuthStore();
@@ -59,11 +60,20 @@ function App() {
       />
     )}
     <Routes>
+      {/* Setup wizard — shown in setup window on first launch */}
+      <Route path="/setup" element={<SetupWizard />} />
+
       {/* Public routes - Login */}
       <Route
         path="/login"
         element={
           isAuthenticated ? <Navigate to="/" replace /> : <PinLoginPage />
+        }
+      />
+      <Route
+        path="/setup-pin"
+        element={
+          isAuthenticated ? <SetupPinPage /> : <Navigate to="/login" replace />
         }
       />
 
@@ -79,8 +89,6 @@ function App() {
         {/* Default route - POS Screen */}
         <Route index element={<POSScreen />} />
 
-        {/* Smena (shift management) - accessible to all authenticated users */}
-        <Route path="smena" element={<SmenaPage />} />
 
         {/* Products */}
         <Route path="products" element={<ProductList />} />

@@ -3,7 +3,8 @@ import { Outlet } from 'react-router-dom';
 import styled from 'styled-components';
 import { Sidebar } from './Sidebar';
 import { AppBar, APP_BAR_HEIGHT } from './AppBar';
-import { SidebarProvider } from '../../context/SidebarContext';
+import { SidebarProvider, useSidebar } from '../../context/SidebarContext';
+import { SmenaPage } from '../../pages/Smena/SmenaPage';
 
 const Content = styled.main`
   padding-top: ${APP_BAR_HEIGHT + 8}px;
@@ -16,14 +17,24 @@ const Content = styled.main`
   min-width: 0;
 `;
 
-export function Layout() {
+function LayoutInner() {
+  const { smenaOpen, closeSmenaModal } = useSidebar();
   return (
-    <SidebarProvider>
+    <>
       <AppBar />
       <Sidebar />
       <Content>
         <Outlet />
       </Content>
+      {smenaOpen && <SmenaPage onClose={closeSmenaModal} />}
+    </>
+  );
+}
+
+export function Layout() {
+  return (
+    <SidebarProvider>
+      <LayoutInner />
     </SidebarProvider>
   );
 }

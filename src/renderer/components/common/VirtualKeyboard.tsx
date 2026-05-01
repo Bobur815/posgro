@@ -101,6 +101,7 @@ const CYRILLIC_SHIFT: KeyDef[][] = [
 interface VirtualKeyboardProps {
   numbersOnly?: boolean;
   fixed?: boolean;
+  zIndex?: number;
   onKeyPress: (key: string) => void;
   onClose: () => void;
 }
@@ -138,12 +139,12 @@ function isSymbolKey(key: string) {
 
 /* ── styled ─────────────────────────────────────────────── */
 
-const Overlay = styled.div<{ $fixed?: boolean }>`
+const Overlay = styled.div<{ $fixed?: boolean; $zIndex?: number }>`
   position: ${({ $fixed }) => ($fixed ? "fixed" : "absolute")};
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 200;
+  z-index: ${({ $zIndex }) => $zIndex ?? 200};
   animation: slideUp 0.2s ease;
 
   @keyframes slideUp {
@@ -246,6 +247,7 @@ const Key = styled.button<{
 export function VirtualKeyboard({
   numbersOnly = false,
   fixed = false,
+  zIndex,
   onKeyPress,
   onClose,
 }: VirtualKeyboardProps) {
@@ -286,7 +288,7 @@ export function VirtualKeyboard({
   };
 
   return (
-    <Overlay $fixed={fixed} onMouseDown={(e) => e.preventDefault()}>
+    <Overlay $fixed={fixed} $zIndex={zIndex} onMouseDown={(e) => e.preventDefault()}>
       <Wrapper>
         <Header>
           <CloseBtn type="button" tabIndex={-1} onClick={onClose}>

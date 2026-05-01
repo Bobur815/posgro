@@ -7,7 +7,7 @@ import { setupScaleHandlers } from "./scale-handlers";
 import { setupSmenaHandlers } from "./smena-handlers";
 import { getAppConfig, updateConfig } from "../config/app-config";
 import { getAuthToken, getServerToken } from "../sync/queue-manager";
-import { getPrismaClient } from "../database/sqlite-client";
+import { getPrismaClient, readStoreBootstrap, writeStoreBootstrap } from "../database/sqlite-client";
 import {
   setPrinterConfig,
   setupPrinterHandlers,
@@ -671,6 +671,11 @@ function setupAppHandlers(): void {
     app.quit();
   });
 
+  ipcMain.handle("app:relaunch", () => {
+    app.relaunch({ args: process.argv.slice(1) });
+    app.exit(0);
+  });
+
   ipcMain.handle("config:getLocalConfig", async () => {
     const prisma = getPrismaClient();
     return prisma.localConfig.findUnique({ where: { id: "config" } });
@@ -684,12 +689,22 @@ function setupAppHandlers(): void {
         where: { id: "config" },
         data,
       });
-      // Keep in-memory AppConfig in sync so receipt numbers and terminalId
-      // on new sales reflect the change immediately without a restart.
       if (data.terminalId) updateConfig({ terminalId: data.terminalId });
       if (data.storeId) updateConfig({ storeId: data.storeId });
       if (data.apiUrl) updateConfig({ vpsApiUrl: data.apiUrl });
-      return result;
+
+      // When storeId changes, write the bootstrap file so the next launch
+      // opens the correct per-store SQLite database.
+      let requiresRestart = false;
+      if (data.storeId) {
+        const current = readStoreBootstrap();
+        if (current !== data.storeId) {
+          writeStoreBootstrap(data.storeId);
+          requiresRestart = true;
+        }
+      }
+
+      return { ...result, requiresRestart };
     },
   );
 }

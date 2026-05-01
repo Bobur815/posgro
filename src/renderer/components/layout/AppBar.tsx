@@ -77,8 +77,10 @@ const SmenaIndicator = styled.div<{ $open: boolean }>`
   font-weight: 600;
   color: ${({ $open, theme }) =>
     $open ? theme.colors.success : theme.colors.error};
-  cursor: default;
+  cursor: pointer;
   white-space: nowrap;
+  transition: opacity 0.15s;
+  &:hover { opacity: 0.8; }
 `;
 
 const Dot = styled.span<{ $open: boolean }>`
@@ -161,7 +163,7 @@ const LoginBtn = styled.button`
 export function AppBar() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { isCollapsed, toggleSidebar } = useSidebar();
+  const { isCollapsed, toggleSidebar, openSmenaModal } = useSidebar();
   const { user, isPinLogin, logout } = useAuthStore();
   const { status, refreshStatus } = useSync();
 
@@ -179,9 +181,12 @@ export function AppBar() {
 
   useEffect(() => {
     checkSmena();
-    // Re-check when window gains focus (cashier may have opened/closed smena in another tab)
     window.addEventListener('focus', checkSmena);
-    return () => window.removeEventListener('focus', checkSmena);
+    window.addEventListener('smena-updated', checkSmena);
+    return () => {
+      window.removeEventListener('focus', checkSmena);
+      window.removeEventListener('smena-updated', checkSmena);
+    };
   }, [checkSmena]);
 
   const handleSync = async () => {
@@ -222,7 +227,7 @@ export function AppBar() {
 
       {/* Smena indicator */}
       {smenaOpen !== null && (
-        <SmenaIndicator $open={smenaOpen}>
+        <SmenaIndicator $open={smenaOpen} onClick={openSmenaModal} title={t('smena.title')}>
           <Dot $open={smenaOpen} />
           {smenaOpen ? t('smena.statusOpen') : t('smena.statusClosed')}
         </SmenaIndicator>

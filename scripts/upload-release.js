@@ -1,10 +1,14 @@
 const { execSync } = require('child_process');
 const { version } = require('../package.json');
 
-const exe = `dist/grocery-pos Setup ${version}.exe`;
+// Local build output uses spaces (NSIS default); latest.yml uses hyphens (artifactName template).
+// Specify the remote filename explicitly so they always match.
+const localExe = `dist/grocery-pos Setup ${version}.exe`;
+const remoteExe = `grocery-pos-Setup-${version}.exe`;
+const vps = 'bobur@144.91.121.160';
+const remotePath = `/home/bobur/releases`;
+
 console.log(`Uploading v${version} to VPS...`);
-
-execSync(`scp "dist/latest.yml" bobur@144.91.121.160:/home/bobur/releases/`, { stdio: 'inherit' });
-execSync(`scp "${exe}" bobur@144.91.121.160:/home/bobur/releases/`, { stdio: 'inherit' });
-
+execSync(`scp "dist/latest.yml" ${vps}:${remotePath}/`, { stdio: 'inherit' });
+execSync(`scp "${localExe}" "${vps}:${remotePath}/${remoteExe}"`, { stdio: 'inherit' });
 console.log(`Done! v${version} is live at https://pos.bobur-dev.uz/releases/`);

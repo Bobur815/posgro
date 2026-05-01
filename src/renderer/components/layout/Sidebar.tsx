@@ -107,6 +107,26 @@ const StyledNavLink = styled(NavLink)`
   }
 `;
 
+const NavButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.sm};
+  padding: ${({ theme }) => theme.spacing.sm};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  color: ${({ theme }) => theme.colors.text};
+  text-decoration: none;
+  transition: all 0.2s;
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+
+  &:hover {
+    background-color: ${({ theme }) => theme.colors.background};
+  }
+`;
+
 const IconWrapper = styled.span`
   flex-shrink: 0;
   width: 22px;
@@ -190,7 +210,7 @@ const UpdateDot = styled.span`
 export function Sidebar() {
   const { t } = useTranslation();
   const { user } = useAuthStore();
-  const { isCollapsed, collapseSidebar } = useSidebar();
+  const { isCollapsed, collapseSidebar, openSmenaModal } = useSidebar();
   const { status, refreshStatus } = useSync();
   const isAdmin = user?.role === "ADMIN";
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -233,7 +253,10 @@ export function Sidebar() {
           <NavSection>
             <SectionTitle>{t("nav.main")}</SectionTitle>
             {renderNavItem("/", ShoppingCart, t("nav.pos"), true)}
-            {renderNavItem("/smena", Clock, t("nav.smena"))}
+            <NavButton onClick={() => { openSmenaModal(); collapseSidebar(); }}>
+              <IconWrapper><Clock size={17} /></IconWrapper>
+              <NavText>{t("nav.smena")}</NavText>
+            </NavButton>
             {renderNavItem("/products", Package, t("nav.products"))}
           </NavSection>
 

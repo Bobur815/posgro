@@ -168,7 +168,10 @@ export function SystemSettings() {
     e.preventDefault();
     try {
       await window.electronAPI.settings.set("store_name", settings.storeName);
-      await window.electronAPI.settings.set("store_address", settings.storeAddress);
+      await window.electronAPI.settings.set(
+        "store_address",
+        settings.storeAddress,
+      );
       await window.electronAPI.settings.set("store_phone", settings.storePhone);
       await window.electronAPI.settings.set("store_stir", settings.storeStir);
       await window.electronAPI.settings.set("tax_rate", settings.taxRate);
@@ -180,7 +183,10 @@ export function SystemSettings() {
 
   const loadTerminalId = async () => {
     try {
-      const config = await window.electronAPI.config.getLocalConfig() as { terminalId?: string; storeId?: string } | null;
+      const config = (await window.electronAPI.config.getLocalConfig()) as {
+        terminalId?: string;
+        storeId?: string;
+      } | null;
       if (config) {
         setTerminalId(config.terminalId || "");
         setStoreId(config.storeId || "");
@@ -193,7 +199,7 @@ export function SystemSettings() {
   const handleSaveTerminalId = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await window.electronAPI.config.updateLocalConfig({ terminalId, storeId });
+      await window.electronAPI.config.updateLocalConfig({ terminalId });
       alert(t("common.saved"));
     } catch (error) {
       console.error("Failed to save terminal id:", error);
@@ -229,7 +235,11 @@ export function SystemSettings() {
   return (
     <Container>
       <Header>
-        <BackButton variant="secondary" size="small" onClick={() => navigate("/settings")}>
+        <BackButton
+          variant="secondary"
+          size="small"
+          onClick={() => navigate("/settings")}
+        >
           <ArrowLeft size={20} />
         </BackButton>
         <Title>{t("settings.systemSettings")}</Title>
@@ -289,12 +299,14 @@ export function SystemSettings() {
         <SectionTitle>{t("settings.connection")}</SectionTitle>
         <Form onSubmit={handleSaveTerminalId}>
           <Row>
-            <Input
-              label={t("settings.storeId")}
-              value={storeId}
-              onChange={(e) => setStoreId(e.target.value)}
-              placeholder="1000"
-            />
+            <div>
+              <InfoText
+                style={{ marginBottom: 4, fontWeight: 600, fontSize: 13 }}
+              >
+                {t("settings.storeId")}
+              </InfoText>
+              <StatValue style={{ fontSize: 16 }}>{storeId || "—"}</StatValue>
+            </div>
             <Input
               label={t("settings.terminalId")}
               value={terminalId}

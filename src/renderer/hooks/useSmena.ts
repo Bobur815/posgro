@@ -30,6 +30,7 @@ export function useSmena() {
     try {
       const smena = await window.electronAPI.smena.open({ initialCash });
       await loadCurrent();
+      window.dispatchEvent(new Event('smena-updated'));
       return smena;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to open smena';
@@ -46,6 +47,7 @@ export function useSmena() {
     try {
       const result = await window.electronAPI.smena.close({ smenaId, finalCash });
       setCurrentSmena(null);
+      window.dispatchEvent(new Event('smena-updated'));
       return result;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to close smena';

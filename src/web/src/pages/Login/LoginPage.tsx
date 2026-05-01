@@ -8,7 +8,9 @@ import { Button } from "@components/common/Button";
 import { Input } from "@components/common/Input";
 import { UzbekPhoneInput } from "@components/common/UzbekPhoneInput";
 import { isUzPhoneComplete } from "@shared/utils/phone";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Download } from "lucide-react";
+
+const RELEASES_BASE = "/releases";
 
 const Container = styled.div`
   display: flex;
@@ -76,6 +78,32 @@ const LangRow = styled.div`
   margin-top: ${({ theme }) => theme.spacing.lg};
 `;
 
+const DownloadBanner = styled.a`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: ${({ theme }) => theme.spacing.md};
+  padding: 8px 12px;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-size: 13px;
+  text-decoration: none;
+  transition: all 0.2s;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.primary};
+    color: ${({ theme }) => theme.colors.primary};
+    background-color: ${({ theme }) => theme.colors.primary}08;
+  }
+
+  span.ver {
+    font-weight: 500;
+    color: ${({ theme }) => theme.colors.text};
+  }
+`;
+
 const LangButton = styled.button<{ $active?: boolean }>`
   background: none;
   border: 1px solid ${({ theme, $active }) => $active ? theme.colors.primary : theme.colors.border};
@@ -132,6 +160,7 @@ export function LoginPage() {
   const [showStoreId, setShowStoreId] = useState(!ENV_STORE_ID && !localStorage.getItem("last_store_id"));
   const [rememberMe, setRememberMe] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
+  const [latestRelease, setLatestRelease] = useState<{ version: string; url: string } | null>(null);
 
   useEffect(() => {
     clearError();
@@ -150,6 +179,22 @@ export function LoginPage() {
     }
   }, [clearError]);
 
+  useEffect(() => {
+    fetch(`${RELEASES_BASE}/latest.yml`)
+      .then((r) => r.text())
+      .then((yaml) => {
+        const versionMatch = yaml.match(/^version:\s*(.+)$/m);
+        const pathMatch = yaml.match(/^path:\s*(.+)$/m);
+        if (versionMatch && pathMatch) {
+          setLatestRelease({
+            version: versionMatch[1].trim(),
+            url: `${RELEASES_BASE}/${pathMatch[1].trim()}`,
+          });
+        }
+      })
+      .catch(() => { /* releases endpoint unavailable — hide banner */ });
+  }, []);
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isUzPhoneComplete(phoneDigits)) return;
@@ -266,6 +311,15 @@ export function LoginPage() {
             O'zbekcha
           </LangButton>
         </LangRow>
+
+        {latestRelease && (
+          <DownloadBanner href={latestRelease.url} download>
+            <Download size={14} />
+            {language === "uz" ? "Dasturni yuklab olish" : "Скачать приложение"}
+            {" "}
+            <span className="ver">v{latestRelease.version}</span>
+          </DownloadBanner>
+        )}
       </Card>
     </Container>
   );

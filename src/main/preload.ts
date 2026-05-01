@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("auth:restoreSession", token),
     changePassword: (currentPassword: string, newPassword: string) =>
       ipcRenderer.invoke("auth:changePassword", currentPassword, newPassword),
+    isPinConfigured: () => ipcRenderer.invoke("auth:isPinConfigured"),
+    setupPin: (pin: string) => ipcRenderer.invoke("auth:setupPin", pin),
   },
 
   // Products
@@ -48,8 +50,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     update: (id: string, data: unknown) =>
       ipcRenderer.invoke("sales:update", id, data),
     delete: (id: string) => ipcRenderer.invoke("sales:delete", id),
-    getAll: (filters?: { startDate?: string; endDate?: string; terminalId?: string }) =>
-      ipcRenderer.invoke("sales:getAll", filters),
+    getAll: (filters?: {
+      startDate?: string;
+      endDate?: string;
+      terminalId?: string;
+    }) => ipcRenderer.invoke("sales:getAll", filters),
     getById: (id: string) => ipcRenderer.invoke("sales:getById", id),
     getTodaySummary: () => ipcRenderer.invoke("sales:getTodaySummary"),
   },
@@ -120,9 +125,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.on("sync:failed", handler);
       return () => ipcRenderer.removeListener("sync:failed", handler);
     },
-    onStockConflict: (callback: (conflicts: { id: number; nameRu: string; stock: number }[]) => void) => {
-      const handler = (_event: IpcRendererEvent, conflicts: { id: number; nameRu: string; stock: number }[]) =>
-        callback(conflicts);
+    onStockConflict: (
+      callback: (
+        conflicts: { id: number; nameRu: string; stock: number }[],
+      ) => void,
+    ) => {
+      const handler = (
+        _event: IpcRendererEvent,
+        conflicts: { id: number; nameRu: string; stock: number }[],
+      ) => callback(conflicts);
       ipcRenderer.on("sync:stockConflict", handler);
       return () => ipcRenderer.removeListener("sync:stockConflict", handler);
     },
@@ -189,8 +200,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // Analytics
   analytics: {
-    getData: (filters: { startDate: string; endDate: string; terminalId?: string }) =>
-      ipcRenderer.invoke("analytics:getData", filters),
+    getData: (filters: {
+      startDate: string;
+      endDate: string;
+      terminalId?: string;
+    }) => ipcRenderer.invoke("analytics:getData", filters),
   },
 
   // Terminals
@@ -205,6 +219,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getTerminalId: () => ipcRenderer.invoke("app:getTerminalId"),
     getStoreInfo: () => ipcRenderer.invoke("app:getStoreInfo"),
     quit: () => ipcRenderer.invoke("app:quit"),
+    relaunch: () => ipcRenderer.invoke("app:relaunch"),
     onCloseRequested: (callback: () => void) => {
       ipcRenderer.on("app:close-requested", callback);
       return () => ipcRenderer.removeListener("app:close-requested", callback);
@@ -225,14 +240,45 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // Smena (shift) management
   smena: {
-    getCurrent: () => ipcRenderer.invoke('smena:getCurrent'),
-    open: (data: { initialCash: number }) => ipcRenderer.invoke('smena:open', data),
-    addMovement: (data: { smenaId: string; type: 'PAY_IN' | 'PAY_OUT'; amount: number; note?: string }) =>
-      ipcRenderer.invoke('smena:addMovement', data),
-    close: (data: { smenaId: string; finalCash: number }) => ipcRenderer.invoke('smena:close', data),
-    printZReport: (smenaId: string) => ipcRenderer.invoke('smena:printZReport', smenaId),
-    printXReport: (smenaId: string) => ipcRenderer.invoke('smena:printXReport', smenaId),
-    getHistory: (filters?: { limit?: number }) => ipcRenderer.invoke('smena:getHistory', filters),
+    getCurrent: () => ipcRenderer.invoke("smena:getCurrent"),
+    open: (data: { initialCash: number }) =>
+      ipcRenderer.invoke("smena:open", data),
+    addMovement: (data: {
+      smenaId: string;
+      type: "PAY_IN" | "PAY_OUT";
+      amount: number;
+      note?: string;
+    }) => ipcRenderer.invoke("smena:addMovement", data),
+    close: (data: { smenaId: string; finalCash: number }) =>
+      ipcRenderer.invoke("smena:close", data),
+    printZReport: (smenaId: string) =>
+      ipcRenderer.invoke("smena:printZReport", smenaId),
+    printXReport: (smenaId: string) =>
+      ipcRenderer.invoke("smena:printXReport", smenaId),
+    getHistory: (filters?: { limit?: number }) =>
+      ipcRenderer.invoke("smena:getHistory", filters),
+  },
+
+  // Setup wizard (first-launch only)
+  setup: {
+    authenticate: (data: {
+      phone: string;
+      password: string;
+      storeId: string;
+    }) => ipcRenderer.invoke("setup:authenticate", data),
+    complete: (data: {
+      storeId: string;
+      terminalId: string;
+      storeName: string;
+      storeAddress: string;
+      storePhone: string;
+      storeStir: string;
+      taxRate: string;
+      syncInterval: string;
+      token: string;
+      pin?: string;
+    }) => ipcRenderer.invoke("setup:complete", data),
+    launchApp: () => ipcRenderer.invoke("setup:launchApp"),
   },
 
   // Auto-updater
@@ -244,8 +290,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.on("updater:checking", cb);
       return () => ipcRenderer.removeListener("updater:checking", cb);
     },
-    onAvailable: (cb: (info: { version: string; releaseDate: string }) => void) => {
-      const h = (_e: IpcRendererEvent, i: { version: string; releaseDate: string }) => cb(i);
+    onAvailable: (
+      cb: (info: { version: string; releaseDate: string }) => void,
+    ) => {
+      const h = (
+        _e: IpcRendererEvent,
+        i: { version: string; releaseDate: string },
+      ) => cb(i);
       ipcRenderer.on("updater:available", h);
       return () => ipcRenderer.removeListener("updater:available", h);
     },
@@ -253,8 +304,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.on("updater:not-available", cb);
       return () => ipcRenderer.removeListener("updater:not-available", cb);
     },
-    onProgress: (cb: (p: { percent: number; transferred: number; total: number; bytesPerSecond: number }) => void) => {
-      const h = (_e: IpcRendererEvent, p: { percent: number; transferred: number; total: number; bytesPerSecond: number }) => cb(p);
+    onProgress: (
+      cb: (p: {
+        percent: number;
+        transferred: number;
+        total: number;
+        bytesPerSecond: number;
+      }) => void,
+    ) => {
+      const h = (
+        _e: IpcRendererEvent,
+        p: {
+          percent: number;
+          transferred: number;
+          total: number;
+          bytesPerSecond: number;
+        },
+      ) => cb(p);
       ipcRenderer.on("updater:progress", h);
       return () => ipcRenderer.removeListener("updater:progress", h);
     },
@@ -285,6 +351,8 @@ declare global {
           currentPassword: string,
           newPassword: string,
         ) => Promise<boolean>;
+        isPinConfigured: () => Promise<boolean>;
+        setupPin: (pin: string) => Promise<boolean>;
       };
       products: {
         getAll: (filters?: unknown) => Promise<unknown[]>;
@@ -307,7 +375,11 @@ declare global {
         create: (data: unknown) => Promise<unknown>;
         update: (id: string, data: unknown) => Promise<unknown>;
         delete: (id: string) => Promise<boolean>;
-        getAll: (filters?: { startDate?: string; endDate?: string; terminalId?: string }) => Promise<unknown[]>;
+        getAll: (filters?: {
+          startDate?: string;
+          endDate?: string;
+          terminalId?: string;
+        }) => Promise<unknown[]>;
         getById: (id: string) => Promise<unknown>;
         getTodaySummary: () => Promise<unknown>;
       };
@@ -349,7 +421,9 @@ declare global {
           callback: (error: { message: string }) => void,
         ) => () => void;
         onStockConflict: (
-          callback: (conflicts: { id: number; nameRu: string; stock: number }[]) => void,
+          callback: (
+            conflicts: { id: number; nameRu: string; stock: number }[],
+          ) => void,
         ) => () => void;
       };
       printer: {
@@ -396,13 +470,16 @@ declare global {
       };
       terminals: {
         getKnown: () => Promise<string[]>;
-        getStatus: () => Promise<{ terminalId: string; lastSyncAt: string; unsyncedCount: number }[]>;
+        getStatus: () => Promise<
+          { terminalId: string; lastSyncAt: string; unsyncedCount: number }[]
+        >;
       };
       app: {
         getVersion: () => Promise<string>;
         getTerminalId: () => Promise<string>;
         getStoreInfo: () => Promise<{ storeId: string; storeName: string }>;
         quit: () => Promise<void>;
+        relaunch: () => Promise<void>;
         onCloseRequested: (callback: () => void) => () => void;
         confirmClose: () => void;
       };
@@ -418,25 +495,66 @@ declare global {
           apiUrl?: string;
           storeName?: string;
           terminalId?: string;
-        }) => Promise<unknown>;
+        }) => Promise<{ requiresRestart?: boolean }>;
       };
       smena: {
         getCurrent: () => Promise<unknown | null>;
         open: (data: { initialCash: number }) => Promise<unknown>;
-        addMovement: (data: { smenaId: string; type: 'PAY_IN' | 'PAY_OUT'; amount: number; note?: string }) => Promise<unknown>;
-        close: (data: { smenaId: string; finalCash: number }) => Promise<unknown>;
+        addMovement: (data: {
+          smenaId: string;
+          type: "PAY_IN" | "PAY_OUT";
+          amount: number;
+          note?: string;
+        }) => Promise<unknown>;
+        close: (data: {
+          smenaId: string;
+          finalCash: number;
+        }) => Promise<unknown>;
         printZReport: (smenaId: string) => Promise<boolean>;
         printXReport: (smenaId: string) => Promise<boolean>;
         getHistory: (filters?: { limit?: number }) => Promise<unknown[]>;
+      };
+      setup: {
+        authenticate: (data: {
+          phone: string;
+          password: string;
+          storeId: string;
+        }) => Promise<{
+          success: boolean;
+          token: string;
+          user: { phone: string; nameRu: string; nameUz: string; role: string };
+        }>;
+        complete: (data: {
+          storeId: string;
+          terminalId: string;
+          storeName: string;
+          storeAddress: string;
+          storePhone: string;
+          storeStir: string;
+          taxRate: string;
+          syncInterval: string;
+          token: string;
+          pin?: string;
+        }) => Promise<{ success: boolean }>;
+        launchApp: () => Promise<void>;
       };
       updater: {
         checkForUpdates: () => Promise<void>;
         startDownload: () => Promise<void>;
         quitAndInstall: () => void;
         onChecking: (cb: () => void) => () => void;
-        onAvailable: (cb: (info: { version: string; releaseDate: string }) => void) => () => void;
+        onAvailable: (
+          cb: (info: { version: string; releaseDate: string }) => void,
+        ) => () => void;
         onNotAvailable: (cb: () => void) => () => void;
-        onProgress: (cb: (p: { percent: number; transferred: number; total: number; bytesPerSecond: number }) => void) => () => void;
+        onProgress: (
+          cb: (p: {
+            percent: number;
+            transferred: number;
+            total: number;
+            bytesPerSecond: number;
+          }) => void,
+        ) => () => void;
         onDownloaded: (cb: (info: { version: string }) => void) => () => void;
         onError: (cb: (e: { message: string }) => void) => () => void;
       };

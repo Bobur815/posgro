@@ -14,6 +14,17 @@ interface JwtPayload {
   exp: number;
 }
 
+function decodeTokenStoreId(token: string): { storeId: string | null; expired: boolean } | null {
+  try {
+    const parts = token.split('.');
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString()) as { storeId?: string | null; exp?: number };
+    const expired = !!payload.exp && payload.exp * 1000 <= Date.now();
+    return { storeId: payload.storeId ?? null, expired };
+  } catch {
+    return null;
+  }
+}
+
 let currentUser: AuthUser | null = null;
 
 export function setupAuthHandlers(): void {
@@ -26,8 +37,18 @@ export function setupAuthHandlers(): void {
     const storeId = localConfig?.storeId || config.storeId;
     const vpsApiUrl = localConfig?.apiUrl || config.vpsApiUrl;
 
+    console.log(`[auth:login] phone=${phone} terminal_storeId=${storeId}`);
+
     // Find user in local database
     let user = await prisma.user.findUnique({ where: { phone } });
+
+    console.log(`[auth:login] local user found:`, user ? `id=${user.id} role=${user.role} storeId=${user.storeId} active=${user.active}` : 'null');
+
+    // Reject users whose storeId is set to a different store — they don't belong here
+    if (user && user.storeId && user.storeId !== storeId) {
+      console.log(`[auth:login] BLOCKED local user — storeId mismatch: user.storeId=${user.storeId} terminal=${storeId}`);
+      user = null;
+    }
 
     let serverTokenObtained = false;
 
@@ -35,13 +56,29 @@ export function setupAuthHandlers(): void {
       // User not in local DB — try VPS (covers new terminal setup or user only on server)
       let synced = false;
       try {
+        console.log(`[auth:login] calling VPS login — storeId=${storeId} phone=${phone}`);
         const serverRes = await fetch(`${vpsApiUrl}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ storeId, phone, password }),
         });
+        console.log(`[auth:login] VPS response status: ${serverRes.status}`);
         if (serverRes.ok) {
           const body = await serverRes.json() as { token: string; user: { id: string; phone: string; role: string; nameUz: string; nameRu: string } };
+          // Decode and log the full token payload for debugging
+          let rawPayload: Record<string, unknown> = {};
+          try { rawPayload = JSON.parse(Buffer.from(body.token.split('.')[1], 'base64').toString()); } catch { /* ignore */ }
+          console.log(`[auth:login] VPS token payload:`, JSON.stringify(rawPayload));
+          // Reject if VPS token belongs to a different store
+          const tokenInfo = decodeTokenStoreId(body.token);
+          console.log(`[auth:login] token storeId=${tokenInfo?.storeId} terminal storeId=${storeId} — match=${tokenInfo?.storeId === storeId}`);
+          if (tokenInfo?.storeId && tokenInfo.storeId !== storeId) {
+            console.log(`[auth:login] BLOCKED — VPS token storeId mismatch`);
+            throw new Error('auth.errors.store_mismatch');
+          }
+          if (!tokenInfo?.storeId) {
+            console.warn(`[auth:login] WARNING — VPS token has no storeId claim; cannot verify store ownership`);
+          }
           setServerToken(body.token);
           serverTokenObtained = true;
           await prisma.systemSetting.upsert({
@@ -53,7 +90,7 @@ export function setupAuthHandlers(): void {
           const hashedPassword = await bcrypt.hash(password, 10);
           user = await prisma.user.upsert({
             where: { phone },
-            update: { password: hashedPassword, role: body.user.role, nameUz: body.user.nameUz, nameRu: body.user.nameRu, active: true },
+            update: { password: hashedPassword, role: body.user.role, nameUz: body.user.nameUz, nameRu: body.user.nameRu, active: true, storeId },
             create: {
               id: body.user.id,
               phone: body.user.phone,
@@ -62,12 +99,17 @@ export function setupAuthHandlers(): void {
               nameUz: body.user.nameUz,
               nameRu: body.user.nameRu,
               active: true,
+              storeId,
             },
           });
           synced = true;
+        } else if (serverRes.status === 404 || serverRes.status === 400) {
+          // Store not found on VPS — storeId is likely wrong
+          throw new Error('auth.errors.server_not_configured');
         }
-      } catch {
-        // VPS unreachable
+      } catch (e) {
+        if (e instanceof Error && e.message.startsWith('auth.errors.')) throw e;
+        // VPS unreachable — fall through
       }
       if (!synced) {
         throw new Error('auth.errors.user_not_found');
@@ -78,8 +120,11 @@ export function setupAuthHandlers(): void {
       throw new Error('auth.errors.user_deactivated');
     }
 
+    console.log(`[auth:login] proceeding with user id=${user!.id} storeId=${user!.storeId} role=${user!.role}`);
+
     // Verify password against local hash
     const isValidPassword = await bcrypt.compare(password, user!.password);
+    console.log(`[auth:login] local password match: ${isValidPassword}`);
 
     if (!isValidPassword) {
       // Local hash may be stale (password changed on web) — try VPS as fallback
@@ -91,9 +136,14 @@ export function setupAuthHandlers(): void {
           body: JSON.stringify({ storeId, phone, password }),
         });
         if (serverRes.ok) {
+          const { token: sToken } = await serverRes.json() as { token: string };
+          // Reject if VPS token belongs to a different store
+          const tokenInfo = decodeTokenStoreId(sToken);
+          if (tokenInfo?.storeId && tokenInfo.storeId !== storeId) {
+            throw new Error('auth.errors.store_mismatch');
+          }
           vpsAccepted = true;
           serverTokenObtained = true;
-          const { token: sToken } = await serverRes.json() as { token: string };
           setServerToken(sToken);
           await prisma.systemSetting.upsert({
             where: { key: 'server_token' },
@@ -102,9 +152,10 @@ export function setupAuthHandlers(): void {
           });
           // Sync local hash so future offline logins use the new password
           const hashedPassword = await bcrypt.hash(password, 10);
-          await prisma.user.update({ where: { phone }, data: { password: hashedPassword } });
+          await prisma.user.update({ where: { phone }, data: { password: hashedPassword, storeId } });
         }
-      } catch {
+      } catch (e) {
+        if (e instanceof Error && e.message.startsWith('auth.errors.')) throw e;
         // VPS unreachable — fall through to invalid_password
       }
       if (!vpsAccepted) {
@@ -137,25 +188,26 @@ export function setupAuthHandlers(): void {
       });
       if (serverRes.ok) {
         const { token: sToken } = await serverRes.json() as { token: string };
-        setServerToken(sToken);
-        await prisma.systemSetting.upsert({
-          where: { key: 'server_token' },
-          update: { value: sToken },
-          create: { key: 'server_token', value: sToken },
-        });
+        // Only use server token if it belongs to this store
+        const tokenInfo = decodeTokenStoreId(sToken);
+        if (tokenInfo?.storeId && tokenInfo.storeId !== storeId) {
+          console.warn(`VPS returned token for store ${tokenInfo.storeId}, expected ${storeId} — skipping server token`);
+        } else {
+          setServerToken(sToken);
+          await prisma.systemSetting.upsert({
+            where: { key: 'server_token' },
+            update: { value: sToken },
+            create: { key: 'server_token', value: sToken },
+          });
+        }
       } else {
         const text = await serverRes.text();
         console.warn(`VPS login failed (${serverRes.status}): ${text} — storeId: ${storeId}, phone: ${phone}`);
         const existingSetting = await prisma.systemSetting.findUnique({ where: { key: 'server_token' } });
         if (existingSetting?.value) {
-          try {
-            const parts = existingSetting.value.split('.');
-            const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString()) as { exp?: number };
-            if (!payload.exp || payload.exp * 1000 > Date.now()) {
-              setServerToken(existingSetting.value);
-            }
-          } catch {
-            // Invalid token format — ignore
+          const decoded = decodeTokenStoreId(existingSetting.value);
+          if (decoded && !decoded.expired && decoded.storeId === storeId) {
+            setServerToken(existingSetting.value);
           }
         }
       }
@@ -221,11 +273,12 @@ export function setupAuthHandlers(): void {
       throw new Error('auth.errors.invalid_pin');
     }
 
-    // Find default cashier (first active USER)
+    // Find default cashier (first active USER belonging to this store)
     const cashier = await prisma.user.findFirst({
       where: {
         role: 'USER',
         active: true,
+        ...(localConfig?.storeId ? { storeId: localConfig.storeId } : {}),
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -250,17 +303,14 @@ export function setupAuthHandlers(): void {
     // Store token for sync operations
     await setAuthToken(token);
 
-    // Restore persisted server token (saved during last full login) so sync works
+    // Restore persisted server token — only if it belongs to the same store
+    const pinLocalConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+    const pinStoreId = pinLocalConfig?.storeId ?? null;
     const serverTokenSetting = await prisma.systemSetting.findUnique({ where: { key: 'server_token' } });
     if (serverTokenSetting?.value) {
-      try {
-        const parts = serverTokenSetting.value.split('.');
-        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString()) as { exp?: number };
-        if (!payload.exp || payload.exp * 1000 > Date.now()) {
-          setServerToken(serverTokenSetting.value);
-        }
-      } catch {
-        // Invalid token — ignore
+      const decoded = decodeTokenStoreId(serverTokenSetting.value);
+      if (decoded && !decoded.expired && decoded.storeId === pinStoreId) {
+        setServerToken(serverTokenSetting.value);
       }
     }
 
@@ -345,6 +395,12 @@ export function setupAuthHandlers(): void {
         return null;
       }
 
+      // Reject if the restored user belongs to a different store
+      const restoreLocalConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+      if (restoreLocalConfig?.storeId && user.storeId && user.storeId !== restoreLocalConfig.storeId) {
+        return null;
+      }
+
       // Restore current user
       currentUser = {
         id: user.id,
@@ -357,17 +413,13 @@ export function setupAuthHandlers(): void {
       // Restore token for sync
       await setAuthToken(token);
 
-      // Restore server token if persisted and not expired
+      // Restore server token — only if it belongs to the same store as LocalConfig
+      const restoreStoreId = restoreLocalConfig?.storeId ?? null;
       const serverTokenSetting = await prisma.systemSetting.findUnique({ where: { key: 'server_token' } });
       if (serverTokenSetting?.value) {
-        try {
-          const parts = serverTokenSetting.value.split('.');
-          const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString()) as { exp?: number };
-          if (!payload.exp || payload.exp * 1000 > Date.now()) {
-            setServerToken(serverTokenSetting.value);
-          }
-        } catch {
-          // Invalid token — ignore
+        const decoded = decodeTokenStoreId(serverTokenSetting.value);
+        if (decoded && !decoded.expired && decoded.storeId === restoreStoreId) {
+          setServerToken(serverTokenSetting.value);
         }
       }
 
@@ -386,7 +438,11 @@ export function setupAuthHandlers(): void {
     }
 
     const prisma = getPrismaClient();
+    const localConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+    const storeId = localConfig?.storeId;
+
     return prisma.user.findMany({
+      where: storeId ? { storeId } : {},
       select: {
         id: true,
         phone: true,
@@ -410,6 +466,8 @@ export function setupAuthHandlers(): void {
     // Hash password
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
+    const localConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+
     const user = await prisma.user.create({
       data: {
         phone: data.phone,
@@ -418,6 +476,7 @@ export function setupAuthHandlers(): void {
         nameUz: data.nameUz,
         nameRu: data.nameRu,
         active: true,
+        storeId: localConfig?.storeId ?? null,
       },
       select: {
         id: true,
@@ -532,6 +591,33 @@ export function setupAuthHandlers(): void {
         entity: 'user',
         entityId: id,
       },
+    });
+
+    return true;
+  });
+
+  ipcMain.handle('auth:isPinConfigured', async () => {
+    const prisma = getPrismaClient();
+    const config = await prisma.localConfig.findUnique({
+      where: { id: 'config' },
+      select: { storePin: true },
+    });
+    return !!(config?.storePin);
+  });
+
+  ipcMain.handle('auth:setupPin', async (_event, pin: string) => {
+    if (!currentUser) {
+      throw new Error('Not authenticated');
+    }
+    if (!/^\d{4}$/.test(pin)) {
+      throw new Error('auth.errors.invalid_pin_format');
+    }
+
+    const prisma = getPrismaClient();
+    const hashedPin = await bcrypt.hash(pin, 10);
+    await prisma.localConfig.update({
+      where: { id: 'config' },
+      data: { storePin: hashedPin },
     });
 
     return true;

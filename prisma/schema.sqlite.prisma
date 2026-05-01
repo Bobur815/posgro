@@ -37,10 +37,12 @@ model User {
   nameUz    String   @map("name_uz")
   nameRu    String   @map("name_ru")
   active    Boolean  @default(true)
+  storeId   String?  @map("store_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@index([storeId])
   @@map("users")
 }
 

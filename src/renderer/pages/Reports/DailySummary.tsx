@@ -245,7 +245,6 @@ export function ReceiptsSummary() {
   const [terminalId, setTerminalId] = useState("");
   const [knownTerminals, setKnownTerminals] = useState<string[]>([]);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-  console.log(knownTerminals, sales);
   
   useEffect(() => { 
     if (isAdmin) {

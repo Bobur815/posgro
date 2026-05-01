@@ -28,6 +28,10 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
+      '/releases': {
+        target: 'https://pos.bobur-dev.uz',
+        changeOrigin: true,
+      },
     },
   },
   build: {
