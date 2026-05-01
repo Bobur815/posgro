@@ -79,6 +79,9 @@ const LangRow = styled.div`
 `;
 
 const DownloadBanner = styled.a`
+  @media (max-width: 600px) {
+    display: none;
+  }
   display: flex;
   align-items: center;
   justify-content: center;
