@@ -1,4 +1,4 @@
-// Grocery POS - SQLite Schema for Electron POS Terminal
+// POSGRO - SQLite Schema for Electron POS Terminal
 // This schema is for local offline-first operation
 // Data syncs with the PostgreSQL server
 

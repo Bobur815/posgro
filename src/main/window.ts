@@ -15,8 +15,8 @@ export function createSetupWindow(): BrowserWindow {
       sandbox: false,
     },
     show: false,
-    title: 'Yangi Asr — Sozlash',
-    icon: path.join(__dirname, '../../build/icon.ico'),
+    title: 'POSGRO',
+    icon: path.join(__dirname, '../../build/icons/posgro-icon.ico'),
     autoHideMenuBar: true,
   });
 
@@ -66,8 +66,8 @@ export function createWindow(): BrowserWindow {
       sandbox: false,
     },
     show: false,
-    title: 'Yangi Asr',
-    icon: path.join(__dirname, '../../build/icon.ico'),
+    title: 'POSGRO',
+    icon: path.join(__dirname, '../../build/icons/posgro-icon.ico'),
     autoHideMenuBar: true, // Hide menu bar
   });
 

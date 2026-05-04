@@ -6,6 +6,7 @@ import { uploadLocalData } from './upload-sync';
 import { getAppConfig } from '../config/app-config';
 import { getPrismaClient } from '../database/sqlite-client';
 import { getServerToken, clearServerToken } from './queue-manager';
+import { flushLogs } from '../logger';
 
 function decodeTokenStoreId(token: string): string | null | undefined {
   try {
@@ -123,6 +124,9 @@ export class SyncService {
       // Send heartbeat to VPS so admins can monitor all terminals
       await this.sendHeartbeat();
 
+      // Upload buffered logs to VPS for super admin visibility
+      await this.uploadLogs();
+
       this.lastSyncTime = new Date();
 
       // Notify renderer process
@@ -172,6 +176,27 @@ export class SyncService {
       }
     } catch {
       // Offline or endpoint not yet implemented — use cached limit
+    }
+  }
+
+  private async uploadLogs(): Promise<void> {
+    const entries = flushLogs();
+    if (entries.length === 0) return;
+    const config = getAppConfig();
+    const token = getServerToken();
+    if (!token) return;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      await fetch(`${config.vpsApiUrl}/logs/upload`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ terminalId: config.terminalId, storeId: config.storeId, entries }),
+      });
+      clearTimeout(timeoutId);
+    } catch {
+      // fire-and-forget — entries are already saved to local log file
     }
   }
 

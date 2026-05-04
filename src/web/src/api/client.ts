@@ -442,6 +442,42 @@ export const stores = {
   },
 };
 
+// ─── Terminal Logs (Super Admin) ─────────────────────────────────────────────
+
+export interface TerminalLogEntry {
+  id: string;
+  storeId: string;
+  terminalId: string;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+  timestamp: string;
+}
+
+export interface LogsResponse {
+  items: TerminalLogEntry[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface LogsQueryParams {
+  storeId?: string;
+  terminalId?: string;
+  level?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  limit?: number;
+}
+
+export const logs = {
+  getLogs: async (params?: LogsQueryParams): Promise<LogsResponse> => {
+    const { data } = await axiosInstance.get('/logs', { params });
+    return data;
+  },
+};
+
 // ─── Analytics ───────────────────────────────────────────────────────────────
 
 export const analytics = {
@@ -598,6 +634,7 @@ export const api = {
   settings,
   receipt,
   stores,
+  logs,
   analytics,
   mxik,
   aslBelgisi,

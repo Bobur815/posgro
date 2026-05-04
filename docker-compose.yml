@@ -1,4 +1,4 @@
-name: grocery_pos
+name: posgro
 
 services:
   ocr-python:
@@ -6,7 +6,7 @@ services:
       context: ./src/server/ocr-python
     restart: unless-stopped
     networks:
-      - grocery-network
+      - posgro-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 30s
@@ -18,14 +18,14 @@ services:
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: grocery_pos
+      POSTGRES_DB: posgro
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
     networks:
-      - grocery-network
+      - posgro-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d grocery_pos"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d posgro"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -38,7 +38,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/grocery_pos"
+      DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/posgro"
       PYTHON_OCR_URL: "http://ocr-python:8001"
       NODE_ENV: "production"
       PORT: "3001"
@@ -52,7 +52,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - grocery-network
+      - posgro-network
     command:
       - /bin/sh
       - -lc
@@ -71,5 +71,5 @@ volumes:
     driver: local
 
 networks:
-  grocery-network:
+  posgro-network:
     driver: bridge

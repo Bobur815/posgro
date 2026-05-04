@@ -223,7 +223,7 @@ export function LoginPage() {
   return (
     <Container>
       <Card>
-        <Logo>Yangi Asr</Logo>
+        <Logo>POSGRO</Logo>
         <Subtitle>{t("auth.login")}</Subtitle>
 
         <Form onSubmit={handleSubmit}>

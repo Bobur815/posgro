@@ -9,6 +9,7 @@ import {
   Param,
   UseGuards,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { StoresService } from './stores.service';
@@ -17,6 +18,7 @@ import { UpdateStoreDto } from './dto/update-store.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
 
 @ApiTags('stores')
@@ -35,11 +37,18 @@ export class StoresController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get store by ID (Super Admin only)' })
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Get store by ID (Admin can only access their own store)' })
   @ApiParam({ name: 'id', description: 'Store ID', example: 'clxyz123' })
   @ApiResponse({ status: 200, description: 'Store details with counts' })
   @ApiResponse({ status: 404, description: 'Store not found' })
-  async findOne(@Param('id') id: string) {
+  async findOne(
+    @Param('id') id: string,
+    @CurrentUser() user: { role: UserRole; storeId: string | null },
+  ) {
+    if (user.role === UserRole.ADMIN && user.storeId !== id) {
+      throw new ForbiddenException('Access denied');
+    }
     return this.storesService.findById(id);
   }
 

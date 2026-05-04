@@ -1,4 +1,4 @@
-// Grocery POS - Prisma Schema
+// POSGRO - Prisma Schema
 // Works with PostgreSQL (VPS)
 // Multi-tenant: Each store has isolated data
 
@@ -39,6 +39,7 @@ model Store {
   systemSettings       SystemSetting[]
   auditLogs            AuditLog[]
   terminalHeartbeats   TerminalHeartbeat[]
+  terminalLogs         TerminalLog[]
 
   @@map("stores")
 }
@@ -326,6 +327,25 @@ model TerminalHeartbeat {
   @@unique([storeId, terminalId])
   @@index([storeId])
   @@map("terminal_heartbeats")
+}
+
+// ==================== TERMINAL LOGS ====================
+
+model TerminalLog {
+  id         String   @id @default(cuid())
+  storeId    String   @map("store_id")
+  store      Store    @relation(fields: [storeId], references: [id])
+  terminalId String   @map("terminal_id")
+  level      String   // "info" | "warn" | "error"
+  message    String   @db.Text
+  timestamp  DateTime
+
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([storeId])
+  @@index([storeId, level])
+  @@index([storeId, timestamp(sort: Desc)])
+  @@map("terminal_logs")
 }
 
 model AuditLog {

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import i18n from "../../i18n";
 import styled, { keyframes } from "styled-components";
 import { CheckCircle, Store, KeyRound, ShieldCheck, Delete, Eraser, ChevronRight } from "lucide-react";
+import { VirtualKeyboard } from "../../components/common/VirtualKeyboard";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
 import { UzbekPhoneInput } from "../../components/common/UzbekPhoneInput";
@@ -104,9 +105,9 @@ const StepLabel = styled.span<{ $active: boolean; $done: boolean }>`
   font-weight: ${({ $active }) => ($active ? 600 : 400)};
 `;
 
-const Content = styled.div`
+const Content = styled.div<{ $kbOpen?: boolean }>`
   flex: 1;
-  padding: 40px 48px;
+  padding: 40px 48px ${({ $kbOpen }) => ($kbOpen ? '360px' : '40px')};
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -368,10 +369,34 @@ export function SetupWizard() {
         password: data.password,
         storeId: data.storeId.trim(),
       });
+
+      // Pre-fill store info from server (best-effort)
+      let prefill: Partial<WizardData> = {};
+      try {
+        const config = await window.electronAPI.config.getLocalConfig();
+        const vpsApiUrl = config?.apiUrl || 'https://pos.bobur-dev.uz/api';
+        const res = await fetch(`${vpsApiUrl}/stores/${data.storeId.trim()}`, {
+          headers: { Authorization: `Bearer ${result.token}` },
+        });
+        if (res.ok) {
+          const store = await res.json();
+          const settings = store.settings ? JSON.parse(store.settings) : {};
+          prefill = {
+            storeName: store.name || '',
+            storeAddress: store.address || '',
+            storePhone: store.phone || '',
+            taxRate: settings.taxRate != null ? String(settings.taxRate) : '0',
+          };
+        }
+      } catch {
+        // Non-fatal — proceed with empty prefill
+      }
+
       setData(prev => ({
         ...prev,
+        ...prefill,
         token: result.token,
-        storePhone: '998' + data.phone,
+        storePhone: prefill.storePhone || ('998' + data.phone),
       }));
       setCurrentStep('storeInfo');
     } catch (e) {
@@ -464,6 +489,36 @@ export function SetupWizard() {
   const [pinError, setPinError] = useState('');
   const [shakePins, setShakePins] = useState(false);
 
+  // ── Virtual Keyboard ─────────────────────────────────────────────────────
+  const [activeField, setActiveField] = useState<string | null>(null);
+
+  const NUMBER_ONLY_FIELDS = new Set(['phone', 'taxRate', 'syncInterval']);
+
+  const handleVirtualKey = useCallback((key: string) => {
+    if (!activeField) return;
+    if (key === 'ENTER') { setActiveField(null); return; }
+
+    if (activeField === 'phone') {
+      if (key === 'BACKSPACE') setData(p => ({ ...p, phone: p.phone.slice(0, -1) }));
+      else if (/^\d$/.test(key) && data.phone.length < 9) setData(p => ({ ...p, phone: p.phone + key }));
+      return;
+    }
+    if (activeField === 'newPassword') {
+      if (key === 'BACKSPACE') setNewPassword(p => p.slice(0, -1));
+      else setNewPassword(p => p + key);
+      return;
+    }
+    if (activeField === 'confirmPassword') {
+      if (key === 'BACKSPACE') setConfirmPassword(p => p.slice(0, -1));
+      else setConfirmPassword(p => p + key);
+      return;
+    }
+    const field = activeField as keyof WizardData;
+    if (key === 'BACKSPACE') setData(p => ({ ...p, [field]: String(p[field]).slice(0, -1) }));
+    else setData(p => ({ ...p, [field]: String(p[field]) + key }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeField, data.phone.length]);
+
   const currentPin = pinStep === 'enter' ? pin : confirmPin;
   const setCurrentPin = pinStep === 'enter' ? setPin : setConfirmPin;
 
@@ -528,7 +583,7 @@ export function SetupWizard() {
     <Wrapper>
       {/* Sidebar */}
       <Sidebar>
-        <SidebarLogo>Yangi Asr</SidebarLogo>
+        <SidebarLogo>POSGRO</SidebarLogo>
         <SidebarSubtitle>{t('setup.subtitle')}</SidebarSubtitle>
         <StepList>
           {STEPS.map((step, i) => {
@@ -553,7 +608,7 @@ export function SetupWizard() {
       </Sidebar>
 
       {/* Main content */}
-      <Content>
+      <Content $kbOpen={activeField !== null}>
         {currentStep === 'login' && (
           <>
             <StepHeader>
@@ -565,18 +620,21 @@ export function SetupWizard() {
                 label={t('setup.login.phone')}
                 valueDigits={data.phone}
                 onDigitsChange={(v) => setData(prev => ({ ...prev, phone: v }))}
+                onFocus={() => setActiveField('phone')}
               />
               <Input
                 label={t('setup.login.password')}
                 type="password"
                 value={data.password}
                 onChange={(e) => setData(prev => ({ ...prev, password: e.target.value }))}
+                onFocus={() => setActiveField('password')}
                 required
               />
               <Input
                 label={t('setup.login.storeId')}
                 value={data.storeId}
                 onChange={(e) => setData(prev => ({ ...prev, storeId: e.target.value }))}
+                onFocus={() => setActiveField('storeId')}
                 placeholder={t('setup.login.storeIdPlaceholder')}
                 required
               />
@@ -606,12 +664,14 @@ export function SetupWizard() {
                 label={`${t('setup.storeInfo.storeName')} *`}
                 value={data.storeName}
                 onChange={(e) => setData(prev => ({ ...prev, storeName: e.target.value }))}
+                onFocus={() => setActiveField('storeName')}
                 required
               />
               <Input
                 label={`${t('setup.storeInfo.storeAddress')} *`}
                 value={data.storeAddress}
                 onChange={(e) => setData(prev => ({ ...prev, storeAddress: e.target.value }))}
+                onFocus={() => setActiveField('storeAddress')}
                 required
               />
               <Row>
@@ -619,12 +679,14 @@ export function SetupWizard() {
                   label={`${t('setup.storeInfo.storePhone')} *`}
                   value={data.storePhone}
                   onChange={(e) => setData(prev => ({ ...prev, storePhone: e.target.value }))}
+                  onFocus={() => setActiveField('storePhone')}
                   required
                 />
                 <Input
                   label={`${t('setup.storeInfo.storeStir')} *`}
                   value={data.storeStir}
                   onChange={(e) => setData(prev => ({ ...prev, storeStir: e.target.value }))}
+                  onFocus={() => setActiveField('storeStir')}
                   required
                 />
               </Row>
@@ -635,18 +697,21 @@ export function SetupWizard() {
                   step="0.01"
                   value={data.taxRate}
                   onChange={(e) => setData(prev => ({ ...prev, taxRate: e.target.value }))}
+                  onFocus={() => setActiveField('taxRate')}
                 />
                 <Input
                   label={t('setup.storeInfo.syncInterval')}
                   type="number"
                   value={data.syncInterval}
                   onChange={(e) => setData(prev => ({ ...prev, syncInterval: e.target.value }))}
+                  onFocus={() => setActiveField('syncInterval')}
                 />
               </Row>
               <Input
                 label={t('setup.storeInfo.terminalId')}
                 value={data.terminalId}
                 onChange={(e) => setData(prev => ({ ...prev, terminalId: e.target.value }))}
+                onFocus={() => setActiveField('terminalId')}
                 placeholder="T1"
               />
               <div style={{ fontSize: 12, color: 'var(--text-secondary, #888)', marginTop: -8 }}>
@@ -679,12 +744,14 @@ export function SetupWizard() {
                 type="password"
                 value={newPassword}
                 onChange={(e) => { setNewPassword(e.target.value); setError(''); }}
+                onFocus={() => setActiveField('newPassword')}
               />
               <Input
                 label={t('setup.password.confirmPassword')}
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
+                onFocus={() => setActiveField('confirmPassword')}
               />
               {error && <ErrorMsg>{error}</ErrorMsg>}
               <Actions>
@@ -737,6 +804,16 @@ export function SetupWizard() {
           </>
         )}
       </Content>
+
+      {activeField !== null && (
+        <VirtualKeyboard
+          fixed
+          zIndex={500}
+          numbersOnly={NUMBER_ONLY_FIELDS.has(activeField)}
+          onKeyPress={handleVirtualKey}
+          onClose={() => setActiveField(null)}
+        />
+      )}
 
       {completing && (
         <LoadingOverlay>

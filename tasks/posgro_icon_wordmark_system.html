@@ -1,0 +1,317 @@
+<html>
+<h2 class="sr-only">POSGRO Icon and Wordmark system showing separate icon, wordmark, and combined variations with theme toggle</h2>
+
+<div style="padding: 1rem 0;">
+  <!-- Header with theme toggle -->
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem;">
+    <div>
+      <h1 style="font-size: 22px; font-weight: 500; margin: 0 0 4px;">Option 5: Icon + Wordmark System</h1>
+      <p style="font-size: 14px; color: var(--color-text-secondary); margin: 0;">Most versatile - use together or separately</p>
+    </div>
+    <button id="themeToggle" style="font-size: 14px; padding: 8px 16px;">
+      <span id="themeIcon">☀️</span> <span id="themeText">Light</span>
+    </button>
+  </div>
+
+  <!-- Main Icon (Square - for app icon) -->
+  <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.5rem; margin-bottom: 1rem;">
+    <div style="margin-bottom: 1rem;">
+      <h3 style="font-size: 16px; font-weight: 500; margin: 0 0 4px;">A. Icon only</h3>
+      <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0;">For app icon, favicon, taskbar, system tray</p>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;">
+      <!-- 256x256 -->
+      <div style="text-align: center;">
+        <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 1.5rem; display: inline-flex; align-items: center; justify-content: center;">
+          <svg width="128" height="128" viewBox="0 0 256 256" id="icon-256">
+            <defs>
+              <linearGradient id="icon-grad-1" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" class="grad-start"/>
+                <stop offset="100%" class="grad-stop"/>
+              </linearGradient>
+            </defs>
+            <rect width="256" height="256" rx="60" fill="url(#icon-grad-1)"/>
+            <text x="128" y="175" font-family="Arial, sans-serif" font-size="115" font-weight="900" fill="white" text-anchor="middle" letter-spacing="-2">PG</text>
+            <g transform="translate(165, 72)" opacity="0.9">
+              <path d="M0 0 L5 0 L8 15 L20 15 M17 20 A2 2 0 1 1 17 24 A2 2 0 1 1 17 20 M9 20 A2 2 0 1 1 9 24 A2 2 0 1 1 9 20" stroke="white" stroke-width="3" stroke-linecap="round" fill="none"/>
+            </g>
+          </svg>
+        </div>
+        <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 8px;">256×256 Desktop</div>
+      </div>
+      
+      <!-- 64x64 -->
+      <div style="text-align: center;">
+        <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 1.5rem; display: inline-flex; align-items: center; justify-content: center;">
+          <svg width="64" height="64" viewBox="0 0 256 256" id="icon-64">
+            <defs>
+              <linearGradient id="icon-grad-2" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" class="grad-start"/>
+                <stop offset="100%" class="grad-stop"/>
+              </linearGradient>
+            </defs>
+            <rect width="256" height="256" rx="60" fill="url(#icon-grad-2)"/>
+            <text x="128" y="175" font-family="Arial, sans-serif" font-size="115" font-weight="900" fill="white" text-anchor="middle" letter-spacing="-2">PG</text>
+            <g transform="translate(165, 72)" opacity="0.9">
+              <path d="M0 0 L5 0 L8 15 L20 15 M17 20 A2 2 0 1 1 17 24 A2 2 0 1 1 17 20 M9 20 A2 2 0 1 1 9 24 A2 2 0 1 1 9 20" stroke="white" stroke-width="3" stroke-linecap="round" fill="none"/>
+            </g>
+          </svg>
+        </div>
+        <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 8px;">64×64 Taskbar</div>
+      </div>
+      
+      <!-- 32x32 -->
+      <div style="text-align: center;">
+        <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 1.5rem; display: inline-flex; align-items: center; justify-content: center;">
+          <svg width="32" height="32" viewBox="0 0 256 256" id="icon-32">
+            <defs>
+              <linearGradient id="icon-grad-3" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" class="grad-start"/>
+                <stop offset="100%" class="grad-stop"/>
+              </linearGradient>
+            </defs>
+            <rect width="256" height="256" rx="60" fill="url(#icon-grad-3)"/>
+            <text x="128" y="175" font-family="Arial, sans-serif" font-size="115" font-weight="900" fill="white" text-anchor="middle" letter-spacing="-2">PG</text>
+          </svg>
+        </div>
+        <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 8px;">32×32 Toolbar</div>
+      </div>
+      
+      <!-- 16x16 -->
+      <div style="text-align: center;">
+        <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 1.5rem; display: inline-flex; align-items: center; justify-content: center;">
+          <svg width="16" height="16" viewBox="0 0 256 256" id="icon-16">
+            <defs>
+              <linearGradient id="icon-grad-4" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" class="grad-start"/>
+                <stop offset="100%" class="grad-stop"/>
+              </linearGradient>
+            </defs>
+            <rect width="256" height="256" rx="60" fill="url(#icon-grad-4)"/>
+            <text x="128" y="175" font-family="Arial, sans-serif" font-size="115" font-weight="900" fill="white" text-anchor="middle" letter-spacing="-2">PG</text>
+          </svg>
+        </div>
+        <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 8px;">16×16 Favicon</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Horizontal Wordmark -->
+  <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.5rem; margin-bottom: 1rem;">
+    <div style="margin-bottom: 1rem;">
+      <h3 style="font-size: 16px; font-weight: 500; margin: 0 0 4px;">B. Wordmark only</h3>
+      <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0;">For headers, emails, documents where icon isn't needed</p>
+    </div>
+    
+    <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 2rem; display: flex; align-items: center; justify-content: center; margin-bottom: 12px;">
+      <svg width="200" height="45" viewBox="0 0 200 45" id="wordmark-only">
+        <text x="0" y="32" font-family="Arial, sans-serif" font-size="32" font-weight="700" class="main-text" letter-spacing="1">POSGRO</text>
+      </svg>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+      <div style="background: var(--color-background-secondary); padding: 8px; border-radius: var(--border-radius-md); text-align: center; font-size: 12px;">Email signature</div>
+      <div style="background: var(--color-background-secondary); padding: 8px; border-radius: var(--border-radius-md); text-align: center; font-size: 12px;">Letterhead</div>
+      <div style="background: var(--color-background-secondary); padding: 8px; border-radius: var(--border-radius-md); text-align: center; font-size: 12px;">Receipts</div>
+    </div>
+  </div>
+
+  <!-- Combined: Icon + Wordmark -->
+  <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.5rem; margin-bottom: 1rem;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+      <div>
+        <h3 style="font-size: 16px; font-weight: 500; margin: 0 0 4px;">C. Combined lockup</h3>
+        <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0;">Full branding for splash screens, headers, marketing</p>
+      </div>
+      <span style="background: var(--color-background-success); color: var(--color-text-success); font-size: 12px; padding: 4px 12px; border-radius: var(--border-radius-md); font-weight: 500;">Primary logo</span>
+    </div>
+    
+    <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 2rem; display: flex; align-items: center; justify-content: center;">
+      <svg width="280" height="70" viewBox="0 0 280 70" id="combined-logo">
+        <defs>
+          <linearGradient id="combined-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" class="grad-start"/>
+            <stop offset="100%" class="grad-stop"/>
+          </linearGradient>
+        </defs>
+        
+        <!-- Icon -->
+        <rect x="10" y="10" width="50" height="50" rx="12" fill="url(#combined-grad)"/>
+        <text x="35" y="50" font-family="Arial, sans-serif" font-size="28" font-weight="900" fill="white" text-anchor="middle">PG</text>
+        
+        <!-- Wordmark -->
+        <text x="75" y="45" font-family="Arial, sans-serif" font-size="32" font-weight="700" class="main-text" letter-spacing="0.5">POSGRO</text>
+        
+        <!-- Tagline -->
+        <text x="75" y="57" font-family="Arial, sans-serif" font-size="9" font-weight="500" class="tagline-text" opacity="0.6" letter-spacing="1">SMART RETAIL SOLUTION</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Real-world Application Examples -->
+  <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.5rem; margin-bottom: 1rem;">
+    <h3 style="font-size: 16px; font-weight: 500; margin: 0 0 1rem;">Real-world examples</h3>
+    
+    <!-- App Header Example -->
+    <div style="margin-bottom: 1.5rem;">
+      <div style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 8px;">Application header</div>
+      <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <svg width="32" height="32" viewBox="0 0 256 256" id="header-icon">
+            <defs>
+              <linearGradient id="header-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" class="grad-start"/>
+                <stop offset="100%" class="grad-stop"/>
+              </linearGradient>
+            </defs>
+            <rect width="256" height="256" rx="60" fill="url(#header-grad)"/>
+            <text x="128" y="175" font-family="Arial, sans-serif" font-size="115" font-weight="900" fill="white" text-anchor="middle" letter-spacing="-2">PG</text>
+          </svg>
+          <div style="font-size: 15px; font-weight: 600;" class="main-text">POSGRO</div>
+          <div style="background: var(--color-background-info); color: var(--color-text-info); font-size: 11px; padding: 3px 8px; border-radius: 10px; font-weight: 500;">TERMINAL_01</div>
+        </div>
+        <div style="font-size: 13px; color: var(--color-text-secondary);">Кассир: Алишер</div>
+      </div>
+    </div>
+    
+    <!-- Windows Desktop Example -->
+    <div style="margin-bottom: 1.5rem;">
+      <div style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 8px;">Windows desktop shortcut</div>
+      <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 16px; display: inline-flex; flex-direction: column; align-items: center; gap: 6px;">
+        <svg width="48" height="48" viewBox="0 0 256 256" id="desktop-icon">
+          <defs>
+            <linearGradient id="desktop-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" class="grad-start"/>
+              <stop offset="100%" class="grad-stop"/>
+            </linearGradient>
+          </defs>
+          <rect width="256" height="256" rx="60" fill="url(#desktop-grad)"/>
+          <text x="128" y="175" font-family="Arial, sans-serif" font-size="115" font-weight="900" fill="white" text-anchor="middle" letter-spacing="-2">PG</text>
+          <g transform="translate(165, 72)" opacity="0.9">
+            <path d="M0 0 L5 0 L8 15 L20 15 M17 20 A2 2 0 1 1 17 24 A2 2 0 1 1 17 20 M9 20 A2 2 0 1 1 9 24 A2 2 0 1 1 9 20" stroke="white" stroke-width="3" stroke-linecap="round" fill="none"/>
+          </g>
+        </svg>
+        <div style="font-size: 11px; font-weight: 500; text-align: center;" class="main-text">POSGRO</div>
+      </div>
+    </div>
+    
+    <!-- Loading Screen Example -->
+    <div>
+      <div style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 8px;">Loading/Splash screen</div>
+      <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 2rem; display: flex; flex-direction: column; align-items: center; gap: 16px;">
+        <svg width="120" height="120" viewBox="0 0 256 256" id="splash-icon">
+          <defs>
+            <linearGradient id="splash-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" class="grad-start"/>
+              <stop offset="100%" class="grad-stop"/>
+            </linearGradient>
+          </defs>
+          <rect width="256" height="256" rx="60" fill="url(#splash-grad)"/>
+          <text x="128" y="175" font-family="Arial, sans-serif" font-size="115" font-weight="900" fill="white" text-anchor="middle" letter-spacing="-2">PG</text>
+          <g transform="translate(165, 72)" opacity="0.9">
+            <path d="M0 0 L5 0 L8 15 L20 15 M17 20 A2 2 0 1 1 17 24 A2 2 0 1 1 17 20 M9 20 A2 2 0 1 1 9 24 A2 2 0 1 1 9 20" stroke="white" stroke-width="3" stroke-linecap="round" fill="none"/>
+          </g>
+        </svg>
+        <div style="text-align: center;">
+          <div style="font-size: 20px; font-weight: 700; margin-bottom: 4px;" class="main-text">POSGRO</div>
+          <div style="font-size: 13px; color: var(--color-text-secondary);">Загрузка системы...</div>
+        </div>
+        <div style="width: 200px; height: 3px; background: var(--color-border-tertiary); border-radius: 2px; overflow: hidden;">
+          <div style="width: 60%; height: 100%; background: linear-gradient(90deg, #1976d2, #dc004e);"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Usage Guidelines -->
+  <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.5rem;">
+    <h3 style="font-size: 16px; font-weight: 500; margin: 0 0 1rem;">When to use each variation</h3>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+      <div style="background: var(--color-background-secondary); padding: 12px; border-radius: var(--border-radius-md);">
+        <div style="font-weight: 500; font-size: 14px; margin-bottom: 6px;">Icon only (A)</div>
+        <ul style="font-size: 12px; color: var(--color-text-secondary); margin: 0; padding-left: 20px;">
+          <li>App icon (.exe)</li>
+          <li>Favicon (website)</li>
+          <li>System tray</li>
+          <li>Taskbar</li>
+          <li>Small UI elements</li>
+        </ul>
+      </div>
+      
+      <div style="background: var(--color-background-secondary); padding: 12px; border-radius: var(--border-radius-md);">
+        <div style="font-weight: 500; font-size: 14px; margin-bottom: 6px;">Wordmark only (B)</div>
+        <ul style="font-size: 12px; color: var(--color-text-secondary); margin: 0; padding-left: 20px;">
+          <li>Email signatures</li>
+          <li>Receipts</li>
+          <li>Documents</li>
+          <li>Letterhead</li>
+          <li>Invoices</li>
+        </ul>
+      </div>
+      
+      <div style="background: var(--color-background-secondary); padding: 12px; border-radius: var(--border-radius-md);">
+        <div style="font-weight: 500; font-size: 14px; margin-bottom: 6px;">Combined (C)</div>
+        <ul style="font-size: 12px; color: var(--color-text-secondary); margin: 0; padding-left: 20px;">
+          <li>App header</li>
+          <li>Splash screen</li>
+          <li>Marketing materials</li>
+          <li>Social media</li>
+          <li>Presentations</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let isDark = false;
+const themeToggle = document.getElementById('themeToggle');
+const themeIcon = document.getElementById('themeIcon');
+const themeText = document.getElementById('themeText');
+
+const colors = {
+  light: {
+    primary: '#1976d2',
+    secondary: '#dc004e',
+    text: '#000000'
+  },
+  dark: {
+    primary: '#90caf9',
+    secondary: '#f48fb1',
+    text: '#ffffff'
+  }
+};
+
+function updateColors() {
+  const theme = isDark ? colors.dark : colors.light;
+  
+  // Update gradient stops
+  document.querySelectorAll('.grad-start').forEach(el => {
+    el.setAttribute('stop-color', theme.primary);
+  });
+  document.querySelectorAll('.grad-stop').forEach(el => {
+    el.setAttribute('stop-color', theme.secondary);
+  });
+  
+  // Update text colors
+  document.querySelectorAll('.main-text').forEach(el => {
+    el.setAttribute('fill', theme.text);
+  });
+  document.querySelectorAll('.tagline-text').forEach(el => {
+    el.setAttribute('fill', theme.text);
+  });
+}
+
+themeToggle.addEventListener('click', () => {
+  isDark = !isDark;
+  themeIcon.textContent = isDark ? '🌙' : '☀️';
+  themeText.textContent = isDark ? 'Dark' : 'Light';
+  updateColors();
+});
+
+// Initialize
+updateColors();
+</script>
+</html>

@@ -15,7 +15,7 @@ const { PrismaClient } = require(prismaClientPath);
 const useAppData =
   process.argv.includes("--appdata") || !process.argv.includes("--local");
 const dbPath = useAppData
-  ? path.join(process.env.APPDATA || "", "grocery-pos", "pos-local.db")
+  ? path.join(process.env.APPDATA || "", "POSGRO", "pos-local.db")
   : path.join(__dirname, "..", "prisma", "local.db");
 const dbUrl = "file:" + dbPath;
 console.log(`Using database: ${dbPath}`);

@@ -48,7 +48,7 @@ async function bootstrap() {
 
   // Swagger configuration
   const config = new DocumentBuilder()
-    .setTitle('Yangi Asr API')
+    .setTitle('POSGRO API')
     .setDescription('API for Grocery Store POS System - Sales, Products, Inventory, Users')
     .setVersion('1.0')
     .addBearerAuth(

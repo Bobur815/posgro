@@ -19,6 +19,7 @@ import { SystemSettings } from './pages/Settings/SystemSettings';
 import { UserSettings } from './pages/Settings/UserSettings';
 import { DevicesPage } from './pages/Settings/DevicesPage';
 import { StoreList } from './pages/Admin/StoreList';
+import { LogsPage } from './pages/Admin/LogsPage';
 
 function PrivateRoute({
   children,
@@ -105,6 +106,7 @@ export function App() {
 
           {/* Super Admin */}
           <Route path="admin/stores" element={<PrivateRoute superAdminOnly><StoreList /></PrivateRoute>} />
+          <Route path="admin/logs" element={<PrivateRoute superAdminOnly><LogsPage /></PrivateRoute>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

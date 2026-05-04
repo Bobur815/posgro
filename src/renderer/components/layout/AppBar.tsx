@@ -6,6 +6,8 @@ import { Menu, X, RefreshCw, LogIn, LogOut, User } from 'lucide-react';
 import { useSidebar } from '../../context/SidebarContext';
 import { useAuthStore } from '../../store/auth-store';
 import { useSync } from '../../hooks/useSync';
+import { POSGROIcon } from '../../branding';
+import { useTheme } from '../../theme/ThemeProvider';
 
 export const APP_BAR_HEIGHT = 48;
 
@@ -51,12 +53,18 @@ const IconBtn = styled.button`
   }
 `;
 
-const Brand = styled.span`
+const BrandWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+`;
+
+const BrandName = styled.span`
   font-size: 16px;
   font-weight: 700;
   color: ${({ theme }) => theme.colors.primary};
   white-space: nowrap;
-  letter-spacing: -0.3px;
+  letter-spacing: 0.5px;
 `;
 
 const Spacer = styled.div`
@@ -166,6 +174,7 @@ export function AppBar() {
   const { isCollapsed, toggleSidebar, openSmenaModal } = useSidebar();
   const { user, isPinLogin, logout } = useAuthStore();
   const { status, refreshStatus } = useSync();
+  const { mode } = useTheme();
 
   const [smenaOpen, setSmenaOpen] = useState<boolean | null>(null);
 
@@ -221,7 +230,10 @@ export function AppBar() {
       </IconBtn>
 
       {/* Brand */}
-      <Brand>Yangi Asr</Brand>
+      <BrandWrapper>
+        <POSGROIcon theme={mode} size={28} />
+        <BrandName>POSGRO</BrandName>
+      </BrandWrapper>
 
       <Spacer />
 

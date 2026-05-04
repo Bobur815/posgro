@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Truck,
   Store,
+  ScrollText,
   type LucideIcon,
 } from "lucide-react";
 import { useAuthStore } from "../../store/auth-store";
@@ -334,7 +335,7 @@ export function Sidebar() {
   );
 
   const mobileNavItems = isSuperAdmin
-    ? [{ to: "/admin/stores", icon: Store }]
+    ? [{ to: "/admin/stores", icon: Store }, { to: "/admin/logs", icon: ScrollText }]
     : [
         { to: "/products", icon: Package },
         { to: "/products/stock", icon: ClipboardList },
@@ -350,7 +351,7 @@ export function Sidebar() {
       <Container $collapsed={isCollapsed}>
         <LogoSection $collapsed={isCollapsed}>
           <Logo $collapsed={isCollapsed}>
-            {isCollapsed ? "YA" : "Yangi Asr"}
+            {isCollapsed ? "PG" : "POSGRO"}
           </Logo>
           <ToggleButton
             onClick={toggleSidebar}
@@ -430,6 +431,7 @@ export function Sidebar() {
             <NavSection>
               <SectionTitle $collapsed={isCollapsed}>Super Admin</SectionTitle>
               {renderNavItem("/admin/stores", Store, "Stores")}
+              {renderNavItem("/admin/logs", ScrollText, "Logs")}
             </NavSection>
           )}
         </Nav>

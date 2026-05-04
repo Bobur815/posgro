@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { useAuthStore } from "../../store/auth-store";
+import { POSGROIcon } from "../../branding";
+import { useTheme } from "../../theme/ThemeProvider";
 import { ChevronDown, ChevronUp, Delete, Eraser, Keyboard } from "lucide-react";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
@@ -55,11 +57,19 @@ const LoginCard = styled.div<{ $kbOpen?: boolean }>`
   transition: transform 0.3s ease;
 `;
 
-const Logo = styled.h1`
-  font-size: 26px;
-  font-weight: bold;
-  color: ${({ theme }) => theme.colors.primary};
+const LogoBrand = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
   margin-bottom: ${({ theme }) => theme.spacing.sm};
+`;
+
+const BrandName = styled.span`
+  font-size: 26px;
+  font-weight: 700;
+  color: ${({ theme }) => theme.colors.primary};
+  letter-spacing: 1px;
 `;
 
 const Subtitle = styled.p`
@@ -259,6 +269,7 @@ export function PinLoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { loginWithPin, login, isLoading, error, clearError } = useAuthStore();
+  const { mode: themeMode } = useTheme();
 
   // null = still checking, true/false = result
   const [pinConfigured, setPinConfigured] = useState<boolean | null>(null);
@@ -440,7 +451,10 @@ export function PinLoginPage() {
     <Container>
       <LeftPanel>
         <LoginCard $kbOpen={keyboardOpen}>
-          <Logo>Yangi Asr</Logo>
+          <LogoBrand>
+            <POSGROIcon theme={themeMode} size={72} />
+            <BrandName>POSGRO</BrandName>
+          </LogoBrand>
 
           {mode === "pin" ? (
             <ContentWrapper key="pin">

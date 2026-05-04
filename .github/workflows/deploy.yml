@@ -1,4 +1,4 @@
-name: Deploy Grocery POS Backend
+name: Deploy POSGRO Backend
 
 on:
   schedule:
@@ -26,9 +26,9 @@ jobs:
           script: |
             set -euo pipefail
 
-            PROJECT_DIR="$HOME/grocery-pos"
+            PROJECT_DIR="$HOME/posgro"
             OWNER="Bobur815"
-            NAME="grocery-pos"
+            NAME="posgro"
             REPO_URL_AUTH="https://Bobur815:${GH_PAT}@github.com/${OWNER}/${NAME}.git"
             NGINX_SITE="pos.bobur-dev.uz"
 

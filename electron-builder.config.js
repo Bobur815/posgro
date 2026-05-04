@@ -3,8 +3,8 @@
  * @see https://www.electron.build/configuration/configuration
  */
 module.exports = {
-  appId: 'com.grocery.pos',
-  productName: 'Grocery POS',
+  appId: 'uz.bobur-dev.posgro',
+  productName: 'POSGRO',
   copyright: 'Copyright © 2026 Bobur',
 
   directories: {
@@ -35,8 +35,8 @@ module.exports = {
         arch: ['x64']
       }
     ],
-    icon: 'build/icon.ico',
-    artifactName: '${productName}-Setup-${version}.${ext}'
+    icon: 'build/icons/posgro-icon.ico',
+    artifactName: 'POSGRO-Setup-${version}.exe'
   },
 
   nsis: {
@@ -44,16 +44,16 @@ module.exports = {
     allowToChangeInstallationDirectory: true,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
-    shortcutName: 'Grocery POS',
-    installerIcon: 'build/icon.ico',
-    uninstallerIcon: 'build/icon.ico',
-    installerHeaderIcon: 'build/icon.ico',
+    shortcutName: 'POSGRO',
+    installerIcon: 'build/icons/posgro-icon.ico',
+    uninstallerIcon: 'build/icons/posgro-icon.ico',
+    installerHeaderIcon: 'build/icons/posgro-icon.ico',
     runAfterFinish: false
   },
 
   mac: {
     target: ['dmg'],
-    icon: 'build/icon.icns',
+    icon: 'build/icons/posgro-icon.icns',
     category: 'public.app-category.business'
   },
 

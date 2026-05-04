@@ -31,6 +31,100 @@ function fmtDate(iso: string): string {
   });
 }
 
+// ── Russian ──────────────────────────────────────────────────────────────────
+const RU_HUNDREDS = ['', 'сто', 'двести', 'триста', 'четыреста', 'пятьсот', 'шестьсот', 'семьсот', 'восемьсот', 'девятьсот'];
+const RU_TENS     = ['', 'десять', 'двадцать', 'тридцать', 'сорок', 'пятьдесят', 'шестьдесят', 'семьдесят', 'восемьдесят', 'девяносто'];
+const RU_TEENS    = ['десять', 'одиннадцать', 'двенадцать', 'тринадцать', 'четырнадцать', 'пятнадцать', 'шестнадцать', 'семнадцать', 'восемнадцать', 'девятнадцать'];
+const RU_ONES_M   = ['', 'один', 'два', 'три', 'четыре', 'пять', 'шесть', 'семь', 'восемь', 'девять'];
+const RU_ONES_F   = ['', 'одна', 'две', 'три', 'четыре', 'пять', 'шесть', 'семь', 'восемь', 'девять'];
+
+function chunkRu(num: number, fem: boolean): string {
+  const parts: string[] = [];
+  const h = Math.floor(num / 100);
+  const rest = num % 100;
+  if (h) parts.push(RU_HUNDREDS[h]);
+  if (rest >= 10 && rest <= 19) {
+    parts.push(RU_TEENS[rest - 10]);
+  } else {
+    const t = Math.floor(rest / 10);
+    const o = rest % 10;
+    if (t) parts.push(RU_TENS[t]);
+    if (o) parts.push(fem ? RU_ONES_F[o] : RU_ONES_M[o]);
+  }
+  return parts.join(' ');
+}
+
+function pluralRu(n: number, one: string, few: string, many: string): string {
+  const last2 = n % 100;
+  const last  = n % 10;
+  if (last2 >= 11 && last2 <= 14) return many;
+  if (last === 1) return one;
+  if (last >= 2 && last <= 4) return few;
+  return many;
+}
+
+function numberToWordsRu(n: number): string {
+  if (!n || n <= 0) return '';
+  n = Math.round(n);
+  const parts: string[] = [];
+  const billions  = Math.floor(n / 1_000_000_000);
+  const millions  = Math.floor((n % 1_000_000_000) / 1_000_000);
+  const thousands = Math.floor((n % 1_000_000) / 1_000);
+  const remainder = n % 1_000;
+  if (billions)  { parts.push(chunkRu(billions,  false)); parts.push(pluralRu(billions,  'миллиард',  'миллиарда',  'миллиардов')); }
+  if (millions)  { parts.push(chunkRu(millions,  false)); parts.push(pluralRu(millions,  'миллион',   'миллиона',   'миллионов'));  }
+  if (thousands) { parts.push(chunkRu(thousands, true));  parts.push(pluralRu(thousands, 'тысяча',    'тысячи',     'тысяч'));      }
+  if (remainder || !parts.length) parts.push(chunkRu(remainder, false));
+  return parts.filter(Boolean).join(' ');
+}
+
+// ── Uzbek ─────────────────────────────────────────────────────────────────────
+const UZ_ONES  = ['', 'bir', 'ikki', 'uch', "to'rt", 'besh', 'olti', 'yetti', 'sakkiz', "to'qqiz"];
+const UZ_TENS  = ['', "o'n", 'yigirma', "o'ttiz", 'qirq', 'ellik', 'oltmish', 'yetmish', 'sakson', "to'qson"];
+const UZ_TEENS = ["o'n", "o'n bir", "o'n ikki", "o'n uch", "o'n to'rt", "o'n besh", "o'n olti", "o'n yetti", "o'n sakkiz", "o'n to'qqiz"];
+
+function chunkUz(num: number): string {
+  if (!num) return '';
+  const parts: string[] = [];
+  const h = Math.floor(num / 100);
+  const rest = num % 100;
+  if (h === 1) parts.push('yuz');
+  else if (h > 1) parts.push(`${UZ_ONES[h]} yuz`);
+  if (rest >= 10 && rest <= 19) {
+    parts.push(UZ_TEENS[rest - 10]);
+  } else {
+    const t = Math.floor(rest / 10);
+    const o = rest % 10;
+    if (t) parts.push(UZ_TENS[t]);
+    if (o) parts.push(UZ_ONES[o]);
+  }
+  return parts.join(' ');
+}
+
+function numberToWordsUz(n: number): string {
+  if (!n || n <= 0) return '';
+  n = Math.round(n);
+  const parts: string[] = [];
+  const billions  = Math.floor(n / 1_000_000_000);
+  const millions  = Math.floor((n % 1_000_000_000) / 1_000_000);
+  const thousands = Math.floor((n % 1_000_000) / 1_000);
+  const remainder = n % 1_000;
+  if (billions)  { parts.push(chunkUz(billions));  parts.push('milliard'); }
+  if (millions)  { parts.push(chunkUz(millions));  parts.push('million');  }
+  if (thousands === 1) { parts.push('ming'); }
+  else if (thousands > 1) { parts.push(chunkUz(thousands)); parts.push('ming'); }
+  if (remainder || !parts.length) parts.push(chunkUz(remainder));
+  return parts.filter(Boolean).join(' ');
+}
+
+// ── Shared hint ───────────────────────────────────────────────────────────────
+function amountHint(raw: string, lang: string): string {
+  const n = parseFloat(raw.replace(/\s/g, '')) || 0;
+  if (!n) return '';
+  const words = lang === 'uz' ? numberToWordsUz(n) : numberToWordsRu(n);
+  return `${n.toLocaleString('ru-RU')} so'm${words ? ` — ${words}` : ''}`;
+}
+
 // ─── Styled ────────────────────────────────────────────────────────────────────
 
 const Container = styled.div`
@@ -230,6 +324,14 @@ const NumberInput = styled.input`
   }
 `;
 
+const AmountHint = styled.div`
+  font-size: 12px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-style: italic;
+  min-height: 16px;
+  margin-top: 2px;
+`;
+
 const Divider = styled.hr`
   border: none;
   border-top: 1px solid ${({ theme }) => theme.colors.border};
@@ -262,7 +364,7 @@ const DiffRow = styled.div<{ $positive: boolean }>`
 // ─── Receipt-detail modal ──────────────────────────────────────────────────────
 
 const Receipt = styled.div`
-  font-family: 'Courier New', Courier, monospace;
+  font-family: "Courier New", Courier, monospace;
   background: ${({ theme }) => theme.colors.background};
   border-radius: ${({ theme }) => theme.borderRadius};
   padding: 20px 24px;
@@ -317,7 +419,7 @@ const ReceiptMovItem = styled.div<{ $type: string }>`
   font-size: 12px;
   line-height: 1.7;
   color: ${({ $type, theme }) =>
-    $type === 'PAY_IN' ? theme.colors.success : theme.colors.error};
+    $type === "PAY_IN" ? theme.colors.success : theme.colors.error};
 `;
 
 const ReceiptFooter = styled.div`
@@ -382,7 +484,7 @@ type ActiveField =
 const KEYBOARD_HEIGHT = 360;
 
 export function SmenaPage({ onClose }: { onClose: () => void }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const {
     currentSmena,
     history,
@@ -406,7 +508,9 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [finalCash, setFinalCash] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
-  const [viewSmena, setViewSmena] = useState<(Smena & { stats?: SmenaStats; movements?: SmenaMovement[] }) | null>(null);
+  const [viewSmena, setViewSmena] = useState<
+    (Smena & { stats?: SmenaStats; movements?: SmenaMovement[] }) | null
+  >(null);
 
   const [activeField, setActiveField] = useState<ActiveField | null>(null);
 
@@ -569,6 +673,7 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
                         onFocus={() => setActiveField("initialCash")}
                         placeholder="0"
                       />
+                      <AmountHint>{amountHint(initialCash, i18n.language)}</AmountHint>
                     </Label>
                     <Button type="submit" disabled={isLoading}>
                       {t("smena.openSmena")}
@@ -693,6 +798,7 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
                           <Check size={16} /> {t("smena.payIn")}
                         </Button>
                       </MovementForm>
+                      <AmountHint>{amountHint(payInAmount, i18n.language)}</AmountHint>
                     </div>
 
                     <div style={{ flex: 1 }}>
@@ -739,6 +845,7 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
                           <Check size={16} /> {t("smena.payOut")}
                         </Button>
                       </MovementForm>
+                      <AmountHint>{amountHint(payOutAmount, i18n.language)}</AmountHint>
                     </div>
                   </MovementsRow>
 
@@ -836,12 +943,12 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
                             <Eye size={16} />
                           </Button>
 
-                        <Button
-                          onClick={() => printZReport(s.id)}
-                          style={{ padding: "4px 10px", fontSize: 12 }}
-                        >
-                          <Printer size={16} /> {t("smena.printZReport")}
-                        </Button>
+                          <Button
+                            onClick={() => printZReport(s.id)}
+                            style={{ padding: "4px 10px", fontSize: 12 }}
+                          >
+                            <Printer size={16} /> {t("smena.printZReport")}
+                          </Button>
                         </div>
                       </Td>
                     </tr>
@@ -871,6 +978,7 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
                   placeholder="0"
                   autoFocus
                 />
+                <AmountHint>{amountHint(finalCash, i18n.language)}</AmountHint>
               </Label>
 
               <CloseCalc>
@@ -956,7 +1064,9 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
                   ? t("smena.statusOpen")
                   : "Z-" + t("smena.zReportNumber") + viewSmena.zReportNumber}
               </ReceiptTitle>
-              <ReceiptSub>№{viewSmena.zReportNumber} · {viewSmena.terminalId}</ReceiptSub>
+              <ReceiptSub>
+                №{viewSmena.zReportNumber} · {viewSmena.terminalId}
+              </ReceiptSub>
             </ReceiptCenter>
 
             <ReceiptDash />
@@ -982,17 +1092,24 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
               <>
                 <ReceiptRow>
                   <ReceiptLabel>{t("smena.cashSales")}</ReceiptLabel>
-                  <span>{viewSmena.stats.cashSalesCount} × {fmt(viewSmena.stats.cashSalesAmount)} so'm</span>
+                  <span>
+                    {viewSmena.stats.cashSalesCount} ×{" "}
+                    {fmt(viewSmena.stats.cashSalesAmount)} so'm
+                  </span>
                 </ReceiptRow>
                 <ReceiptRow>
                   <ReceiptLabel>{t("smena.cardSales")}</ReceiptLabel>
-                  <span>{viewSmena.stats.cardSalesCount} × {fmt(viewSmena.stats.cardSalesAmount)} so'm</span>
+                  <span>
+                    {viewSmena.stats.cardSalesCount} ×{" "}
+                    {fmt(viewSmena.stats.cardSalesAmount)} so'm
+                  </span>
                 </ReceiptRow>
                 {viewSmena.stats.returnCount > 0 && (
                   <ReceiptRow>
                     <ReceiptLabel>{t("smena.returns")}</ReceiptLabel>
                     <span style={{ color: "#ef4444" }}>
-                      -{viewSmena.stats.returnCount} × {fmt(viewSmena.stats.returnAmount)} so'm
+                      -{viewSmena.stats.returnCount} ×{" "}
+                      {fmt(viewSmena.stats.returnAmount)} so'm
                     </span>
                   </ReceiptRow>
                 )}
@@ -1017,13 +1134,17 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
                 {viewSmena.stats.payInTotal > 0 && (
                   <ReceiptRow>
                     <ReceiptLabel>{t("smena.payIn")}</ReceiptLabel>
-                    <span style={{ color: "#22c55e" }}>+{fmt(viewSmena.stats.payInTotal)} so'm</span>
+                    <span style={{ color: "#22c55e" }}>
+                      +{fmt(viewSmena.stats.payInTotal)} so'm
+                    </span>
                   </ReceiptRow>
                 )}
                 {viewSmena.stats.payOutTotal > 0 && (
                   <ReceiptRow>
                     <ReceiptLabel>{t("smena.payOut")}</ReceiptLabel>
-                    <span style={{ color: "#ef4444" }}>-{fmt(viewSmena.stats.payOutTotal)} so'm</span>
+                    <span style={{ color: "#ef4444" }}>
+                      -{fmt(viewSmena.stats.payOutTotal)} so'm
+                    </span>
                   </ReceiptRow>
                 )}
                 {viewSmena.finalCash != null && (
@@ -1039,16 +1160,27 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
                       return (
                         <>
                           <ReceiptRow>
-                            <ReceiptLabel>{t("smena.expectedCash")}</ReceiptLabel>
+                            <ReceiptLabel>
+                              {t("smena.expectedCash")}
+                            </ReceiptLabel>
                             <span>{fmt(expected)} so'm</span>
                           </ReceiptRow>
                           <ReceiptRow>
                             <ReceiptLabel>{t("smena.finalCash")}</ReceiptLabel>
                             <span>{fmt(viewSmena.finalCash!)} so'm</span>
                           </ReceiptRow>
-                          <ReceiptBold style={{ color: diff >= 0 ? "#22c55e" : "#ef4444" }}>
-                            <span>{diff >= 0 ? t("smena.overage") : t("smena.shortage")}</span>
-                            <span>{diff >= 0 ? "+" : ""}{fmt(diff)} so'm</span>
+                          <ReceiptBold
+                            style={{ color: diff >= 0 ? "#22c55e" : "#ef4444" }}
+                          >
+                            <span>
+                              {diff >= 0
+                                ? t("smena.overage")
+                                : t("smena.shortage")}
+                            </span>
+                            <span>
+                              {diff >= 0 ? "+" : ""}
+                              {fmt(diff)} so'm
+                            </span>
                           </ReceiptBold>
                         </>
                       );
@@ -1061,15 +1193,18 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
             {viewSmena.movements && viewSmena.movements.length > 0 && (
               <>
                 <ReceiptDash />
-                <ReceiptSub style={{ marginBottom: 4 }}>{t("smena.movements")}</ReceiptSub>
+                <ReceiptSub style={{ marginBottom: 4 }}>
+                  {t("smena.movements")}
+                </ReceiptSub>
                 {viewSmena.movements.map((m) => (
                   <ReceiptMovItem key={m.id} $type={m.type}>
                     <span>
-                      {m.type === "PAY_IN" ? "▲" : "▼"}{" "}
-                      {fmtDate(m.createdAt)}{m.note ? ` — ${m.note}` : ""}
+                      {m.type === "PAY_IN" ? "▲" : "▼"} {fmtDate(m.createdAt)}
+                      {m.note ? ` — ${m.note}` : ""}
                     </span>
                     <span>
-                      {m.type === "PAY_IN" ? "+" : "-"}{fmt(m.amount)}
+                      {m.type === "PAY_IN" ? "+" : "-"}
+                      {fmt(m.amount)}
                     </span>
                   </ReceiptMovItem>
                 ))}

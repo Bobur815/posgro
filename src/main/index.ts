@@ -11,6 +11,7 @@ import { getAppConfig, updateConfig } from "./config/app-config";
 import { getPrismaClient } from "./database/sqlite-client";
 import { getServerToken } from "./sync/queue-manager";
 import { getCurrentUser } from "./ipc/auth-handlers";
+import { log } from "./logger";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 try {
@@ -149,11 +150,13 @@ async function bootstrap() {
     registerSyncHandlers();
 
     process.on("unhandledRejection", (reason, promise) => {
-      console.error("Unhandled Rejection at:", promise, "reason:", reason);
+      log.error("Unhandled Rejection at:", promise, "reason:", reason);
     });
     process.on("uncaughtException", (error) => {
-      console.error("Uncaught Exception:", error);
+      log.error("Uncaught Exception:", error);
     });
+
+    log.info("[bootstrap] App started", { version: app.getVersion(), platform: process.platform });
 
     const bootstrapStoreId = readStoreBootstrap();
 
