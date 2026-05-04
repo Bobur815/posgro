@@ -8,7 +8,9 @@ dist/
 dist-electron/
 dist-renderer/
 out/
-build/
+build/**
+!build/icons/
+!build/icons/**
 *.exe
 *.dmg
 *.AppImage
@@ -42,7 +44,7 @@ Thumbs.db
 desktop.ini
 
 # Logs
-logs/
+/logs/
 *.log
 npm-debug.log*
 yarn-debug.log*

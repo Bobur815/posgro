@@ -5,6 +5,7 @@
 module.exports = {
   appId: 'uz.bobur-dev.posgro',
   productName: 'POSGRO',
+  artifactName: 'POSGRO-Setup-${version}.exe',
   copyright: 'Copyright © 2026 Bobur',
 
   directories: {

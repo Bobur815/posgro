@@ -3,7 +3,7 @@ const { version } = require('../package.json');
 
 // Local build output uses spaces (NSIS default); latest.yml uses hyphens (artifactName template).
 // Specify the remote filename explicitly so they always match.
-const localExe = `dist/POSGRO-Setup-${version}.exe`;
+const localExe = `dist/posgro Setup ${version}.exe`;
 const remoteExe = `POSGRO-Setup-${version}.exe`;
 const vps = 'bobur@144.91.121.160';
 const remotePath = `/home/bobur/releases`;
