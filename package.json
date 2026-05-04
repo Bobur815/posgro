@@ -6,6 +6,7 @@
   "scripts": {
     "dev:pos": "cross-env APP_MODE=pos electron-vite dev",
     "dev:server": "nest start --watch",
+    "build:icons": "node scripts/build-icons.mjs",
     "build:pos": "cross-env APP_MODE=pos electron-vite build && electron-builder",
     "deploy:pos": "npm run build:pos && node scripts/upload-release.js",
     "build:server": "nest build",
@@ -74,6 +75,8 @@
     "jest": "^29.0.0",
     "prettier": "^3.0.0",
     "prisma": "^5.0.0",
+    "sharp": "^0.34.5",
+    "to-ico": "^1.1.5",
     "ts-jest": "^29.4.6",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
