@@ -34,18 +34,39 @@ const LeftPanel = styled.div`
   background-color: ${({ theme }) => theme.colors.surface};
 `;
 
-const RightPanel = styled.div`
+const RightPanel = styled.div<{ $imageUrl?: string }>`
   flex: 1;
-  background-image: url("./images/Grocery-Sub-Banner_2_mic.webp");
-  background-size: cover;
-  background-position: center;
+  position: relative;
+  overflow: hidden;
+  background: ${({ $imageUrl }) =>
+    $imageUrl
+      ? `url(${JSON.stringify($imageUrl)}) center / cover no-repeat`
+      : "linear-gradient(135deg, #1976d2 0%, #dc004e 100%)"};
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-end;
 
   @media (max-width: 768px) {
     display: none;
   }
+`;
+
+const RightOverlay = styled.div`
+  width: 100%;
+  padding: 32px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.6) 0%, transparent 100%);
+`;
+
+const RightTitle = styled.h2`
+  margin: 0 0 8px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #fff;
+`;
+
+const RightSubtitle = styled.p`
+  margin: 0;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.85);
 `;
 
 const LoginCard = styled.div<{ $kbOpen?: boolean }>`
@@ -204,7 +225,6 @@ const ContentWrapper = styled.div`
   }
 `;
 
-
 const PhoneForm = styled.form`
   display: flex;
   flex-direction: column;
@@ -261,9 +281,13 @@ function loadSaved(): { phone: string; password: string } | null {
   try {
     const raw = localStorage.getItem(SAVED_KEY);
     if (raw) return JSON.parse(raw) as { phone: string; password: string };
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return null;
 }
+
+interface LoginBanner { imageUrl: string; title: string; subtitle: string; }
 
 export function PinLoginPage() {
   const { t } = useTranslation();
@@ -273,9 +297,20 @@ export function PinLoginPage() {
 
   // null = still checking, true/false = result
   const [pinConfigured, setPinConfigured] = useState<boolean | null>(null);
+  const [banner, setBanner] = useState<LoginBanner | null>(null);
 
   useEffect(() => {
     window.electronAPI.auth.isPinConfigured().then(setPinConfigured);
+  }, []);
+
+  useEffect(() => {
+    window.electronAPI.config.getLocalConfig().then((cfg) => {
+      if (!cfg?.apiUrl) return;
+      fetch(`${cfg.apiUrl}/site-config/login-banner`)
+        .then((r) => r.json())
+        .then((data) => setBanner(data as LoginBanner))
+        .catch(() => {});
+    });
   }, []);
 
   const [saved] = useState(loadSaved);
@@ -302,7 +337,6 @@ export function PinLoginPage() {
   useEffect(() => {
     clearError();
   }, [clearError]);
-
 
   const switchMode = (newMode: LoginMode) => {
     setPin("");
@@ -391,7 +425,10 @@ export function PinLoginPage() {
     const success = await login(fullPhone, password);
     if (success) {
       if (rememberMe) {
-        localStorage.setItem(SAVED_KEY, JSON.stringify({ phone: phoneDigits, password }));
+        localStorage.setItem(
+          SAVED_KEY,
+          JSON.stringify({ phone: phoneDigits, password }),
+        );
       } else {
         localStorage.removeItem(SAVED_KEY);
       }
@@ -427,7 +464,10 @@ export function PinLoginPage() {
         login(fullPhone, password).then((success) => {
           if (success) {
             if (rememberMe) {
-              localStorage.setItem(SAVED_KEY, JSON.stringify({ phone: phoneDigits, password }));
+              localStorage.setItem(
+                SAVED_KEY,
+                JSON.stringify({ phone: phoneDigits, password }),
+              );
             } else {
               localStorage.removeItem(SAVED_KEY);
             }
@@ -502,7 +542,9 @@ export function PinLoginPage() {
                 </PinButton>
               </PinPad>
 
-              <ErrorMessage>{error ? t(error, { defaultValue: error }) : ""}</ErrorMessage>
+              <ErrorMessage>
+                {error ? t(error, { defaultValue: error }) : ""}
+              </ErrorMessage>
 
               <KeyboardHint>{t("auth.keyboardHint")}</KeyboardHint>
 
@@ -511,7 +553,10 @@ export function PinLoginPage() {
               </SwitchLink>
             </ContentWrapper>
           ) : (
-            <ContentWrapper key="phone" style={{display: "flex", flexDirection: "column", gap: "18px"}}>
+            <ContentWrapper
+              key="phone"
+              style={{ display: "flex", flexDirection: "column", gap: "18px" }}
+            >
               <Subtitle>{t("auth.login")}</Subtitle>
 
               <PhoneRow>
@@ -556,7 +601,11 @@ export function PinLoginPage() {
                   />
                   {t("auth.rememberMe")}
                 </RememberRow>
-                {error && <ErrorMessage>{t(error, { defaultValue: error })}</ErrorMessage>}
+                {error && (
+                  <ErrorMessage>
+                    {t(error, { defaultValue: error })}
+                  </ErrorMessage>
+                )}
                 <Button
                   type="submit"
                   disabled={isLoading || !isUzPhoneComplete(phoneDigits)}
@@ -571,7 +620,6 @@ export function PinLoginPage() {
                   ← {t("auth.enterPin")}
                 </SwitchLink>
               )}
-
             </ContentWrapper>
           )}
         </LoginCard>
@@ -584,7 +632,14 @@ export function PinLoginPage() {
         )}
       </LeftPanel>
 
-      <RightPanel />
+      <RightPanel $imageUrl={banner?.imageUrl || undefined}>
+        {(banner?.title || banner?.subtitle) && (
+          <RightOverlay>
+            {banner.title && <RightTitle>{banner.title}</RightTitle>}
+            {banner.subtitle && <RightSubtitle>{banner.subtitle}</RightSubtitle>}
+          </RightOverlay>
+        )}
+      </RightPanel>
 
       {isLoading && <LoadingOverlay>{t("common.loading")}...</LoadingOverlay>}
     </Container>

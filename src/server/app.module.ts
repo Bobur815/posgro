@@ -16,6 +16,7 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { MxikModule } from './modules/mxik/mxik.module';
 import { TerminalsModule } from './modules/terminals/terminals.module';
 import { LogsModule } from './modules/logs/logs.module';
+import { SiteConfigModule } from './modules/site-config/site-config.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { LogsModule } from './modules/logs/logs.module';
     MxikModule,
     TerminalsModule,
     LogsModule,
+    SiteConfigModule,
   ],
 })
 export class AppModule {}

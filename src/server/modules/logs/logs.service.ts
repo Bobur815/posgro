@@ -40,6 +40,31 @@ export class LogsService {
     return { saved: dto.entries.length };
   }
 
+  async getMeta(
+    callerRole: string,
+    callerStoreId: string | null,
+  ): Promise<{ stores: string[]; terminalsByStore: Record<string, string[]> }> {
+    const where: Record<string, unknown> = {};
+    if (callerRole !== 'SUPER_ADMIN') {
+      where.storeId = callerStoreId;
+    }
+
+    const rows = await this.prisma.terminalLog.findMany({
+      where,
+      select: { storeId: true, terminalId: true },
+      distinct: ['storeId', 'terminalId'],
+      orderBy: [{ storeId: 'asc' }, { terminalId: 'asc' }],
+    });
+
+    const terminalsByStore: Record<string, string[]> = {};
+    for (const row of rows) {
+      if (!terminalsByStore[row.storeId]) terminalsByStore[row.storeId] = [];
+      terminalsByStore[row.storeId].push(row.terminalId);
+    }
+
+    return { stores: Object.keys(terminalsByStore).sort(), terminalsByStore };
+  }
+
   async getLogs(
     callerRole: string,
     callerStoreId: string | null,

@@ -5,7 +5,10 @@ import { setupSetupHandlers } from "./ipc/setup-handlers";
 import { setupAutoUpdater } from "./updater/auto-updater";
 import { autoUpdater } from "electron-updater";
 import { SyncService } from "./sync/sync-service";
-import { initializeDatabase, readStoreBootstrap } from "./database/sqlite-client";
+import {
+  initializeDatabase,
+  readStoreBootstrap,
+} from "./database/sqlite-client";
 import { seedLocalDatabase } from "./database/seed";
 import { getAppConfig, updateConfig } from "./config/app-config";
 import { getPrismaClient } from "./database/sqlite-client";
@@ -44,10 +47,13 @@ function registerSyncHandlers(): void {
   ipcMain.handle("sync:unbackfillStock", async () => {
     const config = getAppConfig();
     const token = getServerToken();
-    if (!token) return { error: 'No server token — log in first' };
+    if (!token) return { error: "No server token — log in first" };
     const res = await fetch(`${config.vpsApiUrl}/sales/unbackfill-stock`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
     });
     return res.json();
   });
@@ -58,32 +64,39 @@ function registerSyncHandlers(): void {
     const token = getServerToken();
     const currentUser = getCurrentUser();
 
-    const [unsyncedCount, totalSales, localConfig, serverTokenSetting] = await Promise.all([
-      prisma.sale.count({ where: { synced: false } }),
-      prisma.sale.count(),
-      prisma.localConfig.findUnique({ where: { id: 'config' } }),
-      prisma.systemSetting.findUnique({ where: { key: 'server_token' } }),
-    ]);
+    const [unsyncedCount, totalSales, localConfig, serverTokenSetting] =
+      await Promise.all([
+        prisma.sale.count({ where: { synced: false } }),
+        prisma.sale.count(),
+        prisma.localConfig.findUnique({ where: { id: "config" } }),
+        prisma.systemSetting.findUnique({ where: { key: "server_token" } }),
+      ]);
 
     let persistedTokenExpiry: string | null = null;
     if (serverTokenSetting?.value) {
       try {
-        const parts = serverTokenSetting.value.split('.');
-        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString()) as { exp?: number; role?: string; storeId?: string };
-        persistedTokenExpiry = payload.exp ? new Date(payload.exp * 1000).toISOString() : 'no_expiry';
+        const parts = serverTokenSetting.value.split(".");
+        const payload = JSON.parse(
+          Buffer.from(parts[1], "base64").toString(),
+        ) as { exp?: number; role?: string; storeId?: string };
+        persistedTokenExpiry = payload.exp
+          ? new Date(payload.exp * 1000).toISOString()
+          : "no_expiry";
       } catch {
-        persistedTokenExpiry = 'invalid_token';
+        persistedTokenExpiry = "invalid_token";
       }
     }
 
     const sampleUnsyncedSale = await prisma.sale.findFirst({
       where: { synced: false },
       include: { items: { take: 1 } },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     return {
-      currentUser: currentUser ? { phone: currentUser.phone, role: currentUser.role } : null,
+      currentUser: currentUser
+        ? { phone: currentUser.phone, role: currentUser.role }
+        : null,
       serverToken: {
         inMemory: !!token,
         persisted: !!serverTokenSetting?.value,
@@ -92,14 +105,16 @@ function registerSyncHandlers(): void {
       sales: {
         total: totalSales,
         unsynced: unsyncedCount,
-        sampleUnsynced: sampleUnsyncedSale ? {
-          id: sampleUnsyncedSale.id,
-          receiptNumber: sampleUnsyncedSale.receiptNumber,
-          cashierId: sampleUnsyncedSale.cashierId,
-          cashierName: sampleUnsyncedSale.cashierName,
-          createdAt: sampleUnsyncedSale.createdAt,
-          itemCount: sampleUnsyncedSale.items.length,
-        } : null,
+        sampleUnsynced: sampleUnsyncedSale
+          ? {
+              id: sampleUnsyncedSale.id,
+              receiptNumber: sampleUnsyncedSale.receiptNumber,
+              cashierId: sampleUnsyncedSale.cashierId,
+              cashierName: sampleUnsyncedSale.cashierName,
+              createdAt: sampleUnsyncedSale.createdAt,
+              itemCount: sampleUnsyncedSale.items.length,
+            }
+          : null,
       },
       config: {
         vpsApiUrl: config.vpsApiUrl,
@@ -115,23 +130,29 @@ function registerSyncHandlers(): void {
 
 async function launchMainApp(): Promise<void> {
   const prisma = getPrismaClient();
-  const localConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+  const localConfig = await prisma.localConfig.findUnique({
+    where: { id: "config" },
+  });
   if (localConfig) {
     updateConfig({
       terminalId: localConfig.terminalId,
       storeId: localConfig.storeId,
       vpsApiUrl: localConfig.apiUrl,
     });
-    console.log(`[bootstrap] Loaded config: terminalId=${localConfig.terminalId} storeId=${localConfig.storeId}`);
+    console.log(
+      `[bootstrap] Loaded config: terminalId=${localConfig.terminalId} storeId=${localConfig.storeId}`,
+    );
   }
 
   mainWindow = createWindow();
 
   if (mainWindow) {
     setupAutoUpdater(mainWindow);
-    mainWindow.webContents.once('did-finish-load', () => {
+    mainWindow.webContents.once("did-finish-load", () => {
       setTimeout(() => {
-        autoUpdater.checkForUpdates().catch(() => { /* offline */ });
+        autoUpdater.checkForUpdates().catch(() => {
+          /* offline */
+        });
       }, 5000);
     });
   }
@@ -156,18 +177,25 @@ async function bootstrap() {
       log.error("Uncaught Exception:", error);
     });
 
-    log.info("[bootstrap] App started", { version: app.getVersion(), platform: process.platform });
+    log.info("[bootstrap] App started", {
+      version: app.getVersion(),
+      platform: process.platform,
+    });
 
     const bootstrapStoreId = readStoreBootstrap();
 
     if (!bootstrapStoreId) {
       // First launch — no store configured. Show setup wizard.
-      console.log('[bootstrap] No store bootstrap found — launching setup wizard');
+      console.log(
+        "[bootstrap] No store bootstrap found — launching setup wizard",
+      );
       await seedLocalDatabase();
 
       setupSetupHandlers(
         () => setupWindow,
-        async () => { await launchMainApp(); },
+        async () => {
+          await launchMainApp();
+        },
       );
 
       setupWindow = createSetupWindow();
@@ -177,11 +205,24 @@ async function bootstrap() {
     // Normal launch — store already configured
     await seedLocalDatabase();
     await launchMainApp();
-
   } catch (error) {
     console.error("Failed to start application:", error);
     app.quit();
   }
+}
+
+// Single-instance lock — quit immediately if another instance is already running
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const win = mainWindow ?? setupWindow;
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
+  });
 }
 
 // App lifecycle events

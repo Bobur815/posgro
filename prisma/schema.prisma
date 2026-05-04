@@ -348,6 +348,14 @@ model TerminalLog {
   @@map("terminal_logs")
 }
 
+model SiteConfig {
+  key       String   @id
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("site_config")
+}
+
 model AuditLog {
   id       String  @id @default(cuid())
   storeId  String  @map("store_id")

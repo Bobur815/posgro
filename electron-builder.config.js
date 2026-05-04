@@ -18,7 +18,8 @@ module.exports = {
   files: [
     'dist-electron/**/*',
     'dist-renderer/**/*',
-    'src/generated/prisma-sqlite/**/*'
+    'src/generated/prisma-sqlite/**/*',
+    'build/icons/**/*'
   ],
 
   extraResources: [

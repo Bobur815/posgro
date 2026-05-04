@@ -4,38 +4,89 @@ import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { useAuthStore } from "../../store/auth-store";
 import { useSettingsStore } from "../../store/settings-store";
+import { POSGROIcon } from "../../branding";
 import { Button } from "@components/common/Button";
 import { Input } from "@components/common/Input";
 import { UzbekPhoneInput } from "@components/common/UzbekPhoneInput";
 import { isUzPhoneComplete } from "@shared/utils/phone";
 import { Eye, EyeOff, Download } from "lucide-react";
+import { siteConfig, type LoginBanner } from "../../api/client";
 
 const RELEASES_BASE = "/releases";
+
+// ─── Layout ──────────────────────────────────────────────────────────────────
 
 const Container = styled.div`
   display: flex;
   min-height: 100vh;
   background-color: ${({ theme }) => theme.colors.background};
-  align-items: center;
-  justify-content: center;
-  padding: ${({ theme }) => theme.spacing.md};
 `;
 
-const Card = styled.div`
-  background-color: ${({ theme }) => theme.colors.surface};
-  border-radius: ${({ theme }) => theme.borderRadius};
-  box-shadow: ${({ theme }) => theme.shadows.md};
+const LeftPanel = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
   padding: ${({ theme }) => theme.spacing.xl};
+  background-color: ${({ theme }) => theme.colors.surface};
+`;
+
+const RightPanel = styled.div<{ $imageUrl?: string }>`
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: ${({ $imageUrl }) =>
+    $imageUrl
+      ? `url(${JSON.stringify($imageUrl)}) center / cover no-repeat`
+      : "linear-gradient(135deg, #1976d2 0%, #dc004e 100%)"};
+  display: flex;
+  align-items: flex-end;
+
+  @media (max-width: 768px) {
+    display: none;
+  }
+`;
+
+const RightOverlay = styled.div`
+  width: 100%;
+  padding: 32px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.6) 0%, transparent 100%);
+`;
+
+const RightTitle = styled.h2`
+  margin: 0 0 8px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #fff;
+`;
+
+const RightSubtitle = styled.p`
+  margin: 0;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.85);
+`;
+
+// ─── Card (left panel content) ───────────────────────────────────────────────
+
+const Card = styled.div`
   width: 100%;
   max-width: 420px;
 `;
 
-const Logo = styled.h1`
-  font-size: 28px;
-  font-weight: bold;
+const LogoBrand = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: ${({ theme }) => theme.spacing.sm};
+`;
+
+const BrandName = styled.span`
+  font-size: 26px;
+  font-weight: 700;
   color: ${({ theme }) => theme.colors.primary};
-  margin: 0 0 ${({ theme }) => theme.spacing.sm};
-  text-align: center;
+  letter-spacing: 1px;
 `;
 
 const Subtitle = styled.p`
@@ -78,6 +129,22 @@ const LangRow = styled.div`
   margin-top: ${({ theme }) => theme.spacing.lg};
 `;
 
+const LangButton = styled.button<{ $active?: boolean }>`
+  background: none;
+  border: 1px solid ${({ theme, $active }) => $active ? theme.colors.primary : theme.colors.border};
+  color: ${({ theme, $active }) => $active ? theme.colors.primary : theme.colors.textSecondary};
+  padding: 4px 12px;
+  border-radius: ${({ theme }) => theme.borderRadius};
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.primary};
+    color: ${({ theme }) => theme.colors.primary};
+  }
+`;
+
 const DownloadBanner = styled.a`
   @media (max-width: 600px) {
     display: none;
@@ -107,22 +174,6 @@ const DownloadBanner = styled.a`
   }
 `;
 
-const LangButton = styled.button<{ $active?: boolean }>`
-  background: none;
-  border: 1px solid ${({ theme, $active }) => $active ? theme.colors.primary : theme.colors.border};
-  color: ${({ theme, $active }) => $active ? theme.colors.primary : theme.colors.textSecondary};
-  padding: 4px 12px;
-  border-radius: ${({ theme }) => theme.borderRadius};
-  cursor: pointer;
-  font-size: 13px;
-  transition: all 0.2s;
-
-  &:hover {
-    border-color: ${({ theme }) => theme.colors.primary};
-    color: ${({ theme }) => theme.colors.primary};
-  }
-`;
-
 const PasswordWrapper = styled.div`
   position: relative;
 `;
@@ -145,6 +196,8 @@ const EyeButton = styled.button`
   }
 `;
 
+// ─── Component ───────────────────────────────────────────────────────────────
+
 const ENV_STORE_ID = import.meta.env.VITE_STORE_ID as string | undefined;
 const SAVED_KEY = "login_saved";
 
@@ -152,7 +205,7 @@ export function LoginPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { login, isLoading, error, clearError } = useAuthStore();
-  const { language, setLanguage } = useSettingsStore();
+  const { language, setLanguage, theme } = useSettingsStore();
 
   const [phoneDigits, setPhoneDigits] = useState("");
   const [password, setPassword] = useState("");
@@ -164,6 +217,7 @@ export function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
   const [latestRelease, setLatestRelease] = useState<{ version: string; url: string } | null>(null);
+  const [banner, setBanner] = useState<LoginBanner | null>(null);
 
   useEffect(() => {
     clearError();
@@ -195,9 +249,13 @@ export function LoginPage() {
           });
         }
       })
-      .catch(() => { /* releases endpoint unavailable — hide banner */ });
+      .catch(() => {});
   }, []);
-  
+
+  useEffect(() => {
+    siteConfig.getLoginBanner().then(setBanner).catch(() => {});
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isUzPhoneComplete(phoneDigits)) return;
@@ -220,110 +278,126 @@ export function LoginPage() {
     i18n.changeLanguage(lang);
   };
 
+  const showOverlay = banner && (banner.title || banner.subtitle);
+
   return (
     <Container>
-      <Card>
-        <Logo>POSGRO</Logo>
-        <Subtitle>{t("auth.login")}</Subtitle>
+      <LeftPanel>
+        <Card>
+          <LogoBrand>
+            <POSGROIcon theme={theme} size={72} />
+            <BrandName>POSGRO</BrandName>
+          </LogoBrand>
+          <Subtitle>{t("auth.login")}</Subtitle>
 
-        <Form onSubmit={handleSubmit}>
-          <UzbekPhoneInput
-            label={t("auth.phone")}
-            valueDigits={phoneDigits}
-            onDigitsChange={setPhoneDigits}
-            onEnter={() => passwordRef.current?.focus()}
-          />
-
-          <PasswordWrapper>
-            <Input
-              label={t("auth.password")}
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={t("auth.password")}
-              ref={passwordRef}
-              required
-              style={{ paddingRight: "40px" }}
+          <Form onSubmit={handleSubmit}>
+            <UzbekPhoneInput
+              label={t("auth.phone")}
+              valueDigits={phoneDigits}
+              onDigitsChange={setPhoneDigits}
+              onEnter={() => passwordRef.current?.focus()}
             />
-            <EyeButton
-              type="button"
-              tabIndex={-1}
-              onClick={() => setShowPassword((v) => !v)}
-              title={showPassword ? t("auth.hidePassword") || "Hide" : t("auth.showPassword") || "Show"}
+
+            <PasswordWrapper>
+              <Input
+                label={t("auth.password")}
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={t("auth.password")}
+                ref={passwordRef}
+                required
+                style={{ paddingRight: "40px" }}
+              />
+              <EyeButton
+                type="button"
+                tabIndex={-1}
+                onClick={() => setShowPassword((v) => !v)}
+                title={showPassword ? t("auth.hidePassword") || "Hide" : t("auth.showPassword") || "Show"}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </EyeButton>
+            </PasswordWrapper>
+
+            {!ENV_STORE_ID && (
+              <>
+                {!showStoreId ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowStoreId(true)}
+                    style={{ background: "none", border: "none", color: "inherit", opacity: 0.5, fontSize: 13, cursor: "pointer", textAlign: "left", padding: 0 }}
+                  >
+                    {storeId ? `${t("common.store")}: ${storeId}` : t("auth.enterStoreId") || "+ Enter store ID"}
+                  </button>
+                ) : (
+                  <Input
+                    label={t("common.storeId")}
+                    value={storeId}
+                    onChange={(e) => setStoreId(e.target.value)}
+                    placeholder="XXXX"
+                  />
+                )}
+              </>
+            )}
+
+            <RememberRow>
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+              />
+              {t("auth.rememberMe") || "Запомнить меня"}
+            </RememberRow>
+
+            {error && (
+              <ErrorMessage>{t(error, { defaultValue: t("auth.errors.login_failed") })}</ErrorMessage>
+            )}
+
+            <Button
+              type="submit"
+              disabled={isLoading || !isUzPhoneComplete(phoneDigits)}
+              fullWidth
             >
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-            </EyeButton>
-          </PasswordWrapper>
+              {isLoading ? t("common.loading") : t("auth.login")}
+            </Button>
+          </Form>
 
-          {!ENV_STORE_ID && (
-            <>
-              {!showStoreId ? (
-                <button
-                  type="button"
-                  onClick={() => setShowStoreId(true)}
-                  style={{ background: "none", border: "none", color: "inherit", opacity: 0.5, fontSize: 13, cursor: "pointer", textAlign: "left", padding: 0 }}
-                >
-                  {storeId ? `${t("common.store")}: ${storeId}` : t("auth.enterStoreId") || "+ Enter store ID"}
-                </button>
-              ) : (
-                <Input
-                  label={t("common.storeId")}
-                  value={storeId}
-                  onChange={(e) => setStoreId(e.target.value)}
-                  placeholder="XXXX"
-                />
-              )}
-            </>
+          <LangRow>
+            <LangButton
+              type="button"
+              $active={language === "ru"}
+              onClick={() => handleLanguageChange("ru")}
+            >
+              Русский
+            </LangButton>
+            <LangButton
+              type="button"
+              $active={language === "uz"}
+              onClick={() => handleLanguageChange("uz")}
+            >
+              O'zbekcha
+            </LangButton>
+          </LangRow>
+
+          {latestRelease && (
+            <DownloadBanner href={latestRelease.url} download>
+              <Download size={14} />
+              {language === "uz" ? "Dasturni yuklab olish" : "Скачать приложение"}
+              {" "}
+              <span className="ver">v{latestRelease.version}</span>
+            </DownloadBanner>
           )}
+        </Card>
+      </LeftPanel>
 
-          <RememberRow>
-            <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-            />
-            {t("auth.rememberMe") || "Запомнить меня"}
-          </RememberRow>
-
-          {error && (
-            <ErrorMessage>{t(error, { defaultValue: t("auth.errors.login_failed") })}</ErrorMessage>
-          )}
-
-          <Button
-            type="submit"
-            disabled={isLoading || !isUzPhoneComplete(phoneDigits)}
-            fullWidth
-          >
-            {isLoading ? t("common.loading") : t("auth.login")}
-          </Button>
-        </Form>
-
-        <LangRow>
-          <LangButton
-            type="button"
-            $active={language === "ru"}
-            onClick={() => handleLanguageChange("ru")}
-          >
-            Русский
-          </LangButton>
-          <LangButton
-            type="button"
-            $active={language === "uz"}
-            onClick={() => handleLanguageChange("uz")}
-          >
-            O'zbekcha
-          </LangButton>
-        </LangRow>
-
-        {latestRelease && (
-          <DownloadBanner href={latestRelease.url} download>
-            <Download size={14} />
-            {language === "uz" ? "Dasturni yuklab olish" : "Скачать приложение"}
-            {" "}
-            <span className="ver">v{latestRelease.version}</span>
-          </DownloadBanner>
+      <RightPanel $imageUrl={banner?.imageUrl || undefined}>
+        {showOverlay && (
+          <RightOverlay>
+            {banner!.title && <RightTitle>{banner!.title}</RightTitle>}
+            {banner!.subtitle && <RightSubtitle>{banner!.subtitle}</RightSubtitle>}
+          </RightOverlay>
         )}
-      </Card>
+      </RightPanel>
     </Container>
   );
 }

@@ -471,9 +471,37 @@ export interface LogsQueryParams {
   limit?: number;
 }
 
+export interface LogsMeta {
+  stores: string[];
+  terminalsByStore: Record<string, string[]>;
+}
+
 export const logs = {
+  getMeta: async (): Promise<LogsMeta> => {
+    const { data } = await axiosInstance.get('/logs/meta');
+    return data;
+  },
   getLogs: async (params?: LogsQueryParams): Promise<LogsResponse> => {
     const { data } = await axiosInstance.get('/logs', { params });
+    return data;
+  },
+};
+
+// ─── Site Config ─────────────────────────────────────────────────────────────
+
+export interface LoginBanner {
+  imageUrl: string;
+  title: string;
+  subtitle: string;
+}
+
+export const siteConfig = {
+  getLoginBanner: async (): Promise<LoginBanner> => {
+    const { data } = await axiosInstance.get('/site-config/login-banner');
+    return data;
+  },
+  updateLoginBanner: async (banner: LoginBanner): Promise<LoginBanner> => {
+    const { data } = await axiosInstance.put('/site-config/login-banner', banner);
     return data;
   },
 };

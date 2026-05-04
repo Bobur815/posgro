@@ -23,6 +23,13 @@ export class LogsController {
     return this.logsService.uploadLogs(storeId, dto);
   }
 
+  @Get('meta')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Distinct stores and terminals present in logs' })
+  async getMeta(@CurrentUser() user: { role: string; storeId: string | null }) {
+    return this.logsService.getMeta(user.role, user.storeId ?? null);
+  }
+
   @Get()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Query terminal logs (admin/super-admin)' })

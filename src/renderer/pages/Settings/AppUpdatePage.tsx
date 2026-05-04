@@ -17,6 +17,8 @@ const Header = styled.div`
   margin-bottom: ${({ theme }) => theme.spacing.lg};
 `;
 
+const BackButton = styled(Button)``;
+
 const Title = styled.h1`
   margin: 0;
   color: ${({ theme }) => theme.colors.text};
@@ -142,9 +144,9 @@ export function AppUpdatePage() {
   return (
     <Container>
       <Header>
-        <Button variant="secondary" onClick={() => navigate('/settings')}>
-          <ArrowLeft size={16} />
-        </Button>
+        <BackButton variant="secondary" size="small" onClick={() => navigate('/settings')}>
+          <ArrowLeft size={20} />
+        </BackButton>
         <Title>{t('settings.appUpdate')}</Title>
       </Header>
 
