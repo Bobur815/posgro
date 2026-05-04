@@ -9,3 +9,5 @@ import { PrismaModule } from '../../prisma/prisma.module';
   providers: [LogsService],
 })
 export class LogsModule {}
+
+
