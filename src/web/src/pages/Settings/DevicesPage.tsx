@@ -31,6 +31,12 @@ const Container = styled.div`
 const Title = styled.h1`
   margin: 0;
   color: ${({ theme }) => theme.colors.text};
+  font-size: 24px;
+
+  @media (max-width: 600px) {
+    font-size: 20px;
+    flex: 1;
+  }
 `;
 
 export const TopBar = styled.div`
@@ -75,6 +81,11 @@ const DeviceRow = styled.div`
   align-items: center;
   gap: ${({ theme }) => theme.spacing.md};
   padding: ${({ theme }) => `${theme.spacing.md} ${theme.spacing.lg}`};
+
+  @media (max-width: 600px) {
+    flex-wrap: wrap;
+    padding: ${({ theme }) => theme.spacing.md};
+  }
 `;
 
 const DeviceIcon = styled.div<{ $current?: boolean }>`
@@ -102,6 +113,7 @@ const DeviceIp = styled.div`
   color: ${({ theme }) => theme.colors.text};
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: ${({ theme }) => theme.spacing.xs};
 `;
 
@@ -120,9 +132,14 @@ const DeviceNameInput = styled.input`
   border-radius: ${({ theme }) => theme.borderRadius};
   padding: 5px 8px;
   width: 200px;
+  max-width: 100%;
   &:focus {
     outline: none;
     border-color: ${({ theme }) => theme.colors.primary};
+  }
+
+  @media (max-width: 600px) {
+    width: 140px;
   }
 `;
 
@@ -155,6 +172,11 @@ const DeviceActions = styled.div`
   align-items: center;
   gap: ${({ theme }) => theme.spacing.sm};
   flex-shrink: 0;
+
+  @media (max-width: 600px) {
+    width: 100%;
+    padding-left: 52px;
+  }
 `;
 
 const SessionsExpanded = styled.div`
@@ -170,6 +192,11 @@ const SessionRow = styled.div`
   border-bottom: 1px solid ${({ theme }) => theme.colors.border};
   &:last-child {
     border-bottom: none;
+  }
+
+  @media (max-width: 600px) {
+    padding: 10px ${({ theme }) => theme.spacing.md};
+    flex-wrap: wrap;
   }
 `;
 
