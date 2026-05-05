@@ -963,7 +963,7 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
 
         {showCloseModal && smena && (
           <Modal
-            onClose={() => setShowCloseModal(false)}
+            onClose={() => { setShowCloseModal(false); setActiveField(null); }}
             title={t("smena.confirmClose")}
           >
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

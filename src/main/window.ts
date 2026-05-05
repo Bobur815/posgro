@@ -16,7 +16,7 @@ export function createSetupWindow(): BrowserWindow {
     },
     show: false,
     title: 'POSGRO',
-    icon: path.join(__dirname, '../../build/icons/posgro-icon.ico'),
+    icon: path.join(process.resourcesPath, 'icons/posgro-icon.ico'),
     autoHideMenuBar: true,
   });
 
@@ -67,7 +67,7 @@ export function createWindow(): BrowserWindow {
     },
     show: false,
     title: 'POSGRO',
-    icon: path.join(__dirname, '../../build/icons/posgro-icon.ico'),
+    icon: path.join(process.resourcesPath, 'icons/posgro-icon.ico'),
     autoHideMenuBar: true, // Hide menu bar
   });
 

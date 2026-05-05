@@ -574,7 +574,7 @@ export function PinLoginPage() {
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => setKeyboardOpen((prev) => !prev)}
                 >
-                  <Keyboard size={20} />
+                  <Keyboard size={19} />
                   {keyboardOpen ? (
                     <ChevronUp size={16} />
                   ) : (

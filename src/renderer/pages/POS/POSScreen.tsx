@@ -47,10 +47,13 @@ function parseSaleError(
         requested: parsed.requested,
       });
     }
+    if (parsed.code === "NO_SMENA_OPEN") {
+      return t("smena.noOpenSmena");
+    }
   } catch {
     // not JSON, fall through
   }
-  return t("common.error");
+  return message || t("common.error");
 }
 
 const PageWrapper = styled.div`
@@ -616,7 +619,9 @@ export function POSScreen() {
         setError(t("products.noResults"));
       }
     } catch (err) {
+      const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
       console.error("Error searching product:", err);
+      window.electronAPI.logger.error(`handleBarcodeSubmit: ${msg}`);
       setError(t("common.error"));
     }
   }, [
@@ -635,7 +640,10 @@ export function POSScreen() {
   const handleQuickPay = useCallback(
     async (method: "cash" | "card") => {
       if (items.length === 0 || payingRef.current) return;
-      if (!await checkSmena()) { setShowSmenaModal(true); return; }
+      if (!(await checkSmena())) {
+        setShowSmenaModal(true);
+        return;
+      }
       payingRef.current = true;
 
       try {
@@ -675,7 +683,9 @@ export function POSScreen() {
           );
         }
       } catch (err) {
+        const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
         console.error("Quick pay failed:", err);
+        window.electronAPI.logger.error(`handleQuickPay(${method}): ${msg}`);
         toast.error(parseSaleError(err, t));
         clearCart();
       } finally {
@@ -698,8 +708,8 @@ export function POSScreen() {
   // Handle keyboard input
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if checkout modal is open
-      if (showCheckout) return;
+      // Ignore if checkout or smena modal is open
+      if (showCheckout || showSmenaModal) return;
 
       // Let native inputs handle their own keyboard events
       const tag = (e.target as HTMLElement)?.tagName;
@@ -781,6 +791,7 @@ export function POSScreen() {
     barcode,
     quantity,
     showCheckout,
+    showSmenaModal,
     handleBarcodeSubmit,
     handleQuickPay,
   ]);
@@ -846,7 +857,10 @@ export function POSScreen() {
     : null;
 
   const handleCheckoutClick = async () => {
-    if (!await checkSmena()) { setShowSmenaModal(true); return; }
+    if (!(await checkSmena())) {
+      setShowSmenaModal(true);
+      return;
+    }
     setShowCheckout(true);
   };
 
@@ -995,7 +1009,11 @@ export function POSScreen() {
         )}
 
         {showSmenaModal && (
-          <Modal title={t("smena.title")} onClose={() => setShowSmenaModal(false)} width="400px">
+          <Modal
+            title={t("smena.title")}
+            onClose={() => setShowSmenaModal(false)}
+            width="400px"
+          >
             <SmenaBlock>
               <SmenaBlockText>{t("smena.noOpenSmena")}</SmenaBlockText>
               <Button

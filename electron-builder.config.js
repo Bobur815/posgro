@@ -27,6 +27,11 @@ module.exports = {
       from: 'prisma',
       to: 'prisma',
       filter: ['**/*']
+    },
+    {
+      from: 'build/icons',
+      to: 'icons',
+      filter: ['**/*']
     }
   ],
 

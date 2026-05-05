@@ -64,6 +64,56 @@ export async function uploadLocalData(): Promise<void> {
   await setLastUploadTime(prisma);
 }
 
+export async function uploadAuditLogs(): Promise<void> {
+  const prisma = getPrismaClient();
+  const token = getServerToken();
+  if (!token) return;
+
+  const config = getAppConfig();
+
+  const stored = await prisma.systemSetting.findUnique({ where: { key: 'last_audit_log_sync' } });
+  const since = stored ? new Date(stored.value) : new Date(0);
+
+  const entries = await prisma.auditLog.findMany({
+    where: { createdAt: { gt: since } },
+    orderBy: { createdAt: 'asc' },
+    take: 200,
+  });
+
+  if (entries.length === 0) return;
+
+  const res = await fetch(`${config.vpsApiUrl}/logs/audit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      entries: entries.map(e => ({
+        id: e.id,
+        userId: e.userId,
+        phone: e.phone,
+        action: e.action,
+        entity: e.entity,
+        entityId: e.entityId,
+        details: e.details ?? undefined,
+        createdAt: e.createdAt.toISOString(),
+      })),
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    console.error(`Failed to upload audit logs (HTTP ${res.status}): ${text}`);
+    return;
+  }
+
+  // Advance the watermark to the last entry we uploaded
+  const lastEntry = entries[entries.length - 1];
+  await prisma.systemSetting.upsert({
+    where: { key: 'last_audit_log_sync' },
+    update: { value: lastEntry.createdAt.toISOString() },
+    create: { key: 'last_audit_log_sync', value: lastEntry.createdAt.toISOString() },
+  });
+}
+
 async function uploadUsers(
   prisma: ReturnType<typeof getPrismaClient>,
   token: string,
@@ -253,6 +303,7 @@ const LOCAL_ONLY_SETTINGS = new Set([
   'last_product_sync',
   'last_sale_sync',
   'last_upload_sync',
+  'last_audit_log_sync',
   'ai_token_limit_daily',
 ]);
 

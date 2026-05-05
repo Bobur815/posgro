@@ -36,7 +36,7 @@ function parseSaleError(
   } catch {
     // not JSON, fall through
   }
-  return t("common.error");
+  return message || t("common.error");
 }
 
 const Content = styled.div`
@@ -367,7 +367,9 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
         onComplete();
       }
     } catch (error) {
+      const msg = error instanceof Error ? (error.stack ?? error.message) : String(error);
       console.error("Payment failed:", error);
+      window.electronAPI.logger.error(`Checkout.handlePayment: ${msg}`);
       toast.error(parseSaleError(error, t));
       clearCart();
       onComplete();

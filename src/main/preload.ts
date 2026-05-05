@@ -285,6 +285,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   updater: {
     checkForUpdates: () => ipcRenderer.invoke("updater:checkForUpdates"),
     startDownload: () => ipcRenderer.invoke("updater:startDownload"),
+    cancelDownload: () => ipcRenderer.invoke("updater:cancelDownload"),
     quitAndInstall: () => ipcRenderer.invoke("updater:quitAndInstall"),
     onChecking: (cb: () => void) => {
       ipcRenderer.on("updater:checking", cb);
@@ -334,6 +335,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.on("updater:error", h);
       return () => ipcRenderer.removeListener("updater:error", h);
     },
+    onCancelled: (cb: () => void) => {
+      ipcRenderer.on("updater:cancelled", cb);
+      return () => ipcRenderer.removeListener("updater:cancelled", cb);
+    },
+  },
+
+  // Logger — forwards renderer errors to the main-process electron-log file
+  logger: {
+    error: (msg: string) => ipcRenderer.send("log:renderer", "error", msg),
+    warn: (msg: string) => ipcRenderer.send("log:renderer", "warn", msg),
+    info: (msg: string) => ipcRenderer.send("log:renderer", "info", msg),
   },
 });
 
@@ -541,6 +553,7 @@ declare global {
       updater: {
         checkForUpdates: () => Promise<void>;
         startDownload: () => Promise<void>;
+        cancelDownload: () => Promise<void>;
         quitAndInstall: () => void;
         onChecking: (cb: () => void) => () => void;
         onAvailable: (
@@ -557,6 +570,12 @@ declare global {
         ) => () => void;
         onDownloaded: (cb: (info: { version: string }) => void) => () => void;
         onError: (cb: (e: { message: string }) => void) => () => void;
+        onCancelled: (cb: () => void) => () => void;
+      };
+      logger: {
+        error: (msg: string) => void;
+        warn: (msg: string) => void;
+        info: (msg: string) => void;
       };
     };
   }

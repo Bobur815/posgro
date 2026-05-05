@@ -288,8 +288,8 @@ export function VirtualKeyboard({
   };
 
   return (
-    <Overlay $fixed={fixed} $zIndex={zIndex} onMouseDown={(e) => e.preventDefault()}>
-      <Wrapper>
+    <Overlay $fixed={fixed} $zIndex={zIndex}>
+      <Wrapper onMouseDown={(e) => e.preventDefault()}>
         <Header>
           <CloseBtn type="button" tabIndex={-1} onClick={onClose}>
             <X size={18} />

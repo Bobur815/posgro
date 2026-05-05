@@ -1,5 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron';
-import { autoUpdater, UpdateInfo, ProgressInfo } from 'electron-updater';
+import { autoUpdater, UpdateInfo, ProgressInfo, CancellationToken } from 'electron-updater';
+
+let activeCancellationToken: CancellationToken | null = null;
 
 export function setupAutoUpdater(mainWindow: BrowserWindow): void {
   autoUpdater.setFeedURL({
@@ -54,14 +56,27 @@ export function setupAutoUpdater(mainWindow: BrowserWindow): void {
   });
 
   ipcMain.handle('updater:startDownload', async () => {
+    activeCancellationToken = new CancellationToken();
     try {
-      await autoUpdater.downloadUpdate();
+      await autoUpdater.downloadUpdate(activeCancellationToken);
     } catch (err) {
-      send('updater:error', { message: (err as Error).message });
+      const message = (err as Error).message;
+      if (message === 'cancelled') {
+        send('updater:cancelled');
+      } else {
+        send('updater:error', { message });
+      }
+    } finally {
+      activeCancellationToken = null;
     }
   });
 
+  ipcMain.handle('updater:cancelDownload', () => {
+    activeCancellationToken?.cancel();
+    activeCancellationToken = null;
+  });
+
   ipcMain.handle('updater:quitAndInstall', () => {
-    autoUpdater.quitAndInstall();
+    autoUpdater.quitAndInstall(true, true);
   });
 }

@@ -1,9 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import styled, { keyframes } from 'styled-components';
-import { ArrowLeft, Download, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
-import { Button } from '../../components/common/Button';
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import styled, { keyframes } from "styled-components";
+import {
+  ArrowLeft,
+  Download,
+  CheckCircle,
+  AlertCircle,
+  RefreshCw,
+  XCircle,
+} from "lucide-react";
+import { Button } from "../../components/common/Button";
 
 const Container = styled.div`
   max-width: 600px;
@@ -84,52 +91,57 @@ const SpinnerIcon = styled(RefreshCw)`
 `;
 
 type UpdateState =
-  | 'idle'
-  | 'checking'
-  | 'up-to-date'
-  | 'available'
-  | 'downloading'
-  | 'downloaded'
-  | 'error';
+  | "idle"
+  | "checking"
+  | "up-to-date"
+  | "available"
+  | "downloading"
+  | "downloaded"
+  | "cancelled"
+  | "error";
 
 export function AppUpdatePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [state, setState] = useState<UpdateState>('idle');
-  const [currentVersion, setCurrentVersion] = useState('');
-  const [updateVersion, setUpdateVersion] = useState('');
+  const [state, setState] = useState<UpdateState>("idle");
+  const [currentVersion, setCurrentVersion] = useState("");
+  const [updateVersion, setUpdateVersion] = useState("");
   const [progress, setProgress] = useState({ percent: 0, bytesPerSecond: 0 });
-  const [errorMsg, setErrorMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
-    window.electronAPI.app.getVersion().then(setCurrentVersion).catch(() => {});
+    window.electronAPI.app
+      .getVersion()
+      .then(setCurrentVersion)
+      .catch(() => {});
 
     const unsubs = [
-      window.electronAPI.updater.onChecking(() => setState('checking')),
+      window.electronAPI.updater.onChecking(() => setState("checking")),
       window.electronAPI.updater.onAvailable((info) => {
         setUpdateVersion(info.version);
-        setState('available');
+        setState("available");
       }),
-      window.electronAPI.updater.onNotAvailable(() => setState('up-to-date')),
+      window.electronAPI.updater.onNotAvailable(() => setState("up-to-date")),
       window.electronAPI.updater.onProgress((p) => {
         setProgress({ percent: p.percent, bytesPerSecond: p.bytesPerSecond });
-        setState('downloading');
+        setState("downloading");
       }),
       window.electronAPI.updater.onDownloaded((info) => {
         setUpdateVersion(info.version);
-        setState('downloaded');
+        setState("downloaded");
       }),
       window.electronAPI.updater.onError((e) => {
         setErrorMsg(e.message);
-        setState('error');
+        setState("error");
       }),
+      window.electronAPI.updater.onCancelled(() => setState("cancelled")),
     ];
 
     return () => unsubs.forEach((u) => u());
   }, []);
 
   const handleCheck = () => {
-    setState('checking');
+    setState("checking");
     window.electronAPI.updater.checkForUpdates();
   };
 
@@ -141,89 +153,118 @@ export function AppUpdatePage() {
     window.electronAPI.updater.quitAndInstall();
   };
 
+  const handleCancel = () => {
+    window.electronAPI.updater.cancelDownload();
+  };
+
   return (
     <Container>
       <Header>
-        <BackButton variant="secondary" size="small" onClick={() => navigate('/settings')}>
+        <BackButton
+          variant="secondary"
+          size="small"
+          onClick={() => navigate("/settings")}
+        >
           <ArrowLeft size={20} />
         </BackButton>
-        <Title>{t('settings.appUpdate')}</Title>
+        <Title>{t("settings.appUpdate")}</Title>
       </Header>
 
       <Section>
-        <SectionTitle>{t('updater.currentVersion')}</SectionTitle>
+        <SectionTitle>{t("updater.currentVersion")}</SectionTitle>
         {currentVersion && <VersionBadge>v{currentVersion}</VersionBadge>}
 
-        {state === 'idle' && (
+        {state === "idle" && (
           <Button onClick={handleCheck}>
             <Download size={16} />
-            {t('updater.checkForUpdates')}
+            {t("updater.checkForUpdates")}
           </Button>
         )}
 
-        {state === 'checking' && (
+        {state === "checking" && (
           <StatusRow>
             <SpinnerIcon size={16} />
-            {t('updater.checking')}
+            {t("updater.checking")}
           </StatusRow>
         )}
 
-        {state === 'up-to-date' && (
+        {state === "up-to-date" && (
           <>
             <StatusRow>
               <CheckCircle size={16} color="green" />
-              {t('updater.upToDate')}
+              {t("updater.upToDate")}
             </StatusRow>
             <Button variant="secondary" onClick={handleCheck}>
-              {t('updater.checkForUpdates')}
+              {t("updater.checkForUpdates")}
             </Button>
           </>
         )}
 
-        {state === 'available' && (
+        {state === "available" && (
           <>
             <StatusRow>
               <Download size={16} />
-              {t('updater.updateAvailable')} — v{updateVersion}
+              {t("updater.updateAvailable")} — v{updateVersion}
             </StatusRow>
             <Button onClick={handleDownload}>
-              {t('updater.downloadUpdate')} v{updateVersion}
+              {t("updater.downloadUpdate")} v{updateVersion}
             </Button>
           </>
         )}
 
-        {state === 'downloading' && (
+        {state === "downloading" && (
           <>
             <StatusRow>
               <SpinnerIcon size={16} />
-              {t('updater.downloading')} — {Math.round(progress.percent)}% ({Math.round(progress.bytesPerSecond / 1024)} KB/s)
+              {t("updater.downloading")} — {Math.round(progress.percent)}% (
+              {Math.round(progress.bytesPerSecond / 1024)} KB/s)
             </StatusRow>
             <ProgressBar>
               <ProgressFill $percent={progress.percent} />
             </ProgressBar>
-          </>
-        )}
-
-        {state === 'downloaded' && (
-          <>
-            <StatusRow>
-              <CheckCircle size={16} color="green" />
-              {t('updater.downloaded')} — v{updateVersion}
-            </StatusRow>
-            <Button onClick={handleInstall}>
-              {t('updater.installAndRestart')}
+            <Button
+              variant="secondary"
+              onClick={handleCancel}
+              style={{ marginTop: 8 }}
+            >
+              <XCircle size={16} />
+              {t("updater.cancelDownload")}
             </Button>
           </>
         )}
 
-        {state === 'error' && (
+        {state === "cancelled" && (
+          <>
+            <StatusRow>
+              <XCircle size={16} />
+              {t("updater.downloadCancelled")}
+            </StatusRow>
+            <Button onClick={handleDownload}>
+              {t("updater.downloadUpdate")} v{updateVersion}
+            </Button>
+          </>
+        )}
+
+        {state === "downloaded" && (
+          <>
+            <StatusRow>
+              <CheckCircle size={16} color="green" />
+              {t("updater.downloaded")} — v{updateVersion}
+            </StatusRow>
+            <Button onClick={handleInstall}>
+              {t("updater.installAndRestart")}
+            </Button>
+          </>
+        )}
+
+        {state === "error" && (
           <>
             <StatusRow>
               <AlertCircle size={16} color="red" />
-              {t('updater.error')}: {errorMsg}
+              {t("updater.error")}: {errorMsg}
             </StatusRow>
             <Button variant="secondary" onClick={handleCheck}>
-              {t('updater.retry')}
+              {t("updater.retry")}
             </Button>
           </>
         )}

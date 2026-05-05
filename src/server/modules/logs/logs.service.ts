@@ -1,11 +1,23 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UploadLogsDto } from './dto/upload-logs.dto';
+import { UploadAuditLogsDto } from './dto/upload-audit-logs.dto';
 
 export interface LogsQuery {
   storeId?: string;
   terminalId?: string;
   level?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface AuditLogsQuery {
+  storeId?: string;
+  phone?: string;
+  action?: string;
+  entity?: string;
   from?: string;
   to?: string;
   page?: number;
@@ -40,6 +52,27 @@ export class LogsService {
     return { saved: dto.entries.length };
   }
 
+  async uploadAuditLogs(storeId: string, dto: UploadAuditLogsDto): Promise<{ saved: number }> {
+    if (!dto.entries.length) return { saved: 0 };
+
+    await this.prisma.auditLog.createMany({
+      data: dto.entries.map(e => ({
+        id: e.id,
+        storeId,
+        userId: e.userId,
+        phone: e.phone,
+        action: e.action,
+        entity: e.entity,
+        entityId: e.entityId,
+        details: e.details ?? null,
+        createdAt: new Date(e.createdAt),
+      })),
+      skipDuplicates: true,
+    });
+
+    return { saved: dto.entries.length };
+  }
+
   async getMeta(
     callerRole: string,
     callerStoreId: string | null,
@@ -63,6 +96,61 @@ export class LogsService {
     }
 
     return { stores: Object.keys(terminalsByStore).sort(), terminalsByStore };
+  }
+
+  async getAuditLogsMeta(callerRole: string, callerStoreId: string | null) {
+    const where = callerRole !== 'SUPER_ADMIN' ? { storeId: callerStoreId ?? undefined } : {};
+
+    const [storeRows, actionRows, entityRows] = await Promise.all([
+      callerRole === 'SUPER_ADMIN'
+        ? this.prisma.auditLog.findMany({ select: { storeId: true }, distinct: ['storeId'] })
+        : [],
+      this.prisma.auditLog.findMany({ where, select: { action: true }, distinct: ['action'], orderBy: { action: 'asc' } }),
+      this.prisma.auditLog.findMany({ where, select: { entity: true }, distinct: ['entity'], orderBy: { entity: 'asc' } }),
+    ]);
+
+    return {
+      stores: storeRows.map((r: { storeId: string }) => r.storeId),
+      actions: actionRows.map((r: { action: string }) => r.action),
+      entities: entityRows.map((r: { entity: string }) => r.entity),
+    };
+  }
+
+  async getAuditLogs(callerRole: string, callerStoreId: string | null, query: AuditLogsQuery) {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.min(100, Math.max(1, query.limit ?? 50));
+    const skip = (page - 1) * limit;
+
+    const where: Record<string, unknown> = {};
+
+    if (callerRole !== 'SUPER_ADMIN') {
+      where.storeId = callerStoreId;
+    } else if (query.storeId) {
+      where.storeId = query.storeId;
+    }
+
+    if (query.phone) where.phone = { contains: query.phone };
+    if (query.action) where.action = query.action;
+    if (query.entity) where.entity = query.entity;
+    if (query.from || query.to) {
+      where.createdAt = {
+        ...(query.from ? { gte: new Date(query.from) } : {}),
+        ...(query.to ? { lte: new Date(query.to) } : {}),
+      };
+    }
+
+    const [total, items] = await Promise.all([
+      this.prisma.auditLog.count({ where }),
+      this.prisma.auditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        include: { store: { select: { name: true } } },
+      }),
+    ]);
+
+    return { items, total, page, limit, pages: Math.ceil(total / limit) };
   }
 
   async getLogs(

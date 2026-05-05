@@ -1,3 +1,4 @@
+import { ipcMain } from 'electron';
 import log from 'electron-log/main';
 
 export interface LogEntry {
@@ -33,6 +34,13 @@ log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}';
 
 // Hooks console.* → log.* so all existing console calls are captured
 log.initialize();
+
+// Receive error/warn/info entries forwarded from the renderer process
+ipcMain.on('log:renderer', (_event, level: string, msg: string) => {
+  if (level === 'error') log.error('[renderer]', msg);
+  else if (level === 'warn') log.warn('[renderer]', msg);
+  else log.info('[renderer]', msg);
+});
 
 export function flushLogs(): LogEntry[] {
   return buffer.splice(0, 200);

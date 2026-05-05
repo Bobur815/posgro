@@ -696,41 +696,59 @@ ipcMain.handle('terminals:getStatus', async () => {
   }
 });
 
+// Module-level mutex: ensures only one generateReceiptNumber call runs at a time.
+// SQLite's DEFERRED transactions don't prevent concurrent reads from different
+// async calls in the same Node.js process, so we serialize at the JS level instead.
+let receiptNumberMutex = Promise.resolve();
+
 async function generateReceiptNumber(terminalId: string): Promise<string> {
+  let resolveOuter!: (value: string) => void;
+  let rejectOuter!: (reason: unknown) => void;
+  const outerPromise = new Promise<string>((resolve, reject) => {
+    resolveOuter = resolve;
+    rejectOuter = reject;
+  });
+
+  receiptNumberMutex = receiptNumberMutex.then(async () => {
+    try {
+      const result = await _generateReceiptNumber(terminalId);
+      resolveOuter(result);
+    } catch (e) {
+      rejectOuter(e);
+    }
+  });
+
+  return outerPromise;
+}
+
+async function _generateReceiptNumber(terminalId: string): Promise<string> {
   const prisma = getPrismaClient();
   const now = new Date();
   const dateStr = format(now, 'yyMMdd');
   const prefix = `${terminalId}${dateStr}`;
   const counterKey = `receipt_seq_${terminalId}_${dateStr}`;
 
-  // Monotonic counter — never decreases even when sales are deleted.
-  // This prevents a deleted receipt number from being reissued to a new sale,
-  // which would cause a DUPLICATE collision on the VPS.
-  //
-  // On first use today, seed the counter from existing local sales so that
-  // any receipts created before this logic was deployed are not reused.
   const stored = await prisma.systemSetting.findUnique({ where: { key: counterKey } });
   let storedSeq = stored ? parseInt(stored.value, 10) : 0;
 
-  if (!stored) {
-    // Seed from current local max (migration: first day this counter is used)
-    const existing = await prisma.sale.findMany({
-      where: { receiptNumber: { startsWith: prefix } },
-      select: { receiptNumber: true },
-    });
-    for (const row of existing) {
-      const seq = parseInt(row.receiptNumber.slice(prefix.length), 10);
-      if (!isNaN(seq) && seq > storedSeq) storedSeq = seq;
-    }
+  // Always verify the counter against actual DB max — self-heals if counter got
+  // corrupted by a previous race condition (stuck pointing at an existing receipt).
+  const existing = await prisma.sale.findMany({
+    where: { receiptNumber: { startsWith: prefix } },
+    select: { receiptNumber: true },
+  });
+  for (const row of existing) {
+    const seq = parseInt(row.receiptNumber.slice(prefix.length), 10);
+    if (!isNaN(seq) && seq > storedSeq) storedSeq = seq;
   }
 
-  const nextSeq = storedSeq + 1;
+  const next = storedSeq + 1;
 
   await prisma.systemSetting.upsert({
     where: { key: counterKey },
-    update: { value: nextSeq.toString() },
-    create: { key: counterKey, value: nextSeq.toString() },
+    update: { value: next.toString() },
+    create: { key: counterKey, value: next.toString() },
   });
 
-  return `${prefix}${nextSeq.toString().padStart(3, '0')}`;
+  return `${prefix}${next.toString().padStart(3, '0')}`;
 }
