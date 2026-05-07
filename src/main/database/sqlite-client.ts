@@ -512,6 +512,14 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
     await prisma.$executeRaw`ALTER TABLE users ADD COLUMN store_id TEXT`;
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_users_store ON users(store_id)`;
   }
+
+  // Migration 14: Paynet fiscal receipt columns on sales
+  try {
+    await prisma.$queryRaw`SELECT paynet_ofd_url FROM sales LIMIT 1`;
+  } catch {
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN paynet_ofd_url TEXT`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN paynet_receipt_number TEXT`;
+  }
 }
 
 export async function closeDatabase(): Promise<void> {
