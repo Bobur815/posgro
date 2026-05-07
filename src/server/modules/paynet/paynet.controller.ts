@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Body, UseGuards } from '@nestjs/common';
 import { PaynetService } from './paynet.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { StoreGuard } from '../../common/guards/store.guard';
@@ -10,12 +10,8 @@ export class PaynetController {
   constructor(private readonly paynetService: PaynetService) {}
 
   @Get()
-  getUnintegrated(
-    @CurrentStore() storeId: string,
-    @Query('amount') amountStr?: string,
-  ) {
-    const amount = amountStr ? parseFloat(amountStr) : undefined;
-    return this.paynetService.getUnintegrated(storeId, amount);
+  getUnintegrated(@CurrentStore() storeId: string) {
+    return this.paynetService.getUnintegrated(storeId);
   }
 
   @Patch(':id/integrate')

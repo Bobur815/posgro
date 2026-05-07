@@ -31,57 +31,24 @@ export class PaynetService {
       ? new Date(`${c.slice(0,4)}-${c.slice(4,6)}-${c.slice(6,8)}T${c.slice(8,10)}:${c.slice(10,12)}:${c.slice(12,14)}`)
       : new Date();
 
-    const amount = await this.fetchOfdAmount(ofdUrl);
-
     await this.prisma.paynetReceipt.upsert({
       where: { storeId_receiptNumber: { storeId, receiptNumber: r } },
-      create: { storeId, ofdUrl, receiptNumber: r, terminalCode: t, fiscalMark: s, issuedAt, amount },
-      update: { ofdUrl, fiscalMark: s, issuedAt, amount },
+      create: { storeId, ofdUrl, receiptNumber: r, terminalCode: t, fiscalMark: s, issuedAt, amount: null },
+      update: { ofdUrl, fiscalMark: s, issuedAt },
     });
 
-    this.logger.log(`Saved Paynet receipt #${r} (amount: ${amount}) for store ${storeId}`);
-    return { receiptNumber: r, amount };
+    this.logger.log(`Saved Paynet receipt #${r} for store ${storeId}`);
+    return { receiptNumber: r, amount: null };
   }
 
-  /** Fetch amount from OFD HTML page */
-  private async fetchOfdAmount(ofdUrl: string): Promise<number | null> {
-    try {
-      const res = await fetch(ofdUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'text/html' },
-        signal: AbortSignal.timeout(5000),
-      });
-      const html = await res.text();
-
-      // Try JSON data embedded in page: "totalSum":50000 or "amount":50000
-      const jsonMatch = html.match(/"(?:totalSum|amount|total)"\s*:\s*([\d.]+)/i);
-      if (jsonMatch) return parseFloat(jsonMatch[1]);
-
-      // Try numeric value near Jami/ИТОГО/Total keywords
-      const keywordMatch = html.match(/(?:Jami|JAMI|ИТОГО|Total)[^0-9]*?([\d\s]+(?:[,.][\d]+)?)/i);
-      if (keywordMatch) {
-        const raw = keywordMatch[1].replace(/\s/g, '').replace(',', '.');
-        const val = parseFloat(raw);
-        if (!isNaN(val) && val > 0) return val;
-      }
-
-      // Try any standalone large integer that looks like a UZS amount (>= 1000)
-      const amounts = [...html.matchAll(/\b([\d]{4,12}(?:[.,]\d{1,2})?)\b/g)]
-        .map(m => parseFloat(m[1].replace(',', '.')))
-        .filter(n => n >= 1000 && n < 100_000_000);
-      if (amounts.length > 0) return amounts[amounts.length - 1]; // last large number is usually total
-    } catch (err) {
-      this.logger.warn(`Failed to fetch OFD amount from ${ofdUrl}: ${err}`);
-    }
-    return null;
-  }
-
-  /** Get unintegrated receipts for a store, optionally filtered by exact amount */
-  async getUnintegrated(storeId: string, amount?: number): Promise<PaynetReceiptDto[]> {
+  /** Get unintegrated receipts for a store from the last 24 hours */
+  async getUnintegrated(storeId: string): Promise<PaynetReceiptDto[]> {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const rows = await this.prisma.paynetReceipt.findMany({
       where: {
         storeId,
         integrated: false,
-        ...(amount != null ? { amount: { gte: amount - 1, lte: amount + 1 } } : {}),
+        createdAt: { gte: since },
       },
       orderBy: { createdAt: 'desc' },
       take: 20,

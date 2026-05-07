@@ -12,14 +12,13 @@ export interface PaynetReceiptInfo {
 }
 
 export function setupPaynetHandlers(): void {
-  ipcMain.handle('paynetReceipts:getByAmount', async (_event, amount: number): Promise<PaynetReceiptInfo[]> => {
+  ipcMain.handle('paynetReceipts:getByAmount', async (): Promise<PaynetReceiptInfo[]> => {
     const config = getAppConfig();
     const token = getServerToken();
     if (!token) return [];
 
     try {
-      const params = new URLSearchParams({ amount: String(amount) });
-      const res = await fetch(`${config.vpsApiUrl}/paynet-receipts?${params}`, {
+      const res = await fetch(`${config.vpsApiUrl}/paynet-receipts`, {
         headers: { Authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(5000),
       });
