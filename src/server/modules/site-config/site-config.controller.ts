@@ -2,7 +2,8 @@ import { Controller, Get, Put, Post, Body, UseGuards, UseInterceptors, UploadedF
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString } from 'class-validator';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { diskStorage } = require('multer') as { diskStorage: (opts: any) => any };
 import { extname, join } from 'path';
 import { mkdirSync, existsSync } from 'fs';
 import { SiteConfigService, LoginBanner } from './site-config.service';
