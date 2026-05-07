@@ -10,6 +10,15 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 
+interface UploadedFile {
+  fieldname: string;
+  originalname: string;
+  mimetype: string;
+  filename: string;
+  size: number;
+  path?: string;
+}
+
 class LoginBannerDto {
   @IsString() imageUrl!: string;
   @IsString() title!: string;
@@ -43,16 +52,16 @@ export class SiteConfigController {
   @ApiOperation({ summary: 'Upload a banner image (super admin only)' })
   @UseInterceptors(FileInterceptor('file', {
     storage: diskStorage({
-      destination: (_req, _file, cb) => {
+      destination: (_req: any, _file: any, cb: (err: any, dest: string) => void) => {
         const dest = join(__dirname, '..', '..', '..', 'uploads');
         if (!existsSync(dest)) mkdirSync(dest, { recursive: true });
         cb(null, dest);
       },
-      filename: (_req, file, cb) => {
+      filename: (_req: any, file: any, cb: (err: any, name: string) => void) => {
         cb(null, `banner-${Date.now()}${extname(file.originalname)}`);
       },
     }),
-    fileFilter: (_req, file, cb) => {
+    fileFilter: (_req: any, file: any, cb: (err: any, accept: boolean) => void) => {
       if (!file.mimetype.match(/^image\/(jpeg|jpg|png|gif|webp)$/)) {
         return cb(new BadRequestException('Only image files are allowed'), false);
       }
@@ -60,7 +69,7 @@ export class SiteConfigController {
     },
     limits: { fileSize: 5 * 1024 * 1024 },
   }))
-  uploadImage(@UploadedFile() file: Express.Multer.File): { url: string } {
+  uploadImage(@UploadedFile() file: UploadedFile): { url: string } {
     if (!file) throw new BadRequestException('No file uploaded');
     return { url: `/uploads/${file.filename}` };
   }
