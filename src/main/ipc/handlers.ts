@@ -1,10 +1,11 @@
-import { ipcMain, app } from "electron";
+import { ipcMain, app, net } from "electron";
 import { setupAuthHandlers } from "./auth-handlers";
 import { setupProductsHandlers } from "./products-handlers";
 import { setupSalesHandlers } from "./sales-handlers";
 import { setupWeighedItemsHandlers } from "./weighed-items-handlers";
 import { setupScaleHandlers } from "./scale-handlers";
 import { setupSmenaHandlers } from "./smena-handlers";
+import { setupPaynetHandlers } from "./paynet-handlers";
 import { getAppConfig, updateConfig } from "../config/app-config";
 import { getAuthToken, getServerToken } from "../sync/queue-manager";
 import { getPrismaClient, readStoreBootstrap, writeStoreBootstrap } from "../database/sqlite-client";
@@ -29,6 +30,7 @@ export function setupIpcHandlers(): void {
   setupSmenaHandlers();
   setupAppHandlers();
   setupReceiptHandlers();
+  setupPaynetHandlers();
 
 }
 
@@ -654,6 +656,16 @@ function setupAppHandlers(): void {
 
   ipcMain.handle("app:getVersion", () => {
     return app.getVersion();
+  });
+
+  ipcMain.handle("app:isOnline", () => {
+    return new Promise<boolean>((resolve) => {
+      const req = net.request({ method: "HEAD", url: "https://pos.bobur-dev.uz" });
+      const timer = setTimeout(() => { req.abort(); resolve(false); }, 3000);
+      req.on("response", () => { clearTimeout(timer); resolve(true); });
+      req.on("error", () => { clearTimeout(timer); resolve(false); });
+      req.end();
+    });
   });
 
   ipcMain.handle("app:getTerminalId", () => {

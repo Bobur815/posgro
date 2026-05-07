@@ -5,6 +5,7 @@ import styled from "styled-components";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
+import { useToast } from "../../context/ToastContext";
 
 const Container = styled.div`
   max-width: 800px;
@@ -81,6 +82,16 @@ const PlanCard = styled.div<{ $pro?: boolean }>`
   padding: ${({ theme }) => theme.spacing.md};
 `;
 
+const CheckRow = styled.label`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.sm};
+  cursor: pointer;
+  font-size: 14px;
+  color: ${({ theme }) => theme.colors.text};
+  user-select: none;
+`;
+
 const StatRow = styled.div`
   display: flex;
   justify-content: space-between;
@@ -107,6 +118,7 @@ const StatValue = styled.span`
 export function SystemSettings() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [settings, setSettings] = useState({
     storeName: "",
@@ -114,6 +126,7 @@ export function SystemSettings() {
     storePhone: "",
     storeStir: "",
     taxRate: "0",
+    taxRateAsDiscount: false,
     syncInterval: "5",
   });
 
@@ -146,6 +159,7 @@ export function SystemSettings() {
         storePhone: allSettings.store_phone || "",
         storeStir: allSettings.store_stir || "",
         taxRate: allSettings.tax_rate || "0",
+        taxRateAsDiscount: allSettings.tax_rate_as_discount === "true",
         syncInterval: allSettings.sync_interval || "5",
       }));
     } catch (error) {
@@ -175,7 +189,8 @@ export function SystemSettings() {
       await window.electronAPI.settings.set("store_phone", settings.storePhone);
       await window.electronAPI.settings.set("store_stir", settings.storeStir);
       await window.electronAPI.settings.set("tax_rate", settings.taxRate);
-      alert(t("common.saved"));
+      await window.electronAPI.settings.set("tax_rate_as_discount", settings.taxRateAsDiscount ? "true" : "false");
+      showToast(t("common.saved"), "success");
     } catch (error) {
       console.error("Failed to save settings:", error);
     }
@@ -200,7 +215,7 @@ export function SystemSettings() {
     e.preventDefault();
     try {
       await window.electronAPI.config.updateLocalConfig({ terminalId });
-      alert(t("common.saved"));
+      showToast(t("common.saved"), "success");
     } catch (error) {
       console.error("Failed to save terminal id:", error);
     }
@@ -220,15 +235,6 @@ export function SystemSettings() {
       console.error("Failed to load plan:", error);
     } finally {
       setPlanLoading(false);
-    }
-  };
-
-  const handleTriggerSync = async () => {
-    try {
-      await window.electronAPI.sync.trigger();
-      loadSyncStatus();
-    } catch (error) {
-      console.error("Sync failed:", error);
     }
   };
 
@@ -289,6 +295,16 @@ export function SystemSettings() {
               }
             />
           </Row>
+          <CheckRow>
+            <input
+              type="checkbox"
+              checked={settings.taxRateAsDiscount}
+              onChange={(e) =>
+                setSettings((prev) => ({ ...prev, taxRateAsDiscount: e.target.checked }))
+              }
+            />
+            {t("settings.taxRateAsDiscount")}
+          </CheckRow>
           <Actions>
             <Button type="submit">{t("common.save")}</Button>
           </Actions>
@@ -319,27 +335,6 @@ export function SystemSettings() {
             <Button type="submit">{t("common.save")}</Button>
           </Actions>
         </Form>
-      </Section>
-
-      <Section>
-        <SectionTitle>{t("settings.synchronization")}</SectionTitle>
-        <InfoText>
-          {t("settings.syncInterval")}: {settings.syncInterval}{" "}
-          {t("settings.minutes")}
-        </InfoText>
-        <InfoText>
-          {t("settings.lastSync")}:{" "}
-          {syncStatus.lastSyncTime
-            ? new Date(syncStatus.lastSyncTime).toLocaleString()
-            : t("settings.never")}
-        </InfoText>
-        <Actions>
-          <Button onClick={handleTriggerSync} disabled={syncStatus.isSyncing}>
-            {syncStatus.isSyncing
-              ? t("settings.syncing")
-              : t("settings.syncNow")}
-          </Button>
-        </Actions>
       </Section>
 
       <Section>

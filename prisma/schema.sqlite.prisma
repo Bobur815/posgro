@@ -175,6 +175,10 @@ model Sale {
   smenaId  String?  @map("smena_id")
   smena    Smena?   @relation(fields: [smenaId], references: [id])
 
+  // Paynet fiscal receipt
+  paynetOfdUrl        String? @map("paynet_ofd_url")
+  paynetReceiptNumber String? @map("paynet_receipt_number")
+
   // Sync tracking
   synced   Boolean   @default(false)
   syncedAt DateTime? @map("synced_at")

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import styled, { keyframes } from "styled-components";
+import styled from "styled-components";
 import {
   ShoppingCart,
   Package,
@@ -15,8 +15,10 @@ import {
   Clock,
   type LucideIcon,
   ReceiptText,
-  RefreshCw,
+  Download,
+  CheckCircle,
 } from "lucide-react";
+import { SyncButton } from "../common/SyncButton";
 import { useAuthStore } from "../../store/auth-store";
 import { useSidebar } from "../../context/SidebarContext";
 import { useSync } from "../../hooks/useSync";
@@ -158,36 +160,10 @@ const SyncStatus = styled.div<{ $syncing?: boolean }>`
   padding: 0 ${({ theme }) => theme.spacing.sm};
 `;
 
-const spin = keyframes`
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-`;
-
-const SyncButton = styled.button<{ $syncing?: boolean }>`
-  display: flex;
-  align-items: center;
-  justify-content: center;
+const SidebarSyncBtn = styled(SyncButton)`
   padding: 4px;
-  border: none;
-  border-radius: ${({ theme }) => theme.borderRadius};
-  background: none;
-  color: ${({ theme }) => theme.colors.textSecondary};
-  cursor: ${({ $syncing }) => ($syncing ? "default" : "pointer")};
   flex-shrink: 0;
   margin-left: auto;
-  transition: color 0.2s, transform 0.1s;
-
-  &:hover:not(:disabled) {
-    color: ${({ theme }) => theme.colors.primary};
-  }
-
-  &:active:not(:disabled) {
-    transform: scale(0.85);
-  }
-
-  svg {
-    animation: ${({ $syncing }) => ($syncing ? spin : "none")} 1s linear infinite;
-  }
 `;
 
 const SyncText = styled.span`
@@ -207,18 +183,57 @@ const UpdateDot = styled.span`
   flex-shrink: 0;
 `;
 
+const VersionRow = styled.div`
+  padding: 0 ${({ theme }) => theme.spacing.sm};
+  font-size: 11px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
+const UpdateBanner = styled(NavLink)<{ $downloaded?: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px ${({ theme }) => theme.spacing.sm};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  background-color: ${({ theme, $downloaded }) =>
+    $downloaded ? `${theme.colors.success}22` : `${theme.colors.warning}22`};
+  color: ${({ theme, $downloaded }) =>
+    $downloaded ? theme.colors.success : theme.colors.warning};
+  transition: opacity 0.2s;
+  &:hover { opacity: 0.75; }
+`;
+
 export function Sidebar() {
   const { t } = useTranslation();
   const { user } = useAuthStore();
   const { isCollapsed, collapseSidebar, openSmenaModal } = useSidebar();
   const { status, refreshStatus } = useSync();
   const isAdmin = user?.role === "ADMIN";
+  const [currentVersion, setCurrentVersion] = useState("");
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [updateDownloaded, setUpdateDownloaded] = useState(false);
+  const [updateVersion, setUpdateVersion] = useState("");
+
+  useEffect(() => {
+    window.electronAPI?.app?.getVersion().then(setCurrentVersion).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!window.electronAPI?.updater) return;
-    const unsub = window.electronAPI.updater.onAvailable(() => setUpdateAvailable(true));
-    return unsub;
+    const unsubs = [
+      window.electronAPI.updater.onAvailable((info) => {
+        setUpdateAvailable(true);
+        setUpdateVersion(info.version);
+      }),
+      window.electronAPI.updater.onDownloaded((info) => {
+        setUpdateDownloaded(true);
+        setUpdateVersion(info.version);
+      }),
+    ];
+    return () => unsubs.forEach((u) => u());
   }, []);
 
   const handleSyncNow = async () => {
@@ -303,15 +318,28 @@ export function Sidebar() {
                   ? `${t("sync.lastSync")}: ${new Date(status.lastSyncTime).toLocaleTimeString()}`
                   : t("sync.notSynced")}
             </SyncText>
-            <SyncButton
-              $syncing={status.isSyncing}
-              disabled={status.isSyncing}
-              onClick={handleSyncNow}
+            <SidebarSyncBtn
+              onSync={handleSyncNow}
+              size={15}
               title={t("settings.syncNow")}
-            >
-              <RefreshCw size={15} />
-            </SyncButton>
+            />
           </SyncStatus>
+
+          {currentVersion && (
+            updateDownloaded ? (
+              <UpdateBanner $downloaded to="/settings/app-update" onClick={collapseSidebar}>
+                <CheckCircle size={13} />
+                v{updateVersion} — {t("updater.installAndRestart")}
+              </UpdateBanner>
+            ) : updateAvailable ? (
+              <UpdateBanner to="/settings/app-update" onClick={collapseSidebar}>
+                <Download size={13} />
+                v{updateVersion} — {t("updater.updateAvailable")}
+              </UpdateBanner>
+            ) : (
+              <VersionRow>v{currentVersion}</VersionRow>
+            )
+          )}
         </BottomSection>
       </SidebarInner>
     </Container>

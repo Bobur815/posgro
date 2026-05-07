@@ -7,6 +7,7 @@ import { InventoryService } from '../inventory/inventory.service';
 import { ProductsService } from '../products/products.service';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { StoresService } from '../stores/stores.service';
+import { PaynetService } from '../paynet/paynet.service';
 import * as fmt from './bot-commands';
 import type { Lang } from './bot-commands';
 
@@ -80,6 +81,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     private readonly productsService: ProductsService,
     private readonly analyticsService: AnalyticsService,
     private readonly storesService: StoresService,
+    private readonly paynetService: PaynetService,
   ) {}
 
   onModuleInit() {
@@ -404,6 +406,44 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       const lang = this.getLang(ctx.chat.id);
       const label = lang === 'uz' ? 'Quyidagi tugmani bosing:' : 'Нажмите кнопку ниже:';
       await ctx.reply(label, this.inlineWebButton());
+    });
+
+    // ── Paynet OFD receipt URL ────────────────────────────────────────────
+    bot.hears(/ofd\.soliq\.uz\/epi\?/i, async (ctx) => {
+      const session = this.sessions.get(ctx.chat.id);
+      if (!session || (session.role !== 'ADMIN' && session.role !== 'SUPER_ADMIN')) return;
+      if (!session.storeId) return;
+
+      const text = 'text' in ctx.message ? ctx.message.text : '';
+      const urlMatch = text.match(/https?:\/\/ofd\.soliq\.uz\/epi\S+/i);
+      if (!urlMatch) {
+        await ctx.reply(session.lang === 'uz' ? '❌ URL topilmadi.' : '❌ URL не найден.');
+        return;
+      }
+
+      const processingMsg = await ctx.reply(
+        session.lang === 'uz' ? '⏳ Chek yuklanmoqda...' : '⏳ Загрузка чека...',
+      );
+
+      try {
+        const { receiptNumber, amount } = await this.paynetService.saveFromTelegram(
+          session.storeId,
+          urlMatch[0],
+        );
+        await ctx.telegram.deleteMessage(ctx.chat.id, processingMsg.message_id).catch(() => {});
+        const amtStr = amount != null
+          ? `${amount.toLocaleString('ru-RU')} so'm`
+          : (session.lang === 'uz' ? 'noma\'lum' : 'неизвестна');
+        await ctx.reply(
+          session.lang === 'uz'
+            ? `✅ Paynet chek #${receiptNumber} saqlandi.\n💰 Summa: ${amtStr}`
+            : `✅ Paynet чек #${receiptNumber} сохранён.\n💰 Сумма: ${amtStr}`,
+        );
+      } catch (err) {
+        this.logger.error('Paynet OFD save error', err);
+        await ctx.telegram.deleteMessage(ctx.chat.id, processingMsg.message_id).catch(() => {});
+        await ctx.reply(session.lang === 'uz' ? '❌ Xatolik yuz berdi.' : '❌ Ошибка при сохранении чека.');
+      }
     });
 
     // ── Fallback: no session → ask language ───────────────────────────────

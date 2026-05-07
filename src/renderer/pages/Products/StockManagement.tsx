@@ -31,7 +31,6 @@ import {
 } from "../../components/common/SearchControls";
 import { debounce } from "@renderer/utils/helpers";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
-import { formatQuantity } from "../../utils/formatters";
 
 const Container = styled.div`
   display: flex;
@@ -44,7 +43,6 @@ const Header = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-left: 25px;
 `;
 
 const SearchRow = styled.div`
@@ -127,6 +125,10 @@ const OutOfStockBadge = styled.span`
   margin-left: ${({ theme }) => theme.spacing.sm};
 `;
 
+const PluField = styled(SearchField)`
+  max-width: 320px;
+`;
+
 export function StockManagement() {
   const { t, i18n } = useTranslation();
   const {
@@ -136,11 +138,9 @@ export function StockManagement() {
     loadProducts,
     loadCategories,
     loadSuppliers,
-    getLowStock,
     searchByBarcode,
     getById,
     findByInternalCode,
-    updateProduct,
     isLoading,
   } = useProducts();
   const { user } = useAuthStore();
@@ -154,6 +154,7 @@ export function StockManagement() {
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [barcodeInput, setBarcodeInput] = useState("");
   const [idInput, setIdInput] = useState("");
+  const [pluInput, setPluInput] = useState("");
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showReceiptScan, setShowReceiptScan] = useState(false);
 
@@ -198,9 +199,10 @@ export function StockManagement() {
     }
   }, [barcodeInput, searchByBarcode, t]);
 
-  const handlePluSubmit = useCallback(async () => {
-    if (!idInput.trim()) return;
-    const product = (await findByInternalCode(idInput.trim())) as Product | null;
+  const handleIdSubmit = useCallback(async () => {
+    const raw = idInput.trim();
+    if (!raw) return;
+    const product = (await getById(raw)) as Product | null;
     if (product) {
       handleAddArrival(product);
       setIdInput("");
@@ -208,7 +210,21 @@ export function StockManagement() {
       toast.error(t("products.noResults"));
       setIdInput("");
     }
-  }, [idInput, findByInternalCode, t]);
+  }, [idInput, getById, t]);
+
+  const handlePluSubmit = useCallback(async () => {
+    const raw = pluInput.trim();
+    if (!raw) return;
+    const code = /^\d+$/.test(raw) ? raw.padStart(6, "0") : raw;
+    const product = (await findByInternalCode(code)) as Product | null;
+    if (product) {
+      handleAddArrival(product);
+      setPluInput("");
+    } else {
+      toast.error(t("products.noResults"));
+      setPluInput("");
+    }
+  }, [pluInput, findByInternalCode, t]);
 
   const handleVirtualKeyPress = (key: string) => {
     if (key === "BACKSPACE") {
@@ -296,15 +312,7 @@ export function StockManagement() {
   return (
     <Container>
       <Header>
-        <Title>
-          {t("inventory.stockManagement")}
-          {products.filter((p) => p.stock <= p.minStock).length > 0 && (
-            <LowStockBadge>
-              {products.filter((p) => p.stock <= p.minStock).length}{" "}
-              {t("inventory.lowStockItems")}
-            </LowStockBadge>
-          )}
-        </Title>
+        <Title>{t("inventory.stockManagement")}</Title>
         {user?.role === "ADMIN" && (
           <Button size="medium" onClick={() => setShowReceiptScan(true)}>
             <ScanLine size={18} />
@@ -349,6 +357,7 @@ export function StockManagement() {
             </KbToggle>
           </InputControls>
         </SearchInputWrapper>
+
         <Button
           size="medium"
           style={{ padding: "10px 12px" }}
@@ -357,6 +366,7 @@ export function StockManagement() {
           {t("filters.filters")}{" "}
           {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
         </Button>
+
         <SearchField>
           <SearchLabel>{t("pos.barcode")}</SearchLabel>
           <SearchInput
@@ -373,28 +383,42 @@ export function StockManagement() {
           />
         </SearchField>
 
-        <SearchField style={{ maxWidth: 150 }}>
-          <SearchLabel>PLU</SearchLabel>
-          <SearchInput
-            value={idInput}
-            onChange={(e) => setIdInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handlePluSubmit();
-              }
-            }}
-            placeholder="PLU"
-          />
-        </SearchField>
-        <SubmitButton
-          onClick={() => {
-            if (barcodeInput.trim()) handleBarcodeSubmit();
-            else if (idInput.trim()) handlePluSubmit();
-          }}
-        >
-          <SendHorizontal size={22} />
-        </SubmitButton>
+        <PluField>
+          <SearchLabel>KOD / PLU</SearchLabel>
+          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+            <SearchInput
+              value={idInput}
+              onChange={(e) => setIdInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleIdSubmit();
+                }
+              }}
+              placeholder={t("pos.id")}
+            />
+            <SearchInput
+              value={pluInput}
+              onChange={(e) => setPluInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handlePluSubmit();
+                }
+              }}
+              placeholder="PLU"
+            />
+            <SubmitButton
+              onClick={() => {
+                if (barcodeInput.trim()) handleBarcodeSubmit();
+                else if (idInput.trim()) handleIdSubmit();
+                else if (pluInput.trim()) handlePluSubmit();
+              }}
+            >
+              <SendHorizontal size={22} />
+            </SubmitButton>
+          </div>
+        </PluField>
       </SearchRow>
 
       <ProductFilters

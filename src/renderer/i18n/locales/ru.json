@@ -386,6 +386,7 @@
     "storePhone": "Телефон",
     "storeStir": "ИНН/СТИР",
     "taxRate": "QQS (%)",
+    "taxRateAsDiscount": "Показать QQS как скидку в чеке",
     "receiptSettings": "Настройки чека",
     "receiptHeader": "Заголовок чека",
     "receiptFooter": "Подвал чека",
@@ -490,9 +491,15 @@
   "errors": {
     "productNotFound": "Товар с ID {{id}} не найден",
     "productInactive": "Товар \"{{name}}\" неактивен",
-    "insufficientStock": "Недостаточно товара \"{{name}}\" на складе. Доступно: {{available}}, запрошено: {{requested}}"
+    "insufficientStock": "Недостаточно товара \"{{name}}\" на складе. Доступно: {{available}}, запрошено: {{requested}}",
+    "noInternet": "Нет подключения к интернету"
+  },
+  "paynet": {
+    "noReceipts": "Нет доступных Paynet чеков для этой суммы"
   },
   "sync": {
+    "syncFailed":"Ошибка",
+    "syncSuccess":"Синхронизировано",
     "syncing": "Синхронизация...",
     "lastSync": "Последняя синхронизация",
     "notSynced": "Не синхронизировано"

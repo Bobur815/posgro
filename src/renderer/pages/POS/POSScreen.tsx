@@ -32,8 +32,11 @@ function parseSaleError(
   t: (key: string, params?: Record<string, unknown>) => string,
 ): string {
   const message = err instanceof Error ? err.message : String(err);
+  // Electron wraps IPC errors: "Error invoking remote method '...': Error: {json}"
+  const jsonStart = message.indexOf("{");
+  const jsonStr = jsonStart !== -1 ? message.slice(jsonStart) : "";
   try {
-    const parsed = JSON.parse(message);
+    const parsed = JSON.parse(jsonStr);
     if (parsed.code === "PRODUCT_NOT_FOUND") {
       return t("errors.productNotFound", { id: parsed.productId });
     }

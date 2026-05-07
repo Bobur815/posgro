@@ -387,7 +387,7 @@ export function Cart() {
                           item.unitPrice,
                         )
                       }
-                      disabled={item.quantity >= item.stock}
+                      disabled={item.quantity >= item.stock || !!item.preWeighedItemId}
                     >
                       +
                     </QuantityButton>

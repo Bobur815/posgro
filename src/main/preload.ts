@@ -216,6 +216,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // App info
   app: {
     getVersion: () => ipcRenderer.invoke("app:getVersion"),
+    isOnline: (): Promise<boolean> => ipcRenderer.invoke("app:isOnline"),
     getTerminalId: () => ipcRenderer.invoke("app:getTerminalId"),
     getStoreInfo: () => ipcRenderer.invoke("app:getStoreInfo"),
     quit: () => ipcRenderer.invoke("app:quit"),
@@ -339,6 +340,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.on("updater:cancelled", cb);
       return () => ipcRenderer.removeListener("updater:cancelled", cb);
     },
+  },
+
+  // Paynet fiscal receipts
+  paynetReceipts: {
+    getByAmount: (amount: number) =>
+      ipcRenderer.invoke("paynetReceipts:getByAmount", amount),
+    integrate: (id: string, saleReceiptNumber: string) =>
+      ipcRenderer.invoke("paynetReceipts:integrate", id, saleReceiptNumber),
   },
 
   // Logger — forwards renderer errors to the main-process electron-log file
@@ -488,6 +497,7 @@ declare global {
       };
       app: {
         getVersion: () => Promise<string>;
+        isOnline: () => Promise<boolean>;
         getTerminalId: () => Promise<string>;
         getStoreInfo: () => Promise<{ storeId: string; storeName: string }>;
         quit: () => Promise<void>;
@@ -571,6 +581,17 @@ declare global {
         onDownloaded: (cb: (info: { version: string }) => void) => () => void;
         onError: (cb: (e: { message: string }) => void) => () => void;
         onCancelled: (cb: () => void) => () => void;
+      };
+      paynetReceipts: {
+        getByAmount: (amount: number) => Promise<Array<{
+          id: string;
+          receiptNumber: string;
+          fiscalMark: string;
+          ofdUrl: string;
+          amount: number | null;
+          issuedAt: string;
+        }>>;
+        integrate: (id: string, saleReceiptNumber: string) => Promise<void>;
       };
       logger: {
         error: (msg: string) => void;

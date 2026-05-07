@@ -11,6 +11,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { Button } from "../../components/common/Button";
+import { useToast } from "../../context/ToastContext";
 
 const Container = styled.div`
   max-width: 600px;
@@ -53,6 +54,7 @@ const VersionBadge = styled.span`
   font-size: 14px;
   font-weight: 600;
   margin-bottom: ${({ theme }) => theme.spacing.md};
+  margin-right: 8px;
 `;
 
 const StatusRow = styled.div`
@@ -103,6 +105,7 @@ type UpdateState =
 export function AppUpdatePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const toast = useToast();
   const [state, setState] = useState<UpdateState>("idle");
   const [currentVersion, setCurrentVersion] = useState("");
   const [updateVersion, setUpdateVersion] = useState("");
@@ -140,7 +143,12 @@ export function AppUpdatePage() {
     return () => unsubs.forEach((u) => u());
   }, []);
 
-  const handleCheck = () => {
+  const handleCheck = async () => {
+    const online = await window.electronAPI.app.isOnline();
+    if (!online) {
+      toast.error(t("errors.noInternet"));
+      return;
+    }
     setState("checking");
     window.electronAPI.updater.checkForUpdates();
   };

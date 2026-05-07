@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import { siteConfig, type LoginBanner } from "../../api/client";
 
@@ -77,6 +77,67 @@ const Hint = styled.p`
   margin: 0;
   font-size: 12px;
   color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
+const UploadArea = styled.div<{ $hasImage: boolean }>`
+  border: 2px dashed ${({ $hasImage, theme }) => $hasImage ? theme.colors.primary : theme.colors.border};
+  border-radius: 8px;
+  overflow: hidden;
+  background: ${({ theme }) => theme.colors.background};
+  cursor: pointer;
+  transition: border-color 0.2s;
+  &:hover { border-color: ${({ theme }) => theme.colors.primary}; }
+`;
+
+const UploadThumb = styled.img`
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+`;
+
+const UploadEmpty = styled.div`
+  height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-size: 14px;
+`;
+
+const UploadActions = styled.div`
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border-top: 1px solid ${({ theme }) => theme.colors.border};
+`;
+
+const UploadBtn = styled.button`
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  background: ${({ theme }) => theme.colors.surface};
+  color: ${({ theme }) => theme.colors.text};
+  font-size: 13px;
+  cursor: pointer;
+  &:hover { background: ${({ theme }) => theme.colors.background}; }
+`;
+
+const RemoveBtn = styled(UploadBtn)`
+  color: ${({ theme }) => theme.colors.error};
+  border-color: ${({ theme }) => theme.colors.error};
+`;
+
+const UploadFileName = styled.span`
+  font-size: 12px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
 `;
 
 const SaveBtn = styled.button`
@@ -172,19 +233,44 @@ export function LoginBannerPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     siteConfig.getLoginBanner()
-      .then((b) => setForm(b))
+      .then((b) => { setForm(b); setPreviewUrl(b.imageUrl); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPendingFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleRemoveImage = () => {
+    setPendingFile(null);
+    setPreviewUrl("");
+    setForm((prev) => ({ ...prev, imageUrl: "" }));
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const handleSave = async () => {
     setSaving(true);
     setStatus(null);
     try {
-      await siteConfig.updateLoginBanner(form);
+      let imageUrl = form.imageUrl;
+      if (pendingFile) {
+        const { url } = await siteConfig.uploadImage(pendingFile);
+        imageUrl = url;
+        setPendingFile(null);
+      }
+      const updated = { ...form, imageUrl };
+      await siteConfig.updateLoginBanner(updated);
+      setForm(updated);
       setStatus({ ok: true, msg: "Saved successfully" });
     } catch {
       setStatus({ ok: false, msg: "Failed to save" });
@@ -207,14 +293,35 @@ export function LoginBannerPage() {
       <Body>
         <FormCard>
           <Field>
-            <Label>Image URL</Label>
-            <TextInput
-              placeholder="https://example.com/banner.jpg"
-              value={form.imageUrl}
-              onChange={set("imageUrl")}
-              disabled={loading}
+            <Label>Banner Image</Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              style={{ display: "none" }}
+              onChange={handleFileChange}
             />
-            <Hint>Direct link to an image. Leave empty to use the default gradient.</Hint>
+            <UploadArea $hasImage={!!previewUrl} onClick={() => fileInputRef.current?.click()}>
+              {previewUrl
+                ? <UploadThumb src={previewUrl} alt="Banner preview" onClick={(e) => e.stopPropagation()} />
+                : <UploadEmpty>
+                    <span style={{ fontSize: 28 }}>🖼️</span>
+                    <span>Click to choose an image</span>
+                  </UploadEmpty>
+              }
+              <UploadActions onClick={(e) => e.stopPropagation()}>
+                <UploadBtn onClick={() => fileInputRef.current?.click()} disabled={loading}>
+                  {previewUrl ? "Change" : "Upload"}
+                </UploadBtn>
+                {previewUrl && (
+                  <RemoveBtn onClick={handleRemoveImage}>Remove</RemoveBtn>
+                )}
+                <UploadFileName>
+                  {pendingFile ? pendingFile.name : form.imageUrl ? form.imageUrl.split("/").pop() : "No image selected"}
+                </UploadFileName>
+              </UploadActions>
+            </UploadArea>
+            <Hint>JPEG, PNG, GIF or WebP · max 5 MB. Leave empty to use the default gradient.</Hint>
           </Field>
 
           <Field>
@@ -247,8 +354,8 @@ export function LoginBannerPage() {
 
         <PreviewCard>
           <PreviewLabel>Preview</PreviewLabel>
-          <PreviewPanel $imageUrl={form.imageUrl || undefined}>
-            {!hasOverlay && !form.imageUrl && (
+          <PreviewPanel $imageUrl={previewUrl || undefined}>
+            {!hasOverlay && !previewUrl && (
               <PreviewEmpty>Default gradient</PreviewEmpty>
             )}
             {hasOverlay && (

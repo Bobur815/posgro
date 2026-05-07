@@ -3,6 +3,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -20,6 +21,11 @@ async function bootstrap() {
   // Serve the super-admin web app from /web (built assets live in dist/web)
   const webDistPath = join(__dirname, '..', 'web');
   app.useStaticAssets(webDistPath, { prefix: '/web' });
+
+  // Serve uploaded files (banner images, etc.)
+  const uploadsPath = join(__dirname, 'uploads');
+  if (!existsSync(uploadsPath)) mkdirSync(uploadsPath, { recursive: true });
+  app.useStaticAssets(uploadsPath, { prefix: '/uploads' });
 
   // Global prefix
   app.setGlobalPrefix('api');

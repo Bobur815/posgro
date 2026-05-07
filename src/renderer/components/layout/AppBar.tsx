@@ -1,13 +1,15 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import styled, { keyframes } from 'styled-components';
-import { Menu, X, RefreshCw, LogIn, LogOut, User } from 'lucide-react';
+import styled from 'styled-components';
+import { Menu, X, LogIn, LogOut, User } from 'lucide-react';
 import { useSidebar } from '../../context/SidebarContext';
 import { useAuthStore } from '../../store/auth-store';
 import { useSync } from '../../hooks/useSync';
 import { POSGROIcon } from '../../branding';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useToast } from '../../context/ToastContext';
+import { SyncButton } from '../common/SyncButton';
 
 export const APP_BAR_HEIGHT = 48;
 
@@ -132,17 +134,13 @@ const RoleBadge = styled.span`
   white-space: nowrap;
 `;
 
-const spin = keyframes`
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-`;
+const AppSyncBtn = styled(SyncButton)`
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
 
-const SyncBtn = styled(IconBtn)<{ $syncing?: boolean }>`
-  color: ${({ $syncing, theme }) =>
-    $syncing ? theme.colors.warning : theme.colors.textSecondary};
-
-  svg {
-    animation: ${({ $syncing }) => ($syncing ? spin : 'none')} 1s linear infinite;
+  &:hover:not(:disabled) {
+    background: ${({ theme }) => theme.colors.background};
   }
 `;
 
@@ -175,6 +173,7 @@ export function AppBar() {
   const { user, isPinLogin, logout } = useAuthStore();
   const { status, refreshStatus } = useSync();
   const { mode } = useTheme();
+  const toast = useToast();
 
   const [smenaOpen, setSmenaOpen] = useState<boolean | null>(null);
 
@@ -199,11 +198,16 @@ export function AppBar() {
   }, [checkSmena]);
 
   const handleSync = async () => {
+    const online = await window.electronAPI.app.isOnline();
+    if (!online) {
+      toast.error(t('errors.noInternet'));
+      return;
+    }
     try {
       await window.electronAPI.sync.trigger();
       await refreshStatus();
-      // Soft-refresh: dispatch the stock-updated event that data hooks listen to
-      window.dispatchEvent(new Event('stock-updated'));
+      toast.success(t('sync.syncSuccess'));
+      setTimeout(() => window.location.reload(), 800);
     } catch (err) {
       console.error('Sync failed:', err);
     }
@@ -246,14 +250,11 @@ export function AppBar() {
       )}
 
       {/* Sync button */}
-      <SyncBtn
-        $syncing={status.isSyncing}
-        onClick={handleSync}
-        disabled={status.isSyncing}
+      <AppSyncBtn
+        onSync={handleSync}
+        size={17}
         title={t('settings.syncNow')}
-      >
-        <RefreshCw size={17} />
-      </SyncBtn>
+      />
 
       <Divider />
 

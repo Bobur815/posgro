@@ -17,6 +17,8 @@ const unitLabels: Record<string, { ru: string; uz: string }> = {
   'м': { ru: 'м', uz: 'm' },
 };
 
+export { formatPhone } from '@shared/utils';
+
 export function formatQuantity(quantity: number, unit: string, locale: 'ru' | 'uz' = 'ru'): string {
   const label = unitLabels[unit]?.[locale] || unit;
   if (unit === 'кг' || unit === 'л') {

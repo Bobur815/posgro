@@ -18,22 +18,24 @@ export default defineConfig(({ mode }) => {
       .map(k => [`process.env.${k}`, JSON.stringify(env[k])])
   )
 
+  // electron-vite@5 types use BuildEnvironmentOptions (Vite 6 only); cast to avoid mismatch with Vite 5
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return {
   main: {
     build: {
       outDir: 'dist-electron/main',
-      lib: {
-        entry: resolve(__dirname, 'src/main/index.ts'),
+      rollupOptions: {
+        input: resolve(__dirname, 'src/main/index.ts'),
       },
     },
-      define: envDefines,
+    define: envDefines,
   },
 
   preload: {
     build: {
-      outDir: 'dist-electron/preload', // 👈 ADD THIS
-      lib: {
-        entry: resolve(__dirname, 'src/main/preload.ts'),
+      outDir: 'dist-electron/preload',
+      rollupOptions: {
+        input: resolve(__dirname, 'src/main/preload.ts'),
       },
     },
   },
@@ -63,5 +65,6 @@ export default defineConfig(({ mode }) => {
       }
     }
   }
-  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any
 })

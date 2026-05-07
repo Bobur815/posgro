@@ -379,6 +379,7 @@
     "storePhone": "Telefon",
     "storeStir": "STIR/INN",
     "taxRate": "QQS (%)",
+    "taxRateAsDiscount": "QQSni chekda chegirma sifatida ko'rsatish",
     "receiptSettings": "Chek sozlamalari",
     "receiptHeader": "Chek sarlavhasi",
     "receiptFooter": "Chek pastki qismi",
@@ -479,9 +480,15 @@
   "errors": {
     "productNotFound": "ID {{id}} bo'lgan mahsulot topilmadi",
     "productInactive": "\"{{name}}\" mahsuloti nofaol",
-    "insufficientStock": "\"{{name}}\" mahsuloti yetarli emas. Mavjud: {{available}}, so'ralgan: {{requested}}"
+    "insufficientStock": "\"{{name}}\" mahsuloti yetarli emas. Mavjud: {{available}}, so'ralgan: {{requested}}",
+    "noInternet": "Internet aloqasi yo'q"
+  },
+  "paynet": {
+    "noReceipts": "Bu summa uchun Paynet chek mavjud emas"
   },
   "sync": {
+    "syncSuccess": "Sinxronizatsiya muvaffaqiyatli",
+    "syncFailed": "Sinxronizatsiya xatosi",
     "syncing": "Sinxronlanmoqda...",
     "lastSync": "Oxirgi sinxronizatsiya",
     "notSynced": "Sinxronlanmagan"

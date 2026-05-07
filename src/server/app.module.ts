@@ -17,6 +17,7 @@ import { MxikModule } from './modules/mxik/mxik.module';
 import { TerminalsModule } from './modules/terminals/terminals.module';
 import { LogsModule } from './modules/logs/logs.module';
 import { SiteConfigModule } from './modules/site-config/site-config.module';
+import { PaynetModule } from './modules/paynet/paynet.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { SiteConfigModule } from './modules/site-config/site-config.module';
     TerminalsModule,
     LogsModule,
     SiteConfigModule,
+    PaynetModule,
   ],
 })
 export class AppModule {}

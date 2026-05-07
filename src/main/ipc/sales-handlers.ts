@@ -96,6 +96,8 @@ export function setupSalesHandlers(): void {
         terminalId: config.terminalId,
         smenaId: currentSmena.id,
         synced: false,
+        paynetOfdUrl: (data.paynetOfdUrl as string | undefined) || null,
+        paynetReceiptNumber: (data.paynetReceiptNumber as string | undefined) || null,
         items: {
           create: items,
         },

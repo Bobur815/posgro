@@ -43,3 +43,13 @@ export function normalizeUzPhone(phone: string): string {
   const subscriber = d.startsWith('998') ? d.slice(3) : d;
   return '998' + subscriber.slice(0, 9);
 }
+
+/** Format a stored phone for display: +998 90 123 45 67 */
+export function formatPhone(phone: string): string {
+  const d = digitsOnly(phone);
+  const normalized = d.startsWith('998') ? d : d.length === 9 ? '998' + d : d;
+  if (normalized.length === 12 && normalized.startsWith('998')) {
+    return `+998 ${normalized.slice(3, 5)} ${normalized.slice(5, 8)} ${normalized.slice(8, 10)} ${normalized.slice(10, 12)}`;
+  }
+  return phone;
+}

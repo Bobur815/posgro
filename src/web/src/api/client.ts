@@ -555,6 +555,14 @@ export const siteConfig = {
     const { data } = await axiosInstance.put('/site-config/login-banner', banner);
     return data;
   },
+  uploadImage: async (file: File): Promise<{ url: string }> => {
+    const form = new FormData();
+    form.append('file', file);
+    const { data } = await axiosInstance.post('/site-config/upload-image', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data;
+  },
 };
 
 // ─── Analytics ───────────────────────────────────────────────────────────────

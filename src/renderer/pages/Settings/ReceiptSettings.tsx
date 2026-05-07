@@ -8,6 +8,7 @@ import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
 import { buildSampleReceiptHTML } from '../../../shared/receipt-html';
 import type { ReceiptSettings as ReceiptSettingsType } from '../../../shared/receipt-html';
+import { useToast } from '../../context/ToastContext';
 
 const Container = styled.div`
   display: flex;
@@ -98,6 +99,7 @@ const Actions = styled.div`
 export function ReceiptSettings() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [settings, setSettings] = useState<ReceiptSettingsType>({
     receipt_width: '80',
@@ -148,7 +150,7 @@ export function ReceiptSettings() {
       await window.electronAPI.settings.set('receipt_language', settings.receipt_language);
       await window.electronAPI.settings.set('receipt_header', settings.receipt_header);
       await window.electronAPI.settings.set('receipt_footer', settings.receipt_footer);
-      alert(t('common.saved'));
+      showToast(t('common.saved'), 'success');
     } catch (err) {
       console.error('Failed to save receipt settings:', err);
     } finally {

@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow } from "electron";
 import { spawn } from "child_process";
+import QRCode from "qrcode";
 import { getPrismaClient } from "../database/sqlite-client";
 import {
   buildReceiptHTML,
@@ -108,6 +109,7 @@ async function loadReceiptSettings(): Promise<ReceiptSettings> {
           "receipt_footer",
           "receipt_width",
           "receipt_language",
+          "tax_rate_as_discount",
         ],
       },
     },
@@ -131,6 +133,7 @@ async function loadReceiptSettings(): Promise<ReceiptSettings> {
     receipt_footer: map.receipt_footer || "",
     receipt_width: (map.receipt_width as "80" | "58") || "80",
     receipt_language: (map.receipt_language as "ru" | "uz") || "ru",
+    tax_rate_as_discount: map.tax_rate_as_discount || "false",
   };
 }
 
@@ -147,6 +150,22 @@ async function printReceipt(saleId: string): Promise<boolean> {
   }
 
   const settings = await loadReceiptSettings();
+
+  // Generate QR code for Paynet fiscal receipt (1% cashback for customer)
+  let fiscalQrBase64: string | undefined;
+  let paynetFiscalMark: string | undefined;
+  const paynetOfdUrl = (sale as any).paynetOfdUrl as string | null;
+  const paynetReceiptNumber = (sale as any).paynetReceiptNumber as string | null;
+  if (paynetOfdUrl) {
+    try {
+      const ofdParams = new URL(paynetOfdUrl).searchParams;
+      paynetFiscalMark = ofdParams.get('s') || undefined;
+      const dataUrl = await QRCode.toDataURL(paynetOfdUrl, { margin: 1, width: 300 });
+      fiscalQrBase64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+    } catch (err) {
+      console.error('[Printer] QR code generation failed:', err);
+    }
+  }
 
   const receiptData: ReceiptData = {
     receiptNumber: sale.receiptNumber,
@@ -173,6 +192,9 @@ async function printReceipt(saleId: string): Promise<boolean> {
     discountAmount: Number(sale.discountAmount),
     finalAmount: Number(sale.finalAmount),
     paymentMethod: sale.paymentMethod,
+    paynetReceiptNumber: paynetReceiptNumber || undefined,
+    paynetFiscalMark,
+    fiscalQrBase64,
   };
 
   const html = buildReceiptHTML(receiptData, settings);

@@ -2,6 +2,7 @@
  * Shared receipt HTML builder — used by both the frontend preview and backend printing.
  * Pure function, no Node/Electron dependencies.
  */
+import { formatPhone } from './utils/phone';
 
 export interface ReceiptItem {
   productName: string;
@@ -21,6 +22,12 @@ export interface ReceiptData {
   discountAmount: number;
   finalAmount: number;
   paymentMethod: string;
+  /** Paynet fiscal receipt number — replaces internal receipt number when set */
+  paynetReceiptNumber?: string;
+  /** Paynet fiscal mark (OFD URL `s` param) shown above QR code */
+  paynetFiscalMark?: string;
+  /** Base64-encoded QR code PNG for the Soliq OFD URL (1% cashback for customer) */
+  fiscalQrBase64?: string;
 }
 
 export interface ReceiptSettings {
@@ -33,6 +40,7 @@ export interface ReceiptSettings {
   store_phone: string;
   store_stir?: string;
   tax_rate?: string;
+  tax_rate_as_discount?: string;
 }
 
 const labels: Record<string, Record<string, string>> = {
@@ -53,6 +61,9 @@ const labels: Record<string, Record<string, string>> = {
     thankYou: "Спасибо за покупку!",
     testTitle: "ТЕСТОВАЯ ПЕЧАТЬ",
     testMessage: "Если вы видите этот текст, принтер работает корректно.",
+    cashback: "Кешбэк 1% — отсканируйте QR",
+    fiscalMark: "Fiskal belgi",
+    taxDiscount: "Chegirma",
   },
   uz: {
     receipt: "Chek №",
@@ -71,12 +82,16 @@ const labels: Record<string, Record<string, string>> = {
     thankYou: "Xaridingiz uchun rahmat!",
     testTitle: "TEST CHOP ETISH",
     testMessage: "Agar siz bu matnni ko'rsangiz, printer to'g'ri ishlayapti.",
+    cashback: "1% cashback — QR kodni skanerlang",
+    fiscalMark: "Fiskal belgi",
+    taxDiscount: "Chegirma",
   },
 };
 
 function fmt(amount: number, currency: string): string {
   return amount.toLocaleString("ru-RU") + " " + currency;
 }
+
 
 function escapeHtml(str: string): string {
   return str
@@ -162,6 +177,10 @@ function baseStyles(widthMm: number): string {
     }
     .footer { margin-top: 6px; font-size: ${sm ? "12px" : "14px"}; color: #000; }
     .positions { font-size: ${sm ? "12px" : "14px"}; color: #000; }
+    .fiscal-block { margin-top: 8px; text-align: center; }
+    .fiscal-block img { width: ${sm ? "110px" : "135px"}; height: ${sm ? "110px" : "135px"}; display: block; margin: 4px auto; }
+    .fiscal-label { font-size: ${sm ? "11px" : "12px"}; font-weight: 600; color: #000; }
+    .fiscal-sub { font-size: ${sm ? "10px" : "11px"}; color: #000; margin-top: 2px; }
   `;
 }
 
@@ -192,6 +211,8 @@ export function buildReceiptHTML(
         ? l.card
         : l.mixed;
 
+  const taxAsDiscount = settings.tax_rate_as_discount === "true" && taxRate > 0;
+
   let itemsHTML = "";
   sale.items.forEach((item, idx) => {
     const isLast = idx === sale.items.length - 1;
@@ -203,17 +224,23 @@ export function buildReceiptHTML(
           <span>${item.quantity} × ${fmt(item.unitPrice, cur)}</span>
           <span>${fmt(item.subtotal, cur)}</span>
         </div>
-        ${taxRate > 0 ? `<div class="item-meta">sh.j. QQS ${taxRate}%: ${fmt(itemVat, cur)}</div>` : ""}
+        <div class="item-meta">sh.j. QQS ${taxRate}%: ${fmt(itemVat, cur)}</div>
         ${item.barcode ? `<div class="item-meta">Shtrix-kod: ${escapeHtml(item.barcode)}</div>` : ""}
         ${item.mxik ? `<div class="item-meta">MXIK: ${escapeHtml(item.mxik)}</div>` : ""}
       </div>${isLast ? "" : '<hr class="item-sep">'}`;
   });
+  const totalVat = sale.finalAmount * taxRate / 100;
+  const grandTotal = !taxAsDiscount ? sale.finalAmount + totalVat : sale.finalAmount;
+  const vatHTML = `<div class="total-row">
+      <span>sh.j. QQS ${taxRate}%</span><span class="dots">.....................................................</span>
+      <span>${fmt(totalVat, cur)}</span>
+    </div>`;
 
-  const totalVat = taxRate > 0 ? sale.totalAmount * taxRate / 100 : 0;
-  const vatHTML = taxRate > 0
+  const taxDiscountAmount = taxAsDiscount ? sale.finalAmount * taxRate / 100 : 0;
+  const taxDiscountHTML = taxAsDiscount
     ? `<div class="total-row">
-        <span>sh.j. QQS ${taxRate}%</span><span class="dots">.....................................................</span>
-        <span>${fmt(totalVat, cur)}</span>
+        <span>${(l as any).taxDiscount} (${taxRate}%)</span><span class="dots">.....................................................</span>
+        <span>-${fmt(taxDiscountAmount, cur)}</span>
       </div>`
     : "";
 
@@ -227,13 +254,22 @@ export function buildReceiptHTML(
 
   const footerText = settings.receipt_footer || l.thankYou;
 
+  const fiscalHTML = sale.fiscalQrBase64
+    ? `<hr>
+       <div class="fiscal-block">
+         ${sale.paynetFiscalMark ? `<div class="fiscal-label">${(l as any).fiscalMark}: ${escapeHtml(sale.paynetFiscalMark)}</div>` : ''}
+         <img src="data:image/png;base64,${sale.fiscalQrBase64}" alt="QR" />
+         <div class="fiscal-sub">${(l as any).cashback}</div>
+       </div>`
+    : '';
+
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>${baseStyles(widthMm)}</style></head>
 <body>
   <div class="center">
     ${settings.store_name ? `<div class="brand">${escapeHtml(settings.store_name)}</div>` : ""}
     ${settings.store_address ? `<div class="sub">${escapeHtml(settings.store_address)}</div>` : ""}
-    ${settings.store_phone ? `<div class="sub">${escapeHtml(settings.store_phone)}</div>` : ""}
+    ${settings.store_phone ? `<div class="sub">${escapeHtml(formatPhone(settings.store_phone))}</div>` : ""}
     ${settings.store_stir ? `<div class="sub">STIR: ${escapeHtml(settings.store_stir)}</div>` : ""}
     ${settings.receipt_header ? `<div class="sub">${escapeHtml(settings.receipt_header)}</div>` : ""}
   </div>
@@ -241,7 +277,7 @@ export function buildReceiptHTML(
   <hr>
 
   <div class="meta-grid">
-    <span class="label">${l.receipt}</span><span class="value">${escapeHtml(sale.receiptNumber)}</span>
+    <span class="label">${l.receipt}</span><span class="value">${escapeHtml(sale.paynetReceiptNumber || sale.receiptNumber)}</span>
     <span class="label">${l.date}</span><span class="value">${dateStr} ${timeStr}</span>
     <span class="label">${l.cashier}</span><span class="value">${escapeHtml(sale.cashierName)}</span>
   </div>
@@ -262,9 +298,10 @@ export function buildReceiptHTML(
   </div>
   ${discountHTML}
   ${vatHTML}
+  ${taxDiscountHTML}
   <div class="total-row grand">
     <span>${l.total}</span><span class="dots">.....................................................</span>
-    <span>${fmt(sale.finalAmount, cur)}</span>
+    <span>${fmt(grandTotal, cur)}</span>
   </div>
   <div class="total-row">
     <span>${l.payment}</span><span class="dots">.....................................................</span>
@@ -274,6 +311,8 @@ export function buildReceiptHTML(
   <hr>
 
   <div class="center footer">${escapeHtml(footerText)}</div>
+
+  ${fiscalHTML}
 
 </body></html>`;
 }
