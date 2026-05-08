@@ -18,6 +18,8 @@ export interface Sale {
   items: SaleItem[];
   totalCost?: number;
   margin?: number;
+  paynetReceiptNumber?: string | null;
+  paynetOfdUrl?: string | null;
 }
 
 export interface SaleItem {

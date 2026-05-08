@@ -484,7 +484,10 @@
     "noInternet": "Internet aloqasi yo'q"
   },
   "paynet": {
-    "noReceipts": "Bu summa uchun Paynet chek mavjud emas"
+    "noReceipts": "Bu summa uchun Paynet chek mavjud emas",
+    "linkReceipt": "Paynet chekni bog'lash",
+    "link": "Bog'lash va chop etish",
+    "integrated": "Paynet chek bog'landi"
   },
   "sync": {
     "syncSuccess": "Sinxronizatsiya muvaffaqiyatli",

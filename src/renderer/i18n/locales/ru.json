@@ -495,7 +495,10 @@
     "noInternet": "Нет подключения к интернету"
   },
   "paynet": {
-    "noReceipts": "Нет доступных Paynet чеков для этой суммы"
+    "noReceipts": "Нет доступных Paynet чеков для этой суммы",
+    "linkReceipt": "Привязать Paynet чек",
+    "link": "Привязать и распечатать",
+    "integrated": "Paynet чек привязан"
   },
   "sync": {
     "syncFailed":"Ошибка",

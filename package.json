@@ -1,6 +1,6 @@
 {
   "name": "posgro",
-  "version": "1.8.2",
+  "version": "1.8.3",
   "description": "Grocery Store POS System - Offline-first Point of Sale",
   "main": "dist-electron/main/index.js",
   "scripts": {
@@ -10,6 +10,8 @@
     "prebuild:pos": "node -e \"const fs=require('fs'),d='dist';if(fs.existsSync(d))fs.readdirSync(d).filter(f=>/\\.(exe|blockmap|yml)$/.test(f)).forEach(f=>fs.unlinkSync(d+'/'+f))\"",
     "build:pos": "cross-env APP_MODE=pos electron-vite build && electron-builder --config electron-builder.config.js",
     "deploy:pos": "npm run build:pos && node scripts/upload-release.js",
+    "build:telegram": "tsc --project src/telegram-bot/tsconfig.json",
+    "deploy:telegram": "bash scripts/deploy-telegram.sh",
     "build:server": "nest build",
     "prisma:generate": "prisma generate",
     "prisma:generate:sqlite": "prisma generate --schema=prisma/schema.sqlite.prisma",
@@ -37,6 +39,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
     "date-fns": "^3.0.0",
+    "dotenv": "^16.0.0",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.8.3",
     "i18next": "^23.0.0",

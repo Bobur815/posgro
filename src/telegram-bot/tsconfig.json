@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "sourceMap": false,
+    "outDir": "../../dist/telegram-bot",
+    "rootDir": ".",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  "include": ["./**/*"],
+  "exclude": ["node_modules"]
+}

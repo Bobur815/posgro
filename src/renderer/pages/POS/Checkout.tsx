@@ -399,16 +399,26 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
         list = await window.electronAPI.paynetReceipts.getByAmount(total);
       }
       setPaynetReceipts(list);
-      if (list.length === 1) setSelectedPaynet(list[0]);
-      else setSelectedPaynet(null);
+      // Auto-select only if exactly one receipt and nothing selected yet
+      setSelectedPaynet(prev => {
+        if (prev) return list.find(r => r.id === prev.id) ?? null;
+        return list.length === 1 ? list[0] : null;
+      });
     } finally {
       setPaynetLoading(false);
     }
   }, [total]);
 
+  // Fetch on mount and when switching to cash; auto-poll every 4s while cash is active
   useEffect(() => {
-    if (paymentMethod === "cash") fetchPaynetReceipts();
-    else { setPaynetReceipts([]); setSelectedPaynet(null); }
+    if (paymentMethod !== "cash") {
+      setPaynetReceipts([]);
+      setSelectedPaynet(null);
+      return;
+    }
+    fetchPaynetReceipts();
+    const interval = setInterval(fetchPaynetReceipts, 4000);
+    return () => clearInterval(interval);
   }, [paymentMethod, fetchPaynetReceipts]);
 
   const change = givenAmount - total;

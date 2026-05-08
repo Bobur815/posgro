@@ -6,9 +6,9 @@
 set -e
 
 # Configuration
-VPS_USER="${1:-root}"
-VPS_HOST="${2:-your-vps-host.com}"
-VPS_PATH="${3:-/opt/grocery-pos}"
+VPS_USER="${VPS_USER:-bobur}"
+VPS_HOST="${VPS_HOST:-144.91.121.160}"
+VPS_PATH="${VPS_PATH:-/opt/grocery-pos}"
 APP_NAME="grocery-pos-api"
 
 # Colors for output
