@@ -279,7 +279,7 @@ function PaynetIntegrationModal({ sale, onClose, onIntegrated, formatCurrency }:
     if (!selected) return;
     setIntegrating(true);
     try {
-      await window.electronAPI.paynetReceipts.integrate(selected.id, sale.receiptNumber);
+      await window.electronAPI.paynetReceipts.integrate(selected.id, sale.receiptNumber, selected.receiptNumber, selected.ofdUrl);
       toast.success(t('paynet.integrated'));
       onIntegrated();
     } catch {

@@ -77,6 +77,9 @@ export function setupAutoUpdater(mainWindow: BrowserWindow): void {
   });
 
   ipcMain.handle('updater:quitAndInstall', () => {
-    autoUpdater.quitAndInstall(true, true);
+    // Destroy the window directly to bypass the close-confirmation interceptor,
+    // then hand off to the NSIS installer (isSilent=false shows installer progress).
+    mainWindow.destroy();
+    autoUpdater.quitAndInstall(false, true);
   });
 }

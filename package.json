@@ -1,6 +1,6 @@
 {
   "name": "posgro",
-  "version": "1.8.3",
+  "version": "1.8.5",
   "description": "Grocery Store POS System - Offline-first Point of Sale",
   "main": "dist-electron/main/index.js",
   "scripts": {
@@ -12,6 +12,7 @@
     "deploy:pos": "npm run build:pos && node scripts/upload-release.js",
     "build:telegram": "tsc --project src/telegram-bot/tsconfig.json",
     "deploy:telegram": "bash scripts/deploy-telegram.sh",
+    "seed:paynet-mock": "node scripts/seed-paynet-mock.js",
     "build:server": "nest build",
     "prisma:generate": "prisma generate",
     "prisma:generate:sqlite": "prisma generate --schema=prisma/schema.sqlite.prisma",

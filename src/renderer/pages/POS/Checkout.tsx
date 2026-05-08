@@ -475,7 +475,7 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
         // Mark Paynet receipt as integrated on the VPS
         if (selectedPaynet && sale.receiptNumber) {
           window.electronAPI.paynetReceipts
-            .integrate(selectedPaynet.id, sale.receiptNumber)
+            .integrate(selectedPaynet.id, sale.receiptNumber, selectedPaynet.receiptNumber, selectedPaynet.ofdUrl)
             .catch((err: unknown) => console.error("Paynet integrate failed:", err));
         }
 

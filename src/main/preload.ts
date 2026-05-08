@@ -346,8 +346,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   paynetReceipts: {
     getByAmount: (amount: number) =>
       ipcRenderer.invoke("paynetReceipts:getByAmount", amount),
-    integrate: (id: string, saleReceiptNumber: string) =>
-      ipcRenderer.invoke("paynetReceipts:integrate", id, saleReceiptNumber),
+    integrate: (id: string, saleReceiptNumber: string, paynetReceiptNumber: string, ofdUrl: string) =>
+      ipcRenderer.invoke("paynetReceipts:integrate", id, saleReceiptNumber, paynetReceiptNumber, ofdUrl),
   },
 
   // Logger — forwards renderer errors to the main-process electron-log file
@@ -591,7 +591,7 @@ declare global {
           amount: number | null;
           issuedAt: string;
         }>>;
-        integrate: (id: string, saleReceiptNumber: string) => Promise<void>;
+        integrate: (id: string, saleReceiptNumber: string, paynetReceiptNumber: string, ofdUrl: string) => Promise<void>;
       };
       logger: {
         error: (msg: string) => void;
