@@ -254,9 +254,18 @@ export function ProductList() {
         const info = await aslBelgisi.verifyMarkingCode(qrData);
         log("aslBelgisi response:", info);
         if (!info.isValid && info._error) log("aslBelgisi ERROR:", info._error);
-        if (info?.productionDate) initial.productionDate = info.productionDate;
-        if (info?.expirationDate) initial.expiryDate = info.expirationDate;
-        if (info?.packageType) initial.packageCode = info.packageType;
+        if (info.isValid) {
+          log("packageType:", info.packageType ?? "not returned");
+          if (info.productionDate) initial.productionDate = info.productionDate;
+          if (info.expirationDate) initial.expiryDate = info.expirationDate;
+          // warn if multi-pack (GROUP, BOX_LV_1, BOX_LV_2)
+          const MULTI_PACK_TYPES = ["GROUP", "BOX_LV_1", "BOX_LV_2"];
+          if (info.packageType && MULTI_PACK_TYPES.includes(info.packageType)) {
+            log("⚠ MULTI-PACK detected:", info.packageType);
+            toast.error(`Multi-pack: ${info.packageType}. Check quantity before saving.`);
+          }
+          // note: info.packageType is a GS1 packaging level (UNIT/GROUP/BOX) — NOT the MXIK packageCode
+        }
       } catch (e) {
         log("aslBelgisi ERROR:", e);
       }

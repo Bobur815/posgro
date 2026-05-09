@@ -261,7 +261,7 @@ export function ProductForm({
     cost: initialData?.cost ? String(initialData.cost) : "",
     stock: initialData?.stock ? String(initialData.stock) : "0",
     minStock: "0",
-    unit: isBulkWeighted ? "кг" as ProductUnit : "шт" as ProductUnit,
+    unit: isBulkWeighted ? ("кг" as ProductUnit) : ("шт" as ProductUnit),
     categoryId: "",
     supplierId: "",
     productionDate: initialData?.productionDate || "",
@@ -270,7 +270,9 @@ export function ProductForm({
     isOnPromotion: false,
     active: true,
     mxik: initialData?.mxik || "",
-    productType: isBulkWeighted ? "BULK_WEIGHTED" as ProductType : "REGULAR" as ProductType,
+    productType: isBulkWeighted
+      ? ("BULK_WEIGHTED" as ProductType)
+      : ("REGULAR" as ProductType),
     internalCode: initialData?.internalCode || "",
   });
   const [existingProduct, setExistingProduct] = useState<Product | null>(null);
@@ -353,9 +355,9 @@ export function ProductForm({
         // Not in local DB — look up in tasnif registry using clean EAN-13
         try {
           const ean = extractEan13(barcode);
-          console.log('[checkBarcode] tasnif lookup for:', ean);
+          console.log("[checkBarcode] tasnif lookup for:", ean);
           const info = await mxikApi.searchByBarcode(ean);
-          console.log('[checkBarcode] tasnif result:', info);
+          console.log("[checkBarcode] tasnif result:", info);
           setFormData((prev) => ({
             ...prev,
             mxik: info.code,
@@ -363,7 +365,7 @@ export function ProductForm({
             nameRu: info.nameRu,
           }));
         } catch (err) {
-          console.warn('[checkBarcode] tasnif lookup failed:', err);
+          console.warn("[checkBarcode] tasnif lookup failed:", err);
           toast.warning(t("products.manualEntryRequired"));
         }
       }
@@ -399,7 +401,12 @@ export function ProductForm({
   const handleQrScan = async (qrData: string) => {
     setShowQrScanner(false);
     const qrType = aslBelgisi.detectQrType(qrData);
-    console.log('[handleQrScan] qrData:', qrData.slice(0, 60), '| type:', qrType);
+    console.log(
+      "[handleQrScan] qrData:",
+      qrData.slice(0, 60),
+      "| type:",
+      qrType,
+    );
 
     if (qrType === "fiscal") {
       toast.warning(t("products.qrCodeIsFiscal"));
@@ -427,9 +434,9 @@ export function ProductForm({
       setIsLookingUpAslBelgisi(true);
       try {
         // Step 1: Verify marking code with asl-belgisi
-        console.log('[handleQrScan] calling verifyMarkingCode...');
+        console.log("[handleQrScan] calling verifyMarkingCode...");
         const mcVerif = await aslBelgisi.verifyMarkingCode(qrData);
-        console.log('[handleQrScan] mcVerif:', mcVerif);
+        console.log("[handleQrScan] mcVerif:", mcVerif);
         if (!mcVerif.isValid) {
           toast.error(t("products.invalidMarkingCode"));
           return;
@@ -726,193 +733,238 @@ export function ProductForm({
 
   return (
     <>
-      {!openArrival && <Modal title={title} onClose={onClose} width="750px">
-        <Form onSubmit={handleSubmit}>
-          <Row>
-            <FormGroup>
-              <Label>{t("products.mxik")}</Label>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <Input
-                  value={formData.mxik}
-                  placeholder="00000000000000000"
-                  onChange={(e) => handleChange("mxik", e.target.value)}
-                  style={{ flex: 1 }}
-                />
-              </div>
-            </FormGroup>
-            <FormGroup>
-              <Label>
-                {t("products.barcode")} <Req>*</Req>
-              </Label>
-              <div
-                style={{ display: "flex", flexDirection: "row", gap: "8px" }}
-              >
-                <Input
-                  value={formData.barcode}
-                  autoFocus
-                  onChange={(e) => handleBarcodeChange(e.target.value)}
-                  disabled={isEdit}
-                  required
-                  style={{ flex: 1 }}
-                />
-                {!isEdit && (
-                  <>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="small"
-                      onClick={handleGenerateBarcode}
-                      title={t("products.generateBarcode")}
-                      style={{ flexShrink: 0 }}
-                    >
-                      <RefreshCw size={16} />
-                    </Button>
-                  </>
-                )}
-              </div>
-              {mcVerification?.isValid && (
+      {!openArrival && (
+        <Modal title={title} onClose={onClose} width="750px">
+          <Form onSubmit={handleSubmit}>
+            <Row>
+              <FormGroup>
+                <Label>{t("products.mxik")}</Label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <Input
+                    value={formData.mxik}
+                    placeholder="00000000000000000"
+                    onChange={(e) => handleChange("mxik", e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                </div>
+              </FormGroup>
+              <FormGroup>
+                <Label>
+                  {t("products.barcode")} <Req>*</Req>
+                </Label>
                 <div
-                  style={{
-                    marginTop: 6,
-                    padding: "6px 10px",
-                    background: "#4caf5015",
-                    border: "1px solid #4caf5060",
-                    borderRadius: 4,
-                    fontSize: 12,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                  }}
+                  style={{ display: "flex", flexDirection: "row", gap: "8px" }}
                 >
-                  <span style={{ color: "#4caf50", fontWeight: 600 }}>
-                    ✓ {t("products.verifiedByAslBelgisi")}
-                  </span>
-                  {mcVerification.issuerName && (
-                    <span style={{ color: "#666" }}>
-                      {t("products.issuer")}: {mcVerification.issuerName}
-                    </span>
+                  <Input
+                    value={formData.barcode}
+                    autoFocus
+                    onChange={(e) => handleBarcodeChange(e.target.value)}
+                    disabled={isEdit}
+                    required
+                    style={{ flex: 1 }}
+                  />
+                  {!isEdit && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="small"
+                        onClick={handleGenerateBarcode}
+                        title={t("products.generateBarcode")}
+                        style={{ flexShrink: 0 }}
+                      >
+                        <RefreshCw size={16} />
+                      </Button>
+                    </>
                   )}
                 </div>
-              )}
-            </FormGroup>
-          </Row>
+                {mcVerification?.isValid && (
+                  <div
+                    style={{
+                      marginTop: 6,
+                      padding: "6px 10px",
+                      background: "#4caf5015",
+                      border: "1px solid #4caf5060",
+                      borderRadius: 4,
+                      fontSize: 12,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <span style={{ color: "#4caf50", fontWeight: 600 }}>
+                      ✓ {t("products.verifiedByAslBelgisi")}
+                    </span>
+                    {mcVerification.issuerName && (
+                      <span style={{ color: "#666" }}>
+                        {t("products.issuer")}: {mcVerification.issuerName}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </FormGroup>
+            </Row>
 
-          <Row>
-            <Input
-              label={
-                <>
-                  {t("products.nameUz")} <Req>*</Req>
-                </>
-              }
-              value={formData.nameUz}
-              onChange={(e) => handleNameUzChange(e.target.value)}
-              required
-            />
-            <Input
-              label={
-                <>
-                  {t("products.nameRu")} <Req>*</Req>
-                </>
-              }
-              value={formData.nameRu}
-              onChange={(e) => handleNameRuChange(e.target.value)}
-              required
-            />
-          </Row>
-
-          <Row>
-            <Input
-              label={
-                <>
-                  {t("products.price")}
-                  {formProfitMargin !== null
-                    ? ` (${formProfitMargin}%)`
-                    : ""}{" "}
-                  <Req>*</Req>
-                </>
-              }
-              type="number"
-              value={formData.price}
-              onChange={(e) => handleChange("price", e.target.value)}
-              required
-            />
-            <Input
-              label={t("products.cost")}
-              type="number"
-              value={formData.cost}
-              onChange={(e) => handleChange("cost", e.target.value)}
-            />
-          </Row>
-
-          <Row>
-            <Input
-              label={t("products.stock")}
-              type="number"
-              step={
-                formData.productType === "BULK_WEIGHTED" ||
-                formData.productType === "PREPACKAGED"
-                  ? "0.001"
-                  : "1"
-              }
-              value={formData.stock}
-              onChange={(e) => handleChange("stock", e.target.value)}
-            />
-            <Input
-              label={t("products.minStock")}
-              type="number"
-              value={formData.minStock}
-              onChange={(e) => handleChange("minStock", e.target.value)}
-            />
-          </Row>
-
-          <ThreeColRow>
-            <FormGroup>
-              <Label>{t("products.productType")}</Label>
-              <Select
-                value={formData.productType}
-                onChange={(e) =>
-                  handleChange("productType", e.target.value as ProductType)
+            <Row>
+              <Input
+                label={
+                  <>
+                    {t("products.nameUz")} <Req>*</Req>
+                  </>
                 }
-              >
-                <option value="REGULAR">
-                  {t("products.productTypeRegular")}
-                </option>
-                <option value="BULK_WEIGHTED">
-                  {t("products.productTypeBulkWeighted")}
-                </option>
-                <option value="PREPACKAGED">
-                  {t("products.productTypePrepackaged")}
-                </option>
-              </Select>
-            </FormGroup>
-            <FormGroup>
-              <Label>{t("products.unit")}</Label>
-              <Select
-                value={formData.unit}
-                onChange={(e) => handleChange("unit", e.target.value)}
-              >
-                {UNIT_OPTIONS.map((unit) => (
-                  <option key={unit} value={unit}>
-                    {getUnitLabel(unit)}
+                value={formData.nameUz}
+                onChange={(e) => handleNameUzChange(e.target.value)}
+                required
+              />
+              <Input
+                label={
+                  <>
+                    {t("products.nameRu")} <Req>*</Req>
+                  </>
+                }
+                value={formData.nameRu}
+                onChange={(e) => handleNameRuChange(e.target.value)}
+                required
+              />
+            </Row>
+
+            <Row>
+              <Input
+                label={
+                  <>
+                    {t("products.price")}
+                    {formProfitMargin !== null
+                      ? ` (${formProfitMargin}%)`
+                      : ""}{" "}
+                    <Req>*</Req>
+                  </>
+                }
+                type="number"
+                value={formData.price}
+                onChange={(e) => handleChange("price", e.target.value)}
+                required
+              />
+              <Input
+                label={t("products.cost")}
+                type="number"
+                value={formData.cost}
+                onChange={(e) => handleChange("cost", e.target.value)}
+              />
+            </Row>
+
+            <Row>
+              <Input
+                label={t("products.stock")}
+                type="number"
+                step={
+                  formData.productType === "BULK_WEIGHTED" ||
+                  formData.productType === "PREPACKAGED"
+                    ? "0.001"
+                    : "1"
+                }
+                value={formData.stock}
+                onChange={(e) => handleChange("stock", e.target.value)}
+              />
+              <Input
+                label={t("products.minStock")}
+                type="number"
+                value={formData.minStock}
+                onChange={(e) => handleChange("minStock", e.target.value)}
+              />
+            </Row>
+
+            <ThreeColRow>
+              <FormGroup>
+                <Label>{t("products.productType")}</Label>
+                <Select
+                  value={formData.productType}
+                  onChange={(e) =>
+                    handleChange("productType", e.target.value as ProductType)
+                  }
+                >
+                  <option value="REGULAR">
+                    {t("products.productTypeRegular")}
                   </option>
-                ))}
-              </Select>
-            </FormGroup>
+                  <option value="BULK_WEIGHTED">
+                    {t("products.productTypeBulkWeighted")}
+                  </option>
+                  <option value="PREPACKAGED">
+                    {t("products.productTypePrepackaged")}
+                  </option>
+                </Select>
+              </FormGroup>
+              <FormGroup>
+                <Label>{t("products.unit")}</Label>
+                <Select
+                  value={formData.unit}
+                  onChange={(e) => handleChange("unit", e.target.value)}
+                >
+                  {UNIT_OPTIONS.map((unit) => (
+                    <option key={unit} value={unit}>
+                      {getUnitLabel(unit)}
+                    </option>
+                  ))}
+                </Select>
+              </FormGroup>
+              <FormGroup>
+                <Label>
+                  {t("products.category")} <Req>*</Req>
+                </Label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <Select
+                    value={formData.categoryId}
+                    onChange={(e) => handleChange("categoryId", e.target.value)}
+                    required
+                    style={{ flex: 1 }}
+                  >
+                    <option value="">{t("products.selectCategory")}</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {i18n.language === "uz" ? cat.nameUz : cat.nameRu}
+                      </option>
+                    ))}
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="small"
+                    onClick={() => setShowCategoryModal(true)}
+                    style={{ flexShrink: 0 }}
+                  >
+                    <Settings size={16} />
+                  </Button>
+                </div>
+              </FormGroup>
+            </ThreeColRow>
+
+            {formData.productType !== "REGULAR" && (
+              <Row>
+                <Input
+                  label={t("products.internalCode")}
+                  value={formData.internalCode}
+                  readOnly
+                  style={{
+                    background: "var(--color-surface)",
+                    cursor: "default",
+                  }}
+                  onChange={() => {}}
+                />
+                <div />
+              </Row>
+            )}
+
             <FormGroup>
-              <Label>
-                {t("products.category")} <Req>*</Req>
-              </Label>
+              <Label>{t("filters.supplier")}</Label>
               <div style={{ display: "flex", gap: "8px" }}>
                 <Select
-                  value={formData.categoryId}
-                  onChange={(e) => handleChange("categoryId", e.target.value)}
-                  required
+                  value={formData.supplierId}
+                  onChange={(e) => handleChange("supplierId", e.target.value)}
                   style={{ flex: 1 }}
                 >
-                  <option value="">{t("products.selectCategory")}</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {i18n.language === "uz" ? cat.nameUz : cat.nameRu}
+                  <option value="">{t("products.noSupplier")}</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {i18n.language === "uz" ? s.nameUz : s.nameRu}
                     </option>
                   ))}
                 </Select>
@@ -920,112 +972,71 @@ export function ProductForm({
                   type="button"
                   variant="secondary"
                   size="small"
-                  onClick={() => setShowCategoryModal(true)}
+                  onClick={() => setShowSupplierModal(true)}
                   style={{ flexShrink: 0 }}
                 >
                   <Settings size={16} />
                 </Button>
               </div>
             </FormGroup>
-          </ThreeColRow>
 
-          {formData.productType !== "REGULAR" && (
+            <Row>
+              <DateInput
+                label={t("products.productionDate")}
+                value={formData.productionDate}
+                onChange={(val) => handleChange("productionDate", val)}
+              />
+              <DateInput
+                label={t("products.expiryDate")}
+                value={formData.expiryDate}
+                onChange={(val) => handleChange("expiryDate", val)}
+              />
+            </Row>
+
             <Row>
               <Input
-                label={t("products.internalCode")}
-                value={formData.internalCode}
-                readOnly
-                style={{
-                  background: "var(--color-surface)",
-                  cursor: "default",
-                }}
-                onChange={() => {}}
+                label={t("filters.discount")}
+                type="number"
+                min="0"
+                max="100"
+                value={formData.discountPercent}
+                onChange={(e) =>
+                  handleChange("discountPercent", e.target.value)
+                }
               />
-              <div />
+              <FormGroup>
+                <Label>{t("filters.isOnPromotion")}</Label>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    marginTop: "4px",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={formData.isOnPromotion}
+                    onChange={(e) =>
+                      handleChange("isOnPromotion", e.target.checked)
+                    }
+                  />
+                  {t("filters.onPromotion")}
+                </label>
+              </FormGroup>
             </Row>
-          )}
 
-          <FormGroup>
-            <Label>{t("filters.supplier")}</Label>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <Select
-                value={formData.supplierId}
-                onChange={(e) => handleChange("supplierId", e.target.value)}
-                style={{ flex: 1 }}
-              >
-                <option value="">{t("products.noSupplier")}</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {i18n.language === "uz" ? s.nameUz : s.nameRu}
-                  </option>
-                ))}
-              </Select>
-              <Button
-                type="button"
-                variant="secondary"
-                size="small"
-                onClick={() => setShowSupplierModal(true)}
-                style={{ flexShrink: 0 }}
-              >
-                <Settings size={16} />
+            <Actions>
+              <Button type="button" variant="secondary" onClick={onClose}>
+                {t("common.cancel")}
               </Button>
-            </div>
-          </FormGroup>
-
-          <Row>
-            <DateInput
-              label={t("products.productionDate")}
-              value={formData.productionDate}
-              onChange={(val) => handleChange("productionDate", val)}
-            />
-            <DateInput
-              label={t("products.expiryDate")}
-              value={formData.expiryDate}
-              onChange={(val) => handleChange("expiryDate", val)}
-            />
-          </Row>
-
-          <Row>
-            <Input
-              label={t("filters.discount")}
-              type="number"
-              min="0"
-              max="100"
-              value={formData.discountPercent}
-              onChange={(e) => handleChange("discountPercent", e.target.value)}
-            />
-            <FormGroup>
-              <Label>{t("filters.isOnPromotion")}</Label>
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  marginTop: "4px",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={formData.isOnPromotion}
-                  onChange={(e) =>
-                    handleChange("isOnPromotion", e.target.checked)
-                  }
-                />
-                {t("filters.onPromotion")}
-              </label>
-            </FormGroup>
-          </Row>
-
-          <Actions>
-            <Button type="button" variant="secondary" onClick={onClose}>
-              {t("common.cancel")}
-            </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? t("common.saving") : t("common.save")}
-            </Button>
-          </Actions>
-        </Form>
-      </Modal>}
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? t("common.saving") : t("common.save")}
+              </Button>
+            </Actions>
+          </Form>
+        </Modal>
+      )}
 
       {showQrScanner && (
         <BarcodeScannerModal
