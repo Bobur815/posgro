@@ -23,7 +23,7 @@ import {
   SUPPLIER_PAYMENT_METHOD_I18N_KEYS,
 } from "@shared/constants/payment-methods";
 import { convertUzbekText } from "@shared/utils/transliterator";
-import { Camera, RefreshCw, Settings } from "lucide-react";
+import { RefreshCw, Settings } from "lucide-react";
 import { SupplierManagementModal } from "../Suppliers/SupplierManagementModal";
 import { CategoryManagementModal } from "./CategoryManagementModal";
 import {
@@ -213,7 +213,12 @@ interface ProductFormProps {
     stock?: number;
     internalCode?: string;
     groupCode?: string;
+    barcode?: string;
+    productionDate?: string;
+    expiryDate?: string;
+    packageCode?: string;
   };
+  openArrival?: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -221,6 +226,7 @@ interface ProductFormProps {
 export function ProductForm({
   productId,
   initialData,
+  openArrival,
   onClose,
   onSuccess,
 }: ProductFormProps) {
@@ -248,7 +254,7 @@ export function ProductForm({
   const isBulkWeighted = initialData?.groupCode === "019";
 
   const [formData, setFormData] = useState({
-    barcode: "",
+    barcode: initialData?.barcode || "",
     nameRu: initialData?.nameRu || "",
     nameUz: initialData?.nameUz || "",
     price: "",
@@ -258,8 +264,8 @@ export function ProductForm({
     unit: isBulkWeighted ? "кг" as ProductUnit : "шт" as ProductUnit,
     categoryId: "",
     supplierId: "",
-    productionDate: "",
-    expiryDate: "",
+    productionDate: initialData?.productionDate || "",
+    expiryDate: initialData?.expiryDate || "",
     discountPercent: "",
     isOnPromotion: false,
     active: true,
@@ -563,6 +569,7 @@ export function ProductForm({
     setShowArrivalModal(false);
     setExistingProduct(null);
     setFormData((prev) => ({ ...prev, barcode: "" }));
+    if (openArrival) onClose();
   };
 
   const getUnitLabel = (unit: ProductUnit) => {
@@ -617,6 +624,24 @@ export function ProductForm({
         productType: product.productType || "REGULAR",
         internalCode: product.internalCode || "",
       });
+
+      if (openArrival) {
+        setExistingProduct(product);
+        setShowArrivalModal(true);
+        setArrivalData((prev) => ({
+          ...prev,
+          cost: product.cost ? String(product.cost) : "",
+          newPrice: String(product.price),
+          priceMode: "none",
+          supplierId: product.supplierId || "",
+          productionDate: product.productionDate
+            ? product.productionDate.split("T")[0]
+            : "",
+          expirationDate: product.expiryDate
+            ? product.expiryDate.split("T")[0]
+            : "",
+        }));
+      }
     }
   };
 
@@ -701,7 +726,7 @@ export function ProductForm({
 
   return (
     <>
-      <Modal title={title} onClose={onClose} width="750px">
+      {!openArrival && <Modal title={title} onClose={onClose} width="750px">
         <Form onSubmit={handleSubmit}>
           <Row>
             <FormGroup>
@@ -732,26 +757,6 @@ export function ProductForm({
                 />
                 {!isEdit && (
                   <>
-                    {isMobile && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="small"
-                        onClick={() => setShowQrScanner(true)}
-                        title={t("products.scanQrCode")}
-                        disabled={isLookingUpAslBelgisi}
-                        style={{ flexShrink: 0 }}
-                      >
-                        {isLookingUpAslBelgisi ? (
-                          <RefreshCw
-                            size={16}
-                            style={{ animation: "spin 1s linear infinite" }}
-                          />
-                        ) : (
-                          <Camera size={16} />
-                        )}
-                      </Button>
-                    )}
                     <Button
                       type="button"
                       variant="secondary"
@@ -1020,7 +1025,7 @@ export function ProductForm({
             </Button>
           </Actions>
         </Form>
-      </Modal>
+      </Modal>}
 
       {showQrScanner && (
         <BarcodeScannerModal

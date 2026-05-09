@@ -57,7 +57,8 @@ jobs:
             ENVEOF
 
             test -s .env         || { echo ".env is empty!";          exit 1; }
-            grep -q 'JWT_SECRET=' .env || { echo "JWT_SECRET missing"; exit 1; }
+            grep -q 'JWT_SECRET=' .env  || { echo "JWT_SECRET missing";  exit 1; }
+            grep -q 'DB_PASSWORD=' .env || { echo "DB_PASSWORD missing"; exit 1; }
 
             # Telegram bot runs on UZ VPS only — strip token so NestJS bot stays disabled
             sed -i '/^TELEGRAM_BOT_TOKEN=/d' .env
@@ -71,9 +72,13 @@ jobs:
             echo "🐳 Docker Compose: build & up"
             export USER_ID=$(id -u)
             export GROUP_ID=$(id -g)
-            docker compose down --remove-orphans || true
-            docker compose build
-            docker compose up -d
+            docker compose build api
+            docker compose up -d --no-deps api
+
+            echo "⏳ Waiting for api to be healthy..."
+            timeout 60 bash -c 'until docker compose ps api | grep -q "healthy"; do sleep 3; done' \
+              && echo "✅ API is healthy" \
+              || { echo "❌ API failed to become healthy"; docker compose logs -n 50 api; exit 1; }
 
             echo "✅ Status"
             docker compose ps

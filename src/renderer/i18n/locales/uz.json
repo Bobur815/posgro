@@ -143,6 +143,16 @@
     "selectCategory": "Kategoriyani tanlang",
     "barcode": "Shtrix-kod",
     "mxik": "MXIK kodi",
+    "autoFillMxik": "MXIK to'ldirish",
+    "autoFillMxikMissing": "{{count}} ta kodsiz",
+    "autoFillMxikConfirm": "{{count}} ta kodsiz mahsulot uchun MXIK to'ldirilsinmi?",
+    "autoFillMxikProgress": "MXIK to'ldirilmoqda",
+    "autoFillMxikProcessing": "Jarayonda: {{name}}",
+    "autoFillMxikDone": "Tayyor!",
+    "autoFillMxikFound": "topildi",
+    "autoFillMxikNotFound": "topilmadi",
+    "autoFillMxikStop": "To'xtatish",
+    "autoFillMxikAllHave": "Barcha mahsulotlarda MXIK kodi mavjud.",
     "scanMxikQr": "MXIK QR skanerlash",
     "unit": "Birlik",
     "productType": "Mahsulot turi",
@@ -643,7 +653,8 @@
     "error": "Skanerda xato yuz berdi",
     "notSupported": "Bu qurilma shtrix-kod skanerini qo'llab-quvvatlamaydi",
     "pointCamera": "Kamerani mahsulot shtrix-kodiga qarating",
-    "cameraError": "Kameraga kirishda xatolik"
+    "cameraError": "Kameraga kirish imkoni yo'q. Sayt HTTPS orqali ochilganini va kamera ruxsati berilganini tekshiring.",
+    "enterManually": "Qo'lda kiritish"
   },
   "receiptScan": {
     "scanCharged":"Skaner narxi",

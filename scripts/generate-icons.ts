@@ -5,7 +5,6 @@ import fs from 'fs/promises';
 import path from 'path';
 
 const sizes = [16, 32, 48, 64, 128, 256];
-
 async function generateIcons() {
   const buildDir = path.join(__dirname, '../build/icons');
   const sourcePath = path.join(buildDir, 'posgro-icon-1024.png');

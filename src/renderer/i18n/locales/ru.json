@@ -139,7 +139,8 @@
     "error": "Ошибка сканера",
     "notSupported": "Это устройство не поддерживает сканер штрих-кодов",
     "pointCamera": "Наведите камеру на штрих-код товара",
-    "cameraError": "Ошибка доступа к камере"
+    "cameraError": "Нет доступа к камере. Убедитесь, что сайт открыт по HTTPS и разрешение на камеру выдано.",
+    "enterManually": "Ввести вручную"
   },
   "products": {
     "add": "Добавить",
@@ -156,6 +157,16 @@
     "selectCategory": "Выберите категорию",
     "barcode": "Штрих-код",
     "mxik": "MXIK код",
+    "autoFillMxik": "Заполнить MXIK",
+    "autoFillMxikMissing": "{{count}} без кода",
+    "autoFillMxikConfirm": "Заполнить MXIK для {{count}} товаров без кода?",
+    "autoFillMxikProgress": "Заполнение MXIK",
+    "autoFillMxikProcessing": "Обработка: {{name}}",
+    "autoFillMxikDone": "Готово!",
+    "autoFillMxikFound": "найдено",
+    "autoFillMxikNotFound": "не найдено",
+    "autoFillMxikStop": "Остановить",
+    "autoFillMxikAllHave": "У всех товаров уже есть MXIK код.",
     "scanMxikQr": "Сканировать MXIK QR",
     "unit": "Единица",
     "productType": "Тип товара",

@@ -63,15 +63,17 @@ const Hint = styled.p`
   margin: ${({ theme }) => theme.spacing.sm} 0 0;
 `;
 
-const DEFAULT_BARCODE_FORMATS = ["ean_13", "ean_8", "code_128", "code_39", "upc_a", "upc_e"];
+const DEFAULT_BARCODE_FORMATS = ["ean_13", "ean_8", "code_128", "code_39", "upc_a", "upc_e", "qr_code", "data_matrix"];
 
 interface BarcodeScannerModalProps {
   onScan: (barcode: string) => void;
   onClose: () => void;
-  /** BarcodeDetector format list. Defaults to standard barcode formats. Pass ['qr_code','data_matrix'] for QR scanning. */
+  /** BarcodeDetector format list. Defaults to standard barcode + QR + DataMatrix formats. */
   formats?: string[];
   /** Override the modal title */
   title?: string;
+  /** Show "Enter manually" button that bypasses the scanner */
+  onManualEntry?: () => void;
 }
 
 export function BarcodeScannerModal({
@@ -79,6 +81,7 @@ export function BarcodeScannerModal({
   onClose,
   formats,
   title,
+  onManualEntry,
 }: BarcodeScannerModalProps) {
   const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -87,6 +90,14 @@ export function BarcodeScannerModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError(
+        t("scanner.cameraError") ||
+          "Camera not available. Make sure the site is opened over HTTPS.",
+      );
+      return;
+    }
+
     const useBarcodeDetector = "BarcodeDetector" in window;
 
     if (useBarcodeDetector) {
@@ -191,11 +202,21 @@ export function BarcodeScannerModal({
           <Hint>{t("scanner.pointCamera") || "Point camera at a barcode"}</Hint>
         </>
       )}
+      {onManualEntry && (
+        <Button
+          type="button"
+          variant="primary"
+          onClick={() => { onClose(); onManualEntry(); }}
+          style={{ marginTop: 12, width: "100%" }}
+        >
+          {t("scanner.enterManually")}
+        </Button>
+      )}
       <Button
         type="button"
         variant="secondary"
         onClick={onClose}
-        style={{ marginTop: 12, width: "100%" }}
+        style={{ marginTop: 8, width: "100%" }}
       >
         {t("common.cancel")}
       </Button>
