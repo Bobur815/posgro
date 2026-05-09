@@ -647,11 +647,12 @@ export const mxik = {
 
 // ─── ASL-BELGISI ─────────────────────────────────────────────────────────────
 
-// Strip ZXing symbology identifier prefix (]d2, ]C1, ]e0) only.
-// FNC1 separators (\x1d, ASCII 29) must be preserved — aslbelgisi uses them
-// to parse GS1 DataMatrix AI boundaries (e.g. AI 21 serial → AI 93 crypto check).
+// Normalize a GS1 DataMatrix string from a scanner:
+// - Strip ZXing symbology prefix (]d2, ]C1, ]e0)
+// - Strip leading FNC1 (\x1d) — the GS1 mode indicator prepended by some decoders
+// - Keep internal \x1d characters — they are AI separators required by aslbelgisi
 function normalizeDataMatrix(raw: string): string {
-  return raw.replace(/^\](d2|C1|e0)/, '');
+  return raw.replace(/^\](d2|C1|e0)/, '').replace(/^\x1d/, '');
 }
 
 export const aslBelgisi = {

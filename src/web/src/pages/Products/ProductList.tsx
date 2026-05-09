@@ -204,20 +204,9 @@ export function ProductList() {
 
   const toast = useToast();
 
-  const [dbg, setDbg] = useState<string[]>([]);
-  const log = (...args: unknown[]) => {
-    const msg = args.map((a) => (typeof a === "object" ? JSON.stringify(a, null, 2) : String(a))).join(" ");
-    console.log("[FAB]", msg);
-    setDbg((prev) => [msg, ...prev].slice(0, 20));
-  };
-
   async function handleFabScan(qrData: string) {
     setShowFabScanner(false);
-    setDbg([]);
-    log("RAW:", qrData);
-
     const type = aslBelgisi.detectQrType(qrData);
-    log("TYPE:", type);
 
     if (type === "fiscal") {
       toast.error(t("scanner.productNotFound"));
@@ -228,16 +217,13 @@ export function ProductList() {
     let barcode: string | undefined;
     if (type === "datamatrix") {
       barcode = aslBelgisi.extractGtinFromDataMatrix(qrData) ?? undefined;
-      log("GTIN:", barcode);
     } else if (type === "barcode") {
       barcode = qrData;
     }
 
     // 1. Check existing DB first
     if (barcode) {
-      log("DB lookup:", barcode);
       const existing = await searchByBarcode(barcode);
-      log("DB result:", existing ? `found id=${existing.id}` : "not found");
       if (existing) {
         setFabArrivalProductId(String(existing.id));
         return;
@@ -250,24 +236,17 @@ export function ProductList() {
     if (type === "datamatrix") {
       if (barcode) initial.barcode = barcode;
       try {
-        log("aslBelgisi verify...");
         const info = await aslBelgisi.verifyMarkingCode(qrData);
-        log("aslBelgisi response:", info);
-        if (!info.isValid && info._error) log("aslBelgisi ERROR:", info._error);
         if (info.isValid) {
-          log("packageType:", info.packageType ?? "not returned");
           if (info.productionDate) initial.productionDate = info.productionDate;
           if (info.expirationDate) initial.expiryDate = info.expirationDate;
-          // warn if multi-pack (GROUP, BOX_LV_1, BOX_LV_2)
           const MULTI_PACK_TYPES = ["GROUP", "BOX_LV_1", "BOX_LV_2"];
           if (info.packageType && MULTI_PACK_TYPES.includes(info.packageType)) {
-            log("⚠ MULTI-PACK detected:", info.packageType);
             toast.error(`Multi-pack: ${info.packageType}. Check quantity before saving.`);
           }
-          // note: info.packageType is a GS1 packaging level (UNIT/GROUP/BOX) — NOT the MXIK packageCode
         }
-      } catch (e) {
-        log("aslBelgisi ERROR:", e);
+      } catch {
+        // partial data — continue
       }
     } else if (type === "mxik") {
       initial.mxik = qrData;
@@ -278,19 +257,16 @@ export function ProductList() {
     // 3. Search tasnif for name + MXIK
     if (initial.barcode) {
       try {
-        log("tasnif lookup:", initial.barcode);
         const result = await mxikApi.searchByBarcode(initial.barcode);
-        log("tasnif result:", result);
         if (result?.code) initial.mxik = result.code;
         if (result?.nameRu) initial.nameRu = result.nameRu;
         if (result?.name) initial.nameUz = result.name;
         if (result?.packageCode) initial.packageCode = result.packageCode;
-      } catch (e) {
-        log("tasnif ERROR:", e);
+      } catch {
+        // no match — continue with barcode only
       }
     }
 
-    log("FINAL initial:", initial);
     setFabInitialData(initial);
     setShowProductForm(true);
   }
@@ -793,20 +769,6 @@ export function ProductList() {
         </ProgressOverlay>
       )}
 
-      {dbg.length > 0 && (
-        <div
-          onClick={() => setDbg([])}
-          style={{
-            position: "fixed", bottom: 120, left: 8, right: 8, zIndex: 9999,
-            background: "rgba(0,0,0,0.88)", color: "#0f0", fontFamily: "monospace",
-            fontSize: 11, padding: 10, borderRadius: 8, maxHeight: 260,
-            overflowY: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all",
-          }}
-        >
-          <div style={{ color: "#888", marginBottom: 4 }}>▼ tap to clear</div>
-          {dbg.map((line, i) => <div key={i} style={{ borderBottom: "1px solid #222", paddingBottom: 2, marginBottom: 2 }}>{line}</div>)}
-        </div>
-      )}
     </Container>
   );
 }
