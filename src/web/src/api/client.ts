@@ -668,21 +668,26 @@ export const aslBelgisi = {
     productSeries?: string;
     issuerName?: string;
     packageType?: string;
+    _error?: string;
   }> => {
     try {
       const normalized = normalizeDataMatrix(markingCode);
       const { data } = await axiosInstance.post('/aslbelgisi/verify', { code: normalized });
       return data;
-    } catch {
-      return { isValid: false };
+    } catch (e: any) {
+      const msg = e?.response?.data?.message ?? e?.message ?? String(e);
+      return { isValid: false, _error: `HTTP ${e?.response?.status ?? '?'}: ${msg}` };
     }
   },
 
-  /** Extract 14-digit GTIN from a GS1 DataMatrix payload. Handles ]d2/]C1 ZXing prefixes. */
+  /** Extract EAN-13 barcode from a 14-digit GTIN (strips leading zero). */
   extractGtinFromDataMatrix: (dataMatrix: string): string | null => {
     const normalized = normalizeDataMatrix(dataMatrix);
     const match = normalized.match(/^01(\d{14})/);
-    return match ? match[1] : null;
+    if (!match) return null;
+    const gtin14 = match[1];
+    // GS1 GTIN-14 with leading 0 → EAN-13
+    return gtin14.startsWith('0') ? gtin14.slice(1) : gtin14;
   },
 
   /** Detect QR/barcode type to route scanning logic correctly. */
