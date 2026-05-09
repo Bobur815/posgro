@@ -18,6 +18,7 @@ import { TerminalsModule } from './modules/terminals/terminals.module';
 import { LogsModule } from './modules/logs/logs.module';
 import { SiteConfigModule } from './modules/site-config/site-config.module';
 import { PaynetModule } from './modules/paynet/paynet.module';
+import { AslBelgisiModule } from './modules/aslbelgisi/aslbelgisi.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { PaynetModule } from './modules/paynet/paynet.module';
     LogsModule,
     SiteConfigModule,
     PaynetModule,
+    AslBelgisiModule,
   ],
 })
 export class AppModule {}
