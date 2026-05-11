@@ -340,6 +340,7 @@ export async function syncCategories(): Promise<void> {
       }
     } else {
       // Products exist — match by nameUz to avoid breaking categoryId references
+      let newCategoryAdded = false;
       for (const category of categories) {
         const existing = await prisma.category.findFirst({
           where: { nameUz: category.nameUz },
@@ -350,10 +351,25 @@ export async function syncCategories(): Promise<void> {
             data: { nameRu: category.nameRu, active: category.active },
           });
         } else {
-          await prisma.category.create({
-            data: { nameRu: category.nameRu, nameUz: category.nameUz, active: category.active },
-          });
+          // Force VPS id so new products can satisfy the FK when they sync
+          try {
+            await prisma.$executeRaw`
+              INSERT INTO categories (id, name_uz, name_ru, active, created_at, updated_at)
+              VALUES (${category.id}, ${category.nameUz}, ${category.nameRu}, ${category.active ? 1 : 0}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            `;
+            newCategoryAdded = true;
+          } catch {
+            // id collision — fall back to autoincrement (rare; new products in this category won't sync until resolved)
+            await prisma.category.create({
+              data: { nameRu: category.nameRu, nameUz: category.nameUz, active: category.active },
+            });
+          }
         }
+      }
+      // A new category means new products may have been silently skipped in prior syncs.
+      // Reset the product sync cursor so the next syncProducts() does a full pull.
+      if (newCategoryAdded) {
+        await prisma.systemSetting.deleteMany({ where: { key: 'last_product_sync' } });
       }
     }
 

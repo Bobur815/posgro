@@ -572,6 +572,19 @@ export function POSScreen() {
           )) as Product | null;
 
           if (product) {
+            if (rongtaParsed.weight > product.stock) {
+              setBarcode("");
+              setId("");
+              setQuantity("1");
+              setError(
+                t("errors.insufficientStock", {
+                  name: i18n.language === "uz" ? product.nameUz : product.nameRu,
+                  available: product.stock,
+                  requested: rongtaParsed.weight,
+                }),
+              );
+              return;
+            }
             const productNameForCart =
               i18n.language === "uz" ? product.nameUz : product.nameRu;
             addItem({
