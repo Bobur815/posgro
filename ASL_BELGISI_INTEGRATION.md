@@ -1,548 +1,217 @@
-ASL-BELGISI Integration Guide
+# ASL-BELGISI Integration Guide
 Grocery POS — Product Marking Code Verification
 
-Vibe coding guide for Claude Code in terminal.
-Copy-paste these prompts directly into your Claude Code session. Each section builds on the previous one.
+---
 
-What Is asl-belgisi and Why Do You Need It
+## What Is asl-belgisi and Why Do You Need It
+
 asl-belgisi (National Information System for Monitoring Marking and Tracking of Products) — Uzbekistan's mandatory product tracking system. Every marked product has a unique DataMatrix code that must be verified before sale.
+
 Why integrate:
 
-✅ Verify product authenticity (prevent counterfeit goods)
-✅ Auto-populate product data from government registry
-✅ Check marking code status (ensure not withdrawn/recalled)
-✅ Get production/expiry dates from marking code
-✅ Comply with government tracking requirements
+- Verify product authenticity (prevent counterfeit goods)
+- Auto-populate product data from government registry
+- Check marking code status (ensure not withdrawn/recalled)
+- Get production/expiry dates from marking code
+- Comply with government tracking requirements
 
-The good news: The public verification API requires NO authentication — unlike the product registry which needs business registration.
+**Auth required:** Yes — the `/public/api/cod/public/codes` endpoint requires a Bearer token (`ASLBELGISI_API_KEY`). Calls are proxied through the VPS server so the key is never exposed to the browser.
 
-Architecture Overview
-ProductForm (Frontend)
-└── Scans DataMatrix QR code
-└── Detects QR type (fiscal/datamatrix/mxik/barcode)
-└── If DataMatrix:
-├── Extract GTIN (barcode)
+---
+
+## Architecture Overview
+
+```
+ProductList / ProductForm (browser)
+└── aslBelgisi.verifyMarkingCode(rawQr)
+        └── normalizeDataMatrix(rawQr)            ← strips ZXing prefix + leading FNC1
+        └── POST /api/aslbelgisi/verify { code }  ← axiosInstance (JWT required)
+                └── AslBelgisiController (VPS)
+                        └── AslBelgisiService
+                                └── POST https://xtrace.aslbelgisi.uz/public/api/cod/public/codes
+                                    Authorization: Bearer ASLBELGISI_API_KEY
+                                    Returns: MC status, dates, issuer info
+
+Browser also calls tasnif.soliq.uz directly (for MXIK/names — geo-restricted, must run in UZ):
+└── mxik.searchByBarcode(gtin)
+        └── GET tasnif.soliq.uz/api/cls-api/elasticsearch/search?...
+        └── GET tasnif.soliq.uz/api/cls-api/integration-mxik/get/history/:mxikCode
+```
+
+**Key distinction:**
+| Data | Source | Called from | Auth |
+|------|--------|-------------|------|
+| MC verification, status, dates | xtrace.aslbelgisi.uz | VPS server (proxy) | Bearer API key |
+| Product names (RU/UZ), MXIK code, package code | tasnif.soliq.uz | Browser (in UZ) | None |
+
+---
+
+## handleFabScan Flow (ProductList.tsx)
+
+This is the main entry point when a barcode/QR is scanned from the FAB scanner button.
+
+```
+handleFabScan(rawQrData)
 │
-├── Step 1: Verify with asl-belgisi (client-side, no auth)
-│ └── POST /public/api/cod/public/codes
-│ └── Returns: MC status, dates, issuer info
+├── aslBelgisi.detectQrType(rawQrData)
+│   ├── normalizeDataMatrix(raw) → strip ]d2/]C1/]e0 prefix + leading \x1d
+│   ├── fiscal   (contains http:// or https://) → toast error, open blank form
+│   ├── datamatrix (starts with "01" + 14 digits after normalize)
+│   ├── mxik    (exactly 17 digits)
+│   └── barcode (everything else)
 │
-├── Step 2: Check local database
-│ └── GET /api/products/barcode/{gtin}
+├── [datamatrix] aslBelgisi.extractGtinFromDataMatrix(raw)
+│   └── normalize → match /^01(\d{14})/ → strip leading 0 → EAN-13
 │
-└── Step 3: Lookup in tasnif.soliq.uz (client-side, no auth)
-└── Returns: names (RU/UZ), MXIK code, packageCode
-└── Merge data → auto-populate form
-
-Key Insight: Hybrid Approach
-We use TWO government APIs to get complete product data:
-Data FieldSourceAuth Required?Geo-Blocked?Product names (RU/UZ)tasnif.soliq.uz❌ No✅ Yes (UZ only)MXIK codetasnif.soliq.uz❌ No✅ Yes (UZ only)Package codetasnif.soliq.uz❌ No✅ Yes (UZ only)MC verificationasl-belgisi❌ No❌ NoMC statusasl-belgisi❌ No❌ NoProduction dateasl-belgisi❌ No❌ NoExpiry dateasl-belgisi❌ No❌ No
-Solution: Call both from client-side (user's browser in Uzbekistan) ✅
-
-Step 1 — Add asl-belgisi Client Functions
-Prompt for Claude Code:
-In src/web/src/api/client.ts, after the existing mxik export section,
-add a new section called "ASL-BELGISI" with these functions:
-
-1. verifyMarkingCode(markingCode) - calls POST /public/api/cod/public/codes
-   Returns: { isValid, status, extendedStatus, gtin, productionDate, expirationDate, issuerName, packageType }
-
-2. extractGtinFromDataMatrix(dataMatrix) - regex extracts GTIN from DataMatrix format "01{GTIN(14)}..."
-   Returns: string | null
-
-3. detectQrType(qrData) - detects if QR is 'fiscal', 'datamatrix', 'mxik', or 'barcode'
-   Returns: 'fiscal' | 'datamatrix' | 'mxik' | 'barcode'
-
-Use fetch API (not axios). API base URL: https://xtrace.aslbelgisi.uz/public/api
-All calls are client-side, no auth headers needed.
-Reference implementation:
-typescript// ─── ASL-BELGISI (Client-side - Public endpoints only) ──────────────────────
-
-export const aslBelgisi = {
-/\*\*
-
-- Verify marking code (MC) authenticity and get status
-- Uses PUBLIC endpoint - NO authentication required
-  \*/
-  verifyMarkingCode: async (markingCode: string): Promise<{
-  isValid: boolean;
-  status?: string;
-  extendedStatus?: string;
-  gtin?: string;
-  productId?: string;
-  emissionDate?: string;
-  productionDate?: string;
-  expirationDate?: string;
-  productSeries?: string;
-  issuerName?: string;
-  packageType?: string;
-  }> => {
-  const ASL_BELGISI = 'https://xtrace.aslbelgisi.uz/public/api';
-
-
-    try {
-      const response = await fetch(`${ASL_BELGISI}/cod/public/codes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          codes: [markingCode],
-          addCodeHistory: false
-        }),
-      });
-
-      if (!response.ok) return { isValid: false };
-
-      const data = await response.json();
-      if (!data || !data.length) return { isValid: false };
-
-      const mcInfo = data[0];
-
-      return {
-        isValid: true,
-        status: mcInfo.status,
-        extendedStatus: mcInfo.extendedStatus,
-        gtin: mcInfo.gtin,
-        productId: mcInfo.productId,
-        emissionDate: mcInfo.emissionDate,
-        productionDate: mcInfo.productionDate,
-        expirationDate: mcInfo.expirationDate,
-        productSeries: mcInfo.productSeries,
-        issuerName: mcInfo.issuerShortInfo?.issuerName?.ru,
-        packageType: mcInfo.packageType,
-      };
-    } catch (error) {
-      console.error('MC verification failed:', error);
-      return { isValid: false };
-    }
-
-},
-
-extractGtinFromDataMatrix: (dataMatrix: string): string | null => {
-const match = dataMatrix.match(/^01(\d{14})/);
-return match ? match[1] : null;
-},
-
-detectQrType: (qrData: string): 'fiscal' | 'datamatrix' | 'mxik' | 'barcode' => {
-if (qrData.includes('http://') || qrData.includes('https://')) {
-return 'fiscal';
-}
-if (/^01\d{14}/.test(qrData)) {
-return 'datamatrix';
-}
-if (/^\d{17}$/.test(qrData)) {
-return 'mxik';
-}
-return 'barcode';
-},
-};
-
-Step 2 — Add Smart QR Scanner to ProductForm
-Prompt for Claude Code:
-In src/web/src/pages/Products/ProductForm.tsx:
-
-1. Add state:
-   - showQrScanner: boolean
-   - isLookingUpAslBelgisi: boolean
-   - mcVerification: object | null
-
-2. Add handler function handleQrScan(qrData: string) that:
-   - Calls aslBelgisi.detectQrType(qrData)
-   - If 'fiscal' → show warning toast, return
-   - If 'datamatrix':
-     a) Extract GTIN with aslBelgisi.extractGtinFromDataMatrix()
-     b) Verify MC with aslBelgisi.verifyMarkingCode()
-     c) Check valid statuses: ['INTRODUCED', 'APPLIED', 'IN_CIRCULATION']
-     d) Search local DB with searchByBarcode(gtin)
-     e) If not found, lookup in mxik.searchByBarcode(gtin)
-     f) Auto-populate form with merged data
-   - If 'mxik' → call mxik.lookupCode()
-   - If 'barcode' → call handleBarcodeChange()
-
-3. Add Camera button next to barcode input field
-4. Add BarcodeScannerModal that calls handleQrScan on scan
-   Reference implementation:
-   typescriptconst [showQrScanner, setShowQrScanner] = useState(false);
-   const [isLookingUpAslBelgisi, setIsLookingUpAslBelgisi] = useState(false);
-   const [mcVerification, setMcVerification] = useState<any>(null);
-
-const handleQrScan = async (qrData: string) => {
-const qrType = aslBelgisi.detectQrType(qrData);
-
-try {
-if (qrType === 'fiscal') {
-toast.warning(t("products.qrCodeIsFiscal"));
-setShowQrScanner(false);
-return;
-}
-
-    if (qrType === 'datamatrix') {
-      const gtin = aslBelgisi.extractGtinFromDataMatrix(qrData);
-
-      if (!gtin) {
-        toast.error(t("products.invalidDataMatrix"));
-        setShowQrScanner(false);
-        return;
-      }
-
-      setIsLookingUpAslBelgisi(true);
-
-      try {
-        // Step 1: Verify marking code
-        const mcVerif = await aslBelgisi.verifyMarkingCode(qrData);
-
-        if (!mcVerif.isValid) {
-          toast.error(t("products.invalidMarkingCode"));
-          setShowQrScanner(false);
-          return;
-        }
-
-        // Check MC status
-        const validStatuses = ['INTRODUCED', 'APPLIED', 'IN_CIRCULATION'];
-        if (mcVerif.status && !validStatuses.includes(mcVerif.status)) {
-          toast.error(
-            t("products.markingCodeNotValid", { status: mcVerif.status })
-          );
-          setShowQrScanner(false);
-          return;
-        }
-
-        setMcVerification(mcVerif);
-        toast.success(t("products.markingCodeVerified"));
-
-        // Step 2: Check local DB
-        const existing = await searchByBarcode(gtin);
-
-        if (existing) {
-          toast.info(t("products.productExists"));
-          setFormData({ ...existing, barcode: gtin });
-          setShowQrScanner(false);
-          return;
-        }
-
-        // Step 3: Lookup in tasnif
-        const tasnifData = await mxik.searchByBarcode(gtin);
-
-        // Merge data
-        setFormData(prev => ({
-          ...prev,
-          barcode: gtin,
-          nameRu: tasnifData.nameRu,
-          nameUz: tasnifData.name,
-          mxik: tasnifData.code,
-          packageCode: tasnifData.packageCode,
-          productionDate: mcVerif.productionDate
-            ? mcVerif.productionDate.split('T')[0]
-            : prev.productionDate,
-          expiryDate: mcVerif.expirationDate
-            ? mcVerif.expirationDate.split('T')[0]
-            : prev.expiryDate,
-        }));
-
-        toast.success(t("products.productDataImported", {
-          source: "tasnif.soliq.uz + asl-belgisi"
-        }));
-
-      } catch (error) {
-        setFormData(prev => ({ ...prev, barcode: gtin }));
-        toast.warning(t("products.manualEntryRequired"));
-      }
-
-    } else if (qrType === 'mxik') {
-      try {
-        const mxikData = await mxik.lookupCode(qrData);
-        setFormData(prev => ({
-          ...prev,
-          mxik: mxikData.code,
-          packageCode: mxikData.packageCode,
-        }));
-        toast.success(t("products.mxikCodeScanned"));
-      } catch {
-        toast.error(t("products.mxikLookupFailed"));
-      }
-    } else {
-      handleBarcodeChange(qrData);
-    }
-
-} finally {
-setIsLookingUpAslBelgisi(false);
-setShowQrScanner(false);
-}
-};
-UI Integration:
-tsx{/_ Barcode field with QR scanner _/}
-<FormGroup>
-<Label>
-{t("products.barcode")} <Req>\*</Req>
-</Label>
-
-  <div style={{ display: "flex", gap: "8px" }}>
-    <Input
-      value={formData.barcode}
-      onChange={(e) => handleBarcodeChange(e.target.value)}
-      disabled={isEdit}
-      required
-      style={{ flex: 1 }}
-    />
-    {!isEdit && (
-      <Button
-        type="button"
-        variant="secondary"
-        onClick={() => setShowQrScanner(true)}
-        title={t("products.scanQrCode")}
-        disabled={isLookingUpAslBelgisi}
-      >
-        {isLookingUpAslBelgisi ? (
-          <RefreshCw size={20} className="spin" />
-        ) : (
-          <Camera size={20} />
-        )}
-      </Button>
-    )}
-  </div>
-  {mcVerification?.isValid && (
-    <div style={{
-      marginTop: 8,
-      padding: '8px 12px',
-      background: '#4caf5010',
-      border: '1px solid #4caf50',
-      borderRadius: 4,
-      fontSize: 12,
-    }}>
-      <span style={{ color: '#4caf50', fontWeight: 600 }}>
-        ✓ {t("products.verifiedByAslBelgisi")}
-      </span>
-      {mcVerification.issuerName && (
-        <div style={{ marginTop: 4, color: '#666' }}>
-          {t("products.issuer")}: {mcVerification.issuerName}
-        </div>
-      )}
-    </div>
-  )}
-</FormGroup>
-
-{/_ QR Scanner Modal _/}
-{showQrScanner && (
-<BarcodeScannerModal
-onScan={handleQrScan}
-onClose={() => setShowQrScanner(false)}
-/>
-)}
-
-Step 3 — Add Translation Keys
-Prompt for Claude Code:
-In src/web/src/i18n/locales/ru.json and uz.json, add these keys under "products":
-
-- scanQrCode: "Scan QR / Barcode"
-- qrCodeIsFiscal: "This is a fiscal receipt QR code"
-- invalidDataMatrix: "Invalid DataMatrix QR code"
-- invalidMarkingCode: "Invalid or unregistered marking code"
-- markingCodeNotValid: "Marking code status: {{status}} - not valid for sale"
-- markingCodeVerified: "Marking code verified by asl-belgisi"
-- verifiedByAslBelgisi: "Verified marking code"
-- issuer: "Manufacturer"
-- productDataImported: "Product data imported from {{source}}"
-- manualEntryRequired: "Product not found. Please enter details manually"
-  Russian translations:
-  json{
-  "products": {
-  "scanQrCode": "Сканировать QR / Штрихкод",
-  "qrCodeIsFiscal": "Это QR-код фискального чека",
-  "invalidDataMatrix": "Неверный QR-код DataMatrix",
-  "invalidMarkingCode": "Недействительный или незарегистрированный код маркировки",
-  "markingCodeNotValid": "Статус кода маркировки: {{status}} - недействителен для продажи",
-  "markingCodeVerified": "Код маркировки проверен через asl-belgisi",
-  "verifiedByAslBelgisi": "Код маркировки подтвержден",
-  "issuer": "Производитель",
-  "productDataImported": "Данные товара импортированы из {{source}}",
-  "manualEntryRequired": "Товар не найден. Пожалуйста, введите данные вручную"
-  }
-  }
-  Uzbek translations:
-  json{
-  "products": {
-  "scanQrCode": "QR / Shtrix-kod skanerlash",
-  "qrCodeIsFiscal": "Bu fiskal chek QR-kodi",
-  "invalidDataMatrix": "Noto'g'ri DataMatrix QR-kodi",
-  "invalidMarkingCode": "Yaroqsiz yoki ro'yxatdan o'tmagan markirovka kodi",
-  "markingCodeNotValid": "Markirovka kodi holati: {{status}} - sotish uchun yaroqsiz",
-  "markingCodeVerified": "Markirovka kodi asl-belgisi orqali tekshirildi",
-  "verifiedByAslBelgisi": "Markirovka kodi tasdiqlandi",
-  "issuer": "Ishlab chiqaruvchi",
-  "productDataImported": "Mahsulot ma'lumotlari {{source}} dan import qilindi",
-  "manualEntryRequired": "Mahsulot topilmadi. Iltimos, ma'lumotlarni qo'lda kiriting"
-  }
-  }
-
-Step 4 — Understanding QR Code Types
-Your POS will encounter 4 types of QR codes:
-QR TypeFormatExampleDetectionActionFiscal ReceiptURLhttps://my.soliq.uz/...Contains http://IgnoreProduct DataMatrixGS1 format0148701234567892...Starts with 01 + 14 digitsExtract GTIN → Verify MC → LookupMXIK Code17-digit number06111001018000000/^\d{17}$/MXIK lookupRegular BarcodeEAN-13, etc.4870123456789OtherDatabase search
-DataMatrix Structure:
-01 4870123456789 21 ABC123 93 XYZ
-│ │ │ │ │ │
-│ └─ GTIN (14) │ │ │ └─ Verification code
-│ │ └─ Serial number
-└─ AI = GTIN └─ AI = Serial
-
-Step 5 — MC Status Reference
-When verifying a marking code, check these statuses:
-StatusDescriptionCan Sell?EMITTEDCode issued but not applied❌ NoAPPLIEDCode applied to product✅ YesINTRODUCEDProduct introduced to circulation✅ YesIN_CIRCULATIONProduct being sold/moved✅ YesWITHDRAWNProduct recalled/withdrawn❌ NoRETIREDCode retired from system❌ NoDISAGGREGATEDRemoved from package⚠️ Check parent
-Valid statuses for sale:
-typescriptconst VALID_MC_STATUSES = [
-'INTRODUCED',
-'APPLIED',
-'IN_CIRCULATION'
-];
-
-Quick Reference
-ThingValueasl-belgisi base URLhttps://xtrace.aslbelgisi.uz/public/apiPublic MC endpoint/cod/public/codesAuth required?❌ No (for public endpoints)Geo-blocked?❌ No (works from Germany VPS)Call from client or server?🌐 Client (browser in UZ)tasnif.soliq.uzUse for product names/MXIKDataMatrix format01{GTIN(14)}21{serial}...Valid MC statusesINTRODUCED, APPLIED, IN_CIRCULATION
-
-Common Claude Code Prompts
-
-# Test the integration:
-
-"Test the aslBelgisi.verifyMarkingCode function with this sample DataMatrix code:
-0148701234567892ABC123. Show me the full response."
-
-# Add error handling:
-
-"Add a fallback in handleQrScan: if asl-belgisi verification fails (network error),
-still allow product creation but show a warning toast that MC wasn't verified"
-
-# Add logging:
-
-"Add console.log statements in handleQrScan to debug the flow:
-
-1. QR type detected
-2. GTIN extracted
-3. MC verification result
-4. tasnif lookup result
-5. Final form data"
-
-# Store MC in database:
-
-"Update Prisma schema to add optional field 'markingCode' to Product model,
-then save the full DataMatrix code when creating product via QR scan"
-
-Workflow Diagram
-┌─────────────────────────────────────────────────────┐
-│ User scans DataMatrix QR on product packaging │
-└─────────────────────────────────────────────────────┘
+├── searchByBarcode(barcode) — local DB check FIRST
+│   └── if found → setFabArrivalProductId, return (show arrival dialog)
 │
-▼
-┌─────────────────────────────────────────────────────┐
-│ detectQrType(qrData) │
-│ ├─ Fiscal → Show warning │
-│ ├─ MXIK (17 digits) → MXIK lookup │
-│ ├─ DataMatrix (01...) → Continue ✅ │
-│ └─ Other → Treat as barcode │
-└─────────────────────────────────────────────────────┘
+├── [datamatrix] aslBelgisi.verifyMarkingCode(rawQrData)
+│   └── POST /api/aslbelgisi/verify   ← goes through VPS
+│   └── On success: populate productionDate, expiryDate
+│   └── On failure: partial data, continue (non-blocking)
+│   └── Multi-pack types (GROUP, BOX_LV_1, BOX_LV_2) → warning toast, don't block
 │
-▼
-┌─────────────────────────────────────────────────────┐
-│ extractGtinFromDataMatrix(qrData) │
-│ Returns: "4870123456789" (14 digits) │
-└─────────────────────────────────────────────────────┘
+├── [datamatrix|barcode] mxik.searchByBarcode(barcode)
+│   └── Browser → tasnif.soliq.uz directly
+│   └── Populates: mxik, nameRu, nameUz, packageCode
 │
-▼
-┌─────────────────────────────────────────────────────┐
-│ verifyMarkingCode(fullDataMatrix) │
-│ POST /public/api/cod/public/codes │
-│ Returns: │
-│ ├─ status: "INTRODUCED" ✅ │
-│ ├─ gtin: "4870123456789" │
-│ ├─ productionDate: "2024-01-15" │
-│ ├─ expirationDate: "2025-01-15" │
-│ └─ issuerName: "ООО Молзавод" │
-└─────────────────────────────────────────────────────┘
+├── [mxik] → sets initial.mxik = qrData (no API call, no barcode)
 │
-▼
-┌─────────────────────────────────────────────────────┐
-│ Check status in VALID_MC_STATUSES │
-│ If invalid → Show error, return ❌ │
-│ If valid → Continue ✅ │
-└─────────────────────────────────────────────────────┘
-│
-▼
-┌─────────────────────────────────────────────────────┐
-│ searchByBarcode(gtin) │
-│ Check local database │
-│ ├─ Found → Load existing product ✅ │
-│ └─ Not found → Continue │
-└─────────────────────────────────────────────────────┘
-│
-▼
-┌─────────────────────────────────────────────────────┐
-│ mxik.searchByBarcode(gtin) │
-│ GET tasnif.soliq.uz │
-│ Returns: │
-│ ├─ nameRu: "Молоко пастеризованное" │
-│ ├─ nameUz: "Pasterizatsiyalangan sut" │
-│ ├─ code: "06111001018000000" │
-│ └─ packageCode: "796" (piece) │
-└─────────────────────────────────────────────────────┘
-│
-▼
-┌─────────────────────────────────────────────────────┐
-│ Merge data from both sources │
-│ ├─ barcode: from GTIN │
-│ ├─ names: from tasnif │
-│ ├─ mxik: from tasnif │
-│ ├─ packageCode: from tasnif │
-│ └─ dates: from asl-belgisi MC │
-└─────────────────────────────────────────────────────┘
-│
-▼
-┌─────────────────────────────────────────────────────┐
-│ Auto-populate ProductForm │
-│ Show success toast ✅ │
-│ Display verification badge │
-└─────────────────────────────────────────────────────┘
+└── setFabInitialData(initial) → setShowProductForm(true)
+```
 
-Troubleshooting
-asl-belgisi returns { isValid: false }
-→ Marking code not registered in system or incorrect format. Check that you're passing the full DataMatrix code, not just GTIN.
-"Marking code status: EMITTED - not valid for sale"
-→ Code issued but not yet applied to product. This is a manufacturer error - they need to report utilization first.
-tasnif.soliq.uz returns empty results
-→ Product not in MXIK registry. Fallback to manual entry. Some imported products may not be registered yet.
-Network errors from client-side
-→ User's browser might be blocking cross-origin requests. Check browser console for CORS errors. The APIs should allow CORS by default.
-MC verification works but tasnif fails
-→ Two separate systems - asl-belgisi tracks marking codes, tasnif tracks MXIK classifications. A product can have an MC but not be in MXIK registry yet (rare but possible for new products).
-Multiple products returned from tasnif
-→ The searchByBarcode function takes the first match. If GTIN matches multiple products, verify with user which is correct.
+**Important difference from `handleQrScan` in ProductForm:** `handleFabScan` does NOT block on invalid MC status — it collects whatever data is available and opens the form. `handleQrScan` is stricter and validates `VALID_MC_STATUSES`.
 
-Testing Checklist
+---
 
-Scan fiscal receipt QR → Should show warning, not create product
-Scan DataMatrix with valid status → Should auto-populate form
-Scan DataMatrix with WITHDRAWN status → Should show error
-Scan MXIK 17-digit QR → Should populate MXIK field only
-Scan regular EAN-13 barcode → Should search database normally
-Product exists in DB → Should load existing, not create duplicate
-Network offline → Should gracefully fallback to manual entry
-Invalid DataMatrix format → Should show error message
+## Server-Side Implementation
 
-Next Steps
-Once this integration is complete, you can:
+### AslBelgisiController
+`src/server/modules/aslbelgisi/aslbelgisi.controller.ts`
 
-Register for full API access (optional):
+```
+POST /api/aslbelgisi/verify
+Body: { code: string }   ← normalized DataMatrix string
+Auth: JwtAuthGuard (any logged-in user)
+```
 
-Get Business User account at https://xtrace.aslbelgisi.uz
-Generate API key in Personal Account
-Access full product registry (not just public MC info)
+### AslBelgisiService
+`src/server/modules/aslbelgisi/aslbelgisi.service.ts`
 
-Store marking codes in sales:
+- Reads `ASLBELGISI_API_KEY` from env (`ConfigService`)
+- Calls `POST https://xtrace.aslbelgisi.uz/public/api/cod/public/codes`
+- Header: `Authorization: Bearer <ASLBELGISI_API_KEY>`
+- Returns `McPublicInfo` shape
 
-Add markingCode field to SaleItem model
-Include in OFD fiscal receipt payload
-Enable product recall tracking
+### Environment Variable
+```
+ASLBELGISI_API_KEY=<your key>   # required in .env / .env.server
+```
+Service will throw `503 SERVICE_UNAVAILABLE` if key is not set.
 
-Batch product import:
+---
 
-Import entire catalog from asl-belgisi registry
-Auto-sync product data changes
-Monitor MC status for recalled products
+## Client-Side Functions (src/web/src/api/client.ts)
 
-Last Updated: January 2026
-Status: Production Ready ✅
+### `normalizeDataMatrix(raw)` (private helper)
+Strips ZXing symbology prefixes (`]d2`, `]C1`, `]e0`) and a leading FNC1 byte (`\x1d`).
+Internal `\x1d` separators are preserved — they are required by the aslbelgisi API.
+
+### `aslBelgisi.verifyMarkingCode(markingCode)`
+- Normalizes the raw QR string
+- `POST /api/aslbelgisi/verify` via `axiosInstance` (includes JWT)
+- Returns `McPublicInfo` on success or `{ isValid: false, _error }` on any error
+
+### `aslBelgisi.extractGtinFromDataMatrix(dataMatrix)`
+- Normalizes the raw string
+- Matches `/^01(\d{14})/`
+- Strips leading `0` from GTIN-14 to produce EAN-13
+- Returns `string | null`
+
+### `aslBelgisi.detectQrType(qrData)`
+Normalizes first, then:
+| Input | Result |
+|-------|--------|
+| Contains `http://` or `https://` | `'fiscal'` |
+| Starts with `01` + 14 digits (after normalize) | `'datamatrix'` |
+| Exactly 17 digits | `'mxik'` |
+| Anything else | `'barcode'` |
+
+---
+
+## QR Code Types Reference
+
+| Type | Format | Detection | Action |
+|------|--------|-----------|--------|
+| Fiscal Receipt | URL | Contains `http://` | Show error, open blank form |
+| GS1 DataMatrix | `01{GTIN-14}21{serial}...` | Starts with `01` + 14 digits | Extract GTIN → verify MC → lookup tasnif |
+| MXIK Code | 17-digit number | `/^\d{17}$/` | Populate mxik field only, open form |
+| Regular Barcode | EAN-13, EAN-8, etc. | Anything else | DB search → tasnif lookup |
+
+### DataMatrix Structure
+```
+01 04870123456789 21 ABC123 \x1d 93 XYZ
+│  └─ GTIN-14    │  └─ Serial │  └─ Verification
+└─ AI=GTIN       └─ AI=Serial └─ AI separator (kept for aslbelgisi)
+```
+
+---
+
+## MC Status Reference
+
+| Status | Description | handleFabScan | handleQrScan |
+|--------|-------------|---------------|--------------|
+| EMITTED | Code issued, not yet applied | warns, continues | blocks |
+| APPLIED | Code applied to product | continues | continues |
+| INTRODUCED | Introduced to circulation | continues | continues |
+| IN_CIRCULATION | Being sold/moved | continues | continues |
+| WITHDRAWN | Recalled | warns, continues | blocks |
+| RETIRED | Retired from system | warns, continues | blocks |
+
+Valid statuses for `handleQrScan` strict check: `INTRODUCED`, `APPLIED`, `IN_CIRCULATION`
+
+---
+
+## Multi-Pack Handling
+
+Types `GROUP`, `BOX_LV_1`, `BOX_LV_2` trigger a warning toast:
+> "Multi-pack: {packageType}. Check quantity before saving."
+
+The form is still opened — the user must manually verify quantity.
+
+---
+
+## Troubleshooting
+
+**`ASL BELGISI API key not configured`**
+→ Set `ASLBELGISI_API_KEY` in `.env` / `.env.server` and restart the server.
+
+**`ASL BELGISI returned 401`**
+→ API key expired or invalid. Generate a new one in your aslbelgisi business account.
+
+**`isValid: false` with no error**
+→ Marking code not found in system. Usually means the product predates the tracking system or the DataMatrix is damaged.
+
+**ZXing / scanner sends garbled prefix**
+→ `normalizeDataMatrix()` handles `]d2`, `]C1`, `]e0`, and leading `\x1d` automatically.
+
+**Verification works but tasnif lookup fails**
+→ Two separate systems. A product can have a valid MC but no entry in the MXIK classifier. Fall back to manual entry.
+
+---
+
+## Testing Checklist
+
+- Scan fiscal receipt QR → error toast, blank form opens
+- Scan DataMatrix (valid status) → dates auto-populated, tasnif name loaded
+- Scan DataMatrix (product already in DB) → arrival dialog shown, no form
+- Scan DataMatrix (multi-pack) → warning toast, form opens
+- Scan 17-digit MXIK code → mxik field set, form opens
+- Scan EAN-13 barcode → tasnif lookup for name/mxik, form opens
+- Scan barcode already in DB → arrival dialog shown
+- No `ASLBELGISI_API_KEY` → 503 error logged, partial data continues
+
+---
+
+*Last Updated: 2026-05-12 — reflects current production code*

@@ -25,7 +25,11 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'https://pos.bobur-dev.uz',
+        changeOrigin: true,
+      },
+      '/uploads': {
+        target: 'https://pos.bobur-dev.uz',
         changeOrigin: true,
       },
       '/releases': {
