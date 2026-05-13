@@ -8,6 +8,10 @@ import {
   type LogsResponse,
   type TerminalLogEntry,
 } from "../../api/client";
+import {
+  DesktopOnly,
+  MobileCardList,
+} from "../../components/common/MobileCard";
 
 // ─── Styled Components ──────────────────────────��────────────────────────────
 
@@ -18,6 +22,11 @@ const Page = styled.div`
   gap: 20px;
   height: 100%;
   max-width: 1400px;
+
+  @media (max-width: 768px) {
+    padding: 16px;
+    gap: 14px;
+  }
 `;
 
 const Header = styled.div`
@@ -38,6 +47,11 @@ const Filters = styled.div`
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    align-items: stretch;
+  }
 `;
 
 const Select = styled.select`
@@ -187,6 +201,66 @@ const PageButton = styled.button<{ $active?: boolean }>`
   }
 `;
 
+// ─── Log Mobile Card ─────────────────────────────────────────────────────────
+
+const LogCard = styled.div<{ $level: string }>`
+  background: ${({ theme }) => theme.colors.surface};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  box-shadow: ${({ theme }) => theme.shadows.sm};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-left: 3px solid
+    ${({ $level, theme }) =>
+      $level === "error"
+        ? theme.colors.error
+        : $level === "warn"
+          ? "#f59e0b"
+          : theme.colors.primary};
+  overflow: hidden;
+`;
+
+const LogCardHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 6px;
+  gap: 8px;
+`;
+
+const LogCardMeta = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+`;
+
+const LogCardTimestamp = styled.span`
+  font-size: 12px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  white-space: nowrap;
+`;
+
+const LogCardTerminal = styled.span`
+  font-size: 11px;
+  font-family: "Consolas", "Courier New", monospace;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const LogCardMessage = styled.div`
+  padding: 6px 14px 12px;
+  border-top: 1px solid ${({ theme }) => theme.colors.border};
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 12px;
+  color: ${({ theme }) => theme.colors.text};
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.5;
+  max-height: 120px;
+  overflow-y: auto;
+`;
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 function formatTimestamp(ts: string): string {
@@ -326,41 +400,63 @@ export function LogsPage() {
 
       {error && <div style={{ color: "red", fontSize: 15 }}>{error}</div>}
 
-      <TableWrapper>
-        <Table>
-          <thead>
-            <tr>
-              <Th style={{ width: 160 }}>Timestamp</Th>
-              <Th style={{ width: 120 }}>Terminal</Th>
-              <Th style={{ width: 70 }}>Level</Th>
-              <Th>Message</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {!loading && data?.items.length === 0 && (
-              <EmptyRow>
-                <td colSpan={4}>No logs found</td>
-              </EmptyRow>
-            )}
-            {data?.items.map((entry: TerminalLogEntry) => (
-              <tr key={entry.id}>
-                <Td style={{ whiteSpace: "nowrap" }}>
-                  {formatTimestamp(entry.timestamp)}
-                </Td>
-                <Td style={{ fontFamily: "monospace" }}>
-                  {entry.terminalId}
-                </Td>
-                <Td>
-                  <LevelBadge $level={entry.level}>{entry.level}</LevelBadge>
-                </Td>
-                <Td>
-                  <Message>{entry.message}</Message>
-                </Td>
+      <DesktopOnly>
+        <TableWrapper>
+          <Table>
+            <thead>
+              <tr>
+                <Th style={{ width: 160 }}>Timestamp</Th>
+                <Th style={{ width: 120 }}>Terminal</Th>
+                <Th style={{ width: 70 }}>Level</Th>
+                <Th>Message</Th>
               </tr>
-            ))}
-          </tbody>
-        </Table>
-      </TableWrapper>
+            </thead>
+            <tbody>
+              {!loading && data?.items.length === 0 && (
+                <EmptyRow>
+                  <td colSpan={4}>No logs found</td>
+                </EmptyRow>
+              )}
+              {data?.items.map((entry: TerminalLogEntry) => (
+                <tr key={entry.id}>
+                  <Td style={{ whiteSpace: "nowrap" }}>
+                    {formatTimestamp(entry.timestamp)}
+                  </Td>
+                  <Td style={{ fontFamily: "monospace" }}>
+                    {entry.terminalId}
+                  </Td>
+                  <Td>
+                    <LevelBadge $level={entry.level}>{entry.level}</LevelBadge>
+                  </Td>
+                  <Td>
+                    <Message>{entry.message}</Message>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </TableWrapper>
+      </DesktopOnly>
+
+      <MobileCardList>
+        {!loading && data?.items.length === 0 && (
+          <div style={{ textAlign: "center", padding: "40px 0", color: "gray", fontSize: 15 }}>
+            No logs found
+          </div>
+        )}
+        {data?.items.map((entry: TerminalLogEntry) => (
+          <LogCard key={entry.id} $level={entry.level}>
+            <LogCardHeader>
+              <LogCardMeta>
+                <LogCardTimestamp>{formatTimestamp(entry.timestamp)}</LogCardTimestamp>
+                <LogCardTerminal>{entry.terminalId}</LogCardTerminal>
+              </LogCardMeta>
+              <LevelBadge $level={entry.level}>{entry.level}</LevelBadge>
+            </LogCardHeader>
+            <LogCardMessage>{entry.message}</LogCardMessage>
+          </LogCard>
+        ))}
+      </MobileCardList>
 
       {data && data.pages > 1 && (
         <Pagination>

@@ -349,6 +349,12 @@ export function POSScreen() {
 
   const addProductToCart = useCallback(
     (product: Product, qty: number) => {
+      if (!product.isActive) {
+        const productName = i18n.language === "uz" ? product.nameUz : product.nameRu;
+        setError(t("errors.productInactive", { name: productName }));
+        return;
+      }
+
       const productName =
         i18n.language === "uz" ? product.nameUz : product.nameRu;
 

@@ -45,6 +45,8 @@ services:
       NODE_ENV: "production"
       PORT: "3001"
       RUN_MIGRATIONS: "true"
+    volumes:
+      - ./uploads:/app/dist/server/uploads
     ports:
       - "3001:3001"
     depends_on:

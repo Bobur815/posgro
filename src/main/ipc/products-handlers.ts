@@ -214,7 +214,7 @@ export function setupProductsHandlers(): void {
   ipcMain.handle("products:getByBarcode", async (_event, barcode: string) => {
     const prisma = getPrismaClient();
     const product = await prisma.product.findUnique({
-      where: { barcode },
+      where: { barcode, active: true },
       include: { category: true, supplier: true },
     });
     return ipcSafe(serializeProduct(product));
