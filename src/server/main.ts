@@ -23,7 +23,8 @@ async function bootstrap() {
   app.useStaticAssets(webDistPath, { prefix: '/web' });
 
   // Serve uploaded files (banner images, etc.)
-  const uploadsPath = join(__dirname, 'uploads');
+  // Use UPLOADS_DIR so files persist across deploys (dist/ is wiped on each build)
+  const uploadsPath = process.env.UPLOADS_DIR || join(process.cwd(), 'uploads');
   if (!existsSync(uploadsPath)) mkdirSync(uploadsPath, { recursive: true });
   app.useStaticAssets(uploadsPath, { prefix: '/uploads' });
 

@@ -54,7 +54,7 @@ export class SiteConfigController {
   @UseInterceptors(FileInterceptor('file', {
     storage: diskStorage({
       destination: (_req: any, _file: any, cb: (err: any, dest: string) => void) => {
-        const dest = join(__dirname, '..', '..', 'uploads');
+        const dest = process.env.UPLOADS_DIR || join(process.cwd(), 'uploads');
         if (!existsSync(dest)) mkdirSync(dest, { recursive: true });
         cb(null, dest);
       },
