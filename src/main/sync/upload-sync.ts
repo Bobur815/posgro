@@ -2,6 +2,7 @@ import { getPrismaClient } from "../database/sqlite-client";
 import { getAppConfig } from "../config/app-config";
 import { getServerToken } from "./queue-manager";
 import type {
+  AuditLog,
   Category,
   Supplier,
   Product,
@@ -86,7 +87,7 @@ export async function uploadAuditLogs(): Promise<void> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({
-      entries: entries.map(e => ({
+      entries: entries.map((e: AuditLog) => ({
         id: e.id,
         userId: e.userId,
         phone: e.phone,
@@ -168,11 +169,6 @@ async function uploadCategories(
     const text = await res.text();
     throw new Error(`Failed to upload categories: ${text}`);
   }
-  const result = (await res.json()) as {
-    created: number;
-    updated: number;
-    errors: number;
-  };
 }
 
 async function uploadSuppliers(
@@ -204,11 +200,6 @@ async function uploadSuppliers(
     const text = await res.text();
     throw new Error(`Failed to upload suppliers: ${text}`);
   }
-  const result = (await res.json()) as {
-    created: number;
-    updated: number;
-    errors: number;
-  };
 }
 
 async function uploadProducts(
@@ -249,11 +240,6 @@ async function uploadProducts(
     const text = await res.text();
     throw new Error(`Failed to upload products: ${text}`);
   }
-  const result = (await res.json()) as {
-    created: number;
-    updated: number;
-    errors: number;
-  };
 }
 
 async function uploadArrivals(
@@ -290,11 +276,6 @@ async function uploadArrivals(
     const text = await res.text();
     throw new Error(`Failed to upload arrivals: ${text}`);
   }
-  const result = (await res.json()) as {
-    created: number;
-    skipped: number;
-    errors: number;
-  };
 }
 
 // Keys that should never be pushed to VPS (terminal-local only)

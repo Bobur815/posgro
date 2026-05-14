@@ -16,6 +16,10 @@ import { getServerToken } from "./sync/queue-manager";
 import { getCurrentUser } from "./ipc/auth-handlers";
 import { log } from "./logger";
 
+// Disable GPU acceleration — prevents renderer crash on remote desktop sessions
+// (AnyDesk, RDP, TeamViewer) where no real GPU is available.
+app.disableHardwareAcceleration();
+
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 try {
   if (require("electron-squirrel-startup")) {

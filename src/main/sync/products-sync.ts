@@ -38,6 +38,21 @@ export async function syncProducts(): Promise<{ id: number; nameRu: string; stoc
       return [];
     }
 
+    // Build local category lookup maps to resolve VPS categoryId → local id.
+    // VPS ids may differ from SQLite autoincrement ids; fall back to nameUz match.
+    const localCategories = await prisma.category.findMany({ select: { id: true, nameUz: true } });
+    const catById  = new Map(localCategories.map((c: { id: number; nameUz: string }) => [c.id, c.id]));
+    const catByName = new Map(localCategories.map((c: { id: number; nameUz: string }) => [c.nameUz, c.id]));
+
+    const resolveCategoryId = (p: { categoryId: number; category?: { nameUz?: string } }): number => {
+      if (catById.has(p.categoryId)) return p.categoryId;
+      const byName = p.category?.nameUz ? catByName.get(p.category.nameUz) : undefined;
+      if (typeof byName === 'number') return byName;
+      return p.categoryId; // fall back to VPS id — will still fail FK but at least we tried
+    };
+
+    // Track the earliest updatedAt among failed products so we can roll back the cursor.
+    let earliestFailedUpdatedAt: Date | null = null;
 
     for (const product of products) {
       // Never write negative stock from VPS to local DB — clamp to 0.
@@ -81,7 +96,7 @@ export async function syncProducts(): Promise<{ id: number; nameRu: string; stoc
               stock: product.stock,
               minStock: product.minStock,
               unit: product.unit,
-              categoryId: product.categoryId,
+              categoryId: resolveCategoryId(product),
               active: product.active,
               mxik: product.mxik ?? null,
               productType: product.productType ?? 'REGULAR',
@@ -105,7 +120,7 @@ export async function syncProducts(): Promise<{ id: number; nameRu: string; stoc
                 stock: product.stock,
                 minStock: product.minStock,
                 unit: product.unit,
-                categoryId: product.categoryId,
+                categoryId: resolveCategoryId(product),
                 active: product.active,
                 mxik: product.mxik ?? null,
                 productType: product.productType ?? 'REGULAR',
@@ -125,7 +140,7 @@ export async function syncProducts(): Promise<{ id: number; nameRu: string; stoc
                 stock: product.stock,
                 minStock: product.minStock,
                 unit: product.unit,
-                categoryId: product.categoryId,
+                categoryId: resolveCategoryId(product),
                 active: product.active,
                 mxik: product.mxik ?? null,
                 productType: product.productType ?? 'REGULAR',
@@ -147,7 +162,7 @@ export async function syncProducts(): Promise<{ id: number; nameRu: string; stoc
               stock: product.stock,
               minStock: product.minStock,
               unit: product.unit,
-              categoryId: product.categoryId,
+              categoryId: resolveCategoryId(product),
               active: product.active,
               mxik: product.mxik ?? null,
               productType: product.productType ?? 'REGULAR',
@@ -160,14 +175,24 @@ export async function syncProducts(): Promise<{ id: number; nameRu: string; stoc
       } catch (productError) {
         // Log and skip — one bad product must not abort the entire sync
         console.error(`Failed to sync product barcode=${product.barcode}:`, productError instanceof Error ? productError.message : productError);
+        // Track earliest failure so the cursor doesn't advance past it
+        const failedAt = new Date(product.updatedAt);
+        if (!earliestFailedUpdatedAt || failedAt < earliestFailedUpdatedAt) {
+          earliestFailedUpdatedAt = failedAt;
+        }
       }
     }
 
-    // Update last sync timestamp
+    // Advance the sync cursor — but if any products failed, roll back to just before
+    // the earliest failure so they are retried on the next sync cycle.
+    const nextCursor = earliestFailedUpdatedAt
+      ? new Date(earliestFailedUpdatedAt.getTime() - 1000).toISOString()
+      : new Date().toISOString();
+
     await prisma.systemSetting.upsert({
       where: { key: 'last_product_sync' },
-      update: { value: new Date().toISOString() },
-      create: { key: 'last_product_sync', value: new Date().toISOString() },
+      update: { value: nextCursor },
+      create: { key: 'last_product_sync', value: nextCursor },
     });
 
     // Detect stock conflicts: products that went negative after VPS overwrite
