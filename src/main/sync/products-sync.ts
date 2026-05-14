@@ -346,10 +346,42 @@ export async function syncCategories(): Promise<void> {
           where: { nameUz: category.nameUz },
         });
         if (existing) {
-          await prisma.category.update({
-            where: { id: existing.id },
-            data: { nameRu: category.nameRu, active: category.active },
-          });
+          if (existing.id !== category.id) {
+            // ID mismatch: server uses a different ID for this category name (e.g. after
+            // a duplicate-cleanup migration on the server). Remap all local products to
+            // the server-canonical ID, then replace the stale category entry.
+            await prisma.$executeRaw`PRAGMA foreign_keys = OFF`;
+            try {
+              await prisma.product.updateMany({
+                where: { categoryId: existing.id },
+                data: { categoryId: category.id },
+              });
+              await prisma.category.delete({ where: { id: existing.id } });
+              const alreadyAtServerId = await prisma.category.findUnique({
+                where: { id: category.id },
+              });
+              if (alreadyAtServerId) {
+                await prisma.category.update({
+                  where: { id: category.id },
+                  data: { nameRu: category.nameRu, nameUz: category.nameUz, active: category.active },
+                });
+              } else {
+                await prisma.$executeRaw`
+                  INSERT INTO categories (id, name_uz, name_ru, active, created_at, updated_at)
+                  VALUES (${category.id}, ${category.nameUz}, ${category.nameRu}, ${category.active ? 1 : 0}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                `;
+              }
+            } finally {
+              await prisma.$executeRaw`PRAGMA foreign_keys = ON`;
+            }
+            // Reset product sync cursor so syncProducts() re-pulls with correct IDs.
+            newCategoryAdded = true;
+          } else {
+            await prisma.category.update({
+              where: { id: existing.id },
+              data: { nameRu: category.nameRu, active: category.active },
+            });
+          }
         } else {
           // Force VPS id so new products can satisfy the FK when they sync
           try {
