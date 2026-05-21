@@ -56,6 +56,9 @@ jobs:
             ${{ secrets.ENV_FILE }}
             ENVEOF
 
+            echo ".env size: $(wc -c < .env) bytes, $(wc -l < .env) lines"
+            echo "Keys present: $(grep -v '^#' .env | grep '=' | cut -d= -f1 | tr '\n' ' ')"
+
             test -s .env         || { echo ".env is empty!";          exit 1; }
             grep -q 'JWT_SECRET=' .env  || { echo "JWT_SECRET missing";  exit 1; }
             grep -q 'DB_PASSWORD=' .env || { echo "DB_PASSWORD missing"; exit 1; }
