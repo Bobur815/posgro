@@ -25,7 +25,7 @@ FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 
-RUN apk add --no-cache openssl libc6-compat
+RUN apk add --no-cache openssl libc6-compat su-exec
 
 # Copy files with proper ownership
 COPY --from=builder --chown=node:node /app/package*.json ./
@@ -33,17 +33,13 @@ COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/prisma ./prisma
 
-# ✅ FIX: Create uploads directory with proper permissions BEFORE switching to node user
-RUN mkdir -p /app/uploads && \
-    chown -R node:node /app/uploads && \
-    chmod 755 /app/uploads
-
-# Now switch to non-root user
-USER node
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 3001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/health || exit 1
 
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["node", "dist/server/main.js"]

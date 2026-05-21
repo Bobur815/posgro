@@ -71,7 +71,7 @@ const RightSubtitle = styled.p`
 
 const LoginCard = styled.div<{ $kbOpen?: boolean }>`
   width: 100%;
-  max-width: 360px;
+  max-width: 400px;
   text-align: center;
   margin-top: -60px;
   transform: translateY(${({ $kbOpen }) => ($kbOpen ? "-60px" : "0")});
