@@ -69,6 +69,25 @@ jobs:
             sudo nginx -t
             sudo systemctl reload nginx
 
+            echo "🐘 Ensure postgres is running"
+            docker compose up -d postgres
+            echo "⏳ Waiting for postgres to be ready..."
+            timeout 60 bash -c '
+              until docker compose exec -T postgres pg_isready \
+                -U "$(grep "^DB_USER=" .env | cut -d= -f2-)"; do
+                sleep 2
+              done
+            ' || { echo "❌ Postgres failed to start"; docker compose logs postgres; exit 1; }
+
+            echo "🔑 Syncing DB password via local socket..."
+            DB_USER_VAL=$(grep '^DB_USER=' .env | cut -d= -f2-)
+            DB_PASS_VAL=$(grep '^DB_PASSWORD=' .env | cut -d= -f2-)
+            docker compose exec -T postgres \
+              psql -U "$DB_USER_VAL" \
+              -c "ALTER USER \"$DB_USER_VAL\" WITH ENCRYPTED PASSWORD '$DB_PASS_VAL';" \
+              && echo "✅ Password synced" \
+              || echo "⚠️  Password sync failed — will attempt migration anyway"
+
             echo "🐳 Docker Compose: build & up"
             export USER_ID=$(id -u)
             export GROUP_ID=$(id -g)
