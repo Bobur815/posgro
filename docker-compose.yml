@@ -30,7 +30,7 @@ services:
     networks:
       - posgro-network
     healthcheck:
-      test: [ "CMD-SHELL", "PGPASSWORD=$POSTGRES_PASSWORD psql -h localhost -U $POSTGRES_USER -d $POSTGRES_DB -c 'SELECT 1' -q 2>/dev/null || exit 1" ]
+      test: [ "CMD-SHELL", "PGPASSWORD=$$POSTGRES_PASSWORD psql -h localhost -U $$POSTGRES_USER -d $$POSTGRES_DB -c 'SELECT 1' -q 2>/dev/null || exit 1" ]
       interval: 5s
       timeout: 5s
       retries: 10
