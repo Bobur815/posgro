@@ -17,6 +17,8 @@ if (!localExeFile) {
   process.exit(1);
 }
 const localExe = `dist/${localExeFile}`;
+const localBlockmap = `dist/${localExeFile}.blockmap`;
+const remoteBlockmap = `${remoteExe}.blockmap`;
 
 // Patch latest.yml so the filename matches the remote exe name
 const ymlPath = 'dist/latest.yml';
@@ -29,4 +31,14 @@ console.log(`Uploading v${version} → ${remoteExe}`);
 console.log(`  source: ${localExe}`);
 execSync(`scp "${ymlPath}" ${vps}:${remotePath}/`, { stdio: 'inherit' });
 execSync(`scp "${localExe}" "${vps}:${remotePath}/${remoteExe}"`, { stdio: 'inherit' });
+
+// Upload blockmap for differential (delta) downloads — electron-updater uses this
+// to download only the changed blocks instead of the full installer.
+try {
+  execSync(`scp "${localBlockmap}" "${vps}:${remotePath}/${remoteBlockmap}"`, { stdio: 'inherit' });
+  console.log(`  blockmap uploaded → differential updates enabled`);
+} catch {
+  console.warn(`  warning: blockmap not found at ${localBlockmap}, differential updates disabled`);
+}
+
 console.log(`Done! v${version} is live at https://pos.bobur-dev.uz/releases/`);

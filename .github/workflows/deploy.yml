@@ -88,6 +88,12 @@ jobs:
               && echo "✅ Password synced" \
               || echo "⚠️  Password sync failed — will attempt migration anyway"
 
+            echo "🐍 Ensure ocr-python is running"
+            docker compose up -d ocr-python
+            echo "⏳ Waiting for ocr-python to be healthy..."
+            timeout 90 bash -c 'until docker compose ps ocr-python | grep -q "healthy"; do sleep 3; done' \
+              || { echo "❌ ocr-python failed to become healthy"; docker compose logs ocr-python; exit 1; }
+
             echo "🐳 Docker Compose: build & up"
             export USER_ID=$(id -u)
             export GROUP_ID=$(id -g)
@@ -95,9 +101,9 @@ jobs:
             docker compose up -d --no-deps api
 
             echo "⏳ Waiting for api to be healthy..."
-            timeout 60 bash -c 'until docker compose ps api | grep -q "healthy"; do sleep 3; done' \
+            timeout 120 bash -c 'until docker compose ps api | grep -q "healthy"; do sleep 3; done' \
               && echo "✅ API is healthy" \
-              || { echo "❌ API failed to become healthy"; docker compose logs -n 50 api; exit 1; }
+              || { echo "❌ API failed to become healthy"; docker compose logs --tail=100 api; docker compose ps; exit 1; }
 
             echo "✅ Status"
             docker compose ps

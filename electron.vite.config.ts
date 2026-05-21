@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => {
   renderer: {
     publicDir: resolve(__dirname, 'public'),
     server: {
-      port: 5174,
+      port: 5300,
     },
     build: {
       outDir: 'dist-renderer'

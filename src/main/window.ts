@@ -38,7 +38,7 @@ export function createSetupWindow(): BrowserWindow {
   });
 
   if (process.env.NODE_ENV === "development") {
-    setupWindow.loadURL("http://localhost:5174/#/setup");
+    setupWindow.loadURL("http://localhost:5300/#/setup");
   } else {
     setupWindow.loadFile(
       path.join(__dirname, "../../dist-renderer/index.html"),
@@ -99,7 +99,7 @@ export function createWindow(): BrowserWindow {
   // Load the app
   if (process.env.NODE_ENV === "development") {
     // Development: load from Vite dev server
-    mainWindow.loadURL("http://localhost:5174");
+    mainWindow.loadURL("http://localhost:5300");
   } else {
     // Production: load from built files
     mainWindow.loadFile(path.join(__dirname, "../../dist-renderer/index.html"));

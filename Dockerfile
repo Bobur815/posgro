@@ -38,7 +38,7 @@ RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 3001
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=6 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/health || exit 1
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
