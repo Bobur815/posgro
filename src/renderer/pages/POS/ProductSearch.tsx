@@ -228,10 +228,11 @@ export function ProductSearch({ onSelect }: ProductSearchProps) {
     setSearchQuery((prev) => prev + key);
   };
 
-  const displayProducts: Product[] =
+  const displayProducts: Product[] = (
     searchQuery.trim() || hasActiveFilters
       ? (products as unknown as Product[])
-      : topSelling;
+      : topSelling
+  ).filter((p) => p.isActive);
 
   return (
     <Container>

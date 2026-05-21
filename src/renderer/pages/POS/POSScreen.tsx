@@ -578,6 +578,17 @@ export function POSScreen() {
           )) as Product | null;
 
           if (product) {
+            if (!product.isActive) {
+              setBarcode("");
+              setId("");
+              setQuantity("1");
+              setError(
+                t("errors.productInactive", {
+                  name: i18n.language === "uz" ? product.nameUz : product.nameRu,
+                }),
+              );
+              return;
+            }
             if (rongtaParsed.weight > product.stock) {
               setBarcode("");
               setId("");
