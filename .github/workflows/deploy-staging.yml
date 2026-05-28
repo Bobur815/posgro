@@ -64,9 +64,16 @@ jobs:
             echo "🌐 Deploy nginx config"
             sudo cp nginx.staging.conf /etc/nginx/sites-available/${NGINX_SITE}
             sudo ln -sf /etc/nginx/sites-available/${NGINX_SITE} /etc/nginx/sites-enabled/${NGINX_SITE}
-            # Skip SSL validation if cert not yet issued (first deploy — run certbot manually once)
+            # Reload or restart nginx depending on whether the site is new.
+            # A new HTTPS server block requires a full restart to initialize its SSL context;
+            # subsequent deploys only need reload (faster, zero-downtime).
             if [ -f "/etc/letsencrypt/live/${NGINX_SITE}/fullchain.pem" ]; then
-              sudo nginx -t && sudo systemctl reload nginx
+              sudo nginx -t || exit 1
+              if sudo nginx -T 2>/dev/null | grep -q "ssl_certificate.*${NGINX_SITE}"; then
+                sudo systemctl reload nginx
+              else
+                sudo systemctl restart nginx
+              fi
             else
               echo "⚠️  SSL cert not found for ${NGINX_SITE} — skipping nginx reload"
               echo "   Run once on VPS: sudo certbot --nginx -d ${NGINX_SITE}"
