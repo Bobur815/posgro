@@ -93,13 +93,62 @@ Renderer (React) → hooks → ipc-client.ts → preload.ts (contextBridge) → 
 - **State:** Zustand stores in `src/renderer/store/`; hooks in `src/renderer/hooks/` wrap store + IPC calls
 - **Styling:** Styled Components with theme tokens (`spacing`, `colors`, `borderRadius`, `shadows`)
 - **Routing:** HashRouter (required for Electron — no BrowserRouter)
-- **i18n:** `src/renderer/i18n/locales/ru.json` + `uz.json`; bilingual DB fields use `nameRu`/`nameUz`
+- **i18n:** `s016623009rc/renderer/i18n/locales/ru.json` + `uz.json`; bilingual DB fields use `nameRu`/`nameUz`
 
 ## Electron Build Notes
 - `asar: false` in `electron-builder.config.js` — Chromium ES modules can't load from `.asar`
 - SQLite Prisma client at `src/generated/prisma-sqlite/` is committed and included in the bundle
 - Native Prisma query engine binaries are bundled via `extraFiles`
 - Release channel: `https://pos.bobur-dev.uz/releases/`
+
+---
+
+# Staging Environment
+
+## Overview
+Two environments run on the same VPS:
+
+| | Production | Staging |
+|---|---|---|
+| Branch | `main` | `dev` |
+| URL | `https://pos.bobur-dev.uz` | `https://dev.pos.bobur-dev.uz` |
+| VPS dir | `~/posgro` | `~/posgro-staging` |
+| DB | `posgro` | `posgro_staging` |
+| API port | `3001` | `3002` |
+| Compose file | `docker-compose.yml` | `docker-compose.staging.yml` |
+| Deploy trigger | nightly cron + manual | push to `dev` |
+
+## Git Workflow
+```
+dev branch  →  push  →  auto-deploys to dev.pos.bobur-dev.uz  →  test
+     ↓
+merge dev → main  →  production deploy (nightly cron or manual trigger)
+```
+
+Always develop on `dev`, never commit directly to `main` unless it's a hotfix.
+
+## Electron POS — Testing Against Staging
+Before building, set `.env.pos`:
+```
+VPS_API_URL=https://dev.pos.bobur-dev.uz
+```
+Build and test the full sync flow against the staging database. When done, restore:
+```
+VPS_API_URL=https://pos.bobur-dev.uz
+```
+Then run `npm run deploy:pos` to publish the production installer.
+
+## Database Migrations — Safe Rollout
+1. Write migration → push to `dev` → staging auto-deploys and runs `prisma migrate deploy`
+2. Verify migration on staging DB (`posgro_staging`) — no data loss, no errors
+3. Merge to `main` → production migration runs against live `posgro` DB
+
+This is especially important for risky changes (adding columns, backfilling data, adding constraints).
+
+## VPS Setup (one-time, already done)
+- SSL cert: `sudo certbot --nginx -d dev.pos.bobur-dev.uz`
+- Nginx config: `nginx.staging.conf` → deployed automatically by `deploy-staging.yml`
+- Uploads dir: `~/posgro-staging/uploads-staging/`
 
 ---
 
