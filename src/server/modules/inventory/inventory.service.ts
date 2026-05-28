@@ -34,7 +34,7 @@ export class InventoryService {
     });
   }
 
-  async createArrival(storeId: string, createArrivalDto: CreateArrivalDto, userId: string) {
+  async createArrival(storeId: string, createArrivalDto: CreateArrivalDto, userId: string, lang?: string) {
     // Validate product exists and belongs to store
     const product = await this.prisma.product.findUnique({
       where: { id: createArrivalDto.productId },
@@ -106,7 +106,10 @@ export class InventoryService {
     if (createArrivalDto.supplierId && createArrivalDto.paymentMethod) {
       const paymentMethod = createArrivalDto.paymentMethod as SupplierPaymentMethod;
       const isDebt = DEBT_PAYMENT_METHODS.includes(paymentMethod);
-      const description = `Arrival: ${product.nameRu} x${createArrivalDto.quantity}`;
+      const isUz = lang?.startsWith('uz');
+      const arrivalWord = isUz ? 'Kirim' : 'Приход';
+      const productName = isUz ? product.nameUz : product.nameRu;
+      const description = `${arrivalWord}: ${productName} x${createArrivalDto.quantity}`;
 
       await this.prisma.supplierTransaction.create({
         data: {

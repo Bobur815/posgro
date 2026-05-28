@@ -14,7 +14,7 @@ const baseURL = import.meta.env.VITE_API_URL ?? "/api";
 
 export const axiosInstance = axios.create({ baseURL });
 
-// Request interceptor: inject JWT
+// Request interceptor: inject JWT and language
 axiosInstance.interceptors.request.use((config) => {
   // Lazy-import to avoid circular deps; read directly from localStorage
   const raw = localStorage.getItem("auth-storage");
@@ -29,6 +29,8 @@ axiosInstance.interceptors.request.use((config) => {
       // ignore
     }
   }
+  const lang = localStorage.getItem("language") ?? "ru";
+  config.headers["Accept-Language"] = lang;
   return config;
 });
 

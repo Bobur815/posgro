@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Query,
+  Headers,
   UseGuards,
   HttpCode,
 } from '@nestjs/common';
@@ -51,8 +52,9 @@ export class InventoryController {
     @CurrentStore() storeId: string,
     @Body() createArrivalDto: CreateArrivalDto,
     @CurrentUser() user: User,
+    @Headers('accept-language') lang?: string,
   ) {
-    return this.inventoryService.createArrival(storeId, createArrivalDto, user.id);
+    return this.inventoryService.createArrival(storeId, createArrivalDto, user.id, lang);
   }
 
   @Post('arrivals/sync-bulk')
