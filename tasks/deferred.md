@@ -6,7 +6,7 @@
 
 **Implemented:**
 - Added `storeProductCode INT NULL` to PostgreSQL + SQLite `products` tables
-- Migration backfills existing rows with `ROW_NUMBER() OVER (PARTITION BY store_id ORDER BY created_at)`
+- Existing products keep `storeProductCode = NULL` — they continue displaying their global `id` (already printed on shelf labels, no reprint needed)
 - Unique index on `(store_id, store_product_code)` — NULLs excluded automatically
 - Server auto-assigns `MAX(storeProductCode) + 1` on product creation
 - Sync pulls `storeProductCode` from VPS into SQLite
