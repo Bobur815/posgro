@@ -13,6 +13,7 @@ import { useToast } from '@context/ToastContext';
 import {
   SupplierTransaction,
   SupplierTransactionType,
+  SupplierTransactionCreateType,
   SupplierPaymentMethod,
 } from '@shared/types';
 import { SUPPLIER_PAYMENT_METHOD_I18N_KEYS } from '@shared/constants/payment-methods';
@@ -198,11 +199,12 @@ export function SupplierDetails() {
 
   const handleCreateTransaction = async (data: {
     supplierId: string;
-    type: SupplierTransactionType;
+    type: SupplierTransactionCreateType;
     paymentMethod: SupplierPaymentMethod;
     amount: number;
     description?: string;
-    dueDate?: string;
+    referenceId?: string;
+    referenceType?: string;
     createdBy: string;
   }) => {
     const result = await createTransaction(data);
@@ -226,15 +228,15 @@ export function SupplierDetails() {
     }
   };
 
-  const getTransactionTypeLabel = (type: SupplierTransactionType) => {
-    const labels: Record<SupplierTransactionType, string> = {
-      PURCHASE: t('suppliers.purchase'),
+  const getTransactionTypeLabel = (type: SupplierTransactionType): string => {
+    const labels: Partial<Record<SupplierTransactionType, string>> = {
       PAYMENT: t('suppliers.payment'),
       RETURN: t('suppliers.return'),
       ADVANCE: t('suppliers.advance'),
+      PURCHASE: t('suppliers.purchase'),
       ADJUSTMENT: t('suppliers.adjustment'),
     };
-    return labels[type];
+    return labels[type] ?? type;
   };
 
   const getPaymentMethodLabel = (method: SupplierPaymentMethod) =>
@@ -392,6 +394,7 @@ export function SupplierDetails() {
       {showTransactionForm && id && (
         <SupplierTransactionForm
           supplierId={id}
+          supplierProducts={(selectedSupplier as any).products ?? []}
           onSubmit={handleCreateTransaction}
           onCancel={() => setShowTransactionForm(false)}
           currentUserId={user?.id || ''}

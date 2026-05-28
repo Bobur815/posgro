@@ -1,5 +1,5 @@
 // src/web/src/pages/Products/ProductList.tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ProductForm } from "./ProductForm";
@@ -176,7 +176,7 @@ export function ProductList() {
   const [showProductForm, setShowProductForm] = useState(false);
   const [editProductId, setEditProductId] = useState<string | null>(null);
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
-
+  
   const [mxikProgress, setMxikProgress] = useState<{
     running: boolean;
     total: number;
@@ -199,6 +199,12 @@ export function ProductList() {
     packageCode?: string;
   } | null>(null);
   const [fabArrivalProductId, setFabArrivalProductId] = useState<string | null>(null);
+
+  const reloadWithFilters = useCallback(() => {
+    const params: ProductFilterParams = { ...filters };
+    if (searchQuery) params.query = searchQuery;
+    loadProducts(params);
+  }, [loadProducts, filters, searchQuery]);
 
   const isMobile = typeof window !== "undefined" && window.innerWidth <= 768;
 
@@ -309,7 +315,7 @@ export function ProductList() {
     }
 
     setMxikProgress((p) => p ? { ...p, running: false, done: missing.length, found, notFound, errors } : p);
-    loadProducts();
+    reloadWithFilters();
   }
 
   const [mobileCount, setMobileCount] = useState(MOBILE_PAGE_SIZE);
@@ -378,7 +384,7 @@ export function ProductList() {
   const handleDelete = async (product: Product) => {
     if (!window.confirm(t("common.confirmDelete"))) return;
     const success = await deleteProduct(String(product.id));
-    if (success) loadProducts();
+    if (success) reloadWithFilters();
   };
 
   const columns = [
@@ -387,7 +393,7 @@ export function ProductList() {
       header: "#",
       render: (_: Product, index: number) => pageOffset + index + 1,
     },
-    { key: "id", header: t("pos.id") },
+    { key: "id", header: t("pos.id"), render: (p: Product) => p.storeProductCode ?? p.id },
     { key: "mxik", header: "MXIK" },
     { key: "barcode", header: t("products.barcode") },
     {
@@ -572,7 +578,7 @@ export function ProductList() {
             fields={[
               {
                 label: t("pos.id") + " (kod)",
-                value: product.id,
+                value: product.storeProductCode ?? product.id,
               },
               ...(product.internalCode
                 ? [
@@ -697,7 +703,7 @@ export function ProductList() {
           onSuccess={() => {
             setShowProductForm(false);
             setFabInitialData(null);
-            loadProducts();
+            reloadWithFilters();
           }}
         />
       )}
@@ -708,7 +714,7 @@ export function ProductList() {
           onClose={() => setEditProductId(null)}
           onSuccess={() => {
             setEditProductId(null);
-            loadProducts();
+            reloadWithFilters();
           }}
         />
       )}
@@ -720,7 +726,7 @@ export function ProductList() {
           onClose={() => setFabArrivalProductId(null)}
           onSuccess={() => {
             setFabArrivalProductId(null);
-            loadProducts();
+            reloadWithFilters();
           }}
         />
       )}

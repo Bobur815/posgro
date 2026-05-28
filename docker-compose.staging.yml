@@ -1,0 +1,64 @@
+name: posgro-staging
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    entrypoint: [ "/bin/bash", "/scripts/postgres-entrypoint.sh" ]
+    environment:
+      POSTGRES_USER: ${DB_USER:?DB_USER is not set}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is not set}
+      POSTGRES_DB: posgro_staging
+    volumes:
+      - postgres_staging_data:/var/lib/postgresql/data
+      - ./scripts/postgres-entrypoint.sh:/scripts/postgres-entrypoint.sh:ro
+      - ./scripts/init-postgres.sh:/docker-entrypoint-initdb.d/init-postgres.sh:ro
+    restart: unless-stopped
+    networks:
+      - posgro-staging-network
+    healthcheck:
+      test: [ "CMD-SHELL", "PGPASSWORD=$$POSTGRES_PASSWORD psql -h localhost -U $$POSTGRES_USER -d $$POSTGRES_DB -c 'SELECT 1' -q 2>/dev/null || exit 1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql://${DB_USER:?DB_USER is not set}:${DB_PASSWORD:?DB_PASSWORD is not set}@postgres:5432/posgro_staging"
+      NODE_ENV: "production"
+      PORT: "3002"
+      RUN_MIGRATIONS: "true"
+    volumes:
+      - ./uploads-staging:/app/uploads
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - posgro-staging-network
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -e
+        if [ "$$RUN_MIGRATIONS" = "true" ]; then
+          echo "Running Prisma migrations..."
+          npx prisma migrate deploy || exit 1
+        fi
+        echo "Starting staging app..."
+        exec node dist/server/main.js
+
+volumes:
+  postgres_staging_data:
+    driver: local
+
+networks:
+  posgro-staging-network:
+    driver: bridge

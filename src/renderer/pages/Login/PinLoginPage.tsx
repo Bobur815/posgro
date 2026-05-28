@@ -566,6 +566,7 @@ export function PinLoginPage() {
                   onDigitsChange={setPhoneDigits}
                   onEnter={handlePhoneEnter}
                   onFocus={() => setFocusedField("phone")}
+                  autoFocus
                 />
                 <KbToggle
                   type="button"

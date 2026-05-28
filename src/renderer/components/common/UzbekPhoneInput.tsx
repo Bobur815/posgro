@@ -58,6 +58,7 @@ interface UzbekPhoneInputProps {
   onFocus?: () => void;
   className?: string;
   disabled?: boolean;
+  autoFocus?: boolean;
 }
 
 function caretAfterToken(str: string, token: string, occurrence = 1): number | null {
@@ -81,6 +82,7 @@ export function UzbekPhoneInput({
   onFocus: onFocusProp,
   className,
   disabled,
+  autoFocus = false,
 }: UzbekPhoneInputProps) {
   const [display, setDisplay] = useState(valueDigits ? formatUzPhone(valueDigits) : '');
   const prevLenRef = useRef(digitsOnly(valueDigits).length);
@@ -190,7 +192,7 @@ export function UzbekPhoneInput({
         placeholder="+998 (XX) XXX-XX-XX"
         ref={inputRef as React.RefObject<HTMLInputElement>}
         disabled={disabled}
-        autoFocus
+        autoFocus={autoFocus}
       />
       {error && <ErrorText>{error}</ErrorText>}
     </Container>

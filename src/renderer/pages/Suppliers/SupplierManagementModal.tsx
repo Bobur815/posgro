@@ -321,6 +321,7 @@ export function SupplierManagementModal({
                 onDigitsChange={(digits) =>
                   setFormData((prev) => ({ ...prev, phoneDigits: digits }))
                 }
+                autoFocus
               />
               <Input
                 label={t("suppliers.balance")}

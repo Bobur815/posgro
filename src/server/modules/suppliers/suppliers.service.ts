@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
+import { CreateTransactionDto } from './dto/create-transaction.dto';
+import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { SupplierFilters, SupplierWhereInput } from './types/supplier.types';
 import { SupplierTransactionType, SupplierPaymentMethod } from '@prisma/client';
 
@@ -164,50 +166,42 @@ export class SuppliersService {
     });
   }
 
-  async createTransaction(storeId: string, userId: string, data: Record<string, unknown>) {
-    const { supplierId, type, paymentMethod, amount, description, referenceId, referenceType, dueDate, paidAt } = data;
-
-    const transaction = await this.prisma.$transaction(async (tx) => {
+  async createTransaction(storeId: string, userId: string, dto: CreateTransactionDto) {
+    return this.prisma.$transaction(async (tx) => {
       const created = await tx.supplierTransaction.create({
         data: {
           storeId,
-          supplierId: supplierId as string,
-          type: type as SupplierTransactionType,
-          paymentMethod: (paymentMethod ?? 'CASH') as SupplierPaymentMethod,
-          amount: amount as number,
-          description: (description as string) ?? null,
-          referenceId: (referenceId as string) ?? null,
-          referenceType: (referenceType as string) ?? null,
-          dueDate: dueDate ? new Date(dueDate as string) : null,
-          paidAt: paidAt ? new Date(paidAt as string) : null,
+          supplierId: dto.supplierId,
+          type: dto.type as SupplierTransactionType,
+          paymentMethod: dto.paymentMethod as SupplierPaymentMethod,
+          amount: dto.amount,
+          description: dto.description ?? null,
+          referenceId: dto.referenceId ?? null,
+          referenceType: dto.referenceType ?? null,
+          dueDate: null,
+          paidAt: null,
           createdBy: userId,
         },
       });
 
-      // Adjust supplier balance: positive amount decreases debt (we paid), negative increases debt
-      const balanceDelta = this.balanceDeltaFor(type as SupplierTransactionType, Number(amount));
+      const balanceDelta = this.balanceDeltaFor(dto.type as SupplierTransactionType, dto.amount);
       await tx.supplier.update({
-        where: { id: supplierId as string },
+        where: { id: dto.supplierId },
         data: { balance: { increment: balanceDelta } },
       });
 
       return created;
     });
-
-    return transaction;
   }
 
-  async updateTransaction(txId: string, storeId: string, data: Record<string, unknown>) {
+  async updateTransaction(txId: string, storeId: string, dto: UpdateTransactionDto) {
     const existing = await this.prisma.supplierTransaction.findUnique({ where: { id: txId } });
     if (!existing || existing.storeId !== storeId) throw new NotFoundException('Transaction not found');
 
-    const { type, paymentMethod, amount, description, dueDate, paidAt } = data;
-
     return this.prisma.$transaction(async (tx) => {
-      // Reverse old balance impact then apply new one
       const oldDelta = this.balanceDeltaFor(existing.type, Number(existing.amount));
-      const newType = (type ?? existing.type) as SupplierTransactionType;
-      const newAmount = amount !== undefined ? Number(amount) : Number(existing.amount);
+      const newType = (dto.type ?? existing.type) as SupplierTransactionType;
+      const newAmount = dto.amount !== undefined ? dto.amount : Number(existing.amount);
       const newDelta = this.balanceDeltaFor(newType, newAmount);
 
       await tx.supplier.update({
@@ -216,12 +210,10 @@ export class SuppliersService {
       });
 
       const updateData: Record<string, unknown> = {};
-      if (type) updateData.type = type as SupplierTransactionType;
-      if (paymentMethod) updateData.paymentMethod = paymentMethod as SupplierPaymentMethod;
-      if (amount !== undefined) updateData.amount = amount as number;
-      if (description !== undefined) updateData.description = description as string;
-      if (dueDate !== undefined) updateData.dueDate = dueDate ? new Date(dueDate as string) : null;
-      if (paidAt !== undefined) updateData.paidAt = paidAt ? new Date(paidAt as string) : null;
+      if (dto.type) updateData.type = dto.type;
+      if (dto.paymentMethod) updateData.paymentMethod = dto.paymentMethod;
+      if (dto.amount !== undefined) updateData.amount = dto.amount;
+      if (dto.description !== undefined) updateData.description = dto.description;
 
       return tx.supplierTransaction.update({ where: { id: txId }, data: updateData });
     });
@@ -252,8 +244,8 @@ export class SuppliersService {
     return { supplierId, balance: supplier.balance };
   }
 
-  async recordPayment(storeId: string, userId: string, data: Record<string, unknown>) {
-    return this.createTransaction(storeId, userId, { ...data, type: 'PAYMENT' });
+  async recordPayment(storeId: string, userId: string, dto: Omit<CreateTransactionDto, 'type'>) {
+    return this.createTransaction(storeId, userId, { ...dto, type: 'PAYMENT' });
   }
 
   private balanceDeltaFor(type: SupplierTransactionType, amount: number): number {

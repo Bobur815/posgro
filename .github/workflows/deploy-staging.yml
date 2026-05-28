@@ -1,0 +1,104 @@
+name: Deploy POSGRO Staging
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          envs: GH_PAT
+          script: |
+            set -euo pipefail
+
+            PROJECT_DIR="$HOME/posgro-staging"
+            OWNER="Bobur815"
+            NAME="posgro"
+            REPO_URL_AUTH="https://Bobur815:${GH_PAT}@github.com/${OWNER}/${NAME}.git"
+            NGINX_SITE="dev.pos.bobur-dev.uz"
+
+            echo "📁 Ensure staging dir"
+            mkdir -p "$PROJECT_DIR"
+            cd "$PROJECT_DIR"
+
+            git config --global --add safe.directory "$PROJECT_DIR" || true
+
+            if [ ! -d .git ]; then
+              echo "🚀 Fresh clone (dev branch)"
+              git clone --depth=1 --branch dev "$REPO_URL_AUTH" .
+            else
+              echo "🔧 Update origin with PAT"
+              git remote set-url origin "$REPO_URL_AUTH" || true
+
+              echo "📦 Pull latest dev"
+              git fetch --depth=1 origin dev
+              git reset --hard origin/dev
+              git clean -fd
+            fi
+
+            echo "🔐 Write .env from secret"
+            cat > .env <<'ENVEOF'
+            ${{ secrets.ENV_FILE }}
+            ENVEOF
+
+            test -s .env         || { echo ".env is empty!";          exit 1; }
+            grep -q 'JWT_SECRET=' .env  || { echo "JWT_SECRET missing";  exit 1; }
+            grep -q 'DB_PASSWORD=' .env || { echo "DB_PASSWORD missing"; exit 1; }
+
+            # Strip tokens that must not run in staging
+            sed -i '/^TELEGRAM_BOT_TOKEN=/d' .env
+
+            echo "🌐 Deploy nginx config"
+            sudo cp nginx.staging.conf /etc/nginx/sites-available/${NGINX_SITE}
+            sudo ln -sf /etc/nginx/sites-available/${NGINX_SITE} /etc/nginx/sites-enabled/${NGINX_SITE}
+            # Skip SSL validation if cert not yet issued (first deploy — run certbot manually once)
+            if [ -f "/etc/letsencrypt/live/${NGINX_SITE}/fullchain.pem" ]; then
+              sudo nginx -t && sudo systemctl reload nginx
+            else
+              echo "⚠️  SSL cert not found for ${NGINX_SITE} — skipping nginx reload"
+              echo "   Run once on VPS: sudo certbot --nginx -d ${NGINX_SITE}"
+            fi
+
+            echo "🐘 Ensure staging postgres is running"
+            docker compose -f docker-compose.staging.yml up -d postgres
+            echo "⏳ Waiting for staging postgres..."
+            timeout 60 bash -c '
+              until docker compose -f docker-compose.staging.yml exec -T postgres pg_isready \
+                -U "$(grep "^DB_USER=" .env | cut -d= -f2-)"; do
+                sleep 2
+              done
+            ' || { echo "❌ Staging postgres failed"; docker compose -f docker-compose.staging.yml logs postgres; exit 1; }
+
+            echo "🔑 Syncing DB password..."
+            DB_USER_VAL=$(grep '^DB_USER=' .env | cut -d= -f2-)
+            DB_PASS_VAL=$(grep '^DB_PASSWORD=' .env | cut -d= -f2-)
+            docker compose -f docker-compose.staging.yml exec -T postgres \
+              psql -U "$DB_USER_VAL" \
+              -c "ALTER USER \"$DB_USER_VAL\" WITH ENCRYPTED PASSWORD '$DB_PASS_VAL';" \
+              && echo "✅ Password synced" \
+              || echo "⚠️  Password sync skipped"
+
+            echo "🐳 Build & deploy staging api"
+            docker compose -f docker-compose.staging.yml build api
+            docker compose -f docker-compose.staging.yml up -d --no-deps api
+
+            echo "⏳ Waiting for staging api..."
+            timeout 120 bash -c 'until docker compose -f docker-compose.staging.yml ps api | grep -q "healthy"; do sleep 3; done' \
+              && echo "✅ Staging API is healthy" \
+              || { echo "❌ Staging API failed"; docker compose -f docker-compose.staging.yml logs --tail=100 api; exit 1; }
+
+            echo "✅ Staging status"
+            docker compose -f docker-compose.staging.yml ps

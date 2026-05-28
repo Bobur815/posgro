@@ -190,6 +190,7 @@ export function UserForm() {
           valueDigits={formData.phone}
           onDigitsChange={(digits) => handleChange('phone', digits)}
           disabled={isEdit}
+          autoFocus
         />
 
         <Input

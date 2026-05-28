@@ -612,7 +612,14 @@
     "supplierUpdated": "Yetkazib beruvchi yangilandi",
     "supplierDeleted": "Yetkazib beruvchi o'chirildi",
     "details": "Tafsilotlar",
-    "viewDetails": "Batafsil"
+    "viewDetails": "Batafsil",
+    "returnMode": "Qaytarish usuli",
+    "returnManual": "Summa bo'yicha",
+    "returnByProduct": "Tovar bo'yicha",
+    "selectProduct": "Mahsulotni tanlang",
+    "quantity": "Miqdor",
+    "calculatedAmount": "Summa (avto)",
+    "tannarx": "Tannarx"
   },
   "receipt": {
     "title": "Chek sozlamalari",

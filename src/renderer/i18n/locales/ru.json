@@ -623,7 +623,14 @@
     "supplierUpdated": "Поставщик обновлен",
     "supplierDeleted": "Поставщик удален",
     "details": "Детали",
-    "viewDetails": "Подробнее"
+    "viewDetails": "Подробнее",
+    "returnMode": "Способ возврата",
+    "returnManual": "Сумма вручную",
+    "returnByProduct": "По товару",
+    "selectProduct": "Выберите товар",
+    "quantity": "Количество",
+    "calculatedAmount": "Сумма (авто)",
+    "tannarx": "Себестоимость (tannarx)"
   },
   "receipt": {
     "title": "Настройки чека",

@@ -15,6 +15,8 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 import { SuppliersService } from './suppliers.service';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
+import { CreateTransactionDto } from './dto/create-transaction.dto';
+import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { StoreGuard } from '../../common/guards/store.guard';
@@ -114,7 +116,7 @@ export class SuppliersController {
   async createTransaction(
     @CurrentStore() storeId: string,
     @CurrentUser('id') userId: string,
-    @Body() body: Record<string, unknown>,
+    @Body() body: CreateTransactionDto,
   ) {
     return this.suppliersService.createTransaction(storeId, userId, body);
   }
@@ -125,7 +127,7 @@ export class SuppliersController {
   async updateTransaction(
     @CurrentStore() storeId: string,
     @Param('txId') txId: string,
-    @Body() body: Record<string, unknown>,
+    @Body() body: UpdateTransactionDto,
   ) {
     return this.suppliersService.updateTransaction(txId, storeId, body);
   }
@@ -153,7 +155,7 @@ export class SuppliersController {
   async recordPayment(
     @CurrentStore() storeId: string,
     @CurrentUser('id') userId: string,
-    @Body() body: Record<string, unknown>,
+    @Body() body: Omit<CreateTransactionDto, 'type'>,
   ) {
     return this.suppliersService.recordPayment(storeId, userId, body);
   }

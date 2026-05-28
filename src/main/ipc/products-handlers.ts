@@ -68,6 +68,7 @@ function serializeProduct(product: any): Product | null {
     bulkQuantity: toNumber(product.bulkQuantity),
     minSaleQty: toNumber(product.minSaleQty),
     maxSaleQty: toNumber(product.maxSaleQty),
+    storeProductCode: product.storeProductCode != null ? Number(product.storeProductCode) : null,
   };
 
   if (product.category) {
@@ -204,10 +205,20 @@ export function setupProductsHandlers(): void {
 
   ipcMain.handle("products:getById", async (_event, id: number | string) => {
     const prisma = getPrismaClient();
-    const product = await prisma.product.findUnique({
-      where: { id: Number(id) },
-      include: { category: true, supplier: true },
-    });
+    const numericId = Number(id);
+    // Try storeProductCode first (per-store sequential code), fall back to global id
+    let product = !isNaN(numericId) && numericId > 0
+      ? await prisma.product.findFirst({
+          where: { storeProductCode: numericId, active: true },
+          include: { category: true, supplier: true },
+        })
+      : null;
+    if (!product) {
+      product = await prisma.product.findUnique({
+        where: { id: numericId },
+        include: { category: true, supplier: true },
+      });
+    }
     return ipcSafe(serializeProduct(product));
   });
 
@@ -233,7 +244,8 @@ export function setupProductsHandlers(): void {
     ];
 
     if (!isNaN(numericId) && Number.isInteger(numericId) && numericId > 0) {
-      orConditions.unshift({ id: { equals: numericId } });
+      orConditions.unshift({ storeProductCode: { equals: numericId } });
+      orConditions.push({ id: { equals: numericId } });
     }
 
     const products = await prisma.product.findMany({

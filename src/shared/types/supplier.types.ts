@@ -10,6 +10,9 @@ export type SupplierTransactionType =
   | 'ADVANCE'     // We paid in advance (supplier owes us)
   | 'ADJUSTMENT'; // Manual balance correction
 
+// Types allowed when creating a new transaction via the UI (PURCHASE & ADJUSTMENT are system-only)
+export type SupplierTransactionCreateType = 'PAYMENT' | 'RETURN' | 'ADVANCE';
+
 export interface Supplier {
   id: string;
   nameRu: string;
@@ -55,9 +58,19 @@ export interface SupplierUpdateInput {
   balance?: number;
 }
 
+export interface SupplierProduct {
+  id: number;
+  nameRu: string;
+  nameUz: string;
+  cost: number | null;
+  price: number;
+  stock: number;
+  unit: string;
+}
+
 export interface SupplierTransactionCreateInput {
   supplierId: string;
-  type: SupplierTransactionType;
+  type: SupplierTransactionCreateType;
   paymentMethod: SupplierPaymentMethod;
   amount: number;
   description?: string;
@@ -86,6 +99,7 @@ export interface SupplierTransactionFilters {
 
 export interface SupplierWithTransactions extends Supplier {
   transactions: SupplierTransaction[];
+  products: SupplierProduct[];
   totalDebt: number;   // Sum of negative amounts (what we owe)
   totalCredit: number; // Sum of positive amounts (what they owe us)
 }

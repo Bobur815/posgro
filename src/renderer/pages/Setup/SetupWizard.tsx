@@ -621,6 +621,7 @@ export function SetupWizard() {
                 valueDigits={data.phone}
                 onDigitsChange={(v) => setData(prev => ({ ...prev, phone: v }))}
                 onFocus={() => setActiveField('phone')}
+                autoFocus
               />
               <Input
                 label={t('setup.login.password')}

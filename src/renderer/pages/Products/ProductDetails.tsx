@@ -303,7 +303,7 @@ export function ProductDetails() {
           >
             <ArrowLeft size={20} />
           </BackButton>
-          <Title>{`${getProductName()} (№ ${product.id})`}</Title>
+          <Title>{`${getProductName()} (№ ${product.storeProductCode ?? product.id})`}</Title>
         </HeaderLeft>
         {isAdmin && (
           <Actions>

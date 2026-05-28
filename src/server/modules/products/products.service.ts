@@ -106,6 +106,12 @@ export class ProductsService {
       );
     }
 
+    const maxCode = await this.prisma.product.aggregate({
+      where: { storeId },
+      _max: { storeProductCode: true },
+    });
+    const nextCode = (maxCode._max.storeProductCode ?? 0) + 1;
+
     return this.prisma.product.create({
       data: {
         storeId,
@@ -134,6 +140,7 @@ export class ProductsService {
         bulkQuantity: createProductDto.bulkQuantity ?? 0,
         minSaleQty: createProductDto.minSaleQty ?? 0,
         maxSaleQty: createProductDto.maxSaleQty ?? 0,
+        storeProductCode: nextCode,
       },
       include: { category: true },
     });

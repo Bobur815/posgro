@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import styled from "styled-components";
 import { X } from "lucide-react";
 import { stores, StoreRecord } from "../../api/client";
+import { UzbekPhoneInput } from "@components/common/UzbekPhoneInput";
+import { phoneToDigits, normalizeUzPhone } from "@shared/utils/phone";
 
 const Overlay = styled.div`
   position: fixed;
@@ -112,14 +114,14 @@ export function StoreFormModal({ store, onClose, onSaved }: Props) {
   const isNew = store === null;
   const [name, setName] = useState(store?.name ?? "");
   const [address, setAddress] = useState(store?.address ?? "");
-  const [phone, setPhone] = useState(store?.phone ?? "");
+  const [phoneDigits, setPhoneDigits] = useState(phoneToDigits(store?.phone ?? ""));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setName(store?.name ?? "");
     setAddress(store?.address ?? "");
-    setPhone(store?.phone ?? "");
+    setPhoneDigits(phoneToDigits(store?.phone ?? ""));
   }, [store]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -134,7 +136,7 @@ export function StoreFormModal({ store, onClose, onSaved }: Props) {
       const payload = {
         name: name.trim(),
         address: address.trim() || undefined,
-        phone: phone.trim() || undefined,
+        phone: phoneDigits ? normalizeUzPhone(phoneDigits) : undefined,
       };
       if (isNew) {
         await stores.create(payload);
@@ -179,11 +181,10 @@ export function StoreFormModal({ store, onClose, onSaved }: Props) {
             />
           </Field>
           <Field>
-            <Label>Phone</Label>
-            <Input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+998901234567"
+            <UzbekPhoneInput
+              label="Phone"
+              valueDigits={phoneDigits}
+              onDigitsChange={setPhoneDigits}
             />
           </Field>
 

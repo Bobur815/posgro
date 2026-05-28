@@ -83,3 +83,4 @@ src/generated/
 # Uploaded files (keep the directory, ignore its contents)
 /uploads/*
 !/uploads/.gitkeep
+/uploads-staging/

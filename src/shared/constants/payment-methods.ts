@@ -37,8 +37,6 @@ export const SUPPLIER_PAYMENT_METHODS = [
   "CASH",
   "CARD",
   "BANK_TRANSFER",
-  "INSTALLMENT",
-  "ONE_TO_ONE",
 ] as const;
 
 export type SupplierPaymentMethod = (typeof SUPPLIER_PAYMENT_METHODS)[number];
@@ -51,6 +49,4 @@ export const SUPPLIER_PAYMENT_METHOD_I18N_KEYS: Record<
   CASH: "suppliers.cash",
   CARD: "suppliers.card",
   BANK_TRANSFER: "suppliers.bankTransfer",
-  INSTALLMENT: "suppliers.installment",
-  ONE_TO_ONE: "suppliers.oneToOne",
 } as const;

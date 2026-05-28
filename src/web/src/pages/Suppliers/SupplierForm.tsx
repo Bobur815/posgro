@@ -137,6 +137,7 @@ export function SupplierForm({ supplierId, initialName, onClose, onSuccess }: Su
         <UzbekPhoneInput
           label={t("suppliers.phone")}
           valueDigits={formData.phoneDigits}
+          autoFocus={false}
           onDigitsChange={(digits) => setFormData((prev) => ({ ...prev, phoneDigits: digits }))}
         />
         {!isEdit && (
