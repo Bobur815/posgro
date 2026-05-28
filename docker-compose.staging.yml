@@ -43,6 +43,12 @@ services:
     restart: unless-stopped
     networks:
       - posgro-staging-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 40s
+      retries: 5
     command:
       - /bin/sh
       - -lc
