@@ -19,7 +19,7 @@ import {
 import { SUPPLIER_PAYMENT_METHOD_I18N_KEYS } from '@shared/constants/payment-methods';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
 import { formatDate } from '../../utils/formatters';
-import { ArrowLeft, Trash } from 'lucide-react';
+import { ArrowLeft, Edit, Trash } from 'lucide-react';
 import { MobileCard, MobileCardList, DesktopOnly } from '../../components/common/MobileCard';
 
 const Container = styled.div`
@@ -181,6 +181,7 @@ export function SupplierDetails() {
     error,
     getById,
     createTransaction,
+    updateTransaction,
     deleteTransaction,
     clearSelectedSupplier,
   } = useSuppliers();
@@ -188,6 +189,8 @@ export function SupplierDetails() {
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [transactionToDelete, setTransactionToDelete] =
+    useState<SupplierTransaction | null>(null);
+  const [transactionToEdit, setTransactionToEdit] =
     useState<SupplierTransaction | null>(null);
 
   useEffect(() => {
@@ -211,6 +214,31 @@ export function SupplierDetails() {
     if (result) {
       toast.success(t('suppliers.transactionCreated'));
       setShowTransactionForm(false);
+      if (id) await getById(id);
+      return true;
+    }
+    if (error) toast.error(error);
+    return false;
+  };
+
+  const handleEditTransaction = async (data: {
+    supplierId: string;
+    type: SupplierTransactionCreateType;
+    paymentMethod: SupplierPaymentMethod;
+    amount: number;
+    description?: string;
+    createdBy?: string;
+  }) => {
+    if (!transactionToEdit) return false;
+    const result = await updateTransaction(transactionToEdit.id, {
+      type: data.type,
+      paymentMethod: data.paymentMethod,
+      amount: data.amount,
+      description: data.description,
+    });
+    if (result) {
+      toast.success(t('suppliers.transactionUpdated'));
+      setTransactionToEdit(null);
       if (id) await getById(id);
       return true;
     }
@@ -287,6 +315,14 @@ export function SupplierDetails() {
       key: 'actions',
       header: '',
       render: (tx: SupplierTransaction) => (
+        <>
+        <Button
+          size="small"
+          variant="secondary"
+          onClick={() => setTransactionToEdit(tx)}
+        >
+          <Edit size={16} />
+        </Button>
         <Button
           size="small"
           variant="danger"
@@ -294,6 +330,7 @@ export function SupplierDetails() {
         >
           <Trash size={16} />
         </Button>
+        </>
       ),
     },
   ];
@@ -373,9 +410,14 @@ export function SupplierDetails() {
                 { label: t('suppliers.description'), value: tx.description || '-' },
               ]}
               actions={
-                <Button size="small" variant="danger" onClick={() => setTransactionToDelete(tx)}>
-                  <Trash size={16} />
-                </Button>
+                <>
+                  <Button size="small" variant="secondary" onClick={() => setTransactionToEdit(tx)}>
+                    <Edit size={16} />
+                  </Button>
+                  <Button size="small" variant="danger" onClick={() => setTransactionToDelete(tx)}>
+                    <Trash size={16} />
+                  </Button>
+                </>
               }
             />
           ))}
@@ -397,6 +439,17 @@ export function SupplierDetails() {
           supplierProducts={(selectedSupplier as any).products ?? []}
           onSubmit={handleCreateTransaction}
           onCancel={() => setShowTransactionForm(false)}
+          currentUserId={user?.id || ''}
+        />
+      )}
+
+      {transactionToEdit && id && (
+        <SupplierTransactionForm
+          supplierId={id}
+          transaction={transactionToEdit}
+          supplierProducts={(selectedSupplier as any).products ?? []}
+          onSubmit={handleEditTransaction}
+          onCancel={() => setTransactionToEdit(null)}
           currentUserId={user?.id || ''}
         />
       )}
