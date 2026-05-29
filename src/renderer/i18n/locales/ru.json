@@ -590,7 +590,7 @@
     "transactions": "Транзакции",
     "transactionHistory": "История транзакций",
     "noTransactions": "Транзакции не найдены",
-    "addTransaction": "Добавить транзакцию",
+    "addTransaction": "Транзакция",
     "editTransaction": "Редактировать транзакцию",
     "transactionType": "Тип транзакции",
     "paymentMethod": "Способ оплаты",
@@ -635,9 +635,9 @@
     "calculatedAmount": "Сумма (авто)",
     "tannarx": "Себестоимость (tannarx)",
     "paymentType": "Условия оплаты",
-    "paymentTypeImmediate": "Немедленно (нал/карта/перевод)",
-    "paymentTypeInstallment": "Рассрочка (оплата позже)",
-    "immediate": "Немедленно",
+    "paymentTypeImmediate": "Нал",
+    "paymentTypeInstallment": "Рассрочка",
+    "immediate": "Нал",
     "credit": "Рассрочка"
   },
   "receipt": {

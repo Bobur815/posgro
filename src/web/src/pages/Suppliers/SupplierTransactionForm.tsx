@@ -52,7 +52,7 @@ const ToggleGroup = styled.div`
 
 const ToggleBtn = styled.button<{ $active: boolean }>`
   flex: 1;
-  padding: ${({ theme }) => `${theme.spacing.xs} ${theme.spacing.sm}`};
+  padding: ${({ theme }) => `${theme.spacing.sm} ${theme.spacing.sm}`};
   border: none;
   cursor: pointer;
   font-size: 13px;
@@ -105,6 +105,7 @@ interface SupplierTransactionFormProps {
     description?: string;
     referenceId?: string;
     referenceType?: string;
+    quantity?: number;
     createdBy: string;
   }) => Promise<boolean>;
   onCancel: () => void;
@@ -193,16 +194,16 @@ export function SupplierTransactionForm({
 
     setIsLoading(true);
     try {
+      const isProductReturn = type === 'RETURN' && returnMode === 'product' && !!selectedProduct;
       const success = await onSubmit({
         supplierId,
         type,
         paymentMethod,
         amount: finalAmount,
         description: description || undefined,
-        referenceId: type === 'RETURN' && returnMode === 'product' && selectedProduct
-          ? String(selectedProduct.id)
-          : undefined,
-        referenceType: type === 'RETURN' && returnMode === 'product' ? 'PRODUCT' : undefined,
+        referenceId: isProductReturn ? String(selectedProduct!.id) : undefined,
+        referenceType: isProductReturn ? 'PRODUCT' : undefined,
+        quantity: isProductReturn ? parseFloat(returnQty) : undefined,
         createdBy: currentUserId,
       });
 

@@ -48,6 +48,7 @@ export type {
   SupplierTransactionFilters,
   SupplierWithTransactions,
   SupplierPaymentType,
+  InventoryArrivalDescription,
 } from './supplier.types';
 
 export type {

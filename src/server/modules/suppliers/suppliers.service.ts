@@ -192,6 +192,20 @@ export class SuppliersService {
         data: { balance: { increment: balanceDelta } },
       });
 
+      // Subtract stock when returning product to supplier
+      if (
+        dto.type === 'RETURN' &&
+        dto.referenceType === 'PRODUCT' &&
+        dto.referenceId &&
+        dto.quantity != null
+      ) {
+        const productId = parseInt(dto.referenceId, 10);
+        await tx.product.update({
+          where: { id: productId },
+          data: { stock: { decrement: dto.quantity } },
+        });
+      }
+
       return created;
     });
   }

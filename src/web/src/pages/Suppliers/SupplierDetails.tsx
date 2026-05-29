@@ -19,11 +19,12 @@ import {
   SupplierTransactionCreateType,
   SupplierPaymentMethod,
   SupplierProduct,
+  InventoryArrivalDescription,
 } from '@shared/types';
 import { SUPPLIER_PAYMENT_METHOD_I18N_KEYS } from '@shared/constants/payment-methods';
-import { formatCurrency as formatCurrencyBase } from '@shared/utils';
+import { formatCurrency, formatCurrency as formatCurrencyBase } from '@shared/utils';
 import { formatDate, formatDateTime } from '../../utils/formatters';
-import { ArrowLeft, Edit, Trash } from 'lucide-react';
+import { ArrowLeft, Edit, Trash, ChevronDown, ChevronUp, Plus } from 'lucide-react';
 import { MobileCard, MobileCardList, DesktopOnly } from '../../components/common/MobileCard';
 
 // ── Styled components ──────────────────────────────────────────────────────────
@@ -136,17 +137,6 @@ const Section = styled.div`
   min-width: 0;
 `;
 
-const SectionHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-
-  @media (max-width: 768px) {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: ${({ theme }) => theme.spacing.sm};
-  }
-`;
 
 const Divider = styled.hr`
   border: none;
@@ -158,6 +148,35 @@ const SectionTitle = styled.h2`
   margin: 0;
   color: ${({ theme }) => theme.colors.text};
   font-size: 18px;
+`;
+
+const CollapseHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  padding: ${({ theme }) => theme.spacing.sm} 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
+`;
+
+const CollapseBody = styled.div<{ $open: boolean }>`
+  display: ${({ $open }) => ($open ? 'flex' : 'none')};
+  flex-direction: column;
+  gap: ${({ theme }) => theme.spacing.md};
+`;
+
+const DescriptionGrid = styled.div`
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px 8px;
+  font-size: 13px;
+`;
+
+const DescCell = styled.span<{ $label?: boolean }>`
+  color: ${({ theme, $label }) => $label ? theme.colors.textSecondary : theme.colors.text};
+  font-weight: ${({ $label }) => $label ? 400 : 500};
+  white-space: nowrap;
 `;
 
 const FilterBar = styled.div`
@@ -247,51 +266,35 @@ const AmountCell = styled.span<{ $negative?: boolean }>`
     $negative ? theme.colors.error : theme.colors.success};
 `;
 
+const TotalTd = styled.td`
+  padding: ${({ theme }) => theme.spacing.md};
+  font-size: 14px;
+  font-weight: 600;
+  color: ${({ theme }) => theme.colors.text};
+  background-color: ${({ theme }) => theme.colors.background};
+  border-top: 2px solid ${({ theme }) => theme.colors.border};
+`;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-interface ArrivalDescription {
-  arrivalWord: string;
-  productId: number;
-  productName: string;
-  quantity: number;
-  cost: number;
+function parseArrivalDescription(d: InventoryArrivalDescription | undefined): InventoryArrivalDescription | null {
+  return d?.productId != null ? d : null;
 }
 
-function parseArrivalDescription(raw: Record<string, unknown> | string | null | undefined): ArrivalDescription | null {
-  if (!raw) return null;
-  // Already an object (JSONB column)
-  if (typeof raw === 'object' && 'productId' in raw) {
-    return raw as unknown as ArrivalDescription;
-  }
-  // Legacy: plain string stored as JSON string by the USING migration
-  if (typeof raw === 'string') {
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && 'productId' in parsed) return parsed as ArrivalDescription;
-    } catch { /* ignore */ }
-  }
-  return null;
-}
-
-function getDescriptionText(raw: Record<string, unknown> | string | null | undefined): string {
-  if (!raw) return '-';
-  if (typeof raw === 'object' && 'text' in raw) return String(raw.text);
-  if (typeof raw === 'string') return raw;
+function getDescriptionText(d: InventoryArrivalDescription | undefined): string {
+  if (!d) return '-';
+  if (d.productId != null) return `${d.arrivalWord}: ${d.productName} x${d.quantity}`;
   return '-';
 }
 
-function formatArrivalDescription(raw: Record<string, unknown> | string | null | undefined): string {
-  const parsed = parseArrivalDescription(raw);
-  if (parsed) return `${parsed.arrivalWord}: ${parsed.productName} x${parsed.quantity}`;
-  return getDescriptionText(raw);
+function formatArrivalDescription(d: InventoryArrivalDescription | undefined): string {
+  return getDescriptionText(d);
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export function SupplierDetails() {
   const { t, i18n } = useTranslation();
-  const formatCurrency = (amount: number) =>
-    formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
   const navigate = useNavigate();
   const { id } = useParams();
   const { user } = useAuthStore();
@@ -310,6 +313,8 @@ export function SupplierDetails() {
 
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
+  const [purchaseOpen, setPurchaseOpen] = useState(true);
+  const [paymentOpen, setPaymentOpen] = useState(true);
   const [transactionToDelete, setTransactionToDelete] =
     useState<SupplierTransaction | null>(null);
   const [transactionToEdit, setTransactionToEdit] =
@@ -335,6 +340,7 @@ export function SupplierDetails() {
     description?: string;
     referenceId?: string;
     referenceType?: string;
+    quantity?: number;
     createdBy: string;
   }) => {
     const result = await createTransaction(data);
@@ -420,15 +426,7 @@ export function SupplierDetails() {
     }
     if (filterProductId) {
       const targetId = Number(filterProductId);
-      list = list.filter((tx) => {
-        const parsed = parseArrivalDescription(tx.description);
-        // New JSON format: match by productId
-        if (parsed) return parsed.productId === targetId;
-        // Legacy plain-text fallback: match by name
-        const product = products.find((p) => p.id === targetId);
-        if (!product || typeof tx.description !== 'string') return false;
-        return tx.description.includes(product.nameRu) || tx.description.includes(product.nameUz);
-      });
+      list = list.filter((tx) => tx.description?.productId === targetId);
     }
     return list;
   }, [allTransactions, filterStartDate, filterEndDate, filterProductId, products]);
@@ -437,6 +435,17 @@ export function SupplierDetails() {
     () => allTransactions.filter((tx) => tx.type !== 'PURCHASE'),
     [allTransactions],
   );
+
+  // ── totals (across all filtered rows, not just current page) ─────────────────
+
+  const purchaseTotals = useMemo(() => ({
+    amount: filteredPurchase.reduce((sum, tx) => sum + Math.abs(tx.amount), 0),
+    quantity: filteredPurchase.reduce((sum, tx) => sum + (tx.description?.quantity ?? 0), 0),
+  }), [filteredPurchase]);
+
+  const paymentTotals = useMemo(() => ({
+    amount: paymentTransactions.reduce((sum, tx) => sum + tx.amount, 0),
+  }), [paymentTransactions]);
 
   // ── pagination ───────────────────────────────────────────────────────────────
 
@@ -473,7 +482,20 @@ export function SupplierDetails() {
     {
       key: 'description',
       header: t('suppliers.description'),
-      render: (tx: SupplierTransaction) => formatArrivalDescription(tx.description),
+      render: (tx: SupplierTransaction) => {
+        const d = parseArrivalDescription(tx.description);
+        if (!d) return <span>{formatArrivalDescription(tx.description)}</span>;
+        return (
+          <DescriptionGrid>
+            <DescCell $label>{d.arrivalWord}</DescCell>
+            <DescCell>{d.productName}</DescCell>
+            <DescCell $label>{t('inventory.quantity')}</DescCell>
+            <DescCell>{d.quantity}</DescCell>
+            <DescCell $label>{t('inventory.costPerUnit')}</DescCell>
+            <DescCell>{formatCurrency(d.cost)}</DescCell>
+          </DescriptionGrid>
+        );
+      },
     },
     {
       key: 'actions',
@@ -548,8 +570,6 @@ export function SupplierDetails() {
       ),
     },
   ];
-
-  console.log(purchasePagination);
   
   // ── early returns ────────────────────────────────────────────────────────────
 
@@ -578,7 +598,7 @@ export function SupplierDetails() {
           <Title>{supplierName}</Title>
         </HeaderLeft>
         <Button onClick={() => setShowEditForm(true)}>
-          {t('common.edit')}
+          <Edit size={18}/>{t('common.edit')}
         </Button>
       </Header>
 
@@ -628,10 +648,12 @@ export function SupplierDetails() {
       <TablesRow>
         {/* ── PURCHASE (arrivals) ──────────────────────────────────────────── */}
         <Section>
-          <SectionHeader>
+          <CollapseHeader onClick={() => setPurchaseOpen((v) => !v)}>
             <SectionTitle>{t('suppliers.purchase')}</SectionTitle>
-          </SectionHeader>
+            {purchaseOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+          </CollapseHeader>
 
+          <CollapseBody $open={purchaseOpen}>
           {/* Filters */}
           <FilterBar>
             <FilterLabel>
@@ -708,6 +730,14 @@ export function SupplierDetails() {
                 data={purchasePagination.pageData}
                 loading={isLoading}
                 emptyMessage={t('suppliers.noTransactions')}
+                tfoot={
+                  <tr>
+                    <TotalTd colSpan={2}>{t('pos.total')}</TotalTd>
+                    <TotalTd>{formatCurrency(purchaseTotals.amount)}</TotalTd>
+                    <TotalTd>{purchaseTotals.quantity} {t('reports.items').toLowerCase()}</TotalTd>
+                    <TotalTd />
+                  </tr>
+                }
               />
               <Pagination
                 currentPage={purchasePagination.currentPage}
@@ -720,17 +750,24 @@ export function SupplierDetails() {
               />
             </TableWrapper>
           </DesktopOnly>
+          </CollapseBody>
         </Section>
             <Divider></Divider>
         {/* ── PAYMENTS / RETURNS / ADVANCES ────────────────────────────────── */}
         <Section>
-          <SectionHeader>
-            <SectionTitle>{t('suppliers.transactionHistory')}</SectionTitle>
-            <Button onClick={() => setShowTransactionForm(true)}>
-              {t('suppliers.addTransaction')}
-            </Button>
-          </SectionHeader>
+          <CollapseHeader onClick={() => setPaymentOpen((v) => !v)}>
+            <SectionTitle>{t('suppliers.transactions')}</SectionTitle>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Button
+                onClick={(e) => { e.stopPropagation(); setShowTransactionForm(true); }}
+              >
+                <Plus size={24} />{t('suppliers.addTransaction')}
+              </Button>
+              {paymentOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+            </div>
+          </CollapseHeader>
 
+          <CollapseBody $open={paymentOpen}>
           {/* Mobile */}
           <MobileCardList>
             {paymentPagination.pageData.map((tx) => (
@@ -787,6 +824,18 @@ export function SupplierDetails() {
                 data={paymentPagination.pageData}
                 loading={isLoading}
                 emptyMessage={t('suppliers.noTransactions')}
+                tfoot={
+                  <tr>
+                    <TotalTd colSpan={3}>{t('pos.total')}</TotalTd>
+                    <TotalTd>
+                      <AmountCell $negative={paymentTotals.amount < 0}>
+                        {paymentTotals.amount < 0 ? '-' : '+'}
+                        {formatCurrency(Math.abs(paymentTotals.amount))}
+                      </AmountCell>
+                    </TotalTd>
+                    <TotalTd colSpan={2} />
+                  </tr>
+                }
               />
               <Pagination
                 currentPage={paymentPagination.currentPage}
@@ -799,6 +848,7 @@ export function SupplierDetails() {
               />
             </TableWrapper>
           </DesktopOnly>
+          </CollapseBody>
         </Section>
       </TablesRow>
 

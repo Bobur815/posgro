@@ -579,7 +579,7 @@
     "transactions": "Tranzaksiyalar",
     "transactionHistory": "Tranzaksiyalar tarixi",
     "noTransactions": "Tranzaksiyalar topilmadi",
-    "addTransaction": "Tranzaksiya qo'shish",
+    "addTransaction": "Tranzaksiya",
     "editTransaction": "Tranzaksiyani tahrirlash",
     "transactionType": "Tranzaksiya turi",
     "paymentMethod": "To'lov usuli",
@@ -624,10 +624,10 @@
     "calculatedAmount": "Summa (avto)",
     "tannarx": "Tannarx",
     "paymentType": "To'lov sharti",
-    "paymentTypeImmediate": "Darhol (naqd/karta/o'tkazma)",
-    "paymentTypeInstallment": "Muddatli to'lov (keyinroq)",
-    "immediate": "Darhol",
-    "credit": "Muddatli"
+    "paymentTypeImmediate": "Naqd",
+    "paymentTypeInstallment": "Bo'lib to'lash",
+    "immediate": "Naqd",
+    "credit": "Bo'lib to'lash"
   },
   "receipt": {
     "title": "Chek sozlamalari",

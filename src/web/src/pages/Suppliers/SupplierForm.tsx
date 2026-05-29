@@ -38,7 +38,7 @@ const ToggleGroup = styled.div`
 
 const ToggleBtn = styled.button<{ $active: boolean }>`
   flex: 1;
-  padding: ${({ theme }) => `${theme.spacing.xs} ${theme.spacing.sm}`};
+  padding: ${({ theme }) => `${theme.spacing.sm} ${theme.spacing.sm}`};
   border: none;
   cursor: pointer;
   font-size: 13px;

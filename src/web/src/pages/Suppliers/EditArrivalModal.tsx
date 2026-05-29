@@ -39,12 +39,12 @@ interface EditArrivalModalProps {
 
 export function EditArrivalModal({ transaction, onClose, onSuccess }: EditArrivalModalProps) {
   const { t, i18n } = useTranslation();
-
+  
   // amount on PURCHASE is negative (we owe). referenceId is the arrival id.
   const totalCost = Math.abs(transaction.amount);
 
-  const [quantity, setQuantity] = useState('');
-  const [cost, setCost] = useState('');
+  const [quantity, setQuantity] = useState(transaction.description?.quantity?.toString() || '');
+  const [cost, setCost] = useState(transaction.description?.cost?.toString() || '');
   const [notes, setNotes] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');

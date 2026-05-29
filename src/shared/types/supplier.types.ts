@@ -27,6 +27,15 @@ export interface Supplier {
   createdAt: string;
 }
 
+export interface InventoryArrivalDescription {
+  arrivalWord: string // "Приход" or "Kirim" based on locale
+  productId: number;
+  productName: string;
+  quantity: number;
+  cost: number;
+}
+
+
 export interface SupplierTransaction {
   id: string;
   supplierId: string;
@@ -34,7 +43,7 @@ export interface SupplierTransaction {
   type: SupplierTransactionType;
   paymentMethod: SupplierPaymentMethod;
   amount: number; // Positive = reduces our debt, Negative = increases our debt
-  description?: Record<string, unknown> | string | null;
+  description?: InventoryArrivalDescription;
   referenceId?: string;
   referenceType?: string;
   dueDate?: string;
@@ -81,6 +90,7 @@ export interface SupplierTransactionCreateInput {
   description?: string;
   referenceId?: string;
   referenceType?: string;
+  quantity?: number;
   dueDate?: string;
 }
 

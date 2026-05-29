@@ -39,4 +39,11 @@ export class CreateTransactionDto {
   @IsOptional()
   @IsString()
   referenceType?: string;
+
+  @ApiPropertyOptional({ example: 5, description: 'Quantity returned (used when referenceType is PRODUCT)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0.001)
+  @Type(() => Number)
+  quantity?: number;
 }
