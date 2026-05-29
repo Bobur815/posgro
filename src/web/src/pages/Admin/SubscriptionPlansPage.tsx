@@ -113,7 +113,7 @@ const ErrorMsg = styled.div`
 const PLANS = [
   {
     key: "starter" as keyof SubscriptionPlanPrices,
-    name: "STARTER",
+    name: "START",
     desc: "Basic POS features for small stores. Monthly subscription.",
     color: "#16a34a",
     accent: "#bbf7d0",
@@ -189,12 +189,12 @@ export function SubscriptionPlansPage() {
                 </Label>
                 <Input
                   type="number"
-                  min="0"
                   step="1000"
                   value={prices[key]}
                   onChange={(e) =>
                     setPrices((prev) => ({ ...prev, [key]: Number(e.target.value) }))
                   }
+                  onFocus={(e) => e.target.select()}
                 />
               </Card>
             ))}

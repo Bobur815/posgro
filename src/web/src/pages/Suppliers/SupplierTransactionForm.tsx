@@ -319,8 +319,7 @@ export function SupplierTransactionForm({
           <Input
             label={t('suppliers.amount')}
             type="number"
-            min="0.01"
-            step="0.01"
+            step="1000"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             required
