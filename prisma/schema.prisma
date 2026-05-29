@@ -291,7 +291,7 @@ model SupplierTransaction {
   type          SupplierTransactionType
   paymentMethod SupplierPaymentMethod   @map("payment_method")
   amount        Decimal                 @db.Decimal(12, 2) // Positive = reduces our debt, Negative = increases our debt
-  description   String?                 @db.Text
+  description   Json?
 
   // Reference to related entity (e.g., InventoryArrival)
   referenceId   String? @map("reference_id")

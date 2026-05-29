@@ -110,13 +110,13 @@ export class InventoryService {
       const isUz = lang?.startsWith('uz');
       const arrivalWord = isUz ? 'Kirim' : 'Приход';
       const productName = isUz ? product.nameUz : product.nameRu;
-      const descriptionPayload = JSON.stringify({
+      const descriptionPayload = {
         arrivalWord,
         productId: product.id,
         productName,
         quantity: createArrivalDto.quantity,
         cost,
-      });
+      };
 
       await this.prisma.supplierTransaction.create({
         data: {

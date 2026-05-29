@@ -45,7 +45,7 @@ export function EditArrivalModal({ transaction, onClose, onSuccess }: EditArriva
 
   const [quantity, setQuantity] = useState('');
   const [cost, setCost] = useState('');
-  const [notes, setNotes] = useState(transaction.description ?? '');
+  const [notes, setNotes] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 

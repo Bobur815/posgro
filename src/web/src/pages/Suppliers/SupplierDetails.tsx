@@ -22,7 +22,7 @@ import {
 } from '@shared/types';
 import { SUPPLIER_PAYMENT_METHOD_I18N_KEYS } from '@shared/constants/payment-methods';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
-import { formatDate } from '../../utils/formatters';
+import { formatDate, formatDateTime } from '../../utils/formatters';
 import { ArrowLeft, Edit, Trash } from 'lucide-react';
 import { MobileCard, MobileCardList, DesktopOnly } from '../../components/common/MobileCard';
 
@@ -257,25 +257,33 @@ interface ArrivalDescription {
   cost: number;
 }
 
-function parseArrivalDescription(raw: string | undefined): ArrivalDescription | null {
+function parseArrivalDescription(raw: Record<string, unknown> | string | null | undefined): ArrivalDescription | null {
   if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && 'productId' in parsed) {
-      return parsed as ArrivalDescription;
-    }
-  } catch {
-    // Legacy plain-text description
+  // Already an object (JSONB column)
+  if (typeof raw === 'object' && 'productId' in raw) {
+    return raw as unknown as ArrivalDescription;
+  }
+  // Legacy: plain string stored as JSON string by the USING migration
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && 'productId' in parsed) return parsed as ArrivalDescription;
+    } catch { /* ignore */ }
   }
   return null;
 }
 
-function formatArrivalDescription(raw: string | undefined): string {
+function getDescriptionText(raw: Record<string, unknown> | string | null | undefined): string {
+  if (!raw) return '-';
+  if (typeof raw === 'object' && 'text' in raw) return String(raw.text);
+  if (typeof raw === 'string') return raw;
+  return '-';
+}
+
+function formatArrivalDescription(raw: Record<string, unknown> | string | null | undefined): string {
   const parsed = parseArrivalDescription(raw);
-  if (parsed) {
-    return `${parsed.arrivalWord}: ${parsed.productName} x${parsed.quantity}`;
-  }
-  return raw || '-';
+  if (parsed) return `${parsed.arrivalWord}: ${parsed.productName} x${parsed.quantity}`;
+  return getDescriptionText(raw);
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -418,9 +426,8 @@ export function SupplierDetails() {
         if (parsed) return parsed.productId === targetId;
         // Legacy plain-text fallback: match by name
         const product = products.find((p) => p.id === targetId);
-        return product
-          ? tx.description?.includes(product.nameRu) || tx.description?.includes(product.nameUz)
-          : false;
+        if (!product || typeof tx.description !== 'string') return false;
+        return tx.description.includes(product.nameRu) || tx.description.includes(product.nameUz);
       });
     }
     return list;
@@ -446,7 +453,7 @@ export function SupplierDetails() {
     {
       key: 'createdAt',
       header: t('common.createdAt'),
-      render: (tx: SupplierTransaction) => formatDate(tx.createdAt),
+      render: (tx: SupplierTransaction) => formatDateTime(tx.createdAt),
     },
     {
       key: 'paymentMethod',
@@ -488,7 +495,7 @@ export function SupplierDetails() {
     {
       key: 'createdAt',
       header: t('common.createdAt'),
-      render: (tx: SupplierTransaction) => formatDate(tx.createdAt),
+      render: (tx: SupplierTransaction) => formatDateTime(tx.createdAt),
     },
     {
       key: 'type',
@@ -516,7 +523,7 @@ export function SupplierDetails() {
     {
       key: 'description',
       header: t('suppliers.description'),
-      render: (tx: SupplierTransaction) => tx.description || '-',
+      render: (tx: SupplierTransaction) => getDescriptionText(tx.description),
     },
     {
       key: 'actions',
@@ -667,7 +674,7 @@ export function SupplierDetails() {
               <MobileCard
                 key={tx.id}
                 title={formatCurrency(Math.abs(tx.amount))}
-                subtitle={formatDate(tx.createdAt)}
+                subtitle={formatDateTime(tx.createdAt)}
                 fields={[
                   {
                     label: t('suppliers.paymentMethod'),
@@ -730,7 +737,7 @@ export function SupplierDetails() {
               <MobileCard
                 key={tx.id}
                 title={getTransactionTypeLabel(tx.type)}
-                subtitle={formatDate(tx.createdAt)}
+                subtitle={formatDateTime(tx.createdAt)}
                 fields={[
                   {
                     label: t('suppliers.paymentMethod'),
@@ -747,7 +754,7 @@ export function SupplierDetails() {
                   },
                   {
                     label: t('suppliers.description'),
-                    value: tx.description || '-',
+                    value: getDescriptionText(tx.description),
                   },
                 ]}
                 actions={

@@ -34,7 +34,7 @@ export interface SupplierTransaction {
   type: SupplierTransactionType;
   paymentMethod: SupplierPaymentMethod;
   amount: number; // Positive = reduces our debt, Negative = increases our debt
-  description?: string;
+  description?: Record<string, unknown> | string | null;
   referenceId?: string;
   referenceType?: string;
   dueDate?: string;

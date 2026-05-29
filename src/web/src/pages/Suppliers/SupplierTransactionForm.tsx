@@ -131,7 +131,13 @@ export function SupplierTransactionForm({
   const [amount, setAmount] = useState(
     transaction ? Math.abs(transaction.amount).toString() : ''
   );
-  const [description, setDescription] = useState(transaction?.description ?? '');
+  const [description, setDescription] = useState(() => {
+    const d = transaction?.description;
+    if (!d) return '';
+    if (typeof d === 'object' && 'text' in d) return String(d.text);
+    if (typeof d === 'string') return d;
+    return '';
+  });
   const [returnMode, setReturnMode] = useState<'manual' | 'product'>('manual');
   const [selectedProductId, setSelectedProductId] = useState('');
   const [returnQty, setReturnQty] = useState('');

@@ -4,6 +4,7 @@ import styled from "styled-components";
 import { useSales } from "../../hooks/useSales";
 import { useAuthStore } from "../../store/auth-store";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
+import { formatDateTime } from "../../utils/formatters";
 import { Modal } from "../../components/common/Modal";
 import { Button } from "../../components/common/Button";
 import { Pagination } from "../../components/common/Pagination";
@@ -258,20 +259,6 @@ export function ReceiptsSummary() {
   const formatCurrency = (amount: number) =>
     formatCurrencyBase(amount, i18n.language as "ru" | "uz");
 
-  const formatDateTime = (iso: string) => {
-    const d = new Date(iso);
-    return (
-      d.toLocaleDateString(i18n.language, {
-        day: "2-digit",
-        month: "2-digit",
-      }) +
-      " " +
-      d.toLocaleTimeString(i18n.language, {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    );
-  };
 
   useEffect(() => {
     const start = new Date(startDate);

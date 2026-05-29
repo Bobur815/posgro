@@ -5,7 +5,7 @@ import { UpdateSupplierDto } from './dto/update-supplier.dto';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { SupplierFilters, SupplierWhereInput } from './types/supplier.types';
-import { SupplierTransactionType, SupplierPaymentMethod, SupplierPaymentType } from '@prisma/client';
+import { Prisma, SupplierTransactionType, SupplierPaymentMethod, SupplierPaymentType } from '@prisma/client';
 
 @Injectable()
 export class SuppliersService {
@@ -177,7 +177,7 @@ export class SuppliersService {
           type: dto.type as SupplierTransactionType,
           paymentMethod: dto.paymentMethod as SupplierPaymentMethod,
           amount: dto.amount,
-          description: dto.description ?? null,
+          description: dto.description ? { text: dto.description } : Prisma.JsonNull,
           referenceId: dto.referenceId ?? null,
           referenceType: dto.referenceType ?? null,
           dueDate: null,
@@ -215,7 +215,7 @@ export class SuppliersService {
       if (dto.type) updateData.type = dto.type;
       if (dto.paymentMethod) updateData.paymentMethod = dto.paymentMethod;
       if (dto.amount !== undefined) updateData.amount = dto.amount;
-      if (dto.description !== undefined) updateData.description = dto.description;
+      if (dto.description !== undefined) updateData.description = dto.description ? { text: dto.description } : null;
 
       return tx.supplierTransaction.update({ where: { id: txId }, data: updateData });
     });
