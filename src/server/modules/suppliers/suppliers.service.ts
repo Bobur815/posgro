@@ -249,12 +249,12 @@ export class SuppliersService {
   }
 
   private balanceDeltaFor(type: SupplierTransactionType, amount: number): number {
-    // Positive balance = we owe them; negative = they owe us
+    // Negative balance = we owe them; positive = they owe us (matches POS app convention)
     switch (type) {
-      case 'PURCHASE':   return amount;   // we received goods → debt increases
-      case 'PAYMENT':    return -amount;  // we paid → debt decreases
-      case 'RETURN':     return -amount;  // we returned goods → debt decreases
-      case 'ADVANCE':    return -amount;  // we pre-paid → they owe us
+      case 'PURCHASE':   return -amount;  // we received goods → we owe more (more negative)
+      case 'PAYMENT':    return amount;   // we paid → debt decreases (less negative)
+      case 'RETURN':     return amount;   // we returned goods → debt decreases
+      case 'ADVANCE':    return amount;   // we pre-paid → they owe us (positive)
       case 'ADJUSTMENT': return amount;   // manual, positive or negative
       default:           return 0;
     }
