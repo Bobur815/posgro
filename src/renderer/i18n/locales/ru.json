@@ -724,6 +724,22 @@
     "creditBalance": "Кредитный баланс",
     "contactSupport": "Служба поддержки"
   },
+  "subscription": {
+    "title": "Тариф",
+    "noplan": "Нет тарифа",
+    "infoTitle": "О тарифах",
+    "infoStarterTitle": "STARTER",
+    "infoStarterDesc": "Базовый тариф для небольших магазинов.",
+    "infoProTitle": "PRO",
+    "infoProDesc": "Расширенные возможности для среднего бизнеса.",
+    "infoVipTitle": "VIP",
+    "infoVipDesc": "Все функции, бессрочная лицензия.",
+    "expiresAt": "Действует до",
+    "perpetual": "Бессрочно",
+    "storeBalanceTitle": "Баланс магазина",
+    "storeBalance": "Баланс",
+    "pricePerMonth": "сум/мес"
+  },
   "smena": {
     "viewDetails":"Подробнее",
     "actions":"Действия",
@@ -805,6 +821,8 @@
       "syncInterval": "Интервал синхронизации (мин)",
       "terminalId": "ID терминала",
       "terminalIdHint": "Уникальный идентификатор этого кассового терминала (например: T1, T2)",
+      "terminalIdTaken": "ID «{{id}}» уже занят. Рекомендуем: {{suggestion}}",
+      "terminalIdUsed": "Уже используются",
       "next": "Далее"
     },
     "password": {

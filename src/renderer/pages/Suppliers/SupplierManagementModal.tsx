@@ -5,13 +5,15 @@ import { Modal } from "../../components/common/Modal";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
 import { ConfirmDialog } from "../../components/common/ConfirmDialog";
+import { VirtualKeyboard } from "../../components/common/VirtualKeyboard";
+import { KbToggle } from "../../components/common/SearchControls";
 import { useSuppliers } from "../../hooks/useSuppliers";
 import { useToast } from "../../context/ToastContext";
-import { Supplier } from "@shared/types";
+import { Supplier, SupplierPaymentType } from "@shared/types";
 import { convertUzbekText } from "@shared/utils/transliterator";
 import { UzbekPhoneInput } from "../../components/common/UzbekPhoneInput";
 import { phoneToDigits, formatUzPhone } from "@shared/utils/phone";
-import { Pencil, Trash2, Plus, ArrowLeft, CirclePlus } from "lucide-react";
+import { Pencil, Trash2, Plus, ArrowLeft, CirclePlus, Keyboard, ChevronDown, ChevronUp } from "lucide-react";
 
 const List = styled.div`
   display: flex;
@@ -111,6 +113,43 @@ const EmptyMessage = styled.div`
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
+const FormGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+`;
+
+const Label = styled.label`
+  font-weight: 500;
+  color: ${({ theme }) => theme.colors.text};
+  font-size: 14px;
+`;
+
+const ToggleGroup = styled.div`
+  display: flex;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  overflow: hidden;
+`;
+
+const ToggleBtn = styled.button<{ $active: boolean }>`
+  flex: 1;
+  padding: ${({ theme }) => `${theme.spacing.sm} ${theme.spacing.sm}`};
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  background: ${({ $active, theme }) => $active ? theme.colors.primary : 'transparent'};
+  color: ${({ $active }) => $active ? '#fff' : 'inherit'};
+  transition: background 0.15s;
+`;
+
+const FormTopBar = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: ${({ theme }) => theme.spacing.sm};
+`;
+
 interface SupplierManagementModalProps {
   onClose: () => void;
   onSupplierChanged: () => void;
@@ -119,6 +158,7 @@ interface SupplierManagementModalProps {
 }
 
 type View = "list" | "form";
+type ActiveInput = 'nameUz' | 'nameRu' | 'address' | null;
 
 export function SupplierManagementModal({
   onClose,
@@ -148,7 +188,12 @@ export function SupplierManagementModal({
     phoneDigits: initialEditSupplier?.phone ? phoneToDigits(initialEditSupplier.phone) : "",
     balance: initialEditSupplier?.balance ?? 0,
     address: initialEditSupplier?.address ?? "",
+    paymentType: (initialEditSupplier?.paymentType ?? "IMMEDIATE") as SupplierPaymentType,
   });
+
+  // VirtualKeyboard state
+  const [activeInput, setActiveInput] = useState<ActiveInput>(null);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   useEffect(() => {
     loadSuppliers(true);
@@ -156,7 +201,7 @@ export function SupplierManagementModal({
 
   const openCreateForm = () => {
     setEditingSupplier(null);
-    setFormData({ nameRu: "", nameUz: "", phoneDigits: "", balance: 0, address: "" });
+    setFormData({ nameRu: "", nameUz: "", phoneDigits: "", balance: 0, address: "", paymentType: "IMMEDIATE" });
     setView("form");
   };
 
@@ -168,6 +213,7 @@ export function SupplierManagementModal({
       phoneDigits: supplier.phone ? phoneToDigits(supplier.phone) : "",
       balance: supplier.balance || 0,
       address: supplier.address || "",
+      paymentType: supplier.paymentType ?? "IMMEDIATE",
     });
     setView("form");
   };
@@ -204,6 +250,28 @@ export function SupplierManagementModal({
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleVirtualKey = (key: string) => {
+    if (!activeInput) return;
+    if (key === 'ENTER') return;
+    if (key === 'BACKSPACE') {
+      if (activeInput === 'nameUz') {
+        handleNameUzChange(formData.nameUz.slice(0, -1));
+      } else if (activeInput === 'nameRu') {
+        handleNameRuChange(formData.nameRu.slice(0, -1));
+      } else if (activeInput === 'address') {
+        setFormData((prev) => ({ ...prev, address: prev.address.slice(0, -1) }));
+      }
+      return;
+    }
+    if (activeInput === 'nameUz') {
+      handleNameUzChange(formData.nameUz + key);
+    } else if (activeInput === 'nameRu') {
+      handleNameRuChange(formData.nameRu + key);
+    } else if (activeInput === 'address') {
+      setFormData((prev) => ({ ...prev, address: prev.address + key }));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -218,6 +286,7 @@ export function SupplierManagementModal({
         phone,
         address,
         balance: formData.balance ? Number(formData.balance) : 0,
+        paymentType: formData.paymentType,
       });
       if (success) toast.success(t("suppliers.supplierUpdated"));
     } else {
@@ -227,6 +296,7 @@ export function SupplierManagementModal({
         phone,
         address,
         balance: formData.balance ? Number(formData.balance) : 0,
+        paymentType: formData.paymentType,
       });
       if (success) toast.success(t("suppliers.supplierCreated"));
     }
@@ -298,14 +368,27 @@ export function SupplierManagementModal({
           </>
         ) : (
           <>
-            <BackButton onClick={() => setView("list")}>
-              <ArrowLeft size={14} /> {t("suppliers.title")}
-            </BackButton>
+            <FormTopBar>
+              <BackButton onClick={() => setView("list")}>
+                <ArrowLeft size={14} /> {t("suppliers.title")}
+              </BackButton>
+              <KbToggle
+                type="button"
+                tabIndex={-1}
+                $active={keyboardOpen}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setKeyboardOpen((prev) => !prev)}
+              >
+                <Keyboard size={18} />
+                {keyboardOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </KbToggle>
+            </FormTopBar>
             <Form onSubmit={handleSubmit}>
               <Input
                 label={t("suppliers.nameUz")}
                 value={formData.nameUz}
                 onChange={(e) => handleNameUzChange(e.target.value)}
+                onFocus={() => setActiveInput('nameUz')}
                 required
                 autoFocus
               />
@@ -313,6 +396,7 @@ export function SupplierManagementModal({
                 label={t("suppliers.nameRu")}
                 value={formData.nameRu}
                 onChange={(e) => handleNameRuChange(e.target.value)}
+                onFocus={() => setActiveInput('nameRu')}
                 required
               />
               <UzbekPhoneInput
@@ -335,7 +419,27 @@ export function SupplierManagementModal({
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, address: e.target.value }))
                 }
+                onFocus={() => setActiveInput('address')}
               />
+              <FormGroup>
+                <Label>{t("suppliers.paymentType")}</Label>
+                <ToggleGroup>
+                  <ToggleBtn
+                    type="button"
+                    $active={formData.paymentType === "IMMEDIATE"}
+                    onClick={() => setFormData((prev) => ({ ...prev, paymentType: "IMMEDIATE" }))}
+                  >
+                    {t("suppliers.paymentTypeImmediate")}
+                  </ToggleBtn>
+                  <ToggleBtn
+                    type="button"
+                    $active={formData.paymentType === "INSTALLMENT"}
+                    onClick={() => setFormData((prev) => ({ ...prev, paymentType: "INSTALLMENT" }))}
+                  >
+                    {t("suppliers.paymentTypeInstallment")}
+                  </ToggleBtn>
+                </ToggleGroup>
+              </FormGroup>
               <Actions>
                 <Button
                   type="button"
@@ -365,6 +469,14 @@ export function SupplierManagementModal({
           variant="danger"
           onConfirm={handleDelete}
           onCancel={() => setSupplierToDelete(null)}
+        />
+      )}
+
+      {keyboardOpen && view === "form" && (
+        <VirtualKeyboard
+          fixed
+          onKeyPress={handleVirtualKey}
+          onClose={() => setKeyboardOpen(false)}
         />
       )}
     </>

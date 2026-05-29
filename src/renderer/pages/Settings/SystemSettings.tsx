@@ -211,16 +211,6 @@ export function SystemSettings() {
     }
   };
 
-  const handleSaveTerminalId = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await window.electronAPI.config.updateLocalConfig({ terminalId });
-      showToast(t("common.saved"), "success");
-    } catch (error) {
-      console.error("Failed to save terminal id:", error);
-    }
-  };
-
   const loadPlan = async () => {
     setPlanLoading(true);
     try {
@@ -313,28 +303,21 @@ export function SystemSettings() {
 
       <Section>
         <SectionTitle>{t("settings.connection")}</SectionTitle>
-        <Form onSubmit={handleSaveTerminalId}>
-          <Row>
-            <div>
-              <InfoText
-                style={{ marginBottom: 4, fontWeight: 600, fontSize: 13 }}
-              >
-                {t("settings.storeId")}
-              </InfoText>
-              <StatValue style={{ fontSize: 16 }}>{storeId || "—"}</StatValue>
-            </div>
-            <Input
-              label={t("settings.terminalId")}
-              value={terminalId}
-              onChange={(e) => setTerminalId(e.target.value)}
-              placeholder="T1"
-            />
-          </Row>
-          <InfoText>{t("settings.terminalIdHint")}</InfoText>
-          <Actions>
-            <Button type="submit">{t("common.save")}</Button>
-          </Actions>
-        </Form>
+        <Row>
+          <div>
+            <InfoText style={{ marginBottom: 4, fontWeight: 600, fontSize: 13 }}>
+              {t("settings.storeId")}
+            </InfoText>
+            <StatValue style={{ fontSize: 16 }}>{storeId || "—"}</StatValue>
+          </div>
+          <div>
+            <InfoText style={{ marginBottom: 4, fontWeight: 600, fontSize: 13 }}>
+              {t("settings.terminalId")}
+            </InfoText>
+            <StatValue style={{ fontSize: 16 }}>{terminalId || "—"}</StatValue>
+          </div>
+        </Row>
+        <InfoText style={{ marginTop: 8 }}>{t("settings.terminalIdHint")}</InfoText>
       </Section>
 
       <Section>

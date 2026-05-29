@@ -275,6 +275,38 @@ const TotalTd = styled.td`
   border-top: 2px solid ${({ theme }) => theme.colors.border};
 `;
 
+const MobileTotalBar = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.md};
+  padding: ${({ theme }) => theme.spacing.sm} ${({ theme }) => theme.spacing.md};
+  background-color: ${({ theme }) => theme.colors.background};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  font-size: 14px;
+
+  @media (min-width: 769px) {
+    display: none;
+  }
+`;
+
+const MobileTotalItem = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+`;
+
+const MobileTotalLabel = styled.span`
+  font-size: 11px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  text-transform: uppercase;
+`;
+
+const MobileTotalValue = styled.span`
+  font-weight: 600;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function parseArrivalDescription(d: InventoryArrivalDescription | undefined): InventoryArrivalDescription | null {
@@ -721,6 +753,16 @@ export function SupplierDetails() {
               />
             ))}
           </MobileCardList>
+          <MobileTotalBar>
+            <MobileTotalItem>
+              <MobileTotalLabel>{t('pos.total')}</MobileTotalLabel>
+              <MobileTotalValue>{formatCurrency(purchaseTotals.amount)}</MobileTotalValue>
+            </MobileTotalItem>
+            <MobileTotalItem>
+              <MobileTotalLabel>{t('inventory.quantity')}</MobileTotalLabel>
+              <MobileTotalValue>{purchaseTotals.quantity}</MobileTotalValue>
+            </MobileTotalItem>
+          </MobileTotalBar>
 
           {/* Desktop */}
           <DesktopOnly>
@@ -815,6 +857,17 @@ export function SupplierDetails() {
               />
             ))}
           </MobileCardList>
+          <MobileTotalBar>
+            <MobileTotalItem>
+              <MobileTotalLabel>{t('pos.total')}</MobileTotalLabel>
+              <MobileTotalValue>
+                <AmountCell $negative={paymentTotals.amount < 0}>
+                  {paymentTotals.amount < 0 ? '-' : '+'}
+                  {formatCurrency(Math.abs(paymentTotals.amount))}
+                </AmountCell>
+              </MobileTotalValue>
+            </MobileTotalItem>
+          </MobileTotalBar>
 
           {/* Desktop */}
           <DesktopOnly>

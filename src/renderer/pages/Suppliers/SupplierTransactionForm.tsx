@@ -4,6 +4,8 @@ import styled from 'styled-components';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { DateInput } from '../../components/common/DateInput';
+import { VirtualKeyboard } from '../../components/common/VirtualKeyboard';
+import { KbToggle } from '../../components/common/SearchControls';
 import {
   SupplierTransaction,
   SupplierTransactionType,
@@ -13,6 +15,7 @@ import {
   SUPPLIER_PAYMENT_METHODS,
   SUPPLIER_PAYMENT_METHOD_I18N_KEYS,
 } from '@shared/constants/payment-methods';
+import { Keyboard, ChevronDown, ChevronUp } from 'lucide-react';
 
 const Overlay = styled.div`
   position: fixed;
@@ -40,6 +43,13 @@ const Modal = styled.div`
 const Title = styled.h2`
   margin: 0 0 ${({ theme }) => theme.spacing.md};
   color: ${({ theme }) => theme.colors.text};
+`;
+
+const TitleRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: ${({ theme }) => theme.spacing.md};
 `;
 
 const Form = styled.form`
@@ -89,6 +99,7 @@ const TRANSACTION_TYPES: SupplierTransactionType[] = [
   'ADJUSTMENT',
 ];
 
+type ActiveInput = 'amount' | 'description' | null;
 
 interface SupplierTransactionFormProps {
   supplierId: string;
@@ -126,13 +137,18 @@ export function SupplierTransactionForm({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // VirtualKeyboard state
+  const [activeInput, setActiveInput] = useState<ActiveInput>(null);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+
   useEffect(() => {
     if (transaction) {
+      // description is InventoryArrivalDescription object — not editable as free text
       setFormData({
         type: transaction.type,
         paymentMethod: transaction.paymentMethod,
         amount: Math.abs(transaction.amount).toString(),
-        description: transaction.description || '',
+        description: '',
         dueDate: transaction.dueDate
           ? new Date(transaction.dueDate).toISOString().split('T')[0]
           : '',
@@ -177,6 +193,22 @@ export function SupplierTransactionForm({
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleVirtualKey = (key: string) => {
+    if (!activeInput) return;
+    if (key === 'ENTER') return;
+    if (key === 'BACKSPACE') {
+      setFormData((prev) => ({
+        ...prev,
+        [activeInput]: prev[activeInput].slice(0, -1),
+      }));
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      [activeInput]: prev[activeInput] + key,
+    }));
+  };
+
   const getTransactionTypeLabel = (type: SupplierTransactionType) => {
     const labels: Record<SupplierTransactionType, string> = {
       PURCHASE: t('suppliers.purchase'),
@@ -188,13 +220,24 @@ export function SupplierTransactionForm({
     return labels[type];
   };
 
-
   return (
     <Overlay onClick={onCancel}>
       <Modal onClick={(e) => e.stopPropagation()}>
-        <Title>
-          {isEdit ? t('suppliers.editTransaction') : t('suppliers.addTransaction')}
-        </Title>
+        <TitleRow>
+          <Title style={{ margin: 0 }}>
+            {isEdit ? t('suppliers.editTransaction') : t('suppliers.addTransaction')}
+          </Title>
+          <KbToggle
+            type="button"
+            tabIndex={-1}
+            $active={keyboardOpen}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setKeyboardOpen((prev) => !prev)}
+          >
+            <Keyboard size={18} />
+            {keyboardOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </KbToggle>
+        </TitleRow>
 
         <Form onSubmit={handleSubmit}>
           <FormGroup>
@@ -233,6 +276,7 @@ export function SupplierTransactionForm({
             step="0.01"
             value={formData.amount}
             onChange={(e) => handleChange('amount', e.target.value)}
+            onFocus={() => setActiveInput('amount')}
             required
           />
 
@@ -240,6 +284,7 @@ export function SupplierTransactionForm({
             label={t('suppliers.description')}
             value={formData.description}
             onChange={(e) => handleChange('description', e.target.value)}
+            onFocus={() => setActiveInput('description')}
           />
 
           {formData.paymentMethod === 'INSTALLMENT' && (
@@ -261,6 +306,15 @@ export function SupplierTransactionForm({
             </Button>
           </Actions>
         </Form>
+
+        {keyboardOpen && (
+          <VirtualKeyboard
+            fixed
+            numbersOnly={activeInput === 'amount'}
+            onKeyPress={handleVirtualKey}
+            onClose={() => setKeyboardOpen(false)}
+          />
+        )}
       </Modal>
     </Overlay>
   );
