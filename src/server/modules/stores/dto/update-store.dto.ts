@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsObject, IsBoolean, IsIn, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsObject, IsBoolean, IsIn, MaxLength, IsDateString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { StoreSettingsDto } from './create-store.dto';
 
@@ -26,11 +26,22 @@ export class UpdateStoreDto {
   @IsBoolean()
   active?: boolean;
 
-  @ApiPropertyOptional({ example: 'paid', description: 'Store AI plan: free or paid' })
+  @ApiPropertyOptional({ example: 'paid', description: 'AI invoice scanning tier: free or paid' })
   @IsOptional()
   @IsString()
   @IsIn(['free', 'paid'])
-  plan?: string;
+  aiPlan?: string;
+
+  @ApiPropertyOptional({ example: 'PRO', description: 'Subscription plan: STARTER, PRO, or VIP' })
+  @IsOptional()
+  @IsString()
+  @IsIn(['STARTER', 'PRO', 'VIP'])
+  subscriptionPlan?: string;
+
+  @ApiPropertyOptional({ example: '2027-01-01T00:00:00.000Z', description: 'Subscription expiry date (null = perpetual)' })
+  @IsOptional()
+  @IsDateString()
+  subscriptionExpiresAt?: string;
 
   @ApiPropertyOptional({ type: StoreSettingsDto, description: 'Store settings' })
   @IsOptional()

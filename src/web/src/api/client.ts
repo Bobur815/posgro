@@ -370,8 +370,10 @@ export interface StoreRecord {
   address: string | null;
   phone: string | null;
   active: boolean;
-  plan: string;
-  aiCredits: number;
+  aiPlan: string;
+  balance: number;
+  subscriptionPlan: string | null;
+  subscriptionExpiresAt: string | null;
   scheduledDeleteAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -416,7 +418,9 @@ export const stores = {
       address: string;
       phone: string;
       active: boolean;
-      plan: string;
+      aiPlan: string;
+      subscriptionPlan: string;
+      subscriptionExpiresAt: string | null;
     }>,
   ): Promise<StoreRecord> => {
     const { data } = await axiosInstance.patch(`/stores/${id}`, payload);
@@ -438,7 +442,7 @@ export const stores = {
     const { data } = await axiosInstance.put(`/stores/${id}/deactivate`);
     return data;
   },
-  addCredits: async (id: string, amount: number): Promise<{ success: boolean; aiCredits: number }> => {
+  addCredits: async (id: string, amount: number): Promise<{ success: boolean; balance: number }> => {
     const { data } = await axiosInstance.post(`/stores/${id}/credits`, { amount });
     return data;
   },
@@ -548,6 +552,12 @@ export interface LoginBanner {
   subtitle: string;
 }
 
+export interface SubscriptionPlanPrices {
+  starter: number;
+  pro: number;
+  vip: number;
+}
+
 export const siteConfig = {
   getLoginBanner: async (): Promise<LoginBanner> => {
     const { data } = await axiosInstance.get('/site-config/login-banner');
@@ -563,6 +573,14 @@ export const siteConfig = {
     const { data } = await axiosInstance.post('/site-config/upload-image', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
+    return data;
+  },
+  getSubscriptionPlans: async (): Promise<SubscriptionPlanPrices> => {
+    const { data } = await axiosInstance.get('/site-config/subscription-plans');
+    return data;
+  },
+  setSubscriptionPlans: async (prices: SubscriptionPlanPrices): Promise<SubscriptionPlanPrices> => {
+    const { data } = await axiosInstance.put('/site-config/subscription-plans', prices);
     return data;
   },
 };

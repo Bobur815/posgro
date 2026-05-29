@@ -186,9 +186,10 @@ export function msgSuppliersList(
 export function msgStoresList(
   stores: Array<{
     name: string;
-    plan: string;
+    aiPlan: string;
     active: boolean;
-    aiCredits: number;
+    balance: number;
+    subscriptionPlan: string | null;
     usersCount: number;
     productsCount: number;
     salesCount: number;
@@ -200,14 +201,15 @@ export function msgStoresList(
   const lines = stores
     .map((s) => {
       const status = s.active ? '✅' : '🔴';
+      const sub = s.subscriptionPlan ?? '—';
       const planUz =
-        s.plan === 'paid'
-          ? `💎 Premium | AI: ${num(Math.round(s.aiCredits))} so'm`
-          : '🆓 Bepul';
+        s.aiPlan === 'paid'
+          ? `💎 AI Premium | Balans: ${num(Math.round(s.balance))} so'm | ${sub}`
+          : `🆓 AI Bepul | ${sub}`;
       const planRu =
-        s.plan === 'paid'
-          ? `💎 Платный | AI: ${num(Math.round(s.aiCredits))} сум`
-          : '🆓 Бесплатный';
+        s.aiPlan === 'paid'
+          ? `💎 AI Платный | Баланс: ${num(Math.round(s.balance))} сум | ${sub}`
+          : `🆓 AI Бесплатный | ${sub}`;
       const planLine = lang === 'uz' ? planUz : lang === 'ru' ? planRu : `${planUz} / ${planRu}`;
       return (
         `${status} *${s.name}*\n` +

@@ -245,9 +245,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           fmt.msgStoresList(
             stores.map((s) => ({
               name: s.name,
-              plan: s.plan,
+              aiPlan: s.aiPlan,
               active: s.active,
-              aiCredits: Number(s.aiCredits),
+              balance: Number(s.balance),
+              subscriptionPlan: s.subscriptionPlan,
               usersCount: s._count.users,
               productsCount: s._count.products,
               salesCount: s._count.sales,

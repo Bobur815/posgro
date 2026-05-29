@@ -19,6 +19,7 @@ import {
   ScrollText,
   Image,
   ShieldCheck,
+  CreditCard,
   type LucideIcon,
 } from "lucide-react";
 import { useAuthStore } from "../../store/auth-store";
@@ -337,7 +338,7 @@ export function Sidebar() {
   );
 
   const mobileNavItems = isSuperAdmin
-    ? [{ to: "/admin/stores", icon: Store }, { to: "/admin/logs", icon: ScrollText }, { to: "/admin/audit-logs", icon: ShieldCheck }, { to: "/admin/login-banner", icon: Image }]
+    ? [{ to: "/admin/stores", icon: Store }, { to: "/admin/logs", icon: ScrollText }, { to: "/admin/audit-logs", icon: ShieldCheck }, { to: "/admin/login-banner", icon: Image }, { to: "/admin/subscription-plans", icon: CreditCard }]
     : [
         { to: "/products", icon: Package },
         { to: "/products/stock", icon: ClipboardList },
@@ -437,6 +438,7 @@ export function Sidebar() {
               {renderNavItem("/admin/logs", ScrollText, "Logs")}
               {renderNavItem("/admin/audit-logs", ShieldCheck, "Audit Logs")}
               {renderNavItem("/admin/login-banner", Image, "Login Banner")}
+              {renderNavItem("/admin/subscription-plans", CreditCard, "Subscriptions")}
             </NavSection>
           )}
         </Nav>

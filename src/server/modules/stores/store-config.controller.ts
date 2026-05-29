@@ -20,12 +20,12 @@ export class StoreConfigController {
     const store = storeId
       ? await this.prisma.store.findUnique({
           where: { id: storeId },
-          select: { plan: true },
+          select: { aiPlan: true },
         })
       : null;
 
     return {
-      ai_token_limit_daily: store?.plan === 'paid' ? AI_TOKEN_LIMIT_PAID : AI_TOKEN_LIMIT_FREE,
+      ai_token_limit_daily: store?.aiPlan === 'paid' ? AI_TOKEN_LIMIT_PAID : AI_TOKEN_LIMIT_FREE,
     };
   }
 }

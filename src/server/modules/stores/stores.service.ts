@@ -186,7 +186,13 @@ export class StoresService {
     if (updateStoreDto.phone !== undefined) data.phone = updateStoreDto.phone;
     if (updateStoreDto.active !== undefined)
       data.active = updateStoreDto.active;
-    if (updateStoreDto.plan !== undefined) data.plan = updateStoreDto.plan;
+    if (updateStoreDto.aiPlan !== undefined) data.aiPlan = updateStoreDto.aiPlan;
+    if (updateStoreDto.subscriptionPlan !== undefined) data.subscriptionPlan = updateStoreDto.subscriptionPlan;
+    if (updateStoreDto.subscriptionExpiresAt !== undefined) {
+      data.subscriptionExpiresAt = updateStoreDto.subscriptionExpiresAt
+        ? new Date(updateStoreDto.subscriptionExpiresAt)
+        : null;
+    }
     if (updateStoreDto.settings !== undefined) {
       data.settings = JSON.stringify(updateStoreDto.settings);
     }
@@ -275,11 +281,11 @@ export class StoresService {
 
     const updated = await this.prisma.store.update({
       where: { id },
-      data: { aiCredits: { increment: amount } },
-      select: { id: true, aiCredits: true },
+      data: { balance: { increment: amount } },
+      select: { id: true, balance: true },
     });
 
-    return { success: true, aiCredits: Number(updated.aiCredits) };
+    return { success: true, balance: Number(updated.balance) };
   }
 
   async getStats(id: string) {

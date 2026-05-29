@@ -45,12 +45,12 @@ export class InvoiceScannerController {
     const store = storeId
       ? await this.prisma.store.findUnique({
           where: { id: storeId },
-          select: { plan: true, aiCredits: true },
+          select: { aiPlan: true, balance: true },
         })
       : null;
     return {
-      plan: store?.plan ?? 'free',
-      balance_uzs: store?.plan === 'paid' ? Number(store.aiCredits) : null,
+      plan: store?.aiPlan ?? 'free',
+      balance_uzs: store?.aiPlan === 'paid' ? Number(store.balance) : null,
     };
   }
 
@@ -63,27 +63,27 @@ export class InvoiceScannerController {
     const store = storeId
       ? await this.prisma.store.findUnique({
           where: { id: storeId },
-          select: { plan: true, aiCredits: true },
+          select: { aiPlan: true, balance: true },
         })
       : null;
 
-    const plan = store?.plan ?? 'free';
+    const plan = store?.aiPlan ?? 'free';
 
     const result = plan === 'paid'
       ? await this.scannerService.scanPaid(body.imageBase64, body.mimeType)
       : await this.scannerService.scanFree(body.imageBase64, body.mimeType);
 
-    // For paid plan: deduct billed cost (Anthropic cost × 1.3, converted to so'm) from credit balance.
-    // aiCredits is stored in UZS. Charge at scan time regardless of whether the user completes the flow.
+    // For paid plan: deduct billed cost (Anthropic cost × 1.3, converted to so'm) from balance.
+    // balance is stored in UZS. Charge at scan time regardless of whether the user completes the flow.
     if (plan === 'paid' && storeId) {
       const UZS_PER_USD = 12_700;
       const chargedUzs = Math.round((result.cost_usd ?? 0) * 1.3 * UZS_PER_USD);
       const updated = await this.prisma.store.update({
         where: { id: storeId },
-        data: { aiCredits: { decrement: chargedUzs } },
-        select: { aiCredits: true },
+        data: { balance: { decrement: chargedUzs } },
+        select: { balance: true },
       });
-      return { ...result, charged_uzs: chargedUzs, balance_uzs: Number(updated.aiCredits) };
+      return { ...result, charged_uzs: chargedUzs, balance_uzs: Number(updated.balance) };
     }
 
     return result;

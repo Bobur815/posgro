@@ -19,8 +19,12 @@ model Store {
   address   String?  @db.Text
   phone     String?
   active    Boolean  @default(true)
-  plan      String   @default("free") // "free" | "paid"
-  aiCredits Decimal  @default(0) @db.Decimal(12, 4) // Pre-paid AI scan credit balance in UZS (so'm)
+  aiPlan    String   @default("free") @map("ai_plan") // "free" | "paid" — AI invoice scanning tier
+  balance   Decimal  @default(0) @db.Decimal(12, 4) @map("balance") // Store balance in UZS (so'm)
+
+  subscriptionPlan      String?   @map("subscription_plan")       // "STARTER" | "PRO" | "VIP"
+  subscriptionExpiresAt DateTime? @map("subscription_expires_at") // null = perpetual (VIP)
+
   settings  String?  @db.Text // JSON: tax rate, receipt template, etc.
 
   scheduledDeleteAt DateTime? @map("scheduled_delete_at")
