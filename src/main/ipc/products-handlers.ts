@@ -90,6 +90,7 @@ function serializeProduct(product: any): Product | null {
       address: product.supplier.address || undefined,
       active: Boolean(product.supplier.active ?? true),
       balance: toNumber(product.supplier.balance),
+      paymentType: (product.supplier as any).paymentType ?? 'IMMEDIATE',
       createdAt: toISOString(product.supplier.createdAt),
     };
   }

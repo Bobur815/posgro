@@ -88,11 +88,12 @@ export function EditArrivalModal({ transaction, onClose, onSuccess }: EditArriva
             <Input
               label={t('inventory.quantity')}
               type="number"
-              step="0.001"
+              step="1"
               placeholder={t('inventory.currentValue')}
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
               autoFocus
+              onFocus={(e) => e.target.select()}
             />
           </div>
           <div>
@@ -103,6 +104,7 @@ export function EditArrivalModal({ transaction, onClose, onSuccess }: EditArriva
               placeholder={t('inventory.currentValue')}
               value={cost}
               onChange={(e) => setCost(e.target.value)}
+              onFocus={(e) => e.target.select()}
             />
             {cost && (
               <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2, fontStyle: 'italic' }}>

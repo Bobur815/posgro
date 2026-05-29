@@ -110,7 +110,13 @@ export class InventoryService {
       const isUz = lang?.startsWith('uz');
       const arrivalWord = isUz ? 'Kirim' : 'Приход';
       const productName = isUz ? product.nameUz : product.nameRu;
-      const description = `${arrivalWord}: ${productName} x${createArrivalDto.quantity}`;
+      const descriptionPayload = JSON.stringify({
+        arrivalWord,
+        productId: product.id,
+        productName,
+        quantity: createArrivalDto.quantity,
+        cost,
+      });
 
       await this.prisma.supplierTransaction.create({
         data: {
@@ -119,7 +125,7 @@ export class InventoryService {
           type: SupplierTransactionType.PURCHASE,
           paymentMethod,
           amount: -totalCost,
-          description,
+          description: descriptionPayload,
           referenceId: arrival.id,
           referenceType: 'ARRIVAL',
           createdBy: userId,
@@ -142,7 +148,7 @@ export class InventoryService {
             type: SupplierTransactionType.PAYMENT,
             paymentMethod,
             amount: totalCost,
-            description: `Payment for: ${description}`,
+            description: descriptionPayload,
             referenceId: arrival.id,
             referenceType: 'ARRIVAL',
             createdBy: userId,

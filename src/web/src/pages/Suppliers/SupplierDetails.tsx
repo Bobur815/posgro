@@ -148,6 +148,12 @@ const SectionHeader = styled.div`
   }
 `;
 
+const Divider = styled.hr`
+  border: none;
+  border-top: 2px solid ${({ theme }) => theme.colors.border};
+  margin: ${({ theme }) => theme.spacing.md} 0;
+`;
+
 const SectionTitle = styled.h2`
   margin: 0;
   color: ${({ theme }) => theme.colors.text};
@@ -241,6 +247,37 @@ const AmountCell = styled.span<{ $negative?: boolean }>`
     $negative ? theme.colors.error : theme.colors.success};
 `;
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+interface ArrivalDescription {
+  arrivalWord: string;
+  productId: number;
+  productName: string;
+  quantity: number;
+  cost: number;
+}
+
+function parseArrivalDescription(raw: string | undefined): ArrivalDescription | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && 'productId' in parsed) {
+      return parsed as ArrivalDescription;
+    }
+  } catch {
+    // Legacy plain-text description
+  }
+  return null;
+}
+
+function formatArrivalDescription(raw: string | undefined): string {
+  const parsed = parseArrivalDescription(raw);
+  if (parsed) {
+    return `${parsed.arrivalWord}: ${parsed.productName} x${parsed.quantity}`;
+  }
+  return raw || '-';
+}
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export function SupplierDetails() {
@@ -273,8 +310,8 @@ export function SupplierDetails() {
     useState<SupplierTransaction | null>(null);
 
   // Purchase filters
-  const [filterStartDate, setFilterStartDate] = useState('');
-  const [filterEndDate, setFilterEndDate] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState(new Date().toISOString().split('T')[0]); // default to 30 days ago
+  const [filterEndDate, setFilterEndDate] = useState(new Date().toISOString().split('T')[0]); // default to today
   const [filterProductId, setFilterProductId] = useState('');
 
   useEffect(() => {
@@ -374,16 +411,17 @@ export function SupplierDetails() {
       list = list.filter((tx) => new Date(tx.createdAt) <= to);
     }
     if (filterProductId) {
-      const product = products.find(
-        (p) => String(p.id) === filterProductId,
-      );
-      if (product) {
-        list = list.filter(
-          (tx) =>
-            tx.description?.includes(product.nameRu) ||
-            tx.description?.includes(product.nameUz),
-        );
-      }
+      const targetId = Number(filterProductId);
+      list = list.filter((tx) => {
+        const parsed = parseArrivalDescription(tx.description);
+        // New JSON format: match by productId
+        if (parsed) return parsed.productId === targetId;
+        // Legacy plain-text fallback: match by name
+        const product = products.find((p) => p.id === targetId);
+        return product
+          ? tx.description?.includes(product.nameRu) || tx.description?.includes(product.nameUz)
+          : false;
+      });
     }
     return list;
   }, [allTransactions, filterStartDate, filterEndDate, filterProductId, products]);
@@ -428,7 +466,7 @@ export function SupplierDetails() {
     {
       key: 'description',
       header: t('suppliers.description'),
-      render: (tx: SupplierTransaction) => tx.description || '-',
+      render: (tx: SupplierTransaction) => formatArrivalDescription(tx.description),
     },
     {
       key: 'actions',
@@ -504,7 +542,10 @@ export function SupplierDetails() {
     },
   ];
 
+  console.log(purchasePagination);
+  
   // ── early returns ────────────────────────────────────────────────────────────
+
 
   if (isLoading && !selectedSupplier) {
     return <Container>{t('common.loading')}</Container>;
@@ -634,7 +675,7 @@ export function SupplierDetails() {
                   },
                   {
                     label: t('suppliers.description'),
-                    value: tx.description || '-',
+                    value: formatArrivalDescription(tx.description),
                   },
                 ]}
                 actions={
@@ -673,7 +714,7 @@ export function SupplierDetails() {
             </TableWrapper>
           </DesktopOnly>
         </Section>
-
+            <Divider></Divider>
         {/* ── PAYMENTS / RETURNS / ADVANCES ────────────────────────────────── */}
         <Section>
           <SectionHeader>

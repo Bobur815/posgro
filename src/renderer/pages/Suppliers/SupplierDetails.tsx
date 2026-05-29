@@ -13,6 +13,7 @@ import { useToast } from '../../context/ToastContext';
 import {
   SupplierTransaction,
   SupplierTransactionType,
+  SupplierTransactionCreateType,
   SupplierPaymentMethod,
 } from '@shared/types';
 import { SUPPLIER_PAYMENT_METHOD_I18N_KEYS } from '@shared/constants/payment-methods';
@@ -185,7 +186,7 @@ export function SupplierDetails() {
 
   const handleCreateTransaction = async (data: {
     supplierId: string;
-    type: SupplierTransactionType;
+    type: SupplierTransactionCreateType;
     paymentMethod: SupplierPaymentMethod;
     amount: number;
     description?: string;
