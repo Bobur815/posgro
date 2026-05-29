@@ -2,7 +2,9 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
+  Param,
   Query,
   Headers,
   UseGuards,
@@ -11,6 +13,7 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { InventoryService } from './inventory.service';
 import { CreateArrivalDto } from './dto/create-arrival.dto';
+import { UpdateArrivalDto } from './dto/update-arrival.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { StoreGuard } from '../../common/guards/store.guard';
@@ -55,6 +58,17 @@ export class InventoryController {
     @Headers('accept-language') lang?: string,
   ) {
     return this.inventoryService.createArrival(storeId, createArrivalDto, user.id, lang);
+  }
+
+  @Patch('arrivals/:id')
+  @ApiOperation({ summary: 'Update inventory arrival (adjusts stock and supplier balance)' })
+  @ApiResponse({ status: 200, description: 'Arrival updated' })
+  async updateArrival(
+    @CurrentStore() storeId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateArrivalDto,
+  ) {
+    return this.inventoryService.updateArrival(id, storeId, dto);
   }
 
   @Post('arrivals/sync-bulk')

@@ -13,6 +13,8 @@ export type SupplierTransactionType =
 // Types allowed when creating a new transaction via the UI (PURCHASE & ADJUSTMENT are system-only)
 export type SupplierTransactionCreateType = 'PAYMENT' | 'RETURN' | 'ADVANCE';
 
+export type SupplierPaymentType = 'IMMEDIATE' | 'INSTALLMENT';
+
 export interface Supplier {
   id: string;
   nameRu: string;
@@ -21,6 +23,7 @@ export interface Supplier {
   address?: string;
   active: boolean;
   balance: number; // Negative = we owe them, Positive = they owe us
+  paymentType: SupplierPaymentType;
   createdAt: string;
 }
 
@@ -47,6 +50,7 @@ export interface SupplierCreateInput {
   phone?: string;
   address?: string;
   balance?: number;
+  paymentType?: SupplierPaymentType;
 }
 
 export interface SupplierUpdateInput {
@@ -56,6 +60,7 @@ export interface SupplierUpdateInput {
   address?: string;
   active?: boolean;
   balance?: number;
+  paymentType?: SupplierPaymentType;
 }
 
 export interface SupplierProduct {

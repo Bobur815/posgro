@@ -47,6 +47,7 @@ export type {
   SupplierTransactionUpdateInput,
   SupplierTransactionFilters,
   SupplierWithTransactions,
+  SupplierPaymentType,
 } from './supplier.types';
 
 export type {

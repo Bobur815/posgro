@@ -243,8 +243,9 @@ model Supplier {
   nameRu  String  @map("name_ru")
   phone   String?
   address String? @db.Text
-  active  Boolean @default(true)
-  balance Decimal @default(0) @db.Decimal(12, 2) // Negative = we owe them, Positive = they owe us
+  active      Boolean             @default(true)
+  balance     Decimal             @default(0) @db.Decimal(12, 2) // Negative = we owe them, Positive = they owe us
+  paymentType SupplierPaymentType @default(IMMEDIATE) @map("payment_type")
 
   categories   Category[]
   arrivals     InventoryArrival[]
@@ -258,6 +259,11 @@ model Supplier {
 }
 
 // ==================== SUPPLIER TRANSACTIONS ====================
+
+enum SupplierPaymentType {
+  IMMEDIATE    // Paid on delivery (cash / card / bank transfer)
+  INSTALLMENT  // Pay later (credit terms)
+}
 
 enum SupplierTransactionType {
   PURCHASE    // We received goods (increases our debt)

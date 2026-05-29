@@ -80,6 +80,7 @@ export class SuppliersService {
         address: data.address || null,
         balance: data.balance ?? 0,
         active: true,
+        paymentType: (data.paymentType as any) ?? 'IMMEDIATE',
         categories: categoryIds?.length
           ? { connect: categoryIds.map((id) => ({ id })) }
           : undefined,

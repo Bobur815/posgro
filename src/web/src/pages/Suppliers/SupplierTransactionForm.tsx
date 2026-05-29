@@ -14,6 +14,7 @@ import {
   SUPPLIER_PAYMENT_METHODS,
   SUPPLIER_PAYMENT_METHOD_I18N_KEYS,
 } from '@shared/constants/payment-methods';
+import { amountHint } from '@shared/utils';
 
 const Form = styled.form`
   display: flex;
@@ -68,6 +69,14 @@ const CalcAmount = styled.div`
   font-family: monospace;
   font-size: 15px;
   color: ${({ theme }) => theme.colors.text};
+`;
+
+const AmountHint = styled.div`
+  font-size: 12px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-style: italic;
+  min-height: 16px;
+  margin-top: 2px;
 `;
 
 const Actions = styled.div`
@@ -291,8 +300,7 @@ export function SupplierTransactionForm({
                   <Input
                     label={t('suppliers.tannarx')}
                     type="number"
-                    min="0.01"
-                    step="0.01"
+                    step="1000"
                     value={manualCost}
                     onChange={(e) => setManualCost(e.target.value)}
                   />
@@ -300,8 +308,7 @@ export function SupplierTransactionForm({
                 <Input
                   label={`${t('suppliers.quantity')} (${selectedProduct.unit})`}
                   type="number"
-                  min="0.001"
-                  step="0.001"
+                  step="1"
                   value={returnQty}
                   onChange={(e) => setReturnQty(e.target.value)}
                 />
@@ -316,14 +323,17 @@ export function SupplierTransactionForm({
             )}
           </>
         ) : (
-          <Input
-            label={t('suppliers.amount')}
-            type="number"
-            step="1000"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            required
-          />
+          <Label>
+            <Input
+              label={t('suppliers.amount')}
+              type="number"
+              step="1000"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              required
+            />
+            <AmountHint>{amountHint(amount, i18n.language)}</AmountHint>
+          </Label>
         )}
 
         <Input

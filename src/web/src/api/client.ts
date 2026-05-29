@@ -197,6 +197,10 @@ export const inventory = {
     });
     return data;
   },
+  updateArrival: async (id: string, payload: { quantity?: number; cost?: number; notes?: string }) => {
+    const { data } = await axiosInstance.patch(`/inventory/arrivals/${id}`, payload);
+    return data;
+  },
   getLowStock: async () => {
     const { data } = await axiosInstance.get("/inventory/low-stock");
     return data;

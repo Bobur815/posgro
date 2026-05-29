@@ -185,6 +185,7 @@ export function NewArrivalModal({
 }: NewArrivalModalProps) {
   const { t, i18n } = useTranslation();
 
+  const initialSupplier = suppliers.find((s) => s.id === product.supplierId);
   const [arrivalData, setArrivalData] = useState<ArrivalData>({
     quantity: "",
     cost: product.cost ? String(product.cost) : "",
@@ -194,7 +195,7 @@ export function NewArrivalModal({
     supplierId: product.supplierId || "",
     productionDate: product.productionDate ? product.productionDate.slice(0, 10) : "",
     expirationDate: product.expiryDate ? product.expiryDate.slice(0, 10) : "",
-    paymentMethod: "CASH",
+    paymentMethod: initialSupplier?.paymentType === 'INSTALLMENT' ? 'INSTALLMENT' : 'CASH',
   });
 
   const formatCurrency = (amount: number) =>
@@ -441,12 +442,17 @@ export function NewArrivalModal({
               <Select
                 value={arrivalData.supplierId}
                 style={{ flex: 1 }}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const id = e.target.value;
+                  const supplier = suppliers.find((s) => s.id === id);
                   setArrivalData((prev) => ({
                     ...prev,
-                    supplierId: e.target.value,
-                  }))
-                }
+                    supplierId: id,
+                    paymentMethod: supplier?.paymentType === 'INSTALLMENT'
+                      ? 'INSTALLMENT'
+                      : 'CASH',
+                  }));
+                }}
               >
                 <option value="">{t("products.noSupplier")}</option>
                 {suppliers.map((supplier: Supplier) => (

@@ -232,7 +232,10 @@
     "afterStockDrops": "qoldiq {{threshold}} ga tushgandan keyin",
     "preWeighed": "Oldindan tortilgan",
     "available": "Mavjud",
-    "sold": "Sotilgan"
+    "sold": "Sotilgan",
+    "editArrival": "Kirimni tahrirlash",
+    "currentValue": "Joriy qiymat",
+    "currentTotal": "Joriy summa"
   },
   "bulkWeigh": {
     "title": "Mahsulotni tortish",
@@ -619,7 +622,10 @@
     "selectProduct": "Mahsulotni tanlang",
     "quantity": "Miqdor",
     "calculatedAmount": "Summa (avto)",
-    "tannarx": "Tannarx"
+    "tannarx": "Tannarx",
+    "paymentType": "To'lov sharti",
+    "paymentTypeImmediate": "Darhol (naqd/karta/o'tkazma)",
+    "paymentTypeInstallment": "Muddatli to'lov (keyinroq)"
   },
   "receipt": {
     "title": "Chek sozlamalari",
