@@ -196,6 +196,19 @@ export function SupplierList() {
       render: (supplier: Supplier) => supplier.phone || "-",
     },
     {
+      key: "address",
+      header: t("suppliers.address"),
+      render: (supplier: Supplier) => supplier.address || "-",  
+    },
+    {
+      key: "paymentType",
+      header: t("suppliers.paymentType"),
+      render: (supplier: Supplier) =>
+        supplier.paymentType === "IMMEDIATE"
+          ? t("suppliers.immediate")
+          : t("suppliers.credit"),
+    },
+    {
       key: "balance",
       header: t("suppliers.balance"),
       render: (supplier: Supplier) => (

@@ -625,7 +625,9 @@
     "tannarx": "Tannarx",
     "paymentType": "To'lov sharti",
     "paymentTypeImmediate": "Darhol (naqd/karta/o'tkazma)",
-    "paymentTypeInstallment": "Muddatli to'lov (keyinroq)"
+    "paymentTypeInstallment": "Muddatli to'lov (keyinroq)",
+    "immediate": "Darhol",
+    "credit": "Muddatli"
   },
   "receipt": {
     "title": "Chek sozlamalari",

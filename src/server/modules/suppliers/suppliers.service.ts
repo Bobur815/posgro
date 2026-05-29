@@ -5,7 +5,7 @@ import { UpdateSupplierDto } from './dto/update-supplier.dto';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { SupplierFilters, SupplierWhereInput } from './types/supplier.types';
-import { SupplierTransactionType, SupplierPaymentMethod } from '@prisma/client';
+import { SupplierTransactionType, SupplierPaymentMethod, SupplierPaymentType } from '@prisma/client';
 
 @Injectable()
 export class SuppliersService {
@@ -69,7 +69,7 @@ export class SuppliersService {
   }
 
   async create(storeId: string, createSupplierDto: CreateSupplierDto) {
-    const { categoryIds, ...data } = createSupplierDto;
+    const { categoryIds, paymentType, ...data } = createSupplierDto;
 
     return this.prisma.supplier.create({
       data: {
@@ -80,7 +80,7 @@ export class SuppliersService {
         address: data.address || null,
         balance: data.balance ?? 0,
         active: true,
-        paymentType: (data.paymentType as any) ?? 'IMMEDIATE',
+        paymentType: paymentType as SupplierPaymentType,
         categories: categoryIds?.length
           ? { connect: categoryIds.map((id) => ({ id })) }
           : undefined,
@@ -92,12 +92,13 @@ export class SuppliersService {
   async update(id: string, storeId: string, updateSupplierDto: UpdateSupplierDto) {
     await this.findById(id, storeId);
 
-    const { categoryIds, ...data } = updateSupplierDto;
+    const { categoryIds, paymentType, ...data } = updateSupplierDto;
 
     return this.prisma.supplier.update({
       where: { id },
       data: {
         ...data,
+        ...(paymentType && { paymentType: paymentType as SupplierPaymentType }),
         categories: categoryIds
           ? { set: categoryIds.map((id) => ({ id })) }
           : undefined,

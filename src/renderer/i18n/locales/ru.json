@@ -636,7 +636,9 @@
     "tannarx": "Себестоимость (tannarx)",
     "paymentType": "Условия оплаты",
     "paymentTypeImmediate": "Немедленно (нал/карта/перевод)",
-    "paymentTypeInstallment": "Рассрочка (оплата позже)"
+    "paymentTypeInstallment": "Рассрочка (оплата позже)",
+    "immediate": "Немедленно",
+    "credit": "Рассрочка"
   },
   "receipt": {
     "title": "Настройки чека",

@@ -120,7 +120,7 @@ const BalanceValue = styled.div<{ $positive?: boolean }>`
 
 const TablesRow = styled.div`
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: ${({ theme }) => theme.spacing.lg};
   align-items: start;
 
@@ -165,7 +165,7 @@ const FilterBar = styled.div`
 `;
 
 const FilterLabel = styled.label`
-  font-size: 12px;
+  font-size: 14px;
   color: ${({ theme }) => theme.colors.textSecondary};
   display: flex;
   flex-direction: column;
@@ -175,12 +175,12 @@ const FilterLabel = styled.label`
 `;
 
 const FilterInput = styled.input`
-  padding: 4px 8px;
+  padding: 8px 8px;
   border: 1px solid ${({ theme }) => theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
   background-color: ${({ theme }) => theme.colors.background};
   color: ${({ theme }) => theme.colors.text};
-  font-size: 13px;
+  font-size: 14px;
   width: 100%;
 
   &:focus {
@@ -190,12 +190,12 @@ const FilterInput = styled.input`
 `;
 
 const FilterSelect = styled.select`
-  padding: 4px 8px;
+  padding: 8px 8px;
   border: 1px solid ${({ theme }) => theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
   background-color: ${({ theme }) => theme.colors.background};
   color: ${({ theme }) => theme.colors.text};
-  font-size: 13px;
+  font-size: 14px;
   width: 100%;
 
   &:focus {
@@ -587,7 +587,7 @@ export function SupplierDetails() {
           {/* Filters */}
           <FilterBar>
             <FilterLabel>
-              {t('common.startDate')}
+              {t('reports.startDate')}
               <FilterInput
                 type="date"
                 value={filterStartDate}
@@ -595,7 +595,7 @@ export function SupplierDetails() {
               />
             </FilterLabel>
             <FilterLabel>
-              {t('common.endDate')}
+              {t('reports.endDate')}
               <FilterInput
                 type="date"
                 value={filterEndDate}
@@ -609,7 +609,7 @@ export function SupplierDetails() {
                   value={filterProductId}
                   onChange={(e) => setFilterProductId(e.target.value)}
                 >
-                  <option value="">{t('common.all')}</option>
+                  <option value="">{t('filters.all')}</option>
                   {products.map((p) => (
                     <option key={p.id} value={String(p.id)}>
                       {i18n.language === 'uz' ? p.nameUz : p.nameRu}
