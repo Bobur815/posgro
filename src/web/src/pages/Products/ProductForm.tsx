@@ -356,7 +356,12 @@ export function ProductForm({
   }, [formData.productType, isEdit]);
 
   const autoSelectCategory = useCallback((groupCode: string) => {
-    const cat = categories.find((c) => c.mxikGroupCode === groupCode);
+    // mxikGroupCode may be comma-separated (e.g. "007,008") for categories
+    // that span multiple MXIK groups (e.g. "Meva va sabzavotlar" covers both
+    // vegetables 007 and fruits 008).
+    const cat = categories.find((c) =>
+      c.mxikGroupCode?.split(",").includes(groupCode)
+    );
     if (cat) {
       setFormData((prev) => ({ ...prev, categoryId: String(cat.id) }));
       toast.info(t("products.categoryAutoSelected"));

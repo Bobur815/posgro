@@ -12,7 +12,8 @@ import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-const dryRun = process.argv.includes('--dry-run');
+const dryRun  = process.argv.includes('--dry-run');
+const remap   = process.argv.includes('--remap');  // re-map already-set categories
 
 // ─── Mapping: keyword patterns (lowercase) → MXIK group code ─────────────────
 // Pattern is matched against lowercase nameUz or nameRu of the category.
@@ -25,9 +26,16 @@ const RULES: Array<{ keywords: string[]; groupCode: string; note: string }> = [
                'творог', 'сыр', 'pishloq'],                     groupCode: '004', note: 'Dairy' },
   { keywords: ['tuxum', 'яйц'],                                 groupCode: '004', note: 'Eggs (animal products)' },
   { keywords: ['muzqaymoq', 'мороженое'],                       groupCode: '004', note: 'Ice cream (dairy)' },
+  // "Meva va sabzavotlar" / "Фрукты и овощи" — combined category spanning
+  // MXIK 007 (vegetables) AND 008 (fruits). Must come before the separate rules.
+  { keywords: ['meva va sabzavot', 'фрукты и овощ', 'овощи и фрукт'],
+                                                                groupCode: '007,008', note: 'Fruits & vegetables (combined)' },
   { keywords: ['sabzavot', 'овощ'],                             groupCode: '007', note: 'Vegetables' },
-  { keywords: ['meva', 'фрукт', 'yong\'oq', 'орех',
-               'quruq', 'сухофрукт', 'qoqi'],                  groupCode: '008', note: 'Fruits & nuts' },
+  // "Quruq mevalar" / "Сухофрукты" — dried fruits are a subset of MXIK 008
+  // (same group as fresh fruits). Use null so fresh fruits auto-select the
+  // broader "Meva va sabzavotlar" category instead. Admin sets this manually.
+  { keywords: ['quruq meva', 'сухофрукт', 'qoqi meva'],        groupCode: 'null', note: 'Dried fruits (no auto-map)' },
+  { keywords: ['meva', 'фрукт', 'yong\'oq', 'орех'],           groupCode: '008', note: 'Fruits & nuts' },
   { keywords: ['choy', 'qahva', 'кофе', 'чай'],                groupCode: '009', note: 'Tea & coffee' },
   { keywords: ['ziravor', 'bahor', 'speci', 'специ', 'приправ'], groupCode: '009', note: 'Spices' },
   { keywords: ['don ', 'donli', 'крупа', 'крупы', 'guruch',
@@ -61,14 +69,18 @@ const RULES: Array<{ keywords: string[]; groupCode: string; note: string }> = [
   { keywords: ['o\'yinchoq', 'игрушк', 'toy'],                groupCode: '095', note: 'Toys' },
 ];
 
-function findGroupCode(nameUz: string, nameRu: string): string | null {
+// Returns:
+//   string  — matched group code (may be comma-separated, e.g. "007,008")
+//   null    — matched but explicitly no group (dried fruits etc.)
+//   undefined — no match at all
+function findGroupCode(nameUz: string, nameRu: string): string | null | undefined {
   const haystack = `${nameUz} ${nameRu}`.toLowerCase();
   for (const rule of RULES) {
     if (rule.keywords.some((kw) => haystack.includes(kw))) {
-      return rule.groupCode;
+      return rule.groupCode === 'null' ? null : rule.groupCode;
     }
   }
-  return null;
+  return undefined;
 }
 
 async function main() {
@@ -85,18 +97,20 @@ async function main() {
   let unmatched: typeof categories = [];
 
   for (const cat of categories) {
-    if (cat.mxikGroupCode) { alreadySet++; continue; }
+    if (!remap && cat.mxikGroupCode !== null && cat.mxikGroupCode !== undefined) { alreadySet++; continue; }
 
     const groupCode = findGroupCode(cat.nameUz, cat.nameRu);
-    if (!groupCode) {
+    if (groupCode === undefined) {
       unmatched.push(cat);
       continue;
     }
 
-    const rule = RULES.find((r) => r.groupCode === groupCode &&
+    // groupCode is either a string (including comma-separated) or null (explicit no-map)
+    const displayCode = groupCode ?? 'null (no auto-map)';
+    const rule = RULES.find((r) =>
       r.keywords.some((kw) => `${cat.nameUz} ${cat.nameRu}`.toLowerCase().includes(kw)));
 
-    console.log(`  [${cat.id}] "${cat.nameUz}" → group ${groupCode} (${rule?.note})`);
+    console.log(`  [${cat.id}] "${cat.nameUz}" → ${displayCode} (${rule?.note})`);
 
     if (!dryRun) {
       await prisma.category.update({ where: { id: cat.id }, data: { mxikGroupCode: groupCode } });
