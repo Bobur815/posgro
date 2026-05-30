@@ -13,6 +13,8 @@
     "build:telegram": "tsc --project src/telegram-bot/tsconfig.json",
     "deploy:telegram": "bash scripts/deploy-telegram.sh",
     "seed:paynet-mock": "node scripts/seed-paynet-mock.js",
+    "import:mxik-catalog": "npx tsx scripts/import-mxik-catalog.ts",
+    "seed:mxik-categories": "npx tsx scripts/seed-mxik-categories.ts",
     "build:server": "nest build",
     "prisma:generate": "prisma generate",
     "prisma:generate:sqlite": "prisma generate --schema=prisma/schema.sqlite.prisma",
@@ -86,7 +88,8 @@
     "to-ico": "^1.1.5",
     "ts-jest": "^29.4.6",
     "tsx": "^4.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "xlsx": "^0.18.5"
   },
   "jest": {
     "preset": "ts-jest",
