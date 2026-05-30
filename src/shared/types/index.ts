@@ -79,3 +79,5 @@ export type {
 } from './receipt.types';
 
 export type { Smena, SmenaMovement, SmenaStats } from './smena.types';
+
+export type { CatalogEntry } from './mxik.types';

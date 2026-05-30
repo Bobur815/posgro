@@ -1,16 +1,6 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-
-export interface CatalogEntry {
-  mxikCode:        string;
-  mxikName:        string;
-  groupCode:       string;
-  groupName:       string;
-  classCode:       string;
-  className:       string;
-  internationalCode: string | null;
-  unitName:        string | null;
-}
+import type { CatalogEntry } from '@shared/types/mxik.types';
 
 const TASNIF_BASE = 'https://tasnif.soliq.uz/api/cls-api';
 

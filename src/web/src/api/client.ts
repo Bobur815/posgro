@@ -1,4 +1,5 @@
 import axios from "axios";
+import type { CatalogEntry } from "@shared/types";
 
 export interface DeviceSession {
   id: string;
@@ -610,16 +611,7 @@ export interface MxikScanInfo {
   groupCode: string | null;
 }
 
-export interface CatalogEntry {
-  mxikCode:          string;
-  mxikName:          string;
-  groupCode:         string;
-  groupName:         string;
-  classCode:         string;
-  className:         string;
-  internationalCode: string | null;
-  unitName:          string | null;
-}
+export type { CatalogEntry };
 
 export const mxik = {
   lookupCode: async (code: string): Promise<{ code: string; name: string; nameRu: string; packageCode: string }> => {
