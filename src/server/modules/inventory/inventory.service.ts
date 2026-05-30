@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
 import { CreateArrivalDto } from './dto/create-arrival.dto';
+import { UpdateArrivalDto } from './dto/update-arrival.dto';
 import { Product, SupplierPaymentMethod, SupplierTransactionType } from '@prisma/client';
 import { ArrivalFilters, InventoryArrivalWhereInput } from './types/inventory.types';
 
@@ -34,7 +35,7 @@ export class InventoryService {
     });
   }
 
-  async createArrival(storeId: string, createArrivalDto: CreateArrivalDto, userId: string) {
+  async createArrival(storeId: string, createArrivalDto: CreateArrivalDto, userId: string, lang?: string) {
     // Validate product exists and belongs to store
     const product = await this.prisma.product.findUnique({
       where: { id: createArrivalDto.productId },
@@ -106,7 +107,16 @@ export class InventoryService {
     if (createArrivalDto.supplierId && createArrivalDto.paymentMethod) {
       const paymentMethod = createArrivalDto.paymentMethod as SupplierPaymentMethod;
       const isDebt = DEBT_PAYMENT_METHODS.includes(paymentMethod);
-      const description = `Arrival: ${product.nameRu} x${createArrivalDto.quantity}`;
+      const isUz = lang?.startsWith('uz');
+      const arrivalWord = isUz ? 'Kirim' : 'Приход';
+      const productName = isUz ? product.nameUz : product.nameRu;
+      const descriptionPayload = {
+        arrivalWord,
+        productId: product.id,
+        productName,
+        quantity: createArrivalDto.quantity,
+        cost,
+      };
 
       await this.prisma.supplierTransaction.create({
         data: {
@@ -115,7 +125,7 @@ export class InventoryService {
           type: SupplierTransactionType.PURCHASE,
           paymentMethod,
           amount: -totalCost,
-          description,
+          description: descriptionPayload,
           referenceId: arrival.id,
           referenceType: 'ARRIVAL',
           createdBy: userId,
@@ -138,7 +148,7 @@ export class InventoryService {
             type: SupplierTransactionType.PAYMENT,
             paymentMethod,
             amount: totalCost,
-            description: `Payment for: ${description}`,
+            description: descriptionPayload,
             referenceId: arrival.id,
             referenceType: 'ARRIVAL',
             createdBy: userId,
@@ -149,6 +159,67 @@ export class InventoryService {
     }
 
     return arrival;
+  }
+
+  async updateArrival(id: string, storeId: string, dto: UpdateArrivalDto) {
+    const arrival = await this.prisma.inventoryArrival.findUnique({ where: { id } });
+    if (!arrival || arrival.storeId !== storeId) throw new NotFoundException('Arrival not found');
+
+    const oldQty = Number(arrival.quantity);
+    const oldCost = Number(arrival.cost);
+    const newQty = dto.quantity ?? oldQty;
+    const newCost = dto.cost ?? oldCost;
+    const oldTotal = oldQty * oldCost;
+    const newTotal = newQty * newCost;
+    const qtyDelta = newQty - oldQty;
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.inventoryArrival.update({
+        where: { id },
+        data: {
+          quantity: newQty,
+          cost: newCost,
+          totalCost: newTotal,
+          ...(dto.notes !== undefined && { notes: dto.notes }),
+        },
+      });
+
+      // Adjust product stock by delta
+      if (qtyDelta !== 0) {
+        await tx.product.update({
+          where: { id: arrival.productId },
+          data: { stock: { increment: qtyDelta } },
+        });
+      }
+
+      // Update the linked PURCHASE supplier transaction if it exists
+      const purchaseTx = await tx.supplierTransaction.findFirst({
+        where: { referenceId: id, referenceType: 'ARRIVAL', type: SupplierTransactionType.PURCHASE },
+      });
+
+      if (purchaseTx && arrival.supplierId) {
+        const amountDelta = -(newTotal - oldTotal); // PURCHASE amounts are negative
+        await tx.supplierTransaction.update({
+          where: { id: purchaseTx.id },
+          data: { amount: -newTotal },
+        });
+        // Only update balance for debt payment methods (INSTALLMENT / ONE_TO_ONE)
+        if (
+          purchaseTx.paymentMethod === SupplierPaymentMethod.INSTALLMENT ||
+          purchaseTx.paymentMethod === SupplierPaymentMethod.ONE_TO_ONE
+        ) {
+          await tx.supplier.update({
+            where: { id: arrival.supplierId },
+            data: { balance: { increment: amountDelta } },
+          });
+        }
+      }
+
+      return tx.inventoryArrival.findUnique({
+        where: { id },
+        include: { product: { select: { id: true, nameRu: true, nameUz: true } } },
+      });
+    });
   }
 
   async syncBulkArrivals(storeId: string, arrivals: Array<{

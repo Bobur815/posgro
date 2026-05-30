@@ -5,6 +5,7 @@ import {
   IsArray,
   IsInt,
   IsNumber,
+  IsIn,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -35,6 +36,12 @@ export class CreateSupplierDto {
   @IsNumber()
   @Type(() => Number)
   balance?: number;
+
+  @ApiPropertyOptional({ example: 'IMMEDIATE', enum: ['IMMEDIATE', 'INSTALLMENT'] })
+  @IsOptional()
+  @IsString()
+  @IsIn(['IMMEDIATE', 'INSTALLMENT'])
+  paymentType?: string;
 
   @ApiPropertyOptional({ example: [1, 2], description: 'Category IDs' })
   @IsOptional()

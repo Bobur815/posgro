@@ -245,9 +245,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           fmt.msgStoresList(
             stores.map((s) => ({
               name: s.name,
-              plan: s.plan,
+              aiPlan: s.aiPlan,
               active: s.active,
-              aiCredits: Number(s.aiCredits),
+              balance: Number(s.balance),
+              subscriptionPlan: s.subscriptionPlan,
               usersCount: s._count.users,
               productsCount: s._count.products,
               salesCount: s._count.sales,
@@ -370,12 +371,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         await ctx.replyWithMarkdown(
           fmt.msgSupplierTransactions(
             supplier.nameRu,
-            supplier.transactions.map((tx) => ({
-              type: tx.type,
-              amount: Number(tx.amount),
-              description: tx.description,
-              createdAt: tx.createdAt,
-            })),
+            supplier.transactions.map((tx) => {
+              const d = tx.description as Record<string, unknown> | string | null;
+              const description = d && typeof d === 'object'
+                ? ('productName' in d ? `${d.arrivalWord}: ${d.productName} x${d.quantity}` : String(d.text ?? ''))
+                : (d ?? null);
+              return { type: tx.type, amount: Number(tx.amount), description, createdAt: tx.createdAt };
+            }),
             session.lang,
           ),
         );

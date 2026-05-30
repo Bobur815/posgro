@@ -228,6 +228,12 @@ export function StockManagement() {
   const [barcodeInput, setBarcodeInput] = useState("");
   const [idInput, setIdInput] = useState("");
   const [pluInput, setPluInput] = useState("");
+  const reloadWithFilters = useCallback(() => {
+    const params: ProductFilterParams = { ...filters };
+    if (searchQuery.trim()) params.query = searchQuery;
+    loadProducts(params);
+  }, [loadProducts, filters, searchQuery]);
+
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showReceiptScan, setShowReceiptScan] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
@@ -354,7 +360,7 @@ export function StockManagement() {
       header: "#",
       render: (_: Product, index: number) => pageOffset + index + 1,
     },
-    { key: "id", header: t("pos.id") },
+    { key: "id", header: t("pos.id"), render: (p: Product) => p.storeProductCode ?? p.id },
     { key: "barcode", header: t("products.barcode") },
     {
       key: "name",
@@ -604,7 +610,7 @@ export function StockManagement() {
           onClose={() => setShowArrival(false)}
           onSuccess={() => {
             setShowArrival(false);
-            loadProducts();
+            reloadWithFilters();
             toast.success(t("inventory.arrivalCreated"));
           }}
           onOpenSupplierModal={() => setShowSupplierModal(true)}
@@ -633,7 +639,7 @@ export function StockManagement() {
           onClose={() => setShowReceiptScan(false)}
           onSuccess={() => {
             setShowReceiptScan(false);
-            loadProducts();
+            reloadWithFilters();
             toast.success(t("inventory.arrivalCreated"));
           }}
         />

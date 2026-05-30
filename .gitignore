@@ -79,3 +79,8 @@ src/generated/
 
 # Claude Code
 .claude/
+
+# Uploaded files (keep the directory, ignore its contents)
+/uploads/*
+!/uploads/.gitkeep
+/uploads-staging/

@@ -232,7 +232,10 @@
     "afterStockDrops": "qoldiq {{threshold}} ga tushgandan keyin",
     "preWeighed": "Oldindan tortilgan",
     "available": "Mavjud",
-    "sold": "Sotilgan"
+    "sold": "Sotilgan",
+    "editArrival": "Kirimni tahrirlash",
+    "currentValue": "Joriy qiymat",
+    "currentTotal": "Joriy summa"
   },
   "bulkWeigh": {
     "title": "Mahsulotni tortish",
@@ -576,7 +579,7 @@
     "transactions": "Tranzaksiyalar",
     "transactionHistory": "Tranzaksiyalar tarixi",
     "noTransactions": "Tranzaksiyalar topilmadi",
-    "addTransaction": "Tranzaksiya qo'shish",
+    "addTransaction": "Tranzaksiya",
     "editTransaction": "Tranzaksiyani tahrirlash",
     "transactionType": "Tranzaksiya turi",
     "paymentMethod": "To'lov usuli",
@@ -612,7 +615,19 @@
     "supplierUpdated": "Yetkazib beruvchi yangilandi",
     "supplierDeleted": "Yetkazib beruvchi o'chirildi",
     "details": "Tafsilotlar",
-    "viewDetails": "Batafsil"
+    "viewDetails": "Batafsil",
+    "returnMode": "Qaytarish usuli",
+    "returnManual": "Summa bo'yicha",
+    "returnByProduct": "Tovar bo'yicha",
+    "selectProduct": "Mahsulotni tanlang",
+    "quantity": "Miqdor",
+    "calculatedAmount": "Summa (avto)",
+    "tannarx": "Tannarx",
+    "paymentType": "To'lov sharti",
+    "paymentTypeImmediate": "Naqd",
+    "paymentTypeInstallment": "Bo'lib to'lash",
+    "immediate": "Naqd",
+    "credit": "Bo'lib to'lash"
   },
   "receipt": {
     "title": "Chek sozlamalari",
@@ -710,6 +725,22 @@
     "creditBalance": "Kredit balansi",
     "contactSupport": "Qo'llab-quvvatlash xizmati"
   },
+  "subscription": {
+    "title": "Tarif",
+    "noplan": "Tarif yo'q",
+    "infoTitle": "Tariflar haqida",
+    "infoStarterTitle": "STARTER",
+    "infoStarterDesc": "Kichik do'konlar uchun asosiy tarif.",
+    "infoProTitle": "PRO",
+    "infoProDesc": "O'rta biznes uchun kengaytirilgan imkoniyatlar.",
+    "infoVipTitle": "VIP",
+    "infoVipDesc": "Barcha imkoniyatlar, muddatsiz litsenziya.",
+    "expiresAt": "Amal qilish muddati",
+    "perpetual": "Muddatsiz",
+    "storeBalanceTitle": "Do'kon balansi",
+    "storeBalance": "Balans",
+    "pricePerMonth": "so'm/oy"
+  },
   "smena": {
     "viewDetails":"Batafsil",
     "actions":"Harakatlar",
@@ -791,6 +822,8 @@
       "syncInterval": "Sinxronlash oralig'i (daq)",
       "terminalId": "Terminal ID",
       "terminalIdHint": "Ushbu kassa terminalining noyob identifikatori (masalan: T1, T2)",
+      "terminalIdTaken": "«{{id}}» ID allaqachon band. Tavsiya: {{suggestion}}",
+      "terminalIdUsed": "Allaqachon ishlatilmoqda",
       "next": "Keyingisi"
     },
     "password": {

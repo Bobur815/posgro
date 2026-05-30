@@ -137,13 +137,15 @@ export function useSuppliers() {
   }, [setTransactions, setLoading, setError]);
 
   const createTransaction = useCallback(async (
-    data: SupplierTransactionCreateInput & { createdBy: string }
+    data: SupplierTransactionCreateInput & { createdBy?: string }
   ) => {
     setLoading(true);
     setError(null);
 
     try {
-      const result = await suppliersApi.createTransaction(data);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { createdBy: _removed, ...payload } = data;
+      const result = await suppliersApi.createTransaction(payload);
       if (selectedSupplier?.id === data.supplierId) {
         await getById(data.supplierId);
       }
@@ -210,13 +212,15 @@ export function useSuppliers() {
     amount: number;
     paymentMethod: string;
     description?: string;
-    createdBy: string;
+    createdBy?: string;
   }) => {
     setLoading(true);
     setError(null);
 
     try {
-      const result = await suppliersApi.recordPayment(data);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { createdBy: _removed, ...payload } = data;
+      const result = await suppliersApi.recordPayment(payload);
       if (selectedSupplier?.id === data.supplierId) {
         await getById(data.supplierId);
       }

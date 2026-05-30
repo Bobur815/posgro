@@ -39,6 +39,7 @@ export interface Product {
   bulkQuantity?: number;
   minSaleQty?: number;
   maxSaleQty?: number;
+  storeProductCode?: number | null;
 }
 
 export interface PreWeighedItem {

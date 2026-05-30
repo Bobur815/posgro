@@ -9,11 +9,42 @@ import { useSuppliers } from "../../hooks/useSuppliers";
 import { useToast } from "@context/ToastContext";
 import { convertUzbekText } from "@shared/utils/transliterator";
 import { normalizeUzPhone, phoneToDigits } from "@shared/utils/phone";
+import type { SupplierPaymentType } from "@shared/types";
 
 const Form = styled.form`
   display: flex;
   flex-direction: column;
   gap: ${({ theme }) => theme.spacing.md};
+`;
+
+const FormGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+`;
+
+const Label = styled.label`
+  font-weight: 500;
+  color: ${({ theme }) => theme.colors.text};
+  font-size: 14px;
+`;
+
+const ToggleGroup = styled.div`
+  display: flex;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  overflow: hidden;
+`;
+
+const ToggleBtn = styled.button<{ $active: boolean }>`
+  flex: 1;
+  padding: ${({ theme }) => `${theme.spacing.sm} ${theme.spacing.sm}`};
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  background: ${({ $active, theme }) => $active ? theme.colors.primary : 'transparent'};
+  color: ${({ $active }) => $active ? '#fff' : 'inherit'};
+  transition: background 0.15s;
 `;
 
 const Actions = styled.div`
@@ -42,6 +73,7 @@ export function SupplierForm({ supplierId, initialName, onClose, onSuccess }: Su
     phoneDigits: "",
     balance: "0",
     address: "",
+    paymentType: "IMMEDIATE" as SupplierPaymentType,
   });
 
   useEffect(() => {
@@ -60,6 +92,7 @@ export function SupplierForm({ supplierId, initialName, onClose, onSuccess }: Su
         phoneDigits: supplier.phone ? phoneToDigits(supplier.phone) : "",
         balance: String(supplier.balance || 0),
         address: supplier.address || "",
+        paymentType: supplier.paymentType ?? "IMMEDIATE",
       });
     }
   };
@@ -72,6 +105,7 @@ export function SupplierForm({ supplierId, initialName, onClose, onSuccess }: Su
       nameUz: formData.nameUz,
       phone: formData.phoneDigits ? normalizeUzPhone(formData.phoneDigits) : undefined,
       address: formData.address || undefined,
+      paymentType: formData.paymentType,
     };
 
     let success;
@@ -137,6 +171,7 @@ export function SupplierForm({ supplierId, initialName, onClose, onSuccess }: Su
         <UzbekPhoneInput
           label={t("suppliers.phone")}
           valueDigits={formData.phoneDigits}
+          autoFocus={false}
           onDigitsChange={(digits) => setFormData((prev) => ({ ...prev, phoneDigits: digits }))}
         />
         {!isEdit && (
@@ -153,6 +188,25 @@ export function SupplierForm({ supplierId, initialName, onClose, onSuccess }: Su
           value={formData.address}
           onChange={(e) => handleChange("address", e.target.value)}
         />
+        <FormGroup>
+          <Label>{t("suppliers.paymentType")}</Label>
+          <ToggleGroup>
+            <ToggleBtn
+              type="button"
+              $active={formData.paymentType === "IMMEDIATE"}
+              onClick={() => setFormData((prev) => ({ ...prev, paymentType: "IMMEDIATE" }))}
+            >
+              {t("suppliers.paymentTypeImmediate")}
+            </ToggleBtn>
+            <ToggleBtn
+              type="button"
+              $active={formData.paymentType === "INSTALLMENT"}
+              onClick={() => setFormData((prev) => ({ ...prev, paymentType: "INSTALLMENT" }))}
+            >
+              {t("suppliers.paymentTypeInstallment")}
+            </ToggleBtn>
+          </ToggleGroup>
+        </FormGroup>
         <Actions>
           <Button type="button" variant="secondary" onClick={onClose}>
             {t("common.cancel")}

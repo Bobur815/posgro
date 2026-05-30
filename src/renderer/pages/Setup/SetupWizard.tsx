@@ -152,6 +152,12 @@ const ErrorMsg = styled.div`
   font-size: 14px;
 `;
 
+const FieldHint = styled.div<{ $error?: boolean }>`
+  font-size: 12px;
+  margin-top: -10px;
+  color: ${({ theme, $error }) => $error ? theme.colors.error : theme.colors.textSecondary};
+`;
+
 const Actions = styled.div`
   display: flex;
   gap: 12px;
@@ -350,8 +356,21 @@ export function SetupWizard() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [existingTerminalIds, setExistingTerminalIds] = useState<string[]>([]);
 
   const stepIndex = STEPS.indexOf(currentStep);
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  const suggestTerminalId = (existing: string[]): string => {
+    const set = new Set(existing.map((s) => s.toUpperCase()));
+    let n = 1;
+    while (set.has(`T${n}`)) n++;
+    return `T${n}`;
+  };
+
+  const isTerminalIdTaken = (id: string): boolean =>
+    existingTerminalIds.some((e) => e.toLowerCase() === id.trim().toLowerCase());
 
   // ── Step 1: Login ────────────────────────────────────────────────────────
 
@@ -392,11 +411,30 @@ export function SetupWizard() {
         // Non-fatal — proceed with empty prefill
       }
 
+      // Fetch existing terminal IDs to check uniqueness
+      let ids: string[] = [];
+      try {
+        const config = await window.electronAPI.config.getLocalConfig();
+        const vpsApiUrl = config?.apiUrl || 'https://pos.bobur-dev.uz/api';
+        const res = await fetch(`${vpsApiUrl}/terminals/status`, {
+          headers: { Authorization: `Bearer ${result.token}` },
+        });
+        if (res.ok) {
+          const statuses = await res.json() as Array<{ terminalId: string }>;
+          ids = statuses.map((s) => s.terminalId);
+        }
+      } catch {
+        // Non-fatal — proceed without uniqueness check
+      }
+      setExistingTerminalIds(ids);
+      const suggestedId = suggestTerminalId(ids);
+
       setData(prev => ({
         ...prev,
         ...prefill,
         token: result.token,
         storePhone: prefill.storePhone || ('998' + data.phone),
+        terminalId: suggestedId,
       }));
       setCurrentStep('storeInfo');
     } catch (e) {
@@ -621,6 +659,7 @@ export function SetupWizard() {
                 valueDigits={data.phone}
                 onDigitsChange={(v) => setData(prev => ({ ...prev, phone: v }))}
                 onFocus={() => setActiveField('phone')}
+                autoFocus
               />
               <Input
                 label={t('setup.login.password')}
@@ -714,14 +753,22 @@ export function SetupWizard() {
                 onFocus={() => setActiveField('terminalId')}
                 placeholder="T1"
               />
-              <div style={{ fontSize: 12, color: 'var(--text-secondary, #888)', marginTop: -8 }}>
-                {t('setup.storeInfo.terminalIdHint')}
-              </div>
+              {isTerminalIdTaken(data.terminalId) ? (
+                <FieldHint $error>
+                  {t('setup.storeInfo.terminalIdTaken', { id: data.terminalId, suggestion: suggestTerminalId(existingTerminalIds) })}
+                </FieldHint>
+              ) : existingTerminalIds.length > 0 ? (
+                <FieldHint>
+                  {t('setup.storeInfo.terminalIdUsed')}: {existingTerminalIds.join(', ')}
+                </FieldHint>
+              ) : (
+                <FieldHint>{t('setup.storeInfo.terminalIdHint')}</FieldHint>
+              )}
               {error && <ErrorMsg>{error}</ErrorMsg>}
               <Actions>
                 <Button
                   type="submit"
-                  disabled={!data.storeName.trim() || !data.storeAddress.trim() || !data.storePhone.trim() || !data.storeStir.trim()}
+                  disabled={!data.storeName.trim() || !data.storeAddress.trim() || !data.storePhone.trim() || !data.storeStir.trim() || isTerminalIdTaken(data.terminalId)}
                   style={{ display: 'flex', alignItems: 'center', gap: 8 }}
                 >
                   {t('setup.storeInfo.next')}

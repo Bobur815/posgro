@@ -101,6 +101,7 @@ export async function syncProducts(): Promise<{ id: number; nameRu: string; stoc
               mxik: product.mxik ?? null,
               productType: product.productType ?? 'REGULAR',
               internalCode: product.internalCode ?? null,
+              storeProductCode: product.storeProductCode ?? null,
               updatedAt: new Date(product.updatedAt),
             },
           });
@@ -125,6 +126,7 @@ export async function syncProducts(): Promise<{ id: number; nameRu: string; stoc
                 mxik: product.mxik ?? null,
                 productType: product.productType ?? 'REGULAR',
                 internalCode: product.internalCode ?? null,
+                storeProductCode: product.storeProductCode ?? null,
                 createdAt: new Date(product.createdAt),
                 updatedAt: new Date(product.updatedAt),
               },
@@ -145,6 +147,7 @@ export async function syncProducts(): Promise<{ id: number; nameRu: string; stoc
                 mxik: product.mxik ?? null,
                 productType: product.productType ?? 'REGULAR',
                 internalCode: product.internalCode ?? null,
+                storeProductCode: product.storeProductCode ?? null,
                 updatedAt: new Date(product.updatedAt),
               },
             });
@@ -167,6 +170,7 @@ export async function syncProducts(): Promise<{ id: number; nameRu: string; stoc
               mxik: product.mxik ?? null,
               productType: product.productType ?? 'REGULAR',
               internalCode: product.internalCode ?? null,
+              storeProductCode: product.storeProductCode ?? null,
               createdAt: new Date(product.createdAt),
               updatedAt: new Date(product.updatedAt),
             },

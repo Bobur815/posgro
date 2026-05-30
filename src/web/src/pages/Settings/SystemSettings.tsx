@@ -1,12 +1,17 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw, Info, X } from "lucide-react";
 import { Button } from "@components/common/Button";
 import { Input } from "@components/common/Input";
 import {
   settings as settingsApi,
   receipt as receiptApi,
+  stores as storesApi,
+  siteConfig as siteConfigApi,
+  auth as authApi,
+  type StoreRecord,
+  type SubscriptionPlanPrices,
 } from "../../api/client";
 import { useNavigate } from "react-router-dom";
 import { TopBar } from "./DevicesPage";
@@ -94,6 +99,105 @@ const StatValue = styled.span`
   font-size: 14px;
   color: ${({ theme }) => theme.colors.text};
 `;
+const TariffRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+const InfoButton = styled.button`
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  display: flex;
+  align-items: center;
+  &:hover { color: ${({ theme }) => theme.colors.primary}; }
+`;
+const SubBadge = styled.span<{ $plan?: string }>`
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: ${({ $plan, theme }) =>
+    $plan === 'VIP' ? '#7c3aed' :
+    $plan === 'PRO' ? theme.colors.primary :
+    $plan === 'STARTER' ? '#16a34a' :
+    theme.colors.border};
+  color: ${({ $plan, theme }) => $plan ? '#fff' : theme.colors.textSecondary};
+`;
+const ModalOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+`;
+const ModalBox = styled.div`
+  background: ${({ theme }) => theme.colors.surface};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  box-shadow: ${({ theme }) => theme.shadows.lg};
+  max-width: 440px;
+  width: 90%;
+  padding: ${({ theme }) => theme.spacing.lg};
+`;
+const ModalHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: ${({ theme }) => theme.spacing.md};
+`;
+const ModalTitle = styled.h3`
+  margin: 0;
+  font-size: 16px;
+  color: ${({ theme }) => theme.colors.text};
+`;
+const CloseBtn = styled.button`
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  display: flex;
+  align-items: center;
+`;
+const PlanInfoCard = styled.div<{ $plan: string }>`
+  border-left: 3px solid ${({ $plan, theme }) =>
+    $plan === 'VIP' ? '#7c3aed' :
+    $plan === 'PRO' ? theme.colors.primary :
+    '#16a34a'};
+  padding: ${({ theme }) => `${theme.spacing.sm} ${theme.spacing.md}`};
+  margin-bottom: ${({ theme }) => theme.spacing.sm};
+  background: ${({ theme }) => theme.colors.background};
+  border-radius: 0 ${({ theme }) => theme.borderRadius} ${({ theme }) => theme.borderRadius} 0;
+`;
+const PlanInfoName = styled.div`
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 2px;
+`;
+const PlanInfoDesc = styled.div`
+  font-size: 13px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+`;
+const PlanInfoPrice = styled.div`
+  font-size: 12px;
+  color: ${({ theme }) => theme.colors.primary};
+  margin-top: 2px;
+  font-weight: 600;
+`;
+const BalanceValue = styled.span`
+  font-size: 20px;
+  font-weight: 700;
+  color: ${({ theme }) => theme.colors.text};
+`;
+const BalanceLabel = styled.div`
+  font-size: 13px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  margin-bottom: 4px;
+`;
 
 export function SystemSettings() {
   const { t } = useTranslation();
@@ -112,10 +216,17 @@ export function SystemSettings() {
   const [plan, setPlan] = useState<string | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [balanceUzs, setBalanceUzs] = useState<number | null>(null);
+
+  const [storeRecord, setStoreRecord] = useState<StoreRecord | null>(null);
+  const [subscriptionPrices, setSubscriptionPrices] = useState<SubscriptionPlanPrices | null>(null);
+  const [storeLoading, setStoreLoading] = useState(false);
+  const [showTariffInfo, setShowTariffInfo] = useState(false);
+
   const navigate = useNavigate();
   useEffect(() => {
     loadSettings();
     loadPlan();
+    loadStore();
   }, []);
 
   const loadSettings = async () => {
@@ -147,6 +258,24 @@ export function SystemSettings() {
       console.error("Failed to load plan:", error);
     } finally {
       setPlanLoading(false);
+    }
+  };
+
+  const loadStore = async () => {
+    setStoreLoading(true);
+    try {
+      const profile = await authApi.getProfile() as { storeId: string | null };
+      if (!profile.storeId) return;
+      const [record, prices] = await Promise.all([
+        storesApi.getById(profile.storeId),
+        siteConfigApi.getSubscriptionPlans(),
+      ]);
+      setStoreRecord(record);
+      setSubscriptionPrices(prices);
+    } catch (error) {
+      console.error("Failed to load store:", error);
+    } finally {
+      setStoreLoading(false);
     }
   };
 
@@ -238,6 +367,7 @@ export function SystemSettings() {
                 }))
               }
             />
+            
           </Row>
           <Actions>
             <Button type="submit" disabled={saveStatus === "saving"}>
@@ -249,6 +379,121 @@ export function SystemSettings() {
           </Actions>
         </Form>
       </Section>
+
+      <Section>
+        <SectionTitle>
+          {t("subscription.title")}
+          {storeRecord?.subscriptionPlan && (
+            <SubBadge $plan={storeRecord.subscriptionPlan} style={{ marginLeft: 8 }}>
+              {storeRecord.subscriptionPlan}
+            </SubBadge>
+          )}
+          {!storeRecord?.subscriptionPlan && !storeLoading && (
+            <SubBadge style={{ marginLeft: 8 }}>{t("subscription.noplan")}</SubBadge>
+          )}
+        </SectionTitle>
+
+        <StatRow>
+          <StatLabel>{t("subscription.title")}</StatLabel>
+          <TariffRow>
+            {storeRecord?.subscriptionPlan ? (
+              <SubBadge $plan={storeRecord.subscriptionPlan}>
+                {storeRecord.subscriptionPlan}
+              </SubBadge>
+            ) : (
+              <StatValue>—</StatValue>
+            )}
+            <InfoButton type="button" onClick={() => setShowTariffInfo(true)} title={t("subscription.infoTitle")}>
+              <Info size={16} />
+            </InfoButton>
+          </TariffRow>
+        </StatRow>
+
+        {storeRecord?.subscriptionPlan && storeRecord.subscriptionPlan !== 'VIP' && (
+          <StatRow>
+            <StatLabel>{t("subscription.expiresAt")}</StatLabel>
+            <StatValue>
+              {storeRecord.subscriptionExpiresAt
+                ? new Date(storeRecord.subscriptionExpiresAt).toLocaleDateString()
+                : "—"}
+            </StatValue>
+          </StatRow>
+        )}
+
+        {storeRecord?.subscriptionPlan === 'VIP' && (
+          <StatRow>
+            <StatLabel>{t("subscription.expiresAt")}</StatLabel>
+            <StatValue>{t("subscription.perpetual")}</StatValue>
+          </StatRow>
+        )}
+      </Section>
+
+      <Section>
+        <SectionTitle>{t("subscription.storeBalanceTitle")}</SectionTitle>
+        <StatRow>
+          <StatLabel>{t("subscription.storeBalance")}</StatLabel>
+          <BalanceValue>
+            {balanceUzs !== null
+              ? `${balanceUzs.toLocaleString("ru-UZ", { maximumFractionDigits: 0 })} so'm`
+              : "—"}
+          </BalanceValue>
+        </StatRow>
+        <Actions style={{ marginTop: "8px" }}>
+          <Button
+            onClick={loadPlan}
+            disabled={planLoading}
+            style={{ display: "flex", alignItems: "center", gap: "6px" }}
+          >
+            <RefreshCw
+              size={14}
+              style={{
+                animation: planLoading ? "spin 1s linear infinite" : "none",
+              }}
+            />
+            {t("aiSettings.refreshPlan")}
+          </Button>
+        </Actions>
+      </Section>
+
+      {showTariffInfo && (
+        <ModalOverlay onClick={() => setShowTariffInfo(false)}>
+          <ModalBox onClick={(e) => e.stopPropagation()}>
+            <ModalHeader>
+              <ModalTitle>{t("subscription.infoTitle")}</ModalTitle>
+              <CloseBtn onClick={() => setShowTariffInfo(false)}>
+                <X size={18} />
+              </CloseBtn>
+            </ModalHeader>
+            <PlanInfoCard $plan="STARTER">
+              <PlanInfoName>{t("subscription.infoStarterTitle")}</PlanInfoName>
+              <PlanInfoDesc>{t("subscription.infoStarterDesc")}</PlanInfoDesc>
+              {subscriptionPrices && (
+                <PlanInfoPrice>
+                  {subscriptionPrices.starter.toLocaleString("ru-UZ")} {t("subscription.pricePerMonth")}
+                </PlanInfoPrice>
+              )}
+            </PlanInfoCard>
+            <PlanInfoCard $plan="PRO">
+              <PlanInfoName>{t("subscription.infoProTitle")}</PlanInfoName>
+              <PlanInfoDesc>{t("subscription.infoProDesc")}</PlanInfoDesc>
+              {subscriptionPrices && (
+                <PlanInfoPrice>
+                  {subscriptionPrices.pro.toLocaleString("ru-UZ")} {t("subscription.pricePerMonth")}
+                </PlanInfoPrice>
+              )}
+            </PlanInfoCard>
+            <PlanInfoCard $plan="VIP">
+              <PlanInfoName>{t("subscription.infoVipTitle")}</PlanInfoName>
+              <PlanInfoDesc>{t("subscription.infoVipDesc")}</PlanInfoDesc>
+              {subscriptionPrices && (
+                <PlanInfoPrice>
+                  {subscriptionPrices.vip.toLocaleString("ru-UZ")} {t("subscription.pricePerMonth")}
+                </PlanInfoPrice>
+              )}
+            </PlanInfoCard>
+          </ModalBox>
+        </ModalOverlay>
+      )}
 
       <Section>
         <SectionTitle>
@@ -274,35 +519,11 @@ export function SystemSettings() {
 
         {plan === "paid" && (
           <PlanCard $pro>
-            <StatRow>
-              <StatLabel>{t("aiSettings.creditBalance")}</StatLabel>
-              <StatValue>
-                {balanceUzs !== null
-                  ? `${balanceUzs.toLocaleString("ru-UZ", { maximumFractionDigits: 0 })} so'm`
-                  : "—"}
-              </StatValue>
-            </StatRow>
-            <InfoText style={{ marginTop: "8px", fontSize: 12, opacity: 0.7 }}>
+            <InfoText style={{ fontSize: 12, opacity: 0.7 }}>
               {t("aiSettings.proPlanNote")}
             </InfoText>
           </PlanCard>
         )}
-
-        <Actions style={{ marginTop: "12px" }}>
-          <Button
-            onClick={loadPlan}
-            disabled={planLoading}
-            style={{ display: "flex", alignItems: "center", gap: "6px" }}
-          >
-            <RefreshCw
-              size={14}
-              style={{
-                animation: planLoading ? "spin 1s linear infinite" : "none",
-              }}
-            />
-            {t("aiSettings.refreshPlan")}
-          </Button>
-        </Actions>
       </Section>
     </Container>
   );

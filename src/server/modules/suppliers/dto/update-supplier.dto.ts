@@ -4,6 +4,7 @@ import {
   IsBoolean,
   IsArray,
   IsInt,
+  IsIn,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -33,6 +34,12 @@ export class UpdateSupplierDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @ApiPropertyOptional({ example: 'IMMEDIATE', enum: ['IMMEDIATE', 'INSTALLMENT'] })
+  @IsOptional()
+  @IsString()
+  @IsIn(['IMMEDIATE', 'INSTALLMENT'])
+  paymentType?: string;
 
   @ApiPropertyOptional({ example: [1, 2], description: 'Category IDs' })
   @IsOptional()

@@ -146,6 +146,7 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
       address TEXT,
       active INTEGER DEFAULT 1,
       balance REAL DEFAULT 0,
+      payment_type TEXT DEFAULT 'IMMEDIATE',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `;
@@ -519,6 +520,26 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   } catch {
     await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN paynet_ofd_url TEXT`;
     await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN paynet_receipt_number TEXT`;
+  }
+
+  // Migration 15: Per-store sequential product code
+  // Reset the product sync cursor so the next sync re-pulls all products and
+  // populates store_product_code from the VPS — avoids a mixed-state display
+  // where some products show per-store codes and others still show global IDs.
+  try {
+    await prisma.$queryRaw`SELECT store_product_code FROM products LIMIT 1`;
+  } catch {
+    await prisma.$executeRaw`ALTER TABLE products ADD COLUMN store_product_code INTEGER`;
+    await prisma.$executeRaw`
+      UPDATE system_settings SET value = ${new Date(0).toISOString()} WHERE key = 'last_product_sync'
+    `;
+  }
+
+  // Migration 16: Add payment_type column to suppliers
+  try {
+    await prisma.$queryRaw`SELECT payment_type FROM suppliers LIMIT 1`;
+  } catch {
+    await prisma.$executeRaw`ALTER TABLE suppliers ADD COLUMN payment_type TEXT DEFAULT 'IMMEDIATE'`;
   }
 }
 

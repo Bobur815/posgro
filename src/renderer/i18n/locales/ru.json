@@ -244,7 +244,10 @@
     "afterStockDrops": "после снижения остатка до {{threshold}}",
     "preWeighed": "Предварительно взвешенные",
     "available": "Доступно",
-    "sold": "Продано"
+    "sold": "Продано",
+    "editArrival": "Редактировать приход",
+    "currentValue": "Текущее значение",
+    "currentTotal": "Текущая сумма"
   },
   "bulkWeigh": {
     "title": "Взвешивание товара",
@@ -587,7 +590,7 @@
     "transactions": "Транзакции",
     "transactionHistory": "История транзакций",
     "noTransactions": "Транзакции не найдены",
-    "addTransaction": "Добавить транзакцию",
+    "addTransaction": "Транзакция",
     "editTransaction": "Редактировать транзакцию",
     "transactionType": "Тип транзакции",
     "paymentMethod": "Способ оплаты",
@@ -623,7 +626,19 @@
     "supplierUpdated": "Поставщик обновлен",
     "supplierDeleted": "Поставщик удален",
     "details": "Детали",
-    "viewDetails": "Подробнее"
+    "viewDetails": "Подробнее",
+    "returnMode": "Способ возврата",
+    "returnManual": "Сумма вручную",
+    "returnByProduct": "По товару",
+    "selectProduct": "Выберите товар",
+    "quantity": "Количество",
+    "calculatedAmount": "Сумма (авто)",
+    "tannarx": "Себестоимость (tannarx)",
+    "paymentType": "Условия оплаты",
+    "paymentTypeImmediate": "Нал",
+    "paymentTypeInstallment": "Рассрочка",
+    "immediate": "Нал",
+    "credit": "Рассрочка"
   },
   "receipt": {
     "title": "Настройки чека",
@@ -709,6 +724,22 @@
     "creditBalance": "Кредитный баланс",
     "contactSupport": "Служба поддержки"
   },
+  "subscription": {
+    "title": "Тариф",
+    "noplan": "Нет тарифа",
+    "infoTitle": "О тарифах",
+    "infoStarterTitle": "STARTER",
+    "infoStarterDesc": "Базовый тариф для небольших магазинов.",
+    "infoProTitle": "PRO",
+    "infoProDesc": "Расширенные возможности для среднего бизнеса.",
+    "infoVipTitle": "VIP",
+    "infoVipDesc": "Все функции, бессрочная лицензия.",
+    "expiresAt": "Действует до",
+    "perpetual": "Бессрочно",
+    "storeBalanceTitle": "Баланс магазина",
+    "storeBalance": "Баланс",
+    "pricePerMonth": "сум/мес"
+  },
   "smena": {
     "viewDetails":"Подробнее",
     "actions":"Действия",
@@ -790,6 +821,8 @@
       "syncInterval": "Интервал синхронизации (мин)",
       "terminalId": "ID терминала",
       "terminalIdHint": "Уникальный идентификатор этого кассового терминала (например: T1, T2)",
+      "terminalIdTaken": "ID «{{id}}» уже занят. Рекомендуем: {{suggestion}}",
+      "terminalIdUsed": "Уже используются",
       "next": "Далее"
     },
     "password": {

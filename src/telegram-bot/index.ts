@@ -225,7 +225,7 @@ bot.hears(ALL_BTNS.STORES, async (ctx) => {
   const session = sessions.get(ctx.chat.id);
   if (!session || session.role !== 'SUPER_ADMIN') return;
   const stores = await prisma.store.findMany({ include: { _count: { select: { users: true, products: true, sales: true } } } });
-  const lines = stores.map(s => `• *${s.name}* (${s.plan}) — ${s._count.sales} sotuv`).join('\n');
+  const lines = stores.map(s => `• *${s.name}* (${s.subscriptionPlan ?? s.aiPlan}) — ${s._count.sales} sotuv`).join('\n');
   await ctx.replyWithMarkdown(lines || (session.lang === 'uz' ? 'Do\'konlar yo\'q' : 'Нет магазинов'));
 });
 

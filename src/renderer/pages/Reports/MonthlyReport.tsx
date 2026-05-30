@@ -6,6 +6,7 @@ import { Pagination } from '../../components/common/Pagination';
 import { useSales } from '../../hooks/useSales';
 import { usePagination } from '../../hooks/usePagination';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
+import { formatDateTime } from '../../utils/formatters';
 
 const Container = styled.div`
   display: flex;
@@ -164,12 +165,6 @@ export function MonthlyReport() {
   const formatCurrency = (amount: number) =>
     formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
 
-  const formatDateTime = (iso: string) => {
-    const d = new Date(iso);
-    return d.toLocaleDateString(i18n.language, { day: '2-digit', month: '2-digit' }) +
-      ' ' +
-      d.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' });
-  };
 
   const handleGenerateReport = async () => {
     const startDate = new Date(selectedYear, selectedMonth, 1);

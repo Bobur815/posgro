@@ -93,6 +93,8 @@ model Product {
   minSaleQty    Decimal @default(0) @map("min_sale_qty")
   maxSaleQty    Decimal @default(0) @map("max_sale_qty")
 
+  storeProductCode Int? @map("store_product_code")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -252,8 +254,9 @@ model Supplier {
   nameRu  String  @map("name_ru")
   phone   String?
   address String?
-  active  Boolean @default(true)
-  balance Decimal @default(0) // Negative = we owe them, Positive = they owe us
+  active      Boolean @default(true)
+  balance     Decimal @default(0) // Negative = we owe them, Positive = they owe us
+  paymentType String  @default("IMMEDIATE") @map("payment_type") // IMMEDIATE | INSTALLMENT
 
   arrivals     InventoryArrival[]
   products     Product[]

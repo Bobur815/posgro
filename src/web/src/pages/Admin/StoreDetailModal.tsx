@@ -160,9 +160,19 @@ interface Props {
 export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
   const [stats, setStats] = useState<StoreStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
-  const [currentPlan, setCurrentPlan] = useState(store.plan);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  // AI plan
+  const [currentAiPlan, setCurrentAiPlan] = useState(store.aiPlan);
+  const [savingAiPlan, setSavingAiPlan] = useState(false);
+  const [aiPlanError, setAiPlanError] = useState<string | null>(null);
+
+  // Subscription plan
+  const [currentSubPlan, setCurrentSubPlan] = useState<string | null>(store.subscriptionPlan);
+  const [subExpiresAt, setSubExpiresAt] = useState(
+    store.subscriptionExpiresAt ? store.subscriptionExpiresAt.slice(0, 10) : ""
+  );
+  const [savingSub, setSavingSub] = useState(false);
+  const [subError, setSubError] = useState<string | null>(null);
 
   // Credit top-up
   const [creditAmount, setCreditAmount] = useState("");
@@ -179,22 +189,46 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
   };
 
   useEffect(() => {
-    setCurrentPlan(store.plan);
+    setCurrentAiPlan(store.aiPlan);
+    setCurrentSubPlan(store.subscriptionPlan);
+    setSubExpiresAt(store.subscriptionExpiresAt ? store.subscriptionExpiresAt.slice(0, 10) : "");
     loadStats();
   }, [store]);
 
-  const handlePlanChange = async (plan: "free" | "paid") => {
-    if (plan === currentPlan) return;
-    setSaving(true);
-    setError(null);
+  const handleAiPlanChange = async (plan: "free" | "paid") => {
+    if (plan === currentAiPlan) return;
+    setSavingAiPlan(true);
+    setAiPlanError(null);
     try {
-      await stores.update(store.id, { plan });
-      setCurrentPlan(plan);
+      await stores.update(store.id, { aiPlan: plan });
+      setCurrentAiPlan(plan);
       onUpdated();
     } catch (e) {
-      setError((e as Error).message);
+      setAiPlanError((e as Error).message);
     } finally {
-      setSaving(false);
+      setSavingAiPlan(false);
+    }
+  };
+
+  const handleSubPlanSave = async () => {
+    if (!currentSubPlan) return;
+    setSavingSub(true);
+    setSubError(null);
+    try {
+      const expiresAt = currentSubPlan === "VIP"
+        ? null
+        : subExpiresAt
+          ? new Date(subExpiresAt).toISOString()
+          : null;
+      await stores.update(store.id, {
+        subscriptionPlan: currentSubPlan,
+        subscriptionExpiresAt: expiresAt,
+      });
+      onUpdated();
+    } catch (e) {
+      setSubError((e as Error).message);
+    } finally {
+      setSavingSub(false);
     }
   };
 
@@ -216,7 +250,7 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
   };
 
   const revenue = stats?.stats.totalRevenue ?? 0;
-  const aiCredits = stats?.store.aiCredits ?? 0;
+  const balance = stats?.store.balance ?? 0;
 
   return (
     <Overlay onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -276,25 +310,78 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
           </StatGrid>
         )}
 
-        {/* AI Plan */}
-        <SectionTitle>AI Invoice Scanning Plan</SectionTitle>
-        <PlanCard $pro={currentPlan === "paid"}>
+        {/* Subscription Plan */}
+        <SectionTitle>Subscription Plan</SectionTitle>
+        <PlanCard $pro={!!currentSubPlan}>
           <PlanRow>
-            <PlanLabel>Current Plan</PlanLabel>
-            <PlanBadge $pro={currentPlan === "paid"}>
-              {currentPlan === "paid" ? "Pro" : "Free"}
+            <PlanLabel>Plan</PlanLabel>
+            <PlanBadge $pro={!!currentSubPlan}>
+              {currentSubPlan ?? "No Plan"}
+            </PlanBadge>
+          </PlanRow>
+          <PlanToggleRow style={{ marginBottom: 10 }}>
+            {(["STARTER", "PRO", "VIP"] as const).map((p) => (
+              <PlanBtn
+                key={p}
+                $active={currentSubPlan === p}
+                onClick={() => setCurrentSubPlan(p)}
+                disabled={savingSub}
+              >
+                {p}
+              </PlanBtn>
+            ))}
+          </PlanToggleRow>
+          {currentSubPlan && currentSubPlan !== "VIP" && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>Expiry date</div>
+              <input
+                type="date"
+                value={subExpiresAt}
+                onChange={(e) => setSubExpiresAt(e.target.value)}
+                style={{
+                  padding: "7px 10px",
+                  border: "1px solid #d1d5db",
+                  borderRadius: 6,
+                  fontSize: 14,
+                  background: "transparent",
+                  color: "inherit",
+                  width: "100%",
+                }}
+              />
+            </div>
+          )}
+          {currentSubPlan === "VIP" && (
+            <PlanNote>VIP is a perpetual license — no expiry date.</PlanNote>
+          )}
+          <PlanBtn
+            $active
+            onClick={handleSubPlanSave}
+            disabled={savingSub || !currentSubPlan}
+            style={{ flex: "none", width: "100%" }}
+          >
+            {savingSub ? "Saving…" : "Save Subscription"}
+          </PlanBtn>
+          {subError && <ErrorMsg>{subError}</ErrorMsg>}
+        </PlanCard>
+
+        {/* AI Invoice Scanning Plan */}
+        <SectionTitle>AI Invoice Scanning</SectionTitle>
+        <PlanCard $pro={currentAiPlan === "paid"}>
+          <PlanRow>
+            <PlanLabel>AI Scan Tier</PlanLabel>
+            <PlanBadge $pro={currentAiPlan === "paid"}>
+              {currentAiPlan === "paid" ? "Pro" : "Free"}
             </PlanBadge>
           </PlanRow>
 
-          {currentPlan === "free" ? (
+          {currentAiPlan === "free" ? (
             <PlanNote>
-              Free plan uses PaddleOCR (open-source, $0/scan). Limited accuracy
-              on complex Uzbekistan invoices (PDF, multi-page, dense tables).
-              Upgrade to Pro for Claude Vision.
+              Free tier uses PaddleOCR (open-source, $0/scan). Limited accuracy
+              on complex Uzbekistan invoices. Upgrade to Pro for Claude Vision.
             </PlanNote>
           ) : (
             <PlanNote>
-              Pro plan uses Claude Vision AI. Billed at{" "}
+              Pro tier uses Claude Vision AI. Billed at{" "}
               <strong>$0.052 / scan</strong> (Anthropic cost + 30% margin).
               Accurate parsing of SoliqServis e-invoices with MXIK codes.
             </PlanNote>
@@ -302,31 +389,31 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
 
           <PlanToggleRow>
             <PlanBtn
-              $active={currentPlan === "free"}
-              onClick={() => handlePlanChange("free")}
-              disabled={saving}
+              $active={currentAiPlan === "free"}
+              onClick={() => handleAiPlanChange("free")}
+              disabled={savingAiPlan}
             >
               Free (PaddleOCR)
             </PlanBtn>
             <PlanBtn
-              $active={currentPlan === "paid"}
-              onClick={() => handlePlanChange("paid")}
-              disabled={saving}
+              $active={currentAiPlan === "paid"}
+              onClick={() => handleAiPlanChange("paid")}
+              disabled={savingAiPlan}
             >
               Pro (Claude Vision)
             </PlanBtn>
           </PlanToggleRow>
 
-          {error && <ErrorMsg>{error}</ErrorMsg>}
+          {aiPlanError && <ErrorMsg>{aiPlanError}</ErrorMsg>}
         </PlanCard>
 
-        {/* AI Credit Balance */}
+        {/* Balance (AI credit top-up) */}
         <SectionTitle>AI Credit Balance</SectionTitle>
         <PlanCard>
           <PlanRow>
             <PlanLabel>Current Balance</PlanLabel>
-            <PlanBadge $pro={aiCredits > 0}>
-              {aiCredits.toLocaleString("ru-UZ", { maximumFractionDigits: 0 })} so'm
+            <PlanBadge $pro={balance > 0}>
+              {balance.toLocaleString("ru-UZ", { maximumFractionDigits: 0 })} so'm
             </PlanBadge>
           </PlanRow>
           <PlanNote style={{ marginBottom: 12 }}>

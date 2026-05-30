@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Put,
   Delete,
   Body,
   Param,
@@ -14,11 +15,14 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 import { SuppliersService } from './suppliers.service';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
+import { CreateTransactionDto } from './dto/create-transaction.dto';
+import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { StoreGuard } from '../../common/guards/store.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentStore } from '../../common/decorators/current-store.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
 import { SupplierFilters } from './types/supplier.types';
 
@@ -89,5 +93,70 @@ export class SuppliersController {
   @ApiResponse({ status: 404, description: 'Supplier not found' })
   async remove(@CurrentStore() storeId: string, @Param('id') id: string) {
     return this.suppliersService.delete(id, storeId);
+  }
+
+  // ── Supplier Transactions ─────────────────────────────────────
+
+  @Get('transactions')
+  @Roles(UserRole.ADMIN, UserRole.USER)
+  @ApiOperation({ summary: 'Get supplier transactions' })
+  @ApiQuery({ name: 'supplierId', required: false, type: String })
+  @ApiQuery({ name: 'type', required: false, type: String })
+  async getTransactions(
+    @CurrentStore() storeId: string,
+    @Query('supplierId') supplierId?: string,
+    @Query('type') type?: string,
+  ) {
+    return this.suppliersService.getTransactions(storeId, { supplierId, type });
+  }
+
+  @Post('transactions')
+  @ApiOperation({ summary: 'Create supplier transaction (Admin only)' })
+  @ApiResponse({ status: 201, description: 'Transaction created' })
+  async createTransaction(
+    @CurrentStore() storeId: string,
+    @CurrentUser('id') userId: string,
+    @Body() body: CreateTransactionDto,
+  ) {
+    return this.suppliersService.createTransaction(storeId, userId, body);
+  }
+
+  @Put('transactions/:txId')
+  @ApiOperation({ summary: 'Update supplier transaction (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Transaction updated' })
+  async updateTransaction(
+    @CurrentStore() storeId: string,
+    @Param('txId') txId: string,
+    @Body() body: UpdateTransactionDto,
+  ) {
+    return this.suppliersService.updateTransaction(txId, storeId, body);
+  }
+
+  @Delete('transactions/:txId')
+  @ApiOperation({ summary: 'Delete supplier transaction (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Transaction deleted' })
+  async deleteTransaction(
+    @CurrentStore() storeId: string,
+    @Param('txId') txId: string,
+  ) {
+    return this.suppliersService.deleteTransaction(txId, storeId);
+  }
+
+  @Get(':id/balance')
+  @Roles(UserRole.ADMIN, UserRole.USER)
+  @ApiOperation({ summary: 'Get supplier balance' })
+  async getBalance(@CurrentStore() storeId: string, @Param('id') id: string) {
+    return this.suppliersService.getBalance(id, storeId);
+  }
+
+  @Post('payments')
+  @ApiOperation({ summary: 'Record supplier payment (Admin only)' })
+  @ApiResponse({ status: 201, description: 'Payment recorded' })
+  async recordPayment(
+    @CurrentStore() storeId: string,
+    @CurrentUser('id') userId: string,
+    @Body() body: Omit<CreateTransactionDto, 'type'>,
+  ) {
+    return this.suppliersService.recordPayment(storeId, userId, body);
   }
 }

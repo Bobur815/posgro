@@ -10,6 +10,11 @@ export type SupplierTransactionType =
   | 'ADVANCE'     // We paid in advance (supplier owes us)
   | 'ADJUSTMENT'; // Manual balance correction
 
+// Types allowed when creating a new transaction via the UI (PURCHASE & ADJUSTMENT are system-only)
+export type SupplierTransactionCreateType = 'PAYMENT' | 'RETURN' | 'ADVANCE';
+
+export type SupplierPaymentType = 'IMMEDIATE' | 'INSTALLMENT';
+
 export interface Supplier {
   id: string;
   nameRu: string;
@@ -18,8 +23,18 @@ export interface Supplier {
   address?: string;
   active: boolean;
   balance: number; // Negative = we owe them, Positive = they owe us
+  paymentType: SupplierPaymentType;
   createdAt: string;
 }
+
+export interface InventoryArrivalDescription {
+  arrivalWord: string // "Приход" or "Kirim" based on locale
+  productId: number;
+  productName: string;
+  quantity: number;
+  cost: number;
+}
+
 
 export interface SupplierTransaction {
   id: string;
@@ -28,7 +43,7 @@ export interface SupplierTransaction {
   type: SupplierTransactionType;
   paymentMethod: SupplierPaymentMethod;
   amount: number; // Positive = reduces our debt, Negative = increases our debt
-  description?: string;
+  description?: InventoryArrivalDescription;
   referenceId?: string;
   referenceType?: string;
   dueDate?: string;
@@ -44,6 +59,7 @@ export interface SupplierCreateInput {
   phone?: string;
   address?: string;
   balance?: number;
+  paymentType?: SupplierPaymentType;
 }
 
 export interface SupplierUpdateInput {
@@ -53,16 +69,28 @@ export interface SupplierUpdateInput {
   address?: string;
   active?: boolean;
   balance?: number;
+  paymentType?: SupplierPaymentType;
+}
+
+export interface SupplierProduct {
+  id: number;
+  nameRu: string;
+  nameUz: string;
+  cost: number | null;
+  price: number;
+  stock: number;
+  unit: string;
 }
 
 export interface SupplierTransactionCreateInput {
   supplierId: string;
-  type: SupplierTransactionType;
+  type: SupplierTransactionCreateType;
   paymentMethod: SupplierPaymentMethod;
   amount: number;
   description?: string;
   referenceId?: string;
   referenceType?: string;
+  quantity?: number;
   dueDate?: string;
 }
 
@@ -86,6 +114,7 @@ export interface SupplierTransactionFilters {
 
 export interface SupplierWithTransactions extends Supplier {
   transactions: SupplierTransaction[];
+  products: SupplierProduct[];
   totalDebt: number;   // Sum of negative amounts (what we owe)
   totalCredit: number; // Sum of positive amounts (what they owe us)
 }

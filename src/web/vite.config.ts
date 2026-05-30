@@ -25,15 +25,15 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'https://pos.bobur-dev.uz',
+        target: 'https://dev.pos.bobur-dev.uz',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'https://pos.bobur-dev.uz',
+        target: 'https://dev.pos.bobur-dev.uz',
         changeOrigin: true,
       },
       '/releases': {
-        target: 'https://pos.bobur-dev.uz',
+        target: 'https://dev.pos.bobur-dev.uz',
         changeOrigin: true,
       },
     },

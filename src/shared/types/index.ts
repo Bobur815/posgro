@@ -38,13 +38,17 @@ export type {
   Supplier,
   SupplierTransaction,
   SupplierTransactionType,
+  SupplierTransactionCreateType,
   SupplierPaymentMethod,
+  SupplierProduct,
   SupplierCreateInput,
   SupplierUpdateInput,
   SupplierTransactionCreateInput,
   SupplierTransactionUpdateInput,
   SupplierTransactionFilters,
   SupplierWithTransactions,
+  SupplierPaymentType,
+  InventoryArrivalDescription,
 } from './supplier.types';
 
 export type {

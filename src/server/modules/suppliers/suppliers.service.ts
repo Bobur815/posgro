@@ -2,7 +2,10 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
+import { CreateTransactionDto } from './dto/create-transaction.dto';
+import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { SupplierFilters, SupplierWhereInput } from './types/supplier.types';
+import { Prisma, SupplierTransactionType, SupplierPaymentMethod, SupplierPaymentType } from '@prisma/client';
 
 @Injectable()
 export class SuppliersService {
@@ -66,7 +69,7 @@ export class SuppliersService {
   }
 
   async create(storeId: string, createSupplierDto: CreateSupplierDto) {
-    const { categoryIds, ...data } = createSupplierDto;
+    const { categoryIds, paymentType, ...data } = createSupplierDto;
 
     return this.prisma.supplier.create({
       data: {
@@ -77,6 +80,7 @@ export class SuppliersService {
         address: data.address || null,
         balance: data.balance ?? 0,
         active: true,
+        paymentType: paymentType as SupplierPaymentType,
         categories: categoryIds?.length
           ? { connect: categoryIds.map((id) => ({ id })) }
           : undefined,
@@ -88,12 +92,13 @@ export class SuppliersService {
   async update(id: string, storeId: string, updateSupplierDto: UpdateSupplierDto) {
     await this.findById(id, storeId);
 
-    const { categoryIds, ...data } = updateSupplierDto;
+    const { categoryIds, paymentType, ...data } = updateSupplierDto;
 
     return this.prisma.supplier.update({
       where: { id },
       data: {
         ...data,
+        ...(paymentType && { paymentType: paymentType as SupplierPaymentType }),
         categories: categoryIds
           ? { set: categoryIds.map((id) => ({ id })) }
           : undefined,
@@ -149,6 +154,126 @@ export class SuppliersService {
       }
     }
     return { created, updated, errors };
+  }
+
+  async getTransactions(storeId: string, filters?: { supplierId?: string; type?: string }) {
+    return this.prisma.supplierTransaction.findMany({
+      where: {
+        storeId,
+        ...(filters?.supplierId && { supplierId: filters.supplierId }),
+        ...(filters?.type && { type: filters.type as SupplierTransactionType }),
+      },
+      include: { supplier: { select: { id: true, nameRu: true, nameUz: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createTransaction(storeId: string, userId: string, dto: CreateTransactionDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.supplierTransaction.create({
+        data: {
+          storeId,
+          supplierId: dto.supplierId,
+          type: dto.type as SupplierTransactionType,
+          paymentMethod: dto.paymentMethod as SupplierPaymentMethod,
+          amount: dto.amount,
+          description: dto.description ? { text: dto.description } : Prisma.JsonNull,
+          referenceId: dto.referenceId ?? null,
+          referenceType: dto.referenceType ?? null,
+          dueDate: null,
+          paidAt: null,
+          createdBy: userId,
+        },
+      });
+
+      const balanceDelta = this.balanceDeltaFor(dto.type as SupplierTransactionType, dto.amount);
+      await tx.supplier.update({
+        where: { id: dto.supplierId },
+        data: { balance: { increment: balanceDelta } },
+      });
+
+      // Subtract stock when returning product to supplier
+      if (
+        dto.type === 'RETURN' &&
+        dto.referenceType === 'PRODUCT' &&
+        dto.referenceId &&
+        dto.quantity != null
+      ) {
+        const productId = parseInt(dto.referenceId, 10);
+        await tx.product.update({
+          where: { id: productId },
+          data: { stock: { decrement: dto.quantity } },
+        });
+      }
+
+      return created;
+    });
+  }
+
+  async updateTransaction(txId: string, storeId: string, dto: UpdateTransactionDto) {
+    const existing = await this.prisma.supplierTransaction.findUnique({ where: { id: txId } });
+    if (!existing || existing.storeId !== storeId) throw new NotFoundException('Transaction not found');
+
+    return this.prisma.$transaction(async (tx) => {
+      const oldDelta = this.balanceDeltaFor(existing.type, Number(existing.amount));
+      const newType = (dto.type ?? existing.type) as SupplierTransactionType;
+      const newAmount = dto.amount !== undefined ? dto.amount : Number(existing.amount);
+      const newDelta = this.balanceDeltaFor(newType, newAmount);
+
+      await tx.supplier.update({
+        where: { id: existing.supplierId },
+        data: { balance: { increment: newDelta - oldDelta } },
+      });
+
+      const updateData: Record<string, unknown> = {};
+      if (dto.type) updateData.type = dto.type;
+      if (dto.paymentMethod) updateData.paymentMethod = dto.paymentMethod;
+      if (dto.amount !== undefined) updateData.amount = dto.amount;
+      if (dto.description !== undefined) updateData.description = dto.description ? { text: dto.description } : null;
+
+      return tx.supplierTransaction.update({ where: { id: txId }, data: updateData });
+    });
+  }
+
+  async deleteTransaction(txId: string, storeId: string) {
+    const existing = await this.prisma.supplierTransaction.findUnique({ where: { id: txId } });
+    if (!existing || existing.storeId !== storeId) throw new NotFoundException('Transaction not found');
+
+    await this.prisma.$transaction(async (tx) => {
+      const delta = this.balanceDeltaFor(existing.type, Number(existing.amount));
+      await tx.supplier.update({
+        where: { id: existing.supplierId },
+        data: { balance: { increment: -delta } },
+      });
+      await tx.supplierTransaction.delete({ where: { id: txId } });
+    });
+
+    return { success: true };
+  }
+
+  async getBalance(supplierId: string, storeId: string) {
+    const supplier = await this.prisma.supplier.findUnique({
+      where: { id: supplierId },
+      select: { id: true, storeId: true, balance: true, nameRu: true, nameUz: true },
+    });
+    if (!supplier || supplier.storeId !== storeId) throw new NotFoundException('Supplier not found');
+    return { supplierId, balance: supplier.balance };
+  }
+
+  async recordPayment(storeId: string, userId: string, dto: Omit<CreateTransactionDto, 'type'>) {
+    return this.createTransaction(storeId, userId, { ...dto, type: 'PAYMENT' });
+  }
+
+  private balanceDeltaFor(type: SupplierTransactionType, amount: number): number {
+    // Negative balance = we owe them; positive = they owe us (matches POS app convention)
+    switch (type) {
+      case 'PURCHASE':   return -amount;  // we received goods → we owe more (more negative)
+      case 'PAYMENT':    return amount;   // we paid → debt decreases (less negative)
+      case 'RETURN':     return amount;   // we returned goods → debt decreases
+      case 'ADVANCE':    return amount;   // we pre-paid → they owe us (positive)
+      case 'ADJUSTMENT': return amount;   // manual, positive or negative
+      default:           return 0;
+    }
   }
 
   async delete(id: string, storeId: string) {

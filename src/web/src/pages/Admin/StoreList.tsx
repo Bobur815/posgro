@@ -114,28 +114,33 @@ const Badge = styled.span<{
   $blue?: boolean;
   $gray?: boolean;
   $red?: boolean;
+  $purple?: boolean;
 }>`
   display: inline-block;
   padding: 3px 10px;
   border-radius: 12px;
   font-size: 13px;
   font-weight: 600;
-  background: ${({ $green, $blue, $gray, $red, theme }) =>
-    $green
-      ? "#dcfce7"
-      : $blue
-        ? "#dbeafe"
-        : $red
-          ? "#fef2f2"
-          : theme.colors.border};
-  color: ${({ $green, $blue, $gray, $red, theme }) =>
-    $green
-      ? "#16a34a"
-      : $blue
-        ? "#2563eb"
-        : $red
-          ? "#ef4444"
-          : theme.colors.textSecondary};
+  background: ${({ $green, $blue, $gray, $red, $purple, theme }) =>
+    $purple
+      ? "#f3e8ff"
+      : $green
+        ? "#dcfce7"
+        : $blue
+          ? "#dbeafe"
+          : $red
+            ? "#fef2f2"
+            : theme.colors.border};
+  color: ${({ $green, $blue, $gray, $red, $purple, theme }) =>
+    $purple
+      ? "#7c3aed"
+      : $green
+        ? "#16a34a"
+        : $blue
+          ? "#2563eb"
+          : $red
+            ? "#ef4444"
+            : theme.colors.textSecondary};
 `;
 
 const RowActions = styled.div`
@@ -294,10 +299,14 @@ export function StoreList() {
                 </Td>
                 <Td>{store.phone ?? "—"}</Td>
                 <Td>
-                  {store.plan === "paid" ? (
-                    <Badge $blue>Pro</Badge>
+                  {store.subscriptionPlan === "VIP" ? (
+                    <Badge $purple>VIP</Badge>
+                  ) : store.subscriptionPlan === "PRO" ? (
+                    <Badge $blue>PRO</Badge>
+                  ) : store.subscriptionPlan === "STARTER" ? (
+                    <Badge $green>STARTER</Badge>
                   ) : (
-                    <Badge $gray>Free</Badge>
+                    <Badge $gray>No Plan</Badge>
                   )}
                 </Td>
                 <Td>{store._count?.users ?? "—"}</Td>

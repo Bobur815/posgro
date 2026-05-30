@@ -698,7 +698,11 @@ export function ProductForm({
   };
 
   const handleChange = (field: string, value: string | boolean) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+      ...(field === "productType" && value === "BULK_WEIGHTED" ? { unit: "кг" } : {}),
+    }));
   };
 
   const handleNameUzChange = (value: string) => {
@@ -849,6 +853,7 @@ export function ProductForm({
                 type="number"
                 value={formData.cost}
                 onChange={(e) => handleChange("cost", e.target.value)}
+                onFocus={(e) => e.target.select()}
               />
             </Row>
 
@@ -864,12 +869,14 @@ export function ProductForm({
                 }
                 value={formData.stock}
                 onChange={(e) => handleChange("stock", e.target.value)}
+                onFocus={(e) => e.target.select()}
               />
               <Input
                 label={t("products.minStock")}
                 type="number"
                 value={formData.minStock}
                 onChange={(e) => handleChange("minStock", e.target.value)}
+                onFocus={(e) => e.target.select()}
               />
             </Row>
 

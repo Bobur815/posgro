@@ -217,7 +217,7 @@ export function PrintTagsModal({ template, onClose }: PrintTagsModalProps) {
             barcode: product.barcode,
             unit: product.unit,
             productType: product.productType,
-            articleId: product.id,
+            articleId: product.storeProductCode ?? product.id,
             pluCode: product.internalCode,
             amount: isWeighted(product) ? amount : 1,
             copies: quantity,

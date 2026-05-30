@@ -1,12 +1,12 @@
 import { Controller, Get, Put, Post, Body, UseGuards, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { IsString } from 'class-validator';
+import { IsString, IsNumber, Min } from 'class-validator';
 import { FileInterceptor } from '@nestjs/platform-express';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { diskStorage } = require('multer') as { diskStorage: (opts: any) => any };
 import { extname, join } from 'path';
 import { mkdirSync, existsSync } from 'fs';
-import { SiteConfigService, LoginBanner } from './site-config.service';
+import { SiteConfigService, LoginBanner, SubscriptionPlanPrices } from './site-config.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -24,6 +24,12 @@ class LoginBannerDto {
   @IsString() imageUrl!: string;
   @IsString() title!: string;
   @IsString() subtitle!: string;
+}
+
+class SubscriptionPlanPricesDto {
+  @IsNumber() @Min(0) starter!: number;
+  @IsNumber() @Min(0) pro!: number;
+  @IsNumber() @Min(0) vip!: number;
 }
 
 @ApiTags('site-config')
@@ -44,6 +50,21 @@ export class SiteConfigController {
   @ApiOperation({ summary: 'Update login page banner (super admin only)' })
   setLoginBanner(@Body() dto: LoginBannerDto): Promise<LoginBanner> {
     return this.siteConfigService.setLoginBanner(dto);
+  }
+
+  @Get('subscription-plans')
+  @ApiOperation({ summary: 'Get subscription plan prices (public)' })
+  getSubscriptionPlans(): Promise<SubscriptionPlanPrices> {
+    return this.siteConfigService.getSubscriptionPlans();
+  }
+
+  @Put('subscription-plans')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Set subscription plan prices (super admin only)' })
+  setSubscriptionPlans(@Body() dto: SubscriptionPlanPricesDto): Promise<SubscriptionPlanPrices> {
+    return this.siteConfigService.setSubscriptionPlans(dto);
   }
 
   @Post('upload-image')

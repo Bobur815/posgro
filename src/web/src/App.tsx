@@ -22,6 +22,7 @@ import { StoreList } from './pages/Admin/StoreList';
 import { LogsPage } from './pages/Admin/LogsPage';
 import { AuditLogsPage } from './pages/Admin/AuditLogsPage';
 import { LoginBannerPage } from './pages/Admin/LoginBannerPage';
+import { SubscriptionPlansPage } from './pages/Admin/SubscriptionPlansPage';
 
 function PrivateRoute({
   children,
@@ -113,6 +114,7 @@ export function App() {
           <Route path="admin/stores" element={<PrivateRoute superAdminOnly><StoreList /></PrivateRoute>} />
           <Route path="admin/logs" element={<PrivateRoute superAdminOnly><LogsPage /></PrivateRoute>} />
           <Route path="admin/login-banner" element={<PrivateRoute superAdminOnly><LoginBannerPage /></PrivateRoute>} />
+          <Route path="admin/subscription-plans" element={<PrivateRoute superAdminOnly><SubscriptionPlansPage /></PrivateRoute>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
