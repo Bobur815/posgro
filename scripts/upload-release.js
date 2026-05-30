@@ -1,4 +1,4 @@
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const { readFileSync, writeFileSync, readdirSync } = require('fs');
 const { version } = require('../package.json');
 
@@ -27,15 +27,28 @@ yml = yml.replace(/path:.*\.exe/g, `path: ${remoteExe}`);
 yml = yml.replace(/url:.*\.exe/g, `url: ${remoteExe}`);
 writeFileSync(ymlPath, yml);
 
+function sftpUpload(localFile, remoteFile) {
+  const batch = `put "${localFile}" ${remotePath}/${remoteFile}\nbye\n`;
+  const result = spawnSync(
+    'sftp',
+    ['-o', 'ServerAliveInterval=30', '-o', 'ServerAliveCountMax=20', '-b', '-', vps],
+    { input: batch, stdio: ['pipe', 'inherit', 'inherit'] }
+  );
+  if (result.status !== 0) {
+    throw new Error(`sftp upload failed for ${localFile}`);
+  }
+}
+
 console.log(`Uploading v${version} → ${remoteExe}`);
 console.log(`  source: ${localExe}`);
-execSync(`scp "${ymlPath}" ${vps}:${remotePath}/`, { stdio: 'inherit' });
-execSync(`scp "${localExe}" "${vps}:${remotePath}/${remoteExe}"`, { stdio: 'inherit' });
+
+sftpUpload(ymlPath, 'latest.yml');
+sftpUpload(localExe, remoteExe);
 
 // Upload blockmap for differential (delta) downloads — electron-updater uses this
 // to download only the changed blocks instead of the full installer.
 try {
-  execSync(`scp "${localBlockmap}" "${vps}:${remotePath}/${remoteBlockmap}"`, { stdio: 'inherit' });
+  sftpUpload(localBlockmap, remoteBlockmap);
   console.log(`  blockmap uploaded → differential updates enabled`);
 } catch {
   console.warn(`  warning: blockmap not found at ${localBlockmap}, differential updates disabled`);
