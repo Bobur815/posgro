@@ -146,6 +146,7 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
       address TEXT,
       active INTEGER DEFAULT 1,
       balance REAL DEFAULT 0,
+      payment_type TEXT DEFAULT 'IMMEDIATE',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `;
@@ -532,6 +533,13 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
     await prisma.$executeRaw`
       UPDATE system_settings SET value = ${new Date(0).toISOString()} WHERE key = 'last_product_sync'
     `;
+  }
+
+  // Migration 16: Add payment_type column to suppliers
+  try {
+    await prisma.$queryRaw`SELECT payment_type FROM suppliers LIMIT 1`;
+  } catch {
+    await prisma.$executeRaw`ALTER TABLE suppliers ADD COLUMN payment_type TEXT DEFAULT 'IMMEDIATE'`;
   }
 }
 
