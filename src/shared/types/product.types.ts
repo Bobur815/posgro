@@ -62,6 +62,7 @@ export interface Category {
   storeId?: string;
   nameRu: string;
   nameUz: string;
+  mxikGroupCode?: string | null;
   parentId?: number;
   parent?: Category;
   children?: Category[];

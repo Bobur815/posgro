@@ -210,7 +210,12 @@
     "productDataImported": "Mahsulot ma'lumotlari {{source}} dan import qilindi",
     "manualEntryRequired": "Mahsulot topilmadi. Ma'lumotlarni qo'lda kiriting",
     "mxikCodeScanned": "MXIK-kod skanerlab olindi",
-    "mxikLookupFailed": "MXIK-kodni topib bo'lmadi"
+    "mxikLookupFailed": "MXIK-kodni topib bo'lmadi",
+    "categoryNotAllowed": "Bu mahsulot sotishga ruxsat etilmagan toifaga kiradi: {{category}}",
+    "searchMxik": "MXIK qidirish",
+    "mxikPickerPlaceholder": "Mahsulot nomini kiriting...",
+    "noMxikResults": "Natija topilmadi",
+    "categoryAutoSelected": "Toifa avtomatik tanlandi"
   },
   "inventory": {
     "stockManagement": "Ombor",

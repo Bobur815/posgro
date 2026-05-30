@@ -23,7 +23,7 @@ import {
   SUPPLIER_PAYMENT_METHOD_I18N_KEYS,
 } from "@shared/constants/payment-methods";
 import { convertUzbekText } from "@shared/utils/transliterator";
-import { RefreshCw, Settings } from "lucide-react";
+import { RefreshCw, Settings, Search } from "lucide-react";
 import { SupplierManagementModal } from "../Suppliers/SupplierManagementModal";
 import { CategoryManagementModal } from "./CategoryManagementModal";
 import {
@@ -32,6 +32,8 @@ import {
   mxik as mxikApi,
   aslBelgisi,
 } from "../../api/client";
+import type { CatalogEntry } from "@shared/types";
+import { isMxikExcluded } from "@shared/types/mxik.types";
 
 const Form = styled.form`
   display: flex;
@@ -201,6 +203,35 @@ const RadioDescription = styled.div`
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
+const PickerList = styled.div`
+  display: flex;
+  flex-direction: column;
+  max-height: 360px;
+  overflow-y: auto;
+  margin-top: ${({ theme }) => theme.spacing.sm};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+`;
+
+const PickerItem = styled.div`
+  padding: 10px 12px;
+  cursor: pointer;
+  &:not(:last-child) { border-bottom: 1px solid ${({ theme }) => theme.colors.border}; }
+  &:hover { background: ${({ theme }) => theme.colors.background}; }
+`;
+
+const PickerItemName = styled.div`
+  font-size: 13px;
+  font-weight: 500;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const PickerItemMeta = styled.div`
+  font-size: 11px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  margin-top: 2px;
+`;
+
 const UNIT_OPTIONS: ProductUnit[] = ["шт", "кг", "л", "м"];
 
 interface ProductFormProps {
@@ -293,6 +324,11 @@ export function ProductForm({
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showQrScanner, setShowQrScanner] = useState(false);
   const [isLookingUpAslBelgisi, setIsLookingUpAslBelgisi] = useState(false);
+  const [showMxikPicker, setShowMxikPicker] = useState(false);
+  const [mxikPickerQuery, setMxikPickerQuery] = useState("");
+  const [mxikPickerResults, setMxikPickerResults] = useState<CatalogEntry[]>([]);
+  const [mxikPickerLoading, setMxikPickerLoading] = useState(false);
+  const mxikPickerTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [mcVerification, setMcVerification] = useState<{
     isValid: boolean;
     issuerName?: string;
@@ -319,6 +355,14 @@ export function ProductForm({
     });
   }, [formData.productType, isEdit]);
 
+  const autoSelectCategory = useCallback((groupCode: string) => {
+    const cat = categories.find((c) => c.mxikGroupCode === groupCode);
+    if (cat) {
+      setFormData((prev) => ({ ...prev, categoryId: String(cat.id) }));
+      toast.info(t("products.categoryAutoSelected"));
+    }
+  }, [categories]);
+
   /** Extract EAN-13 from a GS1 DataMatrix QR payload, or return the value as-is. */
   function extractEan13(raw: string): string {
     const gs1 = raw.match(/\(01\)(\d{14})/) ?? raw.match(/^01(\d{14})/);
@@ -334,6 +378,7 @@ export function ProductForm({
     async (barcode: string) => {
       if (!barcode || barcode.length < 3 || isEdit) return;
 
+      // 1. Local DB — existing product
       const product = await searchByBarcode(barcode);
       if (product) {
         setExistingProduct(product);
@@ -351,27 +396,73 @@ export function ProductForm({
             ? product.expiryDate.split("T")[0]
             : "",
         }));
-      } else {
-        // Not in local DB — look up in tasnif registry using clean EAN-13
-        try {
-          const ean = extractEan13(barcode);
-          console.log("[checkBarcode] tasnif lookup for:", ean);
-          const info = await mxikApi.searchByBarcode(ean);
-          console.log("[checkBarcode] tasnif result:", info);
-          setFormData((prev) => ({
-            ...prev,
-            mxik: info.code,
-            nameUz: info.name,
-            nameRu: info.nameRu,
-          }));
-        } catch (err) {
-          console.warn("[checkBarcode] tasnif lookup failed:", err);
-          toast.warning(t("products.manualEntryRequired"));
+        return;
+      }
+
+      // 2. Local MxikCatalog — fast, no geo-restriction
+      const catalogEntry = await mxikApi.catalogLookup(barcode);
+      if (catalogEntry) {
+        if (isMxikExcluded(catalogEntry.mxikCode)) {
+          toast.error(t("products.categoryNotAllowed", { category: catalogEntry.className }));
+          setFormData((prev) => ({ ...prev, barcode: "" }));
+          return;
         }
+        setFormData((prev) => ({
+          ...prev,
+          mxik: catalogEntry.mxikCode,
+          nameUz: catalogEntry.mxikName,
+          nameRu: catalogEntry.mxikName,
+        }));
+        autoSelectCategory(catalogEntry.groupCode);
+        return;
+      }
+
+      // 3. Fallback: tasnif.soliq.uz (browser-direct, geo-restricted to UZ)
+      try {
+        const ean = extractEan13(barcode);
+        const info = await mxikApi.searchByBarcode(ean);
+        if (isMxikExcluded(info.code)) {
+          toast.error(t("products.categoryNotAllowed", { category: info.nameRu }));
+          setFormData((prev) => ({ ...prev, barcode: "" }));
+          return;
+        }
+        setFormData((prev) => ({
+          ...prev,
+          mxik: info.code,
+          nameUz: info.name,
+          nameRu: info.nameRu,
+        }));
+        autoSelectCategory(info.code.slice(0, 3));
+      } catch {
+        toast.warning(t("products.manualEntryRequired"));
       }
     },
-    [searchByBarcode, isEdit],
+    [searchByBarcode, isEdit, autoSelectCategory],
   );
+
+  const handlePickerSelect = (entry: CatalogEntry) => {
+    setFormData((prev) => ({ ...prev, mxik: entry.mxikCode }));
+    autoSelectCategory(entry.groupCode);
+    setShowMxikPicker(false);
+    setMxikPickerQuery("");
+    setMxikPickerResults([]);
+  };
+
+  useEffect(() => {
+    if (!showMxikPicker) return;
+    if (mxikPickerTimeout.current) clearTimeout(mxikPickerTimeout.current);
+    if (mxikPickerQuery.trim().length < 2) {
+      setMxikPickerResults([]);
+      return;
+    }
+    mxikPickerTimeout.current = setTimeout(async () => {
+      setMxikPickerLoading(true);
+      const results = await mxikApi.catalogSearch(mxikPickerQuery.trim());
+      setMxikPickerResults(results);
+      setMxikPickerLoading(false);
+    }, 350);
+    return () => { if (mxikPickerTimeout.current) clearTimeout(mxikPickerTimeout.current); };
+  }, [mxikPickerQuery, showMxikPicker]);
 
   const handleGenerateBarcode = () => {
     const code = generateProductBarcode();
@@ -416,7 +507,12 @@ export function ProductForm({
     if (qrType === "mxik") {
       try {
         const mxikData = await mxikApi.lookupCode(qrData);
+        if (isMxikExcluded(mxikData.code)) {
+          toast.error(t("products.categoryNotAllowed", { category: mxikData.nameRu }));
+          return;
+        }
         setFormData((prev) => ({ ...prev, mxik: mxikData.code }));
+        autoSelectCategory(mxikData.code.slice(0, 3));
         toast.success(t("products.mxikCodeScanned"));
       } catch {
         toast.error(t("products.mxikLookupFailed"));
@@ -477,6 +573,11 @@ export function ProductForm({
         setFormData((prev) => ({ ...prev, barcode: gtin }));
         try {
           const tasnifData = await mxikApi.searchByBarcode(gtin);
+          if (isMxikExcluded(tasnifData.code)) {
+            toast.error(t("products.categoryNotAllowed", { category: tasnifData.nameRu }));
+            setFormData((prev) => ({ ...prev, barcode: "" }));
+            return;
+          }
           setFormData((prev) => ({
             ...prev,
             barcode: gtin,
@@ -490,6 +591,7 @@ export function ProductForm({
               ? mcVerif.expirationDate.split("T")[0]
               : prev.expiryDate,
           }));
+          autoSelectCategory(tasnifData.code.slice(0, 3));
           toast.success(
             t("products.productDataImported", {
               source: "asl-belgisi + tasnif",
@@ -750,6 +852,16 @@ export function ProductForm({
                     onChange={(e) => handleChange("mxik", e.target.value)}
                     style={{ flex: 1 }}
                   />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="small"
+                    onClick={() => setShowMxikPicker(true)}
+                    title={t("products.searchMxik")}
+                    style={{ flexShrink: 0 }}
+                  >
+                    <Search size={16} />
+                  </Button>
                 </div>
               </FormGroup>
               <FormGroup>
@@ -1399,6 +1511,44 @@ export function ProductForm({
           onClose={() => setShowCategoryModal(false)}
           onCategoryChanged={loadCategories}
         />
+      )}
+
+      {showMxikPicker && (
+        <Modal
+          title={t("products.searchMxik")}
+          onClose={() => { setShowMxikPicker(false); setMxikPickerQuery(""); setMxikPickerResults([]); }}
+          width="560px"
+        >
+          <Input
+            autoFocus
+            value={mxikPickerQuery}
+            placeholder={t("products.mxikPickerPlaceholder")}
+            onChange={(e) => setMxikPickerQuery(e.target.value)}
+          />
+          {mxikPickerLoading && (
+            <div style={{ padding: "12px", textAlign: "center", color: "var(--color-text-secondary)", fontSize: 13 }}>
+              ...
+            </div>
+          )}
+          {!mxikPickerLoading && mxikPickerQuery.trim().length >= 2 && mxikPickerResults.length === 0 && (
+            <div style={{ padding: "12px", textAlign: "center", color: "var(--color-text-secondary)", fontSize: 13 }}>
+              {t("products.noMxikResults")}
+            </div>
+          )}
+          {mxikPickerResults.length > 0 && (
+            <PickerList>
+              {mxikPickerResults.map((entry) => (
+                <PickerItem key={entry.mxikCode} onClick={() => handlePickerSelect(entry)}>
+                  <PickerItemName>{entry.mxikName}</PickerItemName>
+                  <PickerItemMeta>
+                    {entry.className} · {entry.mxikCode}
+                    {entry.internationalCode ? ` · ${entry.internationalCode}` : ""}
+                  </PickerItemMeta>
+                </PickerItem>
+              ))}
+            </PickerList>
+          )}
+        </Modal>
       )}
     </>
   );

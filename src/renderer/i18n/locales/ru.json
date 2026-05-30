@@ -222,7 +222,12 @@
     "productDataImported": "Данные товара импортированы из {{source}}",
     "manualEntryRequired": "Товар не найден. Введите данные вручную",
     "mxikCodeScanned": "MXIK-код отсканирован",
-    "mxikLookupFailed": "Не удалось найти MXIK-код"
+    "mxikLookupFailed": "Не удалось найти MXIK-код",
+    "categoryNotAllowed": "Этот товар относится к запрещённой категории: {{category}}",
+    "searchMxik": "Поиск MXIK",
+    "mxikPickerPlaceholder": "Введите название товара...",
+    "noMxikResults": "Ничего не найдено",
+    "categoryAutoSelected": "Категория выбрана автоматически"
   },
   "inventory": {
     "stockManagement": "Склад",
