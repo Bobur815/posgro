@@ -1,4 +1,16 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+
+export interface CatalogEntry {
+  mxikCode:        string;
+  mxikName:        string;
+  groupCode:       string;
+  groupName:       string;
+  classCode:       string;
+  className:       string;
+  internationalCode: string | null;
+  unitName:        string | null;
+}
 
 const TASNIF_BASE = 'https://tasnif.soliq.uz/api/cls-api';
 
@@ -24,8 +36,42 @@ interface MxikSearchResponse {
   recordTotal: number;
 }
 
+const CATALOG_SELECT = {
+  mxikCode: true, mxikName: true,
+  groupCode: true, groupName: true,
+  classCode: true, className: true,
+  internationalCode: true, unitName: true,
+} as const;
+
 @Injectable()
 export class MxikService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  // ─── Local catalog endpoints ───────────────────────────────────────────────
+
+  async catalogLookupByBarcode(barcode: string): Promise<CatalogEntry | null> {
+    return this.prisma.mxikCatalog.findFirst({
+      where: { internationalCode: barcode },
+      select: CATALOG_SELECT,
+    });
+  }
+
+  async catalogSearch(q: string, limit = 20): Promise<CatalogEntry[]> {
+    if (!q || q.trim().length < 2) return [];
+    return this.prisma.mxikCatalog.findMany({
+      where: {
+        OR: [
+          { mxikName:      { contains: q, mode: 'insensitive' } },
+          { className:     { contains: q, mode: 'insensitive' } },
+          { subPositionName: { contains: q, mode: 'insensitive' } },
+          { brandName:     { contains: q, mode: 'insensitive' } },
+        ],
+      },
+      select: CATALOG_SELECT,
+      take: limit,
+      orderBy: { mxikCode: 'asc' },
+    });
+  }
   async getByCode(code: string): Promise<{ code: string; name: string; nameRu: string; packageCode: string }> {
     if (!/^\d{17}$/.test(code)) {
       throw new HttpException('Invalid MXIK code — must be 17 digits', HttpStatus.BAD_REQUEST);

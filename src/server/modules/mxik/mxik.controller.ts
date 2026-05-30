@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { MxikService } from './mxik.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -24,5 +24,20 @@ export class MxikController {
   @ApiOperation({ summary: 'Find MXIK classification by product barcode (EAN-13)' })
   searchByBarcode(@Param('barcode') barcode: string) {
     return this.mxikService.searchByBarcode(barcode);
+  }
+
+  @Get('catalog/lookup')
+  @ApiOperation({ summary: 'Look up a product in the local MXIK catalog by barcode' })
+  catalogLookup(@Query('barcode') barcode: string) {
+    return this.mxikService.catalogLookupByBarcode(barcode);
+  }
+
+  @Get('catalog/search')
+  @ApiOperation({ summary: 'Search the local MXIK catalog by product name (for MXIK picker)' })
+  catalogSearch(
+    @Query('q') q: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.mxikService.catalogSearch(q, limit ? parseInt(limit, 10) : 20);
   }
 }

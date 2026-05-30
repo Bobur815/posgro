@@ -318,7 +318,7 @@ export const users = {
     return data;
   },
   update: async (id: string, userData: unknown) => {
-    const { data } = await axiosInstance.put(`/users/${id}`, userData);
+    const { data } = await axiosInstance.patch(`/users/${id}`, userData);
     return data;
   },
   delete: async (id: string) => {
@@ -610,6 +610,17 @@ export interface MxikScanInfo {
   groupCode: string | null;
 }
 
+export interface CatalogEntry {
+  mxikCode:          string;
+  mxikName:          string;
+  groupCode:         string;
+  groupName:         string;
+  classCode:         string;
+  className:         string;
+  internationalCode: string | null;
+  unitName:          string | null;
+}
+
 export const mxik = {
   lookupCode: async (code: string): Promise<{ code: string; name: string; nameRu: string; packageCode: string }> => {
     const { data } = await axiosInstance.get(`/mxik/code/${encodeURIComponent(code)}`);
@@ -666,6 +677,26 @@ export const mxik = {
       }
     }
     return map;
+  },
+
+  // ─── Local MxikCatalog endpoints (fast, offline-capable, no geo-restriction) ─
+
+  catalogLookup: async (barcode: string): Promise<CatalogEntry | null> => {
+    try {
+      const { data } = await axiosInstance.get(`/mxik/catalog/lookup?barcode=${encodeURIComponent(barcode)}`);
+      return data ?? null;
+    } catch {
+      return null;
+    }
+  },
+
+  catalogSearch: async (q: string, limit = 20): Promise<CatalogEntry[]> => {
+    try {
+      const { data } = await axiosInstance.get(`/mxik/catalog/search?q=${encodeURIComponent(q)}&limit=${limit}`);
+      return data ?? [];
+    } catch {
+      return [];
+    }
   },
 };
 
