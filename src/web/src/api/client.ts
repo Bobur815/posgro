@@ -682,12 +682,29 @@ export const mxik = {
     }
   },
 
-  catalogSearch: async (q: string, limit = 20): Promise<CatalogEntry[]> => {
+  catalogSearch: async (
+    q: string,
+    page = 0,
+    size = 10,
+  ): Promise<{ results: CatalogEntry[]; total: number }> => {
     try {
-      const { data } = await axiosInstance.get(`/mxik/catalog/search?q=${encodeURIComponent(q)}&limit=${limit}`);
-      return data ?? [];
+      const url = `https://tasnif.soliq.uz/api/cls-api/elasticsearch/search?lang=uz_cyrl&search=${encodeURIComponent(q)}&size=${size}&page=${page}`;
+      const res = await fetch(url);
+      if (!res.ok) return { results: [], total: 0 };
+      const json = await res.json();
+      const items: CatalogEntry[] = (json.data ?? []).map((item: any) => ({
+        mxikCode: item.mxikCode,
+        mxikName: item.name,
+        groupCode: item.groupCode,
+        groupName: item.groupName,
+        classCode: item.classCode,
+        className: item.className,
+        internationalCode: item.internationalCode ?? null,
+        unitName: item.unitsName ?? item.packageName ?? null,
+      }));
+      return { results: items, total: json.recordTotal ?? 0 };
     } catch {
-      return [];
+      return { results: [], total: 0 };
     }
   },
 };
