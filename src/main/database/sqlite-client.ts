@@ -541,6 +541,25 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   } catch {
     await prisma.$executeRaw`ALTER TABLE suppliers ADD COLUMN payment_type TEXT DEFAULT 'IMMEDIATE'`;
   }
+
+  // Migration 17: Add mxik_group_code to categories (group 022 marking code support)
+  try {
+    await prisma.$queryRaw`SELECT mxik_group_code FROM categories LIMIT 1`;
+  } catch {
+    await prisma.$executeRaw`ALTER TABLE categories ADD COLUMN mxik_group_code TEXT`;
+  }
+
+  // Migration 18: Create sold_marking_codes table (unique QR resale prevention)
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS sold_marking_codes (
+      id             TEXT PRIMARY KEY,
+      code           TEXT NOT NULL UNIQUE,
+      product_barcode TEXT,
+      terminal_id    TEXT NOT NULL,
+      sold_at        DATETIME NOT NULL DEFAULT (datetime('now')),
+      synced         INTEGER NOT NULL DEFAULT 0
+    )
+  `;
 }
 
 export async function closeDatabase(): Promise<void> {
