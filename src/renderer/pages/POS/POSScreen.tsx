@@ -496,6 +496,10 @@ export function POSScreen() {
       setError(t("pos.enterBarcode"));
       return;
     }
+    // Normalize DataMatrix: strip ZXing symbology prefix and leading FNC1 byte
+    const normalizedRaw = rawValue.replace(/^]d2|^]C1|^]e0/, "").replace(/^\x1d/, "");
+    // Detect GS1 DataMatrix with serial number (AI 01 = GTIN, AI 21 = serial)
+    const hasSerial = /^01\d{14}21/.test(normalizedRaw) || /^\(01\)\d{14}\(21\)/.test(normalizedRaw);
     // Extract EAN-13 from GS1 DataMatrix QR payload (e.g. 01GTIN-14 21serial 93check)
     const gs1 =
       rawValue.match(/\(01\)(\d{14})/) ?? rawValue.match(/^01(\d{14})/);
@@ -642,6 +646,52 @@ export function POSScreen() {
             );
             return;
           }
+
+          // Group 022 marking code check: prevent resale of unique DataMatrix QR codes
+          const groupCodes = product.category?.mxikGroupCode?.split(",").map((c) => c.trim()) ?? [];
+          if (hasSerial && groupCodes.includes("022")) {
+            // Check for duplicate in current cart
+            const alreadyInCart = items.some((i) => i.markingCode === normalizedRaw);
+            if (alreadyInCart) {
+              setBarcode("");
+              setError(t("pos.markingCodeInCart"));
+              return;
+            }
+            // Check local SQLite + server
+            try {
+              const checkResult = await window.electronAPI.markingCodes.check(normalizedRaw) as {
+                alreadySold: boolean;
+                soldAt?: string;
+                terminalId?: string;
+              };
+              if (checkResult.alreadySold) {
+                const when = checkResult.soldAt
+                  ? new Date(checkResult.soldAt).toLocaleString("ru-RU")
+                  : "";
+                setBarcode("");
+                setError(t("pos.markingCodeAlreadySold", { when, terminal: checkResult.terminalId ?? "" }));
+                return;
+              }
+            } catch {
+              // IPC error — allow sale rather than block
+            }
+
+            // Add as individual item with markingCode (never merged)
+            const productName = i18n.language === "uz" ? product.nameUz : product.nameRu;
+            addItem({
+              productId: product.id,
+              productName,
+              barcode: product.barcode,
+              unitPrice: Number(product.price),
+              quantity: 1,
+              stock: product.stock,
+              unit: product.unit,
+              markingCode: normalizedRaw,
+            });
+            resetInputs();
+            return;
+          }
+
           addProductToCart(product, qty);
           resetInputs();
         }
@@ -664,6 +714,7 @@ export function POSScreen() {
     searchByBarcode,
     addProductToCart,
     addItem,
+    items,
     t,
     handleIdSubmit,
     i18n.language,
@@ -698,6 +749,14 @@ export function POSScreen() {
           : await createSale(saleData);
 
         if (sale) {
+          // Record marking codes (group 022) for sold items — fire and forget
+          const markingEntries = items
+            .filter((i) => i.markingCode)
+            .map((i) => ({ code: i.markingCode!, productBarcode: i.barcode }));
+          if (markingEntries.length > 0) {
+            window.electronAPI.markingCodes.record(markingEntries).catch(() => {});
+          }
+
           // Auto-print receipt for quick pay
           if (sale.id) {
             try {

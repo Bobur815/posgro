@@ -350,6 +350,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("paynetReceipts:integrate", id, saleReceiptNumber, paynetReceiptNumber, ofdUrl),
   },
 
+  // Marking codes — prevent re-sale of group 022 unique QR scans
+  markingCodes: {
+    check: (code: string) =>
+      ipcRenderer.invoke("markingCodes:check", code),
+    record: (entries: { code: string; productBarcode?: string }[]) =>
+      ipcRenderer.invoke("markingCodes:record", entries),
+  },
+
   // Logger — forwards renderer errors to the main-process electron-log file
   logger: {
     error: (msg: string) => ipcRenderer.send("log:renderer", "error", msg),
@@ -592,6 +600,15 @@ declare global {
           issuedAt: string;
         }>>;
         integrate: (id: string, saleReceiptNumber: string, paynetReceiptNumber: string, ofdUrl: string) => Promise<void>;
+      };
+      markingCodes: {
+        check: (code: string) => Promise<{
+          alreadySold: boolean;
+          soldAt?: string;
+          terminalId?: string;
+          source?: 'local' | 'server';
+        }>;
+        record: (entries: { code: string; productBarcode?: string }[]) => Promise<void>;
       };
       logger: {
         error: (msg: string) => void;

@@ -6,6 +6,7 @@ import { setupWeighedItemsHandlers } from "./weighed-items-handlers";
 import { setupScaleHandlers } from "./scale-handlers";
 import { setupSmenaHandlers } from "./smena-handlers";
 import { setupPaynetHandlers } from "./paynet-handlers";
+import { setupMarkingCodesHandlers } from "./marking-codes-handlers";
 import { getAppConfig, updateConfig } from "../config/app-config";
 import { getAuthToken, getServerToken } from "../sync/queue-manager";
 import { getPrismaClient, readStoreBootstrap, writeStoreBootstrap } from "../database/sqlite-client";
@@ -31,7 +32,7 @@ export function setupIpcHandlers(): void {
   setupAppHandlers();
   setupReceiptHandlers();
   setupPaynetHandlers();
-
+  setupMarkingCodesHandlers();
 }
 
 function setupCategoriesHandlers(): void {
@@ -90,6 +91,7 @@ function serializeSupplier(supplier: any) {
     address: supplier.address || undefined,
     active: Boolean(supplier.active),
     balance: toNumber(supplier.balance),
+    paymentType: supplier.paymentType ?? 'IMMEDIATE',
     createdAt: supplier.createdAt?.toISOString?.() || supplier.createdAt,
   };
 }
@@ -161,6 +163,7 @@ function setupSuppliersHandlers(): void {
         phone?: string;
         address?: string;
         balance?: number;
+        paymentType?: string;
       },
     ) => {
       const prisma = getPrismaClient();
@@ -171,6 +174,7 @@ function setupSuppliersHandlers(): void {
           phone: data.phone || null,
           address: data.address || null,
           balance: data.balance ?? 0,
+          paymentType: data.paymentType ?? 'IMMEDIATE',
         },
       });
       return ipcSafe(serializeSupplier(supplier));
@@ -190,6 +194,7 @@ function setupSuppliersHandlers(): void {
         address?: string;
         active?: boolean;
         balance?: number;
+        paymentType?: string;
       },
     ) => {
       const prisma = getPrismaClient();
@@ -202,6 +207,7 @@ function setupSuppliersHandlers(): void {
           ...(data.address !== undefined && { address: data.address || null }),
           ...(data.active !== undefined && { active: data.active }),
           ...(data.balance !== undefined && { balance: data.balance }),
+          ...(data.paymentType !== undefined && { paymentType: data.paymentType }),
         },
       });
       return ipcSafe(serializeSupplier(supplier));

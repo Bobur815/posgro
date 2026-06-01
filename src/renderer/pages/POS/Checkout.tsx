@@ -472,6 +472,14 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
         : await createSale(saleData);
 
       if (sale) {
+        // Record marking codes (group 022) for sold items — fire and forget
+        const markingEntries = items
+          .filter((i) => i.markingCode)
+          .map((i) => ({ code: i.markingCode!, productBarcode: i.barcode }));
+        if (markingEntries.length > 0) {
+          window.electronAPI.markingCodes.record(markingEntries).catch(() => {});
+        }
+
         // Mark Paynet receipt as integrated on the VPS
         if (selectedPaynet && sale.receiptNumber) {
           window.electronAPI.paynetReceipts

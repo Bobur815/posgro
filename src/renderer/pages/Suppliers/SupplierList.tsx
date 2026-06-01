@@ -162,7 +162,8 @@ export function SupplierList() {
     goToPage,
     setPageSize,
   } = usePagination(filteredSuppliers);
-
+  
+  
   const handleDelete = async (supplier: Supplier) => {
     const success = await deleteSupplier(supplier.id);
     if (success) {
@@ -198,6 +199,19 @@ export function SupplierList() {
       key: "phone",
       header: t("suppliers.phone"),
       render: (supplier: Supplier) => supplier.phone || "-",
+    },
+    {
+      key: "address",
+      header: t("suppliers.address"),
+      render: (supplier: Supplier) => supplier.address || "-",
+    },
+    {
+      key: "paymentType",
+      header: t("suppliers.paymentType"),
+      render: (supplier: Supplier) =>
+        supplier.paymentType === "IMMEDIATE"
+          ? t("suppliers.paymentTypeImmediate")
+          : t("suppliers.paymentTypeInstallment"),
     },
     {
       key: "balance",

@@ -128,7 +128,9 @@
     "customAmount": "Boshqa summa",
     "clearAmount": "Tozalash",
     "pluNotFound": "PLU {{plu}} li mahsulot topilmadi. Mahsulot sozlamalarini tekshiring.",
-    "zeroWeight": "Tarozi nol og'irlik qaytardi — qayta o'lchang"
+    "zeroWeight": "Tarozi nol og'irlik qaytardi — qayta o'lchang",
+    "markingCodeInCart": "Bu mahsulot allaqachon savatga qo'shilgan (noyob QR)",
+    "markingCodeAlreadySold": "Bu mahsulot allaqachon sotilgan {{when}} (terminal: {{terminal}})"
   },
   "products": {
     "title": "Mahsulotlar",

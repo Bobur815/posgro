@@ -34,6 +34,8 @@ import {
 } from "../../api/client";
 import type { CatalogEntry } from "@shared/types";
 import { isMxikExcluded } from "@shared/types/mxik.types";
+import { Spinner } from "@renderer/components/common/Spinner";
+import { debounce } from "@renderer/utils/helpers";
 
 const Form = styled.form`
   display: flex;
@@ -328,7 +330,9 @@ export function ProductForm({
   const [mxikPickerQuery, setMxikPickerQuery] = useState("");
   const [mxikPickerResults, setMxikPickerResults] = useState<CatalogEntry[]>([]);
   const [mxikPickerLoading, setMxikPickerLoading] = useState(false);
-  const mxikPickerTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [mxikPickerPage, setMxikPickerPage] = useState(0);
+  const [mxikPickerTotal, setMxikPickerTotal] = useState(0);
+  const [mxikLoadingMore, setMxikLoadingMore] = useState(false);
   const [mcVerification, setMcVerification] = useState<{
     isValid: boolean;
     issuerName?: string;
@@ -453,21 +457,38 @@ export function ProductForm({
     setMxikPickerResults([]);
   };
 
+  const doMxikSearch = useCallback(
+    debounce(async (q: string) => {
+      if (q.trim().length < 2) {
+        setMxikPickerResults([]);
+        setMxikPickerTotal(0);
+        setMxikPickerPage(0);
+        return;
+      }
+      setMxikPickerLoading(true);
+      const { results, total } = await mxikApi.catalogSearch(q.trim(), 0, 10);
+      setMxikPickerResults(results);
+      setMxikPickerTotal(total);
+      setMxikPickerPage(0);
+      setMxikPickerLoading(false);
+    }, 350),
+    [],
+  );
+
   useEffect(() => {
     if (!showMxikPicker) return;
-    if (mxikPickerTimeout.current) clearTimeout(mxikPickerTimeout.current);
-    if (mxikPickerQuery.trim().length < 2) {
-      setMxikPickerResults([]);
-      return;
-    }
-    mxikPickerTimeout.current = setTimeout(async () => {
-      setMxikPickerLoading(true);
-      const results = await mxikApi.catalogSearch(mxikPickerQuery.trim());
-      setMxikPickerResults(results);
-      setMxikPickerLoading(false);
-    }, 350);
-    return () => { if (mxikPickerTimeout.current) clearTimeout(mxikPickerTimeout.current); };
-  }, [mxikPickerQuery, showMxikPicker]);
+    doMxikSearch(mxikPickerQuery);
+  }, [mxikPickerQuery, showMxikPicker, doMxikSearch]);
+
+  const handleMxikLoadMore = async () => {
+    const nextPage = mxikPickerPage + 1;
+    setMxikLoadingMore(true);
+    const { results, total } = await mxikApi.catalogSearch(mxikPickerQuery.trim(), nextPage, 10);
+    setMxikPickerResults((prev) => [...prev, ...results]);
+    setMxikPickerTotal(total);
+    setMxikPickerPage(nextPage);
+    setMxikLoadingMore(false);
+  };
 
   const handleGenerateBarcode = () => {
     const code = generateProductBarcode();
@@ -808,7 +829,9 @@ export function ProductForm({
     setFormData((prev) => ({
       ...prev,
       [field]: value,
-      ...(field === "productType" && value === "BULK_WEIGHTED" ? { unit: "кг" } : {}),
+      ...(field === "productType" && value === "BULK_WEIGHTED"
+        ? { unit: "кг" }
+        : {}),
     }));
   };
 
@@ -964,6 +987,8 @@ export function ProductForm({
                 value={formData.price}
                 onChange={(e) => handleChange("price", e.target.value)}
                 required
+                onFocus={(e) => e.target.select()}
+
               />
               <Input
                 label={t("products.cost")}
@@ -978,6 +1003,7 @@ export function ProductForm({
               <Input
                 label={t("products.stock")}
                 type="number"
+                disabled={isEdit}
                 step={
                   formData.productType === "BULK_WEIGHTED" ||
                   formData.productType === "PREPACKAGED"
@@ -1521,7 +1547,13 @@ export function ProductForm({
       {showMxikPicker && (
         <Modal
           title={t("products.searchMxik")}
-          onClose={() => { setShowMxikPicker(false); setMxikPickerQuery(""); setMxikPickerResults([]); }}
+          onClose={() => {
+            setShowMxikPicker(false);
+            setMxikPickerQuery("");
+            setMxikPickerResults([]);
+            setMxikPickerTotal(0);
+            setMxikPickerPage(0);
+          }}
           width="560px"
         >
           <Input
@@ -1530,28 +1562,41 @@ export function ProductForm({
             placeholder={t("products.mxikPickerPlaceholder")}
             onChange={(e) => setMxikPickerQuery(e.target.value)}
           />
-          {mxikPickerLoading && (
-            <div style={{ padding: "12px", textAlign: "center", color: "var(--color-text-secondary)", fontSize: 13 }}>
-              ...
-            </div>
-          )}
+          {mxikPickerLoading && <Spinner centered size={24} />}
           {!mxikPickerLoading && mxikPickerQuery.trim().length >= 2 && mxikPickerResults.length === 0 && (
             <div style={{ padding: "12px", textAlign: "center", color: "var(--color-text-secondary)", fontSize: 13 }}>
               {t("products.noMxikResults")}
             </div>
           )}
           {mxikPickerResults.length > 0 && (
-            <PickerList>
-              {mxikPickerResults.map((entry) => (
-                <PickerItem key={entry.mxikCode} onClick={() => handlePickerSelect(entry)}>
-                  <PickerItemName>{entry.mxikName}</PickerItemName>
-                  <PickerItemMeta>
-                    {entry.className} · {entry.mxikCode}
-                    {entry.internationalCode ? ` · ${entry.internationalCode}` : ""}
-                  </PickerItemMeta>
-                </PickerItem>
-              ))}
-            </PickerList>
+            <>
+              <PickerList>
+                {mxikPickerResults.map((entry, i) => (
+                  <PickerItem key={`${entry.mxikCode}-${i}`} onClick={() => handlePickerSelect(entry)}>
+                    <PickerItemName>{entry.mxikName}</PickerItemName>
+                    <PickerItemMeta>
+                      {entry.className} · {entry.mxikCode}
+                      {entry.internationalCode ? ` · ${entry.internationalCode}` : ""}
+                    </PickerItemMeta>
+                  </PickerItem>
+                ))}
+              </PickerList>
+              {mxikPickerResults.length < mxikPickerTotal && (
+                <div style={{ display: "flex", justifyContent: "center", paddingTop: 8 }}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="small"
+                    onClick={handleMxikLoadMore}
+                    disabled={mxikLoadingMore}
+                  >
+                    {mxikLoadingMore
+                      ? <Spinner size={14} />
+                      : `${t("common.load")} ${Math.min(10, mxikPickerTotal - mxikPickerResults.length)}`}
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </Modal>
       )}

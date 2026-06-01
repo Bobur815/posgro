@@ -407,12 +407,15 @@ export function SupplierManagementModal({
                 }
                 autoFocus
               />
-              <Input
-                label={t("suppliers.balance")}
-                value={formData.balance}
-                onChange={(e) => handleChange('balance', e.target.value)}
-                placeholder="0.00"
-              />
+              {!editingSupplier && (
+                <Input
+                  label={t("suppliers.balance")}
+                  value={formData.balance}
+                  onChange={(e) => handleChange('balance', e.target.value)}
+                  placeholder="0.00"
+                  type="number"
+                />
+              )}
               <Input
                 label={t("suppliers.address")}
                 value={formData.address}

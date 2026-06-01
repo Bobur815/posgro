@@ -45,6 +45,7 @@ model Store {
   terminalHeartbeats   TerminalHeartbeat[]
   terminalLogs         TerminalLog[]
   paynetReceipts       PaynetReceipt[]
+  soldMarkingCodes     SoldMarkingCode[]
 
   @@map("stores")
 }
@@ -396,6 +397,22 @@ model PaynetReceipt {
   @@unique([storeId, receiptNumber])
   @@index([storeId, integrated])
   @@map("paynet_receipts")
+}
+
+// ==================== MARKING CODES (Group 022 unique QR tracking) ====================
+
+model SoldMarkingCode {
+  id             String   @id @default(cuid())
+  storeId        String   @map("store_id")
+  store          Store    @relation(fields: [storeId], references: [id])
+  code           String
+  productBarcode String?  @map("product_barcode")
+  terminalId     String   @map("terminal_id")
+  soldAt         DateTime @default(now()) @map("sold_at")
+
+  @@unique([storeId, code])
+  @@index([storeId])
+  @@map("sold_marking_codes")
 }
 
 model AuditLog {

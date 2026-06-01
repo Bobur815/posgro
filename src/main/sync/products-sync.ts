@@ -237,6 +237,8 @@ export async function syncSuppliers(): Promise<void> {
           phone: s.phone || null,
           address: s.address || null,
           active: s.active ?? true,
+          balance: s.balance ?? 0,
+          paymentType: s.paymentType ?? 'IMMEDIATE',
         },
         create: {
           id: s.id,
@@ -246,6 +248,7 @@ export async function syncSuppliers(): Promise<void> {
           address: s.address || null,
           active: s.active ?? true,
           balance: s.balance ?? 0,
+          paymentType: s.paymentType ?? 'IMMEDIATE',
         },
       });
     }
@@ -364,6 +367,7 @@ export async function syncCategories(): Promise<void> {
             nameRu: category.nameRu,
             nameUz: category.nameUz,
             active: category.active,
+            mxikGroupCode: category.mxikGroupCode ?? null,
           },
         });
       }
@@ -392,12 +396,12 @@ export async function syncCategories(): Promise<void> {
               if (alreadyAtServerId) {
                 await prisma.category.update({
                   where: { id: category.id },
-                  data: { nameRu: category.nameRu, nameUz: category.nameUz, active: category.active },
+                  data: { nameRu: category.nameRu, nameUz: category.nameUz, active: category.active, mxikGroupCode: category.mxikGroupCode ?? null },
                 });
               } else {
                 await prisma.$executeRaw`
-                  INSERT INTO categories (id, name_uz, name_ru, active, created_at, updated_at)
-                  VALUES (${category.id}, ${category.nameUz}, ${category.nameRu}, ${category.active ? 1 : 0}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                  INSERT INTO categories (id, name_uz, name_ru, active, mxik_group_code, created_at, updated_at)
+                  VALUES (${category.id}, ${category.nameUz}, ${category.nameRu}, ${category.active ? 1 : 0}, ${category.mxikGroupCode ?? null}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 `;
               }
             } finally {
@@ -408,21 +412,21 @@ export async function syncCategories(): Promise<void> {
           } else {
             await prisma.category.update({
               where: { id: existing.id },
-              data: { nameRu: category.nameRu, active: category.active },
+              data: { nameRu: category.nameRu, active: category.active, mxikGroupCode: category.mxikGroupCode ?? null },
             });
           }
         } else {
           // Force VPS id so new products can satisfy the FK when they sync
           try {
             await prisma.$executeRaw`
-              INSERT INTO categories (id, name_uz, name_ru, active, created_at, updated_at)
-              VALUES (${category.id}, ${category.nameUz}, ${category.nameRu}, ${category.active ? 1 : 0}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              INSERT INTO categories (id, name_uz, name_ru, active, mxik_group_code, created_at, updated_at)
+              VALUES (${category.id}, ${category.nameUz}, ${category.nameRu}, ${category.active ? 1 : 0}, ${category.mxikGroupCode ?? null}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             `;
             newCategoryAdded = true;
           } catch {
             // id collision — fall back to autoincrement (rare; new products in this category won't sync until resolved)
             await prisma.category.create({
-              data: { nameRu: category.nameRu, nameUz: category.nameUz, active: category.active },
+              data: { nameRu: category.nameRu, nameUz: category.nameUz, active: category.active, mxikGroupCode: category.mxikGroupCode ?? null },
             });
           }
         }

@@ -49,11 +49,12 @@ model User {
 // ==================== PRODUCTS & INVENTORY ====================
 
 model Category {
-  id        Int       @id @default(autoincrement())
-  nameUz    String    @map("name_uz")
-  nameRu    String    @map("name_ru")
-  active    Boolean   @default(true)
-  products  Product[]
+  id            Int       @id @default(autoincrement())
+  nameUz        String    @map("name_uz")
+  nameRu        String    @map("name_ru")
+  active        Boolean   @default(true)
+  mxikGroupCode String?   @map("mxik_group_code")
+  products      Product[]
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -315,6 +316,19 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ==================== MARKING CODES (Group 022 unique QR tracking) ====================
+
+model SoldMarkingCode {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  productBarcode String?  @map("product_barcode")
+  terminalId     String   @map("terminal_id")
+  soldAt         DateTime @default(now()) @map("sold_at")
+  synced         Boolean  @default(false)
+
+  @@map("sold_marking_codes")
 }
 
 // ==================== SYNC QUEUE ====================
