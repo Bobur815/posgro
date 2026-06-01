@@ -17,12 +17,12 @@ import { StoreGuard } from '../../common/guards/store.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentStore } from '../../common/decorators/current-store.decorator';
 import { UserRole } from '@prisma/client';
-import { IsString } from 'class-validator';
+import { IsString, IsOptional } from 'class-validator';
 
 class CategoryDto {
   @IsString() nameRu!: string;
   @IsString() nameUz!: string;
-  mxikGroupCode?: string | null;
+  @IsOptional() @IsString() mxikGroupCode?: string | null;
 }
 
 @ApiTags('categories')
