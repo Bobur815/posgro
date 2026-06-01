@@ -12,17 +12,17 @@ export class CategoriesService {
     });
   }
 
-  async create(storeId: string, data: { nameRu: string; nameUz: string }) {
+  async create(storeId: string, data: { nameRu: string; nameUz: string; mxikGroupCode?: string | null }) {
     return this.prisma.category.create({
-      data: { storeId, nameRu: data.nameRu, nameUz: data.nameUz },
+      data: { storeId, nameRu: data.nameRu, nameUz: data.nameUz, mxikGroupCode: data.mxikGroupCode ?? null },
     });
   }
 
-  async update(id: number, storeId: string, data: { nameRu?: string; nameUz?: string }) {
+  async update(id: number, storeId: string, data: { nameRu?: string; nameUz?: string; mxikGroupCode?: string | null }) {
     await this.findById(id, storeId);
     return this.prisma.category.update({
       where: { id },
-      data,
+      data: { ...data },
     });
   }
 

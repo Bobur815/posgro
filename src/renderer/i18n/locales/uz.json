@@ -130,7 +130,8 @@
     "pluNotFound": "PLU {{plu}} li mahsulot topilmadi. Mahsulot sozlamalarini tekshiring.",
     "zeroWeight": "Tarozi nol og'irlik qaytardi — qayta o'lchang",
     "markingCodeInCart": "Bu mahsulot allaqachon savatga qo'shilgan (noyob QR)",
-    "markingCodeAlreadySold": "Bu mahsulot allaqachon sotilgan {{when}} (terminal: {{terminal}})"
+    "markingCodeAlreadySold": "Bu mahsulot allaqachon sotilgan {{when}} (terminal: {{terminal}})",
+    "qrOnlyProduct": "Bu mahsulot faqat markirovka QR-kodi orqali sotiladi — QR ni skaner qiling"
   },
   "products": {
     "title": "Mahsulotlar",
@@ -523,7 +524,8 @@
     "categoryCreated": "Kategoriya yaratildi",
     "categoryUpdated": "Kategoriya yangilandi",
     "categoryDeleted": "Kategoriya o'chirildi",
-    "confirmDelete": "Bu kategoriyani o'chirishni tasdiqlaysizmi?"
+    "confirmDelete": "Bu kategoriyani o'chirishni tasdiqlaysizmi?",
+    "mxikGroupCode": "MXIK guruh kodi (mas. 022)"
   },
   "units": {
     "piece": "Dona",

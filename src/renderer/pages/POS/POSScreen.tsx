@@ -465,6 +465,13 @@ export function POSScreen() {
           return;
         }
 
+        const idGroupCodes = (product.category?.mxikGroupCode ?? "").split(",").map((c) => c.trim()).filter(Boolean);
+        if (idGroupCodes.includes("022")) {
+          setId("");
+          setError(t("pos.qrOnlyProduct"));
+          return;
+        }
+
         setId("");
         setBarcode("");
         setQuantity("1");
@@ -490,16 +497,20 @@ export function POSScreen() {
     if (inputMode === "id") {
       return handleIdSubmit();
     }
-
+    
     const rawValue = barcode.trim();
+    
     if (!rawValue) {
       setError(t("pos.enterBarcode"));
       return;
     }
     // Normalize DataMatrix: strip ZXing symbology prefix and leading FNC1 byte
     const normalizedRaw = rawValue.replace(/^]d2|^]C1|^]e0/, "").replace(/^\x1d/, "");
-    // Detect GS1 DataMatrix with serial number (AI 01 = GTIN, AI 21 = serial)
-    const hasSerial = /^01\d{14}21/.test(normalizedRaw) || /^\(01\)\d{14}\(21\)/.test(normalizedRaw);
+    // Detect GS1 DataMatrix with serial number (AI 01 = GTIN, AI 21 = serial).
+    // Strip all internal GS1 group-separator bytes before matching — asl-belgisi codes
+    // often embed \x1d between AIs (e.g. 01{GTIN}\x1d21{serial}).
+    const normalizedNoGS = normalizedRaw.replace(/\x1d/g, "");
+    const hasSerial = /^01\d{14}21/.test(normalizedNoGS) || /^\(01\)\d{14}\(21\)/.test(normalizedNoGS);
     // Extract EAN-13 from GS1 DataMatrix QR payload (e.g. 01GTIN-14 21serial 93check)
     const gs1 =
       rawValue.match(/\(01\)(\d{14})/) ?? rawValue.match(/^01(\d{14})/);
@@ -648,10 +659,10 @@ export function POSScreen() {
           }
 
           // Group 022 marking code check: prevent resale of unique DataMatrix QR codes
-          const groupCodes = product.category?.mxikGroupCode?.split(",").map((c) => c.trim()) ?? [];
+          const groupCodes = (product.category?.mxikGroupCode ?? "").split(",").map((c) => c.trim()).filter(Boolean);
           if (hasSerial && groupCodes.includes("022")) {
             // Check for duplicate in current cart
-            const alreadyInCart = items.some((i) => i.markingCode === normalizedRaw);
+            const alreadyInCart = items.some((i) => i.markingCode === normalizedNoGS);
             if (alreadyInCart) {
               setBarcode("");
               setError(t("pos.markingCodeInCart"));
@@ -659,7 +670,7 @@ export function POSScreen() {
             }
             // Check local SQLite + server
             try {
-              const checkResult = await window.electronAPI.markingCodes.check(normalizedRaw) as {
+              const checkResult = await window.electronAPI.markingCodes.check(normalizedNoGS) as {
                 alreadySold: boolean;
                 soldAt?: string;
                 terminalId?: string;
@@ -686,9 +697,18 @@ export function POSScreen() {
               quantity: 1,
               stock: product.stock,
               unit: product.unit,
-              markingCode: normalizedRaw,
+              markingCode: normalizedNoGS,
             });
             resetInputs();
+            return;
+          }
+
+          // Block plain EAN barcode entry for group-022 marking products.
+          // DataMatrix QR inputs are longer and non-numeric — those pass through.
+          const isPlainBarcode = /^\d{8}$|^\d{12}$|^\d{13}$/.test(rawValue);
+          if (isPlainBarcode && groupCodes.includes("022")) {
+            setBarcode("");
+            setError(t("pos.qrOnlyProduct"));
             return;
           }
 
@@ -932,6 +952,11 @@ export function POSScreen() {
       );
       return;
     }
+    const selectGroupCodes = (product.category?.mxikGroupCode ?? "").split(",").map((c) => c.trim()).filter(Boolean);
+    if (selectGroupCodes.includes("022")) {
+      setError(t("pos.qrOnlyProduct"));
+      return;
+    }
     addProductToCart(product, qty);
     setQuantity("1");
     setError("");
@@ -947,7 +972,7 @@ export function POSScreen() {
       ? "barcode"
       : "qr"
     : null;
-
+  
   const handleCheckoutClick = async () => {
     if (!(await checkSmena())) {
       setShowSmenaModal(true);

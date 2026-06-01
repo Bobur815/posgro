@@ -22,6 +22,7 @@ import { IsString } from 'class-validator';
 class CategoryDto {
   @IsString() nameRu!: string;
   @IsString() nameUz!: string;
+  mxikGroupCode?: string | null;
 }
 
 @ApiTags('categories')

@@ -76,7 +76,7 @@ function serializeProduct(product: any): Product | null {
       id: Number(product.category.id),
       nameRu: String(product.category.nameRu || ""),
       nameUz: String(product.category.nameUz || ""),
-      mxikGroupCode: (product.category as any).mxikGroupCode || undefined,
+      mxikGroupCode: (product.category as any).mxikGroupCode ?? null,
       createdAt: toISOString(product.category.createdAt),
       updatedAt: toISOString(product.category.updatedAt),
     };

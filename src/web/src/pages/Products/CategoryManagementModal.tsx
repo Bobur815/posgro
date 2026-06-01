@@ -121,7 +121,7 @@ export function CategoryManagementModal({
   const [view, setView] = useState<View>('list');
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
-  const [formData, setFormData] = useState({ nameRu: '', nameUz: '' });
+  const [formData, setFormData] = useState({ nameRu: '', nameUz: '', mxikGroupCode: '' });
 
   const loadCategories = async () => {
     try {
@@ -138,13 +138,13 @@ export function CategoryManagementModal({
 
   const openCreateForm = () => {
     setEditingCategory(null);
-    setFormData({ nameRu: '', nameUz: '' });
+    setFormData({ nameRu: '', nameUz: '', mxikGroupCode: '' });
     setView('form');
   };
 
   const openEditForm = (category: Category) => {
     setEditingCategory(category);
-    setFormData({ nameRu: category.nameRu, nameUz: category.nameUz });
+    setFormData({ nameRu: category.nameRu, nameUz: category.nameUz, mxikGroupCode: category.mxikGroupCode ?? '' });
     setView('form');
   };
 
@@ -176,11 +176,15 @@ export function CategoryManagementModal({
     e.preventDefault();
     setIsLoading(true);
     try {
+      const payload = {
+        ...formData,
+        mxikGroupCode: formData.mxikGroupCode.trim() || null,
+      };
       if (editingCategory) {
-        await categoriesApi.update(String(editingCategory.id), formData);
+        await categoriesApi.update(String(editingCategory.id), payload);
         toast.success(t('categories.categoryUpdated'));
       } else {
-        await categoriesApi.create(formData);
+        await categoriesApi.create(payload);
         toast.success(t('categories.categoryCreated'));
       }
       await loadCategories();
@@ -266,6 +270,13 @@ export function CategoryManagementModal({
                 value={formData.nameRu}
                 onChange={(e) => handleNameRuChange(e.target.value)}
                 required
+              />
+              <Input
+                label={t('categories.mxikGroupCode')}
+                value={formData.mxikGroupCode}
+                onChange={(e) => setFormData((prev) => ({ ...prev, mxikGroupCode: e.target.value }))}
+                placeholder="022"
+                maxLength={10}
               />
               <Actions>
                 <Button type="button" variant="secondary" onClick={() => setView('list')}>
