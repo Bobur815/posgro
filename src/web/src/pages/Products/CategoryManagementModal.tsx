@@ -4,12 +4,13 @@ import styled from 'styled-components';
 import { Modal } from '@components/common/Modal';
 import { Button } from '@components/common/Button';
 import { Input } from '@components/common/Input';
+import { Select } from '@components/common/Select';
 import { ConfirmDialog } from '@components/common/ConfirmDialog';
 import { useToast } from '@context/ToastContext';
-import { Category } from '@shared/types';
+import { Category, MxikGroup } from '@shared/types';
 import { convertUzbekText } from '@shared/utils/transliterator';
 import { Pencil, Trash2, Plus, ArrowLeft } from 'lucide-react';
-import { categories as categoriesApi } from '../../api/client';
+import { categories as categoriesApi, mxik as mxikApi } from '../../api/client';
 
 const List = styled.div`
   display: flex;
@@ -117,6 +118,7 @@ export function CategoryManagementModal({
   const toast = useToast();
 
   const [categories, setCategories] = useState<Category[]>([]);
+  const [mxikGroups, setMxikGroups] = useState<MxikGroup[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [view, setView] = useState<View>('list');
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -132,9 +134,32 @@ export function CategoryManagementModal({
     }
   };
 
+  const loadMxikGroups = async () => {
+    try {
+      setMxikGroups(await mxikApi.catalogGroups());
+    } catch (err) {
+      console.error('Failed to load MXIK groups:', err);
+    }
+  };
+
   useEffect(() => {
     loadCategories();
+    loadMxikGroups();
   }, []);
+
+  // Build dropdown options; ensure the currently-saved code is selectable even if
+  // it isn't in the fetched list (e.g. a code no longer in the catalog).
+  const mxikOptions = (() => {
+    const opts = mxikGroups.map((g) => ({
+      value: g.groupCode,
+      label: `${g.groupCode} — ${g.groupName}`,
+    }));
+    const current = formData.mxikGroupCode.trim();
+    if (current && !opts.some((o) => o.value === current)) {
+      opts.unshift({ value: current, label: current });
+    }
+    return opts;
+  })();
 
   const openCreateForm = () => {
     setEditingCategory(null);
@@ -271,12 +296,12 @@ export function CategoryManagementModal({
                 onChange={(e) => handleNameRuChange(e.target.value)}
                 required
               />
-              <Input
+              <Select
                 label={t('categories.mxikGroupCode')}
                 value={formData.mxikGroupCode}
                 onChange={(e) => setFormData((prev) => ({ ...prev, mxikGroupCode: e.target.value }))}
-                placeholder="022"
-                maxLength={10}
+                options={mxikOptions}
+                placeholder={t('categories.selectMxikGroup')}
               />
               <Actions>
                 <Button type="button" variant="secondary" onClick={() => setView('list')}>

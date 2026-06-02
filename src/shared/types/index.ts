@@ -80,4 +80,4 @@ export type {
 
 export type { Smena, SmenaMovement, SmenaStats } from './smena.types';
 
-export type { CatalogEntry } from './mxik.types';
+export type { CatalogEntry, MxikGroup } from './mxik.types';

@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { CatalogEntry } from "@shared/types";
+import type { CatalogEntry, MxikGroup } from "@shared/types";
 
 export interface DeviceSession {
   id: string;
@@ -672,6 +672,11 @@ export const mxik = {
   },
 
   // ─── Local MxikCatalog endpoints (fast, offline-capable, no geo-restriction) ─
+
+  catalogGroups: async (): Promise<MxikGroup[]> => {
+    const { data } = await axiosInstance.get('/mxik/catalog/groups');
+    return data;
+  },
 
   catalogLookup: async (barcode: string): Promise<CatalogEntry | null> => {
     try {

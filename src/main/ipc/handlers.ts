@@ -33,6 +33,28 @@ export function setupIpcHandlers(): void {
   setupReceiptHandlers();
   setupPaynetHandlers();
   setupMarkingCodesHandlers();
+  setupMxikHandlers();
+}
+
+// MXIK catalog lives only in the VPS PostgreSQL, so the renderer proxies through
+// the server (with the logged-in server token) to fetch the group list.
+function setupMxikHandlers(): void {
+  ipcMain.handle("mxik:getGroups", async () => {
+    const config = getAppConfig();
+    const token = getServerToken();
+    if (!token) return [];
+    try {
+      const response = await fetch(`${config.vpsApiUrl}/mxik/catalog/groups`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) return [];
+      const groups = await response.json();
+      return ipcSafe(Array.isArray(groups) ? groups : []);
+    } catch (error) {
+      console.error("Failed to fetch MXIK groups:", error instanceof Error ? error.message : error);
+      return [];
+    }
+  });
 }
 
 function setupCategoriesHandlers(): void {

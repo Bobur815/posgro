@@ -1,6 +1,7 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import type { CatalogEntry } from '@shared/types/mxik.types';
+import { EXCLUDED_MXIK_GROUPS } from '@shared/types/mxik.types';
+import type { CatalogEntry, MxikGroup } from '@shared/types/mxik.types';
 
 const TASNIF_BASE = 'https://tasnif.soliq.uz/api/cls-api';
 
@@ -38,6 +39,32 @@ export class MxikService {
   constructor(private readonly prisma: PrismaService) {}
 
   // ─── Local catalog endpoints ───────────────────────────────────────────────
+
+  /**
+   * Distinct MXIK groups (code + name) for the category picker.
+   * Deduplicates by groupCode (catalog has transliteration variants of the same
+   * code) keeping the name variant with the most rows, and drops groups the store
+   * is legally not allowed to sell (EXCLUDED_MXIK_GROUPS).
+   */
+  async catalogGroups(): Promise<MxikGroup[]> {
+    const raw = await this.prisma.mxikCatalog.groupBy({
+      by: ['groupCode', 'groupName'],
+      _count: { mxikCode: true },
+    });
+
+    const byCode = new Map<string, { groupName: string; count: number }>();
+    for (const g of raw) {
+      if (EXCLUDED_MXIK_GROUPS.has(g.groupCode)) continue;
+      const existing = byCode.get(g.groupCode);
+      if (!existing || g._count.mxikCode > existing.count) {
+        byCode.set(g.groupCode, { groupName: g.groupName, count: g._count.mxikCode });
+      }
+    }
+
+    return [...byCode.entries()]
+      .map(([groupCode, { groupName }]) => ({ groupCode, groupName }))
+      .sort((a, b) => a.groupCode.localeCompare(b.groupCode));
+  }
 
   async catalogLookupByBarcode(barcode: string): Promise<CatalogEntry | null> {
     return this.prisma.mxikCatalog.findFirst({

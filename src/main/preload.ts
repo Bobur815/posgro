@@ -77,6 +77,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     delete: (id: string) => ipcRenderer.invoke("categories:delete", id),
   },
 
+  // MXIK catalog (proxied to VPS)
+  mxik: {
+    getGroups: () => ipcRenderer.invoke("mxik:getGroups"),
+  },
+
   // Inventory
   inventory: {
     createArrival: (data: unknown) =>
@@ -423,6 +428,9 @@ declare global {
         create: (data: unknown) => Promise<unknown>;
         update: (id: string, data: unknown) => Promise<unknown>;
         delete: (id: string) => Promise<boolean>;
+      };
+      mxik: {
+        getGroups: () => Promise<{ groupCode: string; groupName: string }[]>;
       };
       inventory: {
         createArrival: (data: unknown) => Promise<unknown>;

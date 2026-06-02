@@ -26,6 +26,12 @@ export class MxikController {
     return this.mxikService.searchByBarcode(barcode);
   }
 
+  @Get('catalog/groups')
+  @ApiOperation({ summary: 'List distinct MXIK groups (code + name) for category assignment' })
+  catalogGroups() {
+    return this.mxikService.catalogGroups();
+  }
+
   @Get('catalog/lookup')
   @ApiOperation({ summary: 'Look up a product in the local MXIK catalog by barcode' })
   catalogLookup(@Query('barcode') barcode: string) {

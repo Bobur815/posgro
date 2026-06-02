@@ -537,7 +537,8 @@
     "categoryUpdated": "Категория обновлена",
     "categoryDeleted": "Категория удалена",
     "confirmDelete": "Вы уверены, что хотите удалить эту категорию?",
-    "mxikGroupCode": "Код группы МХИК (напр. 022)"
+    "mxikGroupCode": "Код группы МХИК (напр. 022)",
+    "selectMxikGroup": "Выберите группу МХИК"
   },
   "units": {
     "piece": "Штука",

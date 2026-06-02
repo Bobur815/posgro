@@ -9,6 +9,12 @@ export interface CatalogEntry {
   unitName:          string | null;
 }
 
+/** A distinct MXIK group (code + display name) for category assignment. */
+export interface MxikGroup {
+  groupCode: string;
+  groupName: string;
+}
+
 // Groups excluded from the store's legal retail activity.
 // Derived from HS chapter codes mirrored in MXIK group prefixes.
 export const EXCLUDED_MXIK_GROUPS = new Set([

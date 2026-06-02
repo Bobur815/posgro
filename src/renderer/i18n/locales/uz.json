@@ -525,7 +525,8 @@
     "categoryUpdated": "Kategoriya yangilandi",
     "categoryDeleted": "Kategoriya o'chirildi",
     "confirmDelete": "Bu kategoriyani o'chirishni tasdiqlaysizmi?",
-    "mxikGroupCode": "MXIK guruh kodi (mas. 022)"
+    "mxikGroupCode": "MXIK guruh kodi (mas. 022)",
+    "selectMxikGroup": "MXIK guruhini tanlang"
   },
   "units": {
     "piece": "Dona",
