@@ -160,6 +160,7 @@ async function uploadCategories(
     nameUz: c.nameUz,
     nameRu: c.nameRu,
     active: c.active,
+    mxikGroupCode: c.mxikGroupCode ?? null,
   }));
 
   const res = await apiPost("/categories/sync-bulk", token, {

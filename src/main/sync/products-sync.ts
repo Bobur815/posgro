@@ -367,7 +367,7 @@ export async function syncCategories(): Promise<void> {
             nameRu: category.nameRu,
             nameUz: category.nameUz,
             active: category.active,
-            mxikGroupCode: category.mxikGroupCode ?? null,
+            ...(category.mxikGroupCode != null ? { mxikGroupCode: category.mxikGroupCode } : {}),
           },
         });
       }

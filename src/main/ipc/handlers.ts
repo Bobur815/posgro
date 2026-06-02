@@ -52,7 +52,7 @@ function setupCategoriesHandlers(): void {
   ipcMain.handle("categories:update", async (_event, id: string, data) => {
     const prisma = getPrismaClient();
     return prisma.category.update({
-      where: { id },
+      where: { id: Number(id) },
       data,
     });
   });
@@ -60,7 +60,7 @@ function setupCategoriesHandlers(): void {
   ipcMain.handle("categories:delete", async (_event, id: string) => {
     const prisma = getPrismaClient();
     await prisma.category.update({
-      where: { id },
+      where: { id: Number(id) },
       data: { active: false },
     });
     return true;

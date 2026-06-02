@@ -123,8 +123,10 @@ export function CategoryManagementModal({
   const [formData, setFormData] = useState({
     nameRu: '',
     nameUz: '',
+    mxikGroupCode: '',
   });
-
+  console.log(categories);
+  
   const loadCategories = async () => {
     try {
       const data = await window.electronAPI.categories.getAll();
@@ -140,7 +142,7 @@ export function CategoryManagementModal({
 
   const openCreateForm = () => {
     setEditingCategory(null);
-    setFormData({ nameRu: '', nameUz: '' });
+    setFormData({ nameRu: '', nameUz: '', mxikGroupCode: '' });
     setView('form');
   };
 
@@ -149,6 +151,7 @@ export function CategoryManagementModal({
     setFormData({
       nameRu: category.nameRu,
       nameUz: category.nameUz,
+      mxikGroupCode: category.mxikGroupCode ?? '',
     });
     setView('form');
   };
@@ -186,11 +189,15 @@ export function CategoryManagementModal({
     setIsLoading(true);
 
     try {
+      const payload = {
+        ...formData,
+        mxikGroupCode: formData.mxikGroupCode.trim() || null,
+      };
       if (editingCategory) {
-        await window.electronAPI.categories.update(String(editingCategory.id), formData);
+        await window.electronAPI.categories.update(String(editingCategory.id), payload);
         toast.success(t('categories.categoryUpdated'));
       } else {
-        await window.electronAPI.categories.create(formData);
+        await window.electronAPI.categories.create(payload);
         toast.success(t('categories.categoryCreated'));
       }
 
@@ -285,6 +292,13 @@ export function CategoryManagementModal({
                 value={formData.nameRu}
                 onChange={(e) => handleNameRuChange(e.target.value)}
                 required
+              />
+              <Input
+                label={t('categories.mxikGroupCode')}
+                value={formData.mxikGroupCode}
+                onChange={(e) => setFormData((prev) => ({ ...prev, mxikGroupCode: e.target.value }))}
+                placeholder="022"
+                maxLength={10}
               />
               <Actions>
                 <Button

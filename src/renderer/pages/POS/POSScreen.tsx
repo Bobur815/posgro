@@ -227,6 +227,7 @@ const ErrorMessage = styled.div`
   border-radius: ${({ theme }) => theme.borderRadius};
   font-size: 14px;
   text-align: center;
+  margin-bottom: ${({ theme }) => theme.spacing.sm};
 `;
 
 const InputColumn = styled.div`
@@ -466,6 +467,7 @@ export function POSScreen() {
         }
 
         const idGroupCodes = (product.category?.mxikGroupCode ?? "").split(",").map((c) => c.trim()).filter(Boolean);
+        console.log("[DBG id]", JSON.stringify({ id: product.id, cat: product.category, codes: idGroupCodes }));
         if (idGroupCodes.includes("022")) {
           setId("");
           setError(t("pos.qrOnlyProduct"));
@@ -660,6 +662,7 @@ export function POSScreen() {
 
           // Group 022 marking code check: prevent resale of unique DataMatrix QR codes
           const groupCodes = (product.category?.mxikGroupCode ?? "").split(",").map((c) => c.trim()).filter(Boolean);
+          console.log("[DBG barcode]", JSON.stringify({ id: product.id, cat: product.category, codes: groupCodes, hasSerial, rawValue, isPlain: /^\d{8}$|^\d{12}$|^\d{13}$/.test(rawValue) }));
           if (hasSerial && groupCodes.includes("022")) {
             // Check for duplicate in current cart
             const alreadyInCart = items.some((i) => i.markingCode === normalizedNoGS);
@@ -953,6 +956,7 @@ export function POSScreen() {
       return;
     }
     const selectGroupCodes = (product.category?.mxikGroupCode ?? "").split(",").map((c) => c.trim()).filter(Boolean);
+    console.log("[DBG select]", JSON.stringify({ id: product.id, cat: product.category, codes: selectGroupCodes }));
     if (selectGroupCodes.includes("022")) {
       setError(t("pos.qrOnlyProduct"));
       return;
