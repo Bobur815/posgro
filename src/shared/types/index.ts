@@ -81,3 +81,12 @@ export type {
 export type { Smena, SmenaMovement, SmenaStats } from './smena.types';
 
 export type { CatalogEntry, MxikGroup } from './mxik.types';
+
+export type {
+  FiscalState,
+  RegosVcrConfig,
+  RegosVcrConfigInput,
+  FiscalConnectionResult,
+  FiscalQueueStatus,
+  FiscalLabel,
+} from './fiscal.types';

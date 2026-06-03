@@ -560,6 +560,46 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
       synced         INTEGER NOT NULL DEFAULT 0
     )
   `;
+
+  // Migration 19: REGOS:VCR fiscalization columns on sales
+  // (column-existence checked via pragma_table_info so a missing column does not
+  // emit a noisy prisma:error like the older SELECT-probe migrations above)
+  if (!(await columnExists(prisma, 'sales', 'fiscal_status'))) {
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN fiscal_status TEXT`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN fiscal_attempts INTEGER DEFAULT 0`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN fiscal_error TEXT`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN regos_receipt_id TEXT`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN regos_fiscal_sign TEXT`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN regos_qr_code_url TEXT`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN regos_terminal_id TEXT`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN regos_receipt_no TEXT`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN regos_fiscal_at DATETIME`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN regos_labels TEXT`;
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_sales_fiscal_status ON sales(fiscal_status)`;
+  }
+
+  // Migration 20: REGOS:VCR package code on products
+  if (!(await columnExists(prisma, 'products', 'package_code'))) {
+    await prisma.$executeRaw`ALTER TABLE products ADD COLUMN package_code TEXT`;
+  }
+
+  // Migration 21: REGOS:VCR Z-report id on smenas
+  if (!(await columnExists(prisma, 'smenas', 'regos_z_report_id'))) {
+    await prisma.$executeRaw`ALTER TABLE smenas ADD COLUMN regos_z_report_id INTEGER`;
+  }
+}
+
+/** True if `column` exists on `table` — silent (no thrown query, no prisma:error log). */
+async function columnExists(
+  prisma: PrismaClientType,
+  table: string,
+  column: string,
+): Promise<boolean> {
+  const rows = (await prisma.$queryRawUnsafe(
+    `SELECT 1 FROM pragma_table_info('${table}') WHERE name = ?`,
+    column,
+  )) as unknown[];
+  return Array.isArray(rows) && rows.length > 0;
 }
 
 export async function closeDatabase(): Promise<void> {

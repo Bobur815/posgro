@@ -175,6 +175,7 @@ interface ProductFormProps {
     nameRu?: string;
     nameUz?: string;
     mxik?: string;
+    packageCode?: string;
     cost?: number;
     stock?: number;
     minStock?: number;
@@ -233,6 +234,7 @@ export function ProductForm({
     isOnPromotion: false,
     active: true,
     mxik: initialData?.mxik || "",
+    packageCode: initialData?.packageCode || "",
     productType: "REGULAR" as ProductType,
     internalCode: "",
   });
@@ -414,7 +416,9 @@ export function ProductForm({
   const loadProduct = async () => {
     if (!productId) return;
 
-    const product = await getById(productId);
+    // Resolve by DB primary key — productId comes from a product row's `id`, which can
+    // collide with another product's storeProductCode in the default lookup.
+    const product = await getById(productId, { byDbId: true });
     if (product) {
       setFormData({
         barcode: product.barcode,
@@ -438,6 +442,7 @@ export function ProductForm({
         isOnPromotion: product.isOnPromotion ?? false,
         active: product.isActive,
         mxik: product.mxik || "",
+        packageCode: product.packageCode || "",
         productType: product.productType || "REGULAR",
         internalCode: product.internalCode || "",
       });
@@ -468,6 +473,7 @@ export function ProductForm({
       isOnPromotion: formData.isOnPromotion,
       active: formData.active,
       mxik: formData.mxik || undefined,
+      packageCode: formData.packageCode || undefined,
       productType: formData.productType,
       internalCode: formData.internalCode || undefined,
     };
@@ -532,6 +538,12 @@ export function ProductForm({
               value={formData.mxik}
               placeholder="00000000000000000"
               onChange={(e) => handleChange("mxik", e.target.value)}
+            />
+            <Input
+              label={t("products.packageCode", "Код упаковки (МХИК)")}
+              value={formData.packageCode}
+              placeholder="1218868"
+              onChange={(e) => handleChange("packageCode", e.target.value)}
             />
             <FormGroup>
               <Label>

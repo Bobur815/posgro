@@ -15,6 +15,7 @@ import { ConfirmDialog } from "@components/common/ConfirmDialog";
 import { ProductFilters } from "@components/products/ProductFilters";
 import { Product, ProductFilterParams } from "@shared/types";
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronUp,
   PlusCircle,
@@ -173,10 +174,22 @@ export function ProductList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<ProductFilterParams>({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [missingMxikOnly, setMissingMxikOnly] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
   const [editProductId, setEditProductId] = useState<string | null>(null);
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
-  
+
+  // A product needs an MXIK code to be fiscalized (REGOS:VCR). Surface the ones missing it.
+  const isMissingMxik = (p: Product) => p.isActive && !p.mxik;
+  const missingMxikCount = useMemo(
+    () => products.filter(isMissingMxik).length,
+    [products],
+  );
+  const displayedProducts = useMemo(
+    () => (missingMxikOnly ? products.filter(isMissingMxik) : products),
+    [products, missingMxikOnly],
+  );
+
   const [mxikProgress, setMxikProgress] = useState<{
     running: boolean;
     total: number;
@@ -321,10 +334,10 @@ export function ProductList() {
   const [mobileCount, setMobileCount] = useState(MOBILE_PAGE_SIZE);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // Reset mobile count when the product list changes (new search/filter result)
+  // Reset mobile count when the displayed list changes (new search/filter/MXIK toggle)
   useEffect(() => {
     setMobileCount(MOBILE_PAGE_SIZE);
-  }, [products]);
+  }, [displayedProducts]);
 
   // Infinite scroll: load next batch when sentinel enters viewport
   useEffect(() => {
@@ -332,9 +345,9 @@ export function ProductList() {
     if (!el) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && mobileCount < products.length) {
+        if (entry.isIntersecting && mobileCount < displayedProducts.length) {
           setMobileCount((c) =>
-            Math.min(c + MOBILE_PAGE_SIZE, products.length),
+            Math.min(c + MOBILE_PAGE_SIZE, displayedProducts.length),
           );
         }
       },
@@ -342,7 +355,7 @@ export function ProductList() {
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [mobileCount, products.length]);
+  }, [mobileCount, displayedProducts.length]);
 
   useEffect(() => {
     loadProducts(filters);
@@ -376,7 +389,7 @@ export function ProductList() {
     pageOffset,
     goToPage,
     setPageSize,
-  } = usePagination(products);
+  } = usePagination(displayedProducts);
 
   const formatCurrency = (amount: number) =>
     formatCurrencyBase(amount, i18n.language as "ru" | "uz");
@@ -394,7 +407,18 @@ export function ProductList() {
       render: (_: Product, index: number) => pageOffset + index + 1,
     },
     { key: "id", header: t("pos.id"), render: (p: Product) => p.storeProductCode ?? p.id },
-    { key: "mxik", header: "MXIK" },
+    {
+      key: "mxik",
+      header: "MXIK",
+      render: (product: Product) =>
+        product.mxik ? (
+          product.mxik
+        ) : (
+          <span style={{ color: "#f44336", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <AlertTriangle size={14} /> {t("products.noMxik", "нет")}
+          </span>
+        ),
+    },
     { key: "barcode", header: t("products.barcode") },
     {
       key: "internalCode",
@@ -559,6 +583,17 @@ export function ProductList() {
           {t("filters.filters")}{" "}
           {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
         </Button>
+
+        <Button
+          style={{ padding: "0px 12px", flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}
+          size="small"
+          variant={missingMxikOnly ? "primary" : "secondary"}
+          tooltip={t("products.missingMxikHint", "Товары без MXIK не фискализируются")}
+          onClick={() => setMissingMxikOnly((prev) => !prev)}
+        >
+          <AlertTriangle size={16} /> {t("products.missingMxik", "Без MXIK")}
+          {missingMxikCount > 0 ? ` (${missingMxikCount})` : ""}
+        </Button>
       </Filters>
 
       <ProductFilters
@@ -570,7 +605,7 @@ export function ProductList() {
       />
 
       <MobileCardList>
-        {products.slice(0, mobileCount).map((product) => (
+        {displayedProducts.slice(0, mobileCount).map((product) => (
           <MobileCard
             key={product.id}
             title={i18n.language === "uz" ? product.nameUz : product.nameRu}

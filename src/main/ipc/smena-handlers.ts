@@ -4,6 +4,7 @@ import { getCurrentUser } from './auth-handlers';
 import { getAppConfig } from '../config/app-config';
 import { openCashDrawer } from '../printer/thermal-printer';
 import { printZXReport } from '../printer/smena-report-printer';
+import { regosVcrService } from '../fiscal/regos-vcr-service';
 import type { SmenaStats } from '../../shared/types/smena.types';
 
 function ipcSafe<T>(value: T): T {
@@ -154,6 +155,9 @@ export function setupSmenaHandlers(): void {
       console.error('[Smena] Cash drawer error on open:', err)
     );
 
+    // Open the REGOS:VCR Z-report for this shift (best-effort, only if fiscal enabled)
+    void regosVcrService.openShift(smena.id);
+
     return ipcSafe(smena);
   });
 
@@ -209,6 +213,15 @@ export function setupSmenaHandlers(): void {
       },
       include: { movements: true },
     });
+
+    // Flush any pending fiscalizations into this shift, then close the VCR Z-report.
+    // Best-effort — must not block shift close if the VCR is unavailable.
+    try {
+      await regosVcrService.processPending();
+      await regosVcrService.closeZReport();
+    } catch (err) {
+      console.error('[Smena] REGOS Z-report close failed:', err instanceof Error ? err.message : err);
+    }
 
     // Print Z-report
     try {

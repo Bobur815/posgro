@@ -59,6 +59,7 @@ function serializeProduct(product: any): Product | null {
         ? toNumber(product.pendingPriceThreshold)
         : null,
     mxik: product.mxik || undefined,
+    packageCode: product.packageCode || undefined,
     isActive: Boolean(product.active ?? true),
     createdAt: toISOString(product.createdAt),
     updatedAt: toISOString(product.updatedAt),
@@ -205,24 +206,39 @@ export function setupProductsHandlers(): void {
     },
   );
 
-  ipcMain.handle("products:getById", async (_event, id: number | string) => {
-    const prisma = getPrismaClient();
-    const numericId = Number(id);
-    // Try storeProductCode first (per-store sequential code), fall back to global id
-    let product = !isNaN(numericId) && numericId > 0
-      ? await prisma.product.findFirst({
-          where: { storeProductCode: numericId, active: true },
+  ipcMain.handle(
+    "products:getById",
+    async (_event, id: number | string, opts?: { byDbId?: boolean }) => {
+      const prisma = getPrismaClient();
+      const numericId = Number(id);
+
+      // Action buttons (edit / details) pass the real DB primary key and must resolve
+      // unambiguously. The default path below resolves storeProductCode first, which can
+      // collide with another product's DB id — so callers with the real id pass byDbId.
+      if (opts?.byDbId) {
+        const product = await prisma.product.findUnique({
+          where: { id: numericId },
           include: { category: true, supplier: true },
-        })
-      : null;
-    if (!product) {
-      product = await prisma.product.findUnique({
-        where: { id: numericId },
-        include: { category: true, supplier: true },
-      });
-    }
-    return ipcSafe(serializeProduct(product));
-  });
+        });
+        return ipcSafe(serializeProduct(product));
+      }
+
+      // Default (POS id-input / stock lookup): per-store sequential code first, fall back to global id.
+      let product = !isNaN(numericId) && numericId > 0
+        ? await prisma.product.findFirst({
+            where: { storeProductCode: numericId, active: true },
+            include: { category: true, supplier: true },
+          })
+        : null;
+      if (!product) {
+        product = await prisma.product.findUnique({
+          where: { id: numericId },
+          include: { category: true, supplier: true },
+        });
+      }
+      return ipcSafe(serializeProduct(product));
+    },
+  );
 
   ipcMain.handle("products:getByBarcode", async (_event, barcode: string) => {
     const prisma = getPrismaClient();
@@ -332,6 +348,7 @@ export function setupProductsHandlers(): void {
         discountPercent: data.discountPercent ?? 0,
         isOnPromotion: data.isOnPromotion ?? false,
         mxik: data.mxik || null,
+        packageCode: data.packageCode || null,
         productType: data.productType || "REGULAR",
         internalCode: data.internalCode || null,
         active: true,
@@ -416,6 +433,9 @@ export function setupProductsHandlers(): void {
       }
       if (data.mxik !== undefined) {
         updateData.mxik = data.mxik || null;
+      }
+      if (data.packageCode !== undefined) {
+        updateData.packageCode = data.packageCode || null;
       }
       if (data.productType !== undefined) {
         updateData.productType = data.productType;

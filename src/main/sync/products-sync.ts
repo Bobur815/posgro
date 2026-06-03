@@ -348,23 +348,12 @@ export async function syncCategories(): Promise<void> {
 
     const categories = await response.json();
 
-    // [mxik-debug] Log exactly what the VPS returns for each category.
-    console.log(
-      `[syncCategories] VPS ${config.vpsApiUrl}/categories returned ${Array.isArray(categories) ? categories.length : 'non-array'}:`,
-      Array.isArray(categories)
-        ? categories.map((c: { id: number; nameUz: string; mxikGroupCode?: unknown }) =>
-            `id=${c.id} ${c.nameUz} mxik=${JSON.stringify(c.mxikGroupCode)}`,
-          )
-        : categories,
-    );
-
     if (!Array.isArray(categories) || categories.length === 0) {
       return;
     }
 
 
     const productCount = await prisma.product.count();
-    console.log(`[syncCategories] local productCount=${productCount} → ${productCount === 0 ? 'FULL REPLACE' : 'MATCH-BY-NAME'} path`);
     if (productCount === 0) {
       // No products yet — safe to fully replace categories with VPS IDs
       await prisma.$executeRaw`PRAGMA foreign_keys = OFF`;
@@ -389,9 +378,7 @@ export async function syncCategories(): Promise<void> {
         const existing = await prisma.category.findFirst({
           where: { nameUz: category.nameUz },
         });
-        console.log(
-          `[syncCategories] "${category.nameUz}" vps.id=${category.id} vps.mxik=${JSON.stringify(category.mxikGroupCode)} | local ${existing ? `id=${existing.id} mxik=${JSON.stringify(existing.mxikGroupCode)}` : 'NOT FOUND'}`,
-        );
+
         if (existing) {
           if (existing.id !== category.id) {
             // ID mismatch: server uses a different ID for this category name (e.g. after
@@ -456,12 +443,6 @@ export async function syncCategories(): Promise<void> {
     const finalLocal = await prisma.category.findMany({
       select: { id: true, nameUz: true, mxikGroupCode: true },
     });
-    console.log(
-      '[syncCategories] DONE. local categories now:',
-      finalLocal.map((c: { id: number; nameUz: string; mxikGroupCode: string | null }) =>
-        `id=${c.id} ${c.nameUz} mxik=${JSON.stringify(c.mxikGroupCode)}`,
-      ),
-    );
 
   } catch (error) {
     console.error('Failed to sync categories:', error);

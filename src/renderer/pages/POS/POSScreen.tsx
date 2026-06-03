@@ -351,7 +351,8 @@ export function POSScreen() {
   const addProductToCart = useCallback(
     (product: Product, qty: number) => {
       if (!product.isActive) {
-        const productName = i18n.language === "uz" ? product.nameUz : product.nameRu;
+        const productName =
+          i18n.language === "uz" ? product.nameUz : product.nameRu;
         setError(t("errors.productInactive", { name: productName }));
         return;
       }
@@ -466,8 +467,18 @@ export function POSScreen() {
           return;
         }
 
-        const idGroupCodes = (product.category?.mxikGroupCode ?? "").split(",").map((c) => c.trim()).filter(Boolean);
-        console.log("[DBG id]", JSON.stringify({ id: product.id, cat: product.category, codes: idGroupCodes }));
+        const idGroupCodes = (product.category?.mxikGroupCode ?? "")
+          .split(",")
+          .map((c) => c.trim())
+          .filter(Boolean);
+        console.log(
+          "[DBG id]",
+          JSON.stringify({
+            id: product.id,
+            cat: product.category,
+            codes: idGroupCodes,
+          }),
+        );
         if (idGroupCodes.includes("022")) {
           setId("");
           setError(t("pos.qrOnlyProduct"));
@@ -499,20 +510,24 @@ export function POSScreen() {
     if (inputMode === "id") {
       return handleIdSubmit();
     }
-    
+
     const rawValue = barcode.trim();
-    
+
     if (!rawValue) {
       setError(t("pos.enterBarcode"));
       return;
     }
     // Normalize DataMatrix: strip ZXing symbology prefix and leading FNC1 byte
-    const normalizedRaw = rawValue.replace(/^]d2|^]C1|^]e0/, "").replace(/^\x1d/, "");
+    const normalizedRaw = rawValue
+      .replace(/^]d2|^]C1|^]e0/, "")
+      .replace(/^\x1d/, "");
     // Detect GS1 DataMatrix with serial number (AI 01 = GTIN, AI 21 = serial).
     // Strip all internal GS1 group-separator bytes before matching — asl-belgisi codes
     // often embed \x1d between AIs (e.g. 01{GTIN}\x1d21{serial}).
     const normalizedNoGS = normalizedRaw.replace(/\x1d/g, "");
-    const hasSerial = /^01\d{14}21/.test(normalizedNoGS) || /^\(01\)\d{14}\(21\)/.test(normalizedNoGS);
+    const hasSerial =
+      /^01\d{14}21/.test(normalizedNoGS) ||
+      /^\(01\)\d{14}\(21\)/.test(normalizedNoGS);
     // Extract EAN-13 from GS1 DataMatrix QR payload (e.g. 01GTIN-14 21serial 93check)
     const gs1 =
       rawValue.match(/\(01\)(\d{14})/) ?? rawValue.match(/^01(\d{14})/);
@@ -601,7 +616,8 @@ export function POSScreen() {
               setQuantity("1");
               setError(
                 t("errors.productInactive", {
-                  name: i18n.language === "uz" ? product.nameUz : product.nameRu,
+                  name:
+                    i18n.language === "uz" ? product.nameUz : product.nameRu,
                 }),
               );
               return;
@@ -612,7 +628,8 @@ export function POSScreen() {
               setQuantity("1");
               setError(
                 t("errors.insufficientStock", {
-                  name: i18n.language === "uz" ? product.nameUz : product.nameRu,
+                  name:
+                    i18n.language === "uz" ? product.nameUz : product.nameRu,
                   available: product.stock,
                   requested: rongtaParsed.weight,
                 }),
@@ -661,11 +678,26 @@ export function POSScreen() {
           }
 
           // Group 022 marking code check: prevent resale of unique DataMatrix QR codes
-          const groupCodes = (product.category?.mxikGroupCode ?? "").split(",").map((c) => c.trim()).filter(Boolean);
-          console.log("[DBG barcode]", JSON.stringify({ id: product.id, cat: product.category, codes: groupCodes, hasSerial, rawValue, isPlain: /^\d{8}$|^\d{12}$|^\d{13}$/.test(rawValue) }));
+          const groupCodes = (product.category?.mxikGroupCode ?? "")
+            .split(",")
+            .map((c) => c.trim())
+            .filter(Boolean);
+          console.log(
+            "[DBG barcode]",
+            JSON.stringify({
+              id: product.id,
+              cat: product.category,
+              codes: groupCodes,
+              hasSerial,
+              rawValue,
+              isPlain: /^\d{8}$|^\d{12}$|^\d{13}$/.test(rawValue),
+            }),
+          );
           if (hasSerial && groupCodes.includes("022")) {
             // Check for duplicate in current cart
-            const alreadyInCart = items.some((i) => i.markingCode === normalizedNoGS);
+            const alreadyInCart = items.some(
+              (i) => i.markingCode === normalizedNoGS,
+            );
             if (alreadyInCart) {
               setBarcode("");
               setError(t("pos.markingCodeInCart"));
@@ -673,7 +705,9 @@ export function POSScreen() {
             }
             // Check local SQLite + server
             try {
-              const checkResult = await window.electronAPI.markingCodes.check(normalizedNoGS) as {
+              const checkResult = (await window.electronAPI.markingCodes.check(
+                normalizedNoGS,
+              )) as {
                 alreadySold: boolean;
                 soldAt?: string;
                 terminalId?: string;
@@ -683,7 +717,12 @@ export function POSScreen() {
                   ? new Date(checkResult.soldAt).toLocaleString("ru-RU")
                   : "";
                 setBarcode("");
-                setError(t("pos.markingCodeAlreadySold", { when, terminal: checkResult.terminalId ?? "" }));
+                setError(
+                  t("pos.markingCodeAlreadySold", {
+                    when,
+                    terminal: checkResult.terminalId ?? "",
+                  }),
+                );
                 return;
               }
             } catch {
@@ -691,7 +730,8 @@ export function POSScreen() {
             }
 
             // Add as individual item with markingCode (never merged)
-            const productName = i18n.language === "uz" ? product.nameUz : product.nameRu;
+            const productName =
+              i18n.language === "uz" ? product.nameUz : product.nameRu;
             addItem({
               productId: product.id,
               productName,
@@ -725,7 +765,8 @@ export function POSScreen() {
         setError(t("products.noResults"));
       }
     } catch (err) {
-      const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
+      const msg =
+        err instanceof Error ? (err.stack ?? err.message) : String(err);
       console.error("Error searching product:", err);
       window.electronAPI.logger.error(`handleBarcodeSubmit: ${msg}`);
       setError(t("common.error"));
@@ -765,6 +806,9 @@ export function POSScreen() {
           })),
           paymentMethod: method,
           discountAmount: discount,
+          markingCodes: items
+            .filter((i) => i.markingCode)
+            .map((i) => ({ barcode: i.barcode, label: i.markingCode! })),
         };
 
         const sale = editingSaleId
@@ -777,11 +821,13 @@ export function POSScreen() {
             .filter((i) => i.markingCode)
             .map((i) => ({ code: i.markingCode!, productBarcode: i.barcode }));
           if (markingEntries.length > 0) {
-            window.electronAPI.markingCodes.record(markingEntries).catch(() => {});
+            window.electronAPI.markingCodes
+              .record(markingEntries)
+              .catch(() => {});
           }
 
-          // Auto-print receipt for quick pay
-          if (sale.id) {
+          // Auto-print receipt for quick pay — skipped when the VCR prints the fiscal receipt
+          if (sale.id && !vcrPrintsReceiptRef.current) {
             try {
               await window.electronAPI.printer.printReceipt(sale.id);
             } catch (printErr) {
@@ -798,7 +844,8 @@ export function POSScreen() {
           );
         }
       } catch (err) {
-        const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
+        const msg =
+          err instanceof Error ? (err.stack ?? err.message) : String(err);
         console.error("Quick pay failed:", err);
         window.electronAPI.logger.error(`handleQuickPay(${method}): ${msg}`);
         toast.error(parseSaleError(err, t));
@@ -911,6 +958,18 @@ export function POSScreen() {
     handleQuickPay,
   ]);
 
+  // When the VCR prints the fiscal receipt itself, skip posgro's own auto-print.
+  // (The unfiscalized-receipts badge lives in the Cart header.)
+  const vcrPrintsReceiptRef = useRef(false);
+  useEffect(() => {
+    window.electronAPI.fiscal
+      .getConfig()
+      .then((c) => {
+        vcrPrintsReceiptRef.current = c.enabled && c.vcrPrintsReceipt;
+      })
+      .catch(() => {});
+  }, []);
+
   const handleNumberClick = (num: string) => {
     if (inputMode === "barcode") {
       setBarcode((prev) => prev + num);
@@ -955,8 +1014,18 @@ export function POSScreen() {
       );
       return;
     }
-    const selectGroupCodes = (product.category?.mxikGroupCode ?? "").split(",").map((c) => c.trim()).filter(Boolean);
-    console.log("[DBG select]", JSON.stringify({ id: product.id, cat: product.category, codes: selectGroupCodes }));
+    const selectGroupCodes = (product.category?.mxikGroupCode ?? "")
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean);
+    console.log(
+      "[DBG select]",
+      JSON.stringify({
+        id: product.id,
+        cat: product.category,
+        codes: selectGroupCodes,
+      }),
+    );
     if (selectGroupCodes.includes("022")) {
       setError(t("pos.qrOnlyProduct"));
       return;
@@ -976,7 +1045,7 @@ export function POSScreen() {
       ? "barcode"
       : "qr"
     : null;
-  
+
   const handleCheckoutClick = async () => {
     if (!(await checkSmena())) {
       setShowSmenaModal(true);

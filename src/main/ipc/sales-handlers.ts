@@ -3,6 +3,7 @@ import { getPrismaClient } from '../database/sqlite-client';
 import { getCurrentUser } from './auth-handlers';
 import { getAppConfig } from '../config/app-config';
 import { getServerToken } from '../sync/queue-manager';
+import { regosVcrService } from '../fiscal/regos-vcr-service';
 import { format } from 'date-fns';
 import type { Sale, SaleItem as PrismaSaleItem } from '../../generated/prisma-sqlite';
 
@@ -168,7 +169,32 @@ export function setupSalesHandlers(): void {
       },
     });
 
-    return ipcSafe(sale);
+    // REGOS:VCR fiscalization — "allow + fiscalize later". The sale is already saved;
+    // mark it PENDING (snapshotting any scanned marking labels), then attempt fiscalization
+    // and AWAIT it so the fiscal QR is persisted before the receipt prints. The sale is not
+    // blocked by fiscal failure: on error it stays PENDING/FAILED for the retry worker.
+    let finalSale = sale;
+    try {
+      if (await regosVcrService.isEnabled()) {
+        const labels = (data.markingCodes as Array<{ barcode: string; label: string }> | undefined)
+          ?.filter((l) => l?.barcode && l?.label) ?? [];
+        await prisma.sale.update({
+          where: { id: sale.id },
+          data: { fiscalStatus: 'PENDING', regosLabels: labels.length ? JSON.stringify(labels) : null },
+        });
+        await regosVcrService.fiscalizeSale(sale.id).catch((e) =>
+          console.error('[fiscal] immediate fiscalize failed (will retry):', e instanceof Error ? e.message : e),
+        );
+        // Re-read so the returned sale (and the subsequent receipt print) carry fiscal data.
+        finalSale = (await prisma.sale.findUnique({ where: { id: sale.id }, include: { items: true } })) ?? sale;
+      } else {
+        await prisma.sale.update({ where: { id: sale.id }, data: { fiscalStatus: 'DISABLED' } });
+      }
+    } catch (e) {
+      console.error('[fiscal] enqueue failed:', e instanceof Error ? e.message : e);
+    }
+
+    return ipcSafe(finalSale);
   });
 
   ipcMain.handle('sales:getAll', async (_event, filters) => {

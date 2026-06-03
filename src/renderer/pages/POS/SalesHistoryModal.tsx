@@ -6,7 +6,7 @@ import { Button } from '../../components/common/Button';
 import { useSales } from '../../hooks/useSales';
 import type { Sale } from '@shared/types/sale.types';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
-import { ChevronDown, ChevronRight, Pencil, Printer, Trash2, Link } from 'lucide-react';
+import { ChevronDown, ChevronRight, Pencil, Printer, Trash2, Link, ShieldCheck, ShieldAlert, RotateCcw, Copy } from 'lucide-react';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../context/ToastContext';
 
@@ -81,6 +81,19 @@ const PaynetBadge = styled.span`
   background-color: ${({ theme }) => theme.colors.success + '20'};
   color: ${({ theme }) => theme.colors.success};
   border: 1px solid ${({ theme }) => theme.colors.success + '40'};
+`;
+
+const FiscalBadge = styled.span<{ $ok?: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  white-space: nowrap;
+  background-color: ${({ theme, $ok }) => ($ok ? theme.colors.success : theme.colors.error) + '18'};
+  color: ${({ theme, $ok }) => ($ok ? theme.colors.success : theme.colors.error)};
 `;
 
 const Amount = styled.span`
@@ -170,6 +183,32 @@ const DeleteButton = styled(IconButton)`
   &:hover {
     background-color: ${({ theme }) => theme.colors.error}10;
     border-color: ${({ theme }) => theme.colors.error};
+  }
+`;
+
+const FiscalizeButton = styled(IconButton)`
+  color: ${({ theme }) => theme.colors.error};
+  font-weight: 600;
+  &:hover {
+    background-color: ${({ theme }) => theme.colors.error}10;
+    border-color: ${({ theme }) => theme.colors.error};
+  }
+`;
+
+const RefundButton = styled(IconButton)`
+  color: ${({ theme }) => theme.colors.error};
+  &:hover {
+    background-color: ${({ theme }) => theme.colors.error}10;
+    border-color: ${({ theme }) => theme.colors.error};
+  }
+`;
+
+const DuplicateButton = styled(IconButton)`
+  color: ${({ theme }) => theme.colors.textSecondary};
+  &:hover {
+    background-color: ${({ theme }) => theme.colors.background};
+    border-color: ${({ theme }) => theme.colors.textSecondary};
+    color: ${({ theme }) => theme.colors.text};
   }
 `;
 
@@ -344,11 +383,26 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [paynetSale, setPaynetSale] = useState<Sale | null>(null);
+  const [fiscalizingId, setFiscalizingId] = useState<string | null>(null);
+  const [refundConfirmId, setRefundConfirmId] = useState<string | null>(null);
+  const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
 
   const handleDelete = async () => {
     if (!deleteConfirmId) return;
+    const sale = sales.find((s) => s.id === deleteConfirmId);
+    // A fiscalized receipt must be reversed on the OFD before the local record is dropped,
+    // otherwise the fiscal record stays open. Refund first; abort the delete if that fails.
+    if (sale?.fiscalStatus === 'FISCALIZED') {
+      const res = await window.electronAPI.fiscal.refund(sale.id);
+      if (!res.ok) {
+        toast.error(res.error || t('common.error'));
+        setDeleteConfirmId(null);
+        return;
+      }
+    }
     const success = await deleteSale(deleteConfirmId);
     if (success) {
       window.dispatchEvent(new Event('stock-updated'));
@@ -371,6 +425,62 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
       toast.success(t('pos.receiptPrinted'));
     } catch {
       toast.error(t('common.error'));
+    }
+  }, [t, toast]);
+
+  const reloadToday = useCallback(async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    await loadSales({ startDate: today.toISOString() });
+  }, [loadSales]);
+
+  // Re-fiscalize a receipt that failed or is pending (e.g. after fixing the product's MXIK).
+  const handleFiscalize = useCallback(async (sale: Sale, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFiscalizingId(sale.id);
+    try {
+      await window.electronAPI.fiscal.retrySale(sale.id);
+      await reloadToday();
+      toast.success(t('fiscalSettings.fiscalized', 'Фискализировано'));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(msg.includes('{') ? t('common.error') : msg || t('common.error'));
+      await reloadToday();
+    } finally {
+      setFiscalizingId(null);
+    }
+  }, [reloadToday, t, toast]);
+
+  // Full fiscal refund (Receipt.FullRefund) — reverses the receipt on the OFD.
+  const handleRefund = useCallback(async () => {
+    if (!refundConfirmId) return;
+    const id = refundConfirmId;
+    setRefundConfirmId(null);
+    setRefundingId(id);
+    try {
+      const res = await window.electronAPI.fiscal.refund(id);
+      if (res.ok) {
+        toast.success(t('pos.refunded', 'Возврат оформлен'));
+        window.dispatchEvent(new Event('stock-updated'));
+      } else {
+        toast.error(res.error || t('common.error'));
+      }
+      await reloadToday();
+    } finally {
+      setRefundingId(null);
+    }
+  }, [refundConfirmId, reloadToday, t, toast]);
+
+  // Reprint a fiscal duplicate (Receipt.Duplicate).
+  const handleDuplicate = useCallback(async (sale: Sale, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDuplicatingId(sale.id);
+    try {
+      const res = await window.electronAPI.fiscal.printDuplicate(sale.id);
+      if (res.ok) toast.success(t('pos.duplicatePrinted', 'Дубликат напечатан'));
+      else toast.error(res.error || t('common.error'));
+    } finally {
+      setDuplicatingId(null);
     }
   }, [t, toast]);
 
@@ -431,8 +541,47 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
                       {sale.paynetReceiptNumber && (
                         <PaynetBadge>Paynet ✓</PaynetBadge>
                       )}
+                      {sale.fiscalStatus === 'FISCALIZED' && (
+                        <FiscalBadge $ok>
+                          <ShieldCheck size={12} /> {t('fiscalSettings.fiscalized', 'Фискализирован')}
+                        </FiscalBadge>
+                      )}
+                      {(sale.fiscalStatus === 'FAILED' || sale.fiscalStatus === 'PENDING') && (
+                        <FiscalBadge>
+                          <ShieldAlert size={12} /> {t('pos.notFiscalized', 'Не фискализирован')}
+                        </FiscalBadge>
+                      )}
                     </SaleInfo>
                     <Amount>{formatCurrency(sale.finalAmount)}</Amount>
+                    {(sale.fiscalStatus === 'FAILED' || sale.fiscalStatus === 'PENDING') && (
+                      <FiscalizeButton
+                        onClick={(e) => handleFiscalize(sale, e)}
+                        disabled={fiscalizingId === sale.id}
+                        title={t('pos.fiscalize', 'Фискализировать')}
+                      >
+                        <ShieldAlert size={16} />
+                        {fiscalizingId === sale.id ? t('common.processing') : t('pos.fiscalize', 'Фискализировать')}
+                      </FiscalizeButton>
+                    )}
+                    {sale.fiscalStatus === 'FISCALIZED' && (
+                      <>
+                        <RefundButton
+                          onClick={(e) => { e.stopPropagation(); setRefundConfirmId(sale.id); }}
+                          disabled={refundingId === sale.id}
+                          title={t('pos.refund', 'Возврат')}
+                        >
+                          <RotateCcw size={16} />
+                          {refundingId === sale.id ? t('common.processing') : t('pos.refund', 'Возврат')}
+                        </RefundButton>
+                        <DuplicateButton
+                          onClick={(e) => handleDuplicate(sale, e)}
+                          disabled={duplicatingId === sale.id}
+                          title={t('pos.duplicate', 'Дубликат')}
+                        >
+                          <Copy size={16} />
+                        </DuplicateButton>
+                      </>
+                    )}
                     <PrintButton
                       onClick={(e) => handlePrint(sale, e)}
                       title={t('pos.printReceipt')}
@@ -478,12 +627,27 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
         {deleteConfirmId && (
           <ConfirmDialog
             title={t('common.delete')}
-            message={t('pos.deleteSaleConfirm')}
+            message={
+              sales.find((s) => s.id === deleteConfirmId)?.fiscalStatus === 'FISCALIZED'
+                ? t('pos.deleteFiscalizedConfirm', 'Чек фискализирован — при удалении будет оформлен фискальный возврат. Продолжить?')
+                : t('pos.deleteSaleConfirm')
+            }
             confirmLabel={t('common.delete')}
             cancelLabel={t('common.cancel')}
             variant="danger"
             onConfirm={handleDelete}
             onCancel={() => setDeleteConfirmId(null)}
+          />
+        )}
+        {refundConfirmId && (
+          <ConfirmDialog
+            title={t('pos.refund', 'Возврат')}
+            message={t('pos.refundConfirm', 'Оформить полный фискальный возврат по этому чеку?')}
+            confirmLabel={t('pos.refund', 'Возврат')}
+            cancelLabel={t('common.cancel')}
+            variant="danger"
+            onConfirm={handleRefund}
+            onCancel={() => setRefundConfirmId(null)}
           />
         )}
       </Modal>

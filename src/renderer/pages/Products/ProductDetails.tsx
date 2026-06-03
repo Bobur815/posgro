@@ -219,7 +219,9 @@ export function ProductDetails() {
 
   const loadProduct = async () => {
     if (!id) return;
-    const p = await getById(id);
+    // Route param is a product's DB `id` (from the "view details" action) — resolve by
+    // primary key to avoid a storeProductCode collision returning the wrong product.
+    const p = await getById(id, { byDbId: true });
     setProduct(p);
   };
 

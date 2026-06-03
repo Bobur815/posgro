@@ -384,6 +384,17 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   const toast = useToast();
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">("cash");
   const [printCheck, setPrintCheck] = useState(total >= 10000);
+
+  // When REGOS:VCR prints the fiscal receipt itself, default POS receipt printing OFF
+  // to avoid a duplicate (cashier can still tick it manually).
+  useEffect(() => {
+    window.electronAPI.fiscal
+      .getConfig()
+      .then((cfg) => {
+        if (cfg.enabled && cfg.vcrPrintsReceipt) setPrintCheck(false);
+      })
+      .catch(() => {});
+  }, []);
   const [givenAmount, setGivenAmount] = useState(0);
   const [customInput, setCustomInput] = useState("");
 
@@ -465,6 +476,9 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
         discountAmount: discount + discountFromUnderpayment,
         paynetOfdUrl: selectedPaynet?.ofdUrl,
         paynetReceiptNumber: selectedPaynet?.receiptNumber,
+        markingCodes: items
+          .filter((i) => i.markingCode)
+          .map((i) => ({ barcode: i.barcode, label: i.markingCode! })),
       };
 
       const sale = editingSaleId

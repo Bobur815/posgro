@@ -21,7 +21,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   products: {
     getAll: (filters?: { categoryId?: string; active?: boolean }) =>
       ipcRenderer.invoke("products:getAll", filters),
-    getById: (id: string) => ipcRenderer.invoke("products:getById", id),
+    getById: (id: string, opts?: { byDbId?: boolean }) =>
+      ipcRenderer.invoke("products:getById", id, opts),
     getByBarcode: (barcode: string) =>
       ipcRenderer.invoke("products:getByBarcode", barcode),
     findByInternalCode: (internalCode: string) =>
@@ -80,6 +81,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // MXIK catalog (proxied to VPS)
   mxik: {
     getGroups: () => ipcRenderer.invoke("mxik:getGroups"),
+  },
+
+  // REGOS:VCR fiscalization
+  fiscal: {
+    getConfig: () => ipcRenderer.invoke("fiscal:getConfig"),
+    setConfig: (input: unknown) => ipcRenderer.invoke("fiscal:setConfig", input),
+    testConnection: () => ipcRenderer.invoke("fiscal:testConnection"),
+    getStatus: () => ipcRenderer.invoke("fiscal:getStatus"),
+    retrySale: (saleId: string) => ipcRenderer.invoke("fiscal:retrySale", saleId),
+    refund: (saleId: string) => ipcRenderer.invoke("fiscal:refund", saleId),
+    printDuplicate: (saleId: string) => ipcRenderer.invoke("fiscal:printDuplicate", saleId),
   },
 
   // Inventory
@@ -390,7 +402,7 @@ declare global {
       };
       products: {
         getAll: (filters?: unknown) => Promise<unknown[]>;
-        getById: (id: string) => Promise<unknown>;
+        getById: (id: string, opts?: { byDbId?: boolean }) => Promise<unknown>;
         getByBarcode: (barcode: string) => Promise<unknown>;
         findByInternalCode: (internalCode: string) => Promise<unknown>;
         getNextInternalCode: () => Promise<string>;
@@ -431,6 +443,17 @@ declare global {
       };
       mxik: {
         getGroups: () => Promise<{ groupCode: string; groupName: string }[]>;
+      };
+      fiscal: {
+        getConfig: () => Promise<import("../shared/types/fiscal.types").RegosVcrConfig>;
+        setConfig: (
+          input: import("../shared/types/fiscal.types").RegosVcrConfigInput,
+        ) => Promise<import("../shared/types/fiscal.types").RegosVcrConfig>;
+        testConnection: () => Promise<import("../shared/types/fiscal.types").FiscalConnectionResult>;
+        getStatus: () => Promise<import("../shared/types/fiscal.types").FiscalQueueStatus>;
+        retrySale: (saleId: string) => Promise<boolean>;
+        refund: (saleId: string) => Promise<{ ok: boolean; fiscalSign?: string; error?: string }>;
+        printDuplicate: (saleId: string) => Promise<{ ok: boolean; error?: string }>;
       };
       inventory: {
         createArrival: (data: unknown) => Promise<unknown>;

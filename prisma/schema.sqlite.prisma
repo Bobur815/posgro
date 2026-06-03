@@ -96,6 +96,9 @@ model Product {
 
   storeProductCode Int? @map("store_product_code")
 
+  // REGOS:VCR package (unit) code from MXIK — required for fiscalizing marked goods
+  packageCode      String? @map("package_code")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -143,6 +146,7 @@ model Smena {
   openedAt      DateTime  @default(now()) @map("opened_at")
   closedAt      DateTime? @map("closed_at")
   synced        Boolean   @default(false)
+  regosZReportId Int?     @map("regos_z_report_id") // REGOS:VCR Z-report id for this shift
   sales         Sale[]
   movements     SmenaMovement[]
 
@@ -181,6 +185,18 @@ model Sale {
   // Paynet fiscal receipt
   paynetOfdUrl        String? @map("paynet_ofd_url")
   paynetReceiptNumber String? @map("paynet_receipt_number")
+
+  // REGOS:VCR fiscalization
+  fiscalStatus    String?   @map("fiscal_status") // PENDING | FISCALIZED | FAILED | DISABLED
+  fiscalAttempts  Int       @default(0) @map("fiscal_attempts")
+  fiscalError     String?   @map("fiscal_error")
+  regosReceiptId  String?   @map("regos_receipt_id")
+  regosFiscalSign String?   @map("regos_fiscal_sign")
+  regosQrCodeUrl  String?   @map("regos_qr_code_url")
+  regosTerminalId String?   @map("regos_terminal_id")
+  regosReceiptNo  String?   @map("regos_receipt_no")
+  regosFiscalAt   DateTime? @map("regos_fiscal_at")
+  regosLabels     String?   @map("regos_labels") // JSON [{barcode,label}] snapshot for marked goods
 
   // Sync tracking
   synced   Boolean   @default(false)

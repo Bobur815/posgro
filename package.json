@@ -1,6 +1,6 @@
 {
   "name": "posgro",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "Grocery Store POS System - Offline-first Point of Sale",
   "main": "dist-electron/main/index.js",
   "scripts": {
@@ -15,6 +15,7 @@
     "seed:paynet-mock": "node scripts/seed-paynet-mock.js",
     "import:mxik-catalog": "npx tsx scripts/import-mxik-catalog.ts",
     "seed:mxik-categories": "npx tsx scripts/seed-mxik-categories.ts",
+    "test:regos-vcr": "npx tsx scripts/regos-vcr-test.ts",
     "build:server": "nest build",
     "prisma:generate": "prisma generate",
     "prisma:generate:sqlite": "prisma generate --schema=prisma/schema.sqlite.prisma",

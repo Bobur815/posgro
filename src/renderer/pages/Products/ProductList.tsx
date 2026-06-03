@@ -1,5 +1,5 @@
 // src/renderer/pages/Products/ProductList.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
@@ -13,6 +13,7 @@ import { Input } from "../../components/common/Input";
 import { ProductFilters } from "../../components/products/ProductFilters";
 import { Product, ProductFilterParams } from "@shared/types";
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronUp,
   CirclePlus,
@@ -77,6 +78,7 @@ export function ProductList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<ProductFilterParams>({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [missingMxikOnly, setMissingMxikOnly] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [formModal, setFormModal] = useState<{
     open: boolean;
@@ -94,6 +96,14 @@ export function ProductList() {
     loadSuppliers();
   }, [loadProducts, loadCategories, loadSuppliers]);
 
+  // Reload products while preserving the current search query + active filters
+  // (plain loadProducts() would reset the list to unfiltered).
+  const reloadWithFilters = useCallback(() => {
+    const params: ProductFilterParams = { ...filters };
+    if (searchQuery) params.query = searchQuery;
+    loadProducts(params);
+  }, [loadProducts, filters, searchQuery]);
+
   const debouncedSearch = useMemo(
     () =>
       debounce((query: string, f: ProductFilterParams) => {
@@ -110,6 +120,17 @@ export function ProductList() {
     debouncedSearch(searchQuery, filters);
   }, [searchQuery, filters, debouncedSearch]);
 
+  // A product needs an MXIK code to be fiscalized (REGOS:VCR). Surface the ones missing it.
+  const isMissingMxik = (p: Product) => p.isActive && !p.mxik;
+  const missingMxikCount = useMemo(
+    () => products.filter(isMissingMxik).length,
+    [products],
+  );
+  const displayedProducts = useMemo(
+    () => (missingMxikOnly ? products.filter(isMissingMxik) : products),
+    [products, missingMxikOnly],
+  );
+
   const {
     pageData,
     currentPage,
@@ -120,7 +141,7 @@ export function ProductList() {
     pageOffset,
     goToPage,
     setPageSize,
-  } = usePagination(products);
+  } = usePagination(displayedProducts);
 
   const formatCurrency = (amount: number) =>
     formatCurrencyBase(amount, i18n.language as "ru" | "uz");
@@ -130,7 +151,7 @@ export function ProductList() {
     const success = await deleteProduct(String(deleteModal.product.id));
     if (success) {
       setDeleteModal({ open: false });
-      loadProducts();
+      reloadWithFilters();
     }
   };
 
@@ -150,7 +171,18 @@ export function ProductList() {
       render: (_: Product, index: number) => pageOffset + index + 1,
     },
     { key: "id", header: t("pos.id"), render: (p: Product) => p.storeProductCode ?? p.id },
-    { key: "mxik", header: "MXIK" },
+    {
+      key: "mxik",
+      header: "MXIK",
+      render: (product: Product) =>
+        product.mxik ? (
+          product.mxik
+        ) : (
+          <span style={{ color: "#f44336", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <AlertTriangle size={14} /> {t("products.noMxik", "нет")}
+          </span>
+        ),
+    },
     { key: "barcode", header: t("products.barcode") },
     {
       key: "internalCode",
@@ -307,6 +339,17 @@ export function ProductList() {
           {t("filters.filters")}{" "}
           {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
         </Button>
+
+        <Button
+          style={{ padding: "0px 12px" }}
+          size="small"
+          variant={missingMxikOnly ? "primary" : "secondary"}
+          tooltip={t("products.missingMxikHint", "Товары без MXIK не фискализируются")}
+          onClick={() => setMissingMxikOnly((prev) => !prev)}
+        >
+          <AlertTriangle size={16} /> {t("products.missingMxik", "Без MXIK")}
+          {missingMxikCount > 0 ? ` (${missingMxikCount})` : ""}
+        </Button>
       </Filters>
 
       <ProductFilters
@@ -349,7 +392,7 @@ export function ProductList() {
           onClose={() => setFormModal({ open: false })}
           onSuccess={() => {
             setFormModal({ open: false });
-            loadProducts();
+            reloadWithFilters();
           }}
         />
       )}

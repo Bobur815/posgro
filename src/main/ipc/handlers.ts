@@ -7,6 +7,7 @@ import { setupScaleHandlers } from "./scale-handlers";
 import { setupSmenaHandlers } from "./smena-handlers";
 import { setupPaynetHandlers } from "./paynet-handlers";
 import { setupMarkingCodesHandlers } from "./marking-codes-handlers";
+import { setupFiscalHandlers } from "./fiscal-handlers";
 import { getAppConfig, updateConfig } from "../config/app-config";
 import { getAuthToken, getServerToken } from "../sync/queue-manager";
 import { getPrismaClient, readStoreBootstrap, writeStoreBootstrap } from "../database/sqlite-client";
@@ -34,6 +35,7 @@ export function setupIpcHandlers(): void {
   setupPaynetHandlers();
   setupMarkingCodesHandlers();
   setupMxikHandlers();
+  setupFiscalHandlers();
 }
 
 // MXIK catalog lives only in the VPS PostgreSQL, so the renderer proxies through
