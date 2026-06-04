@@ -5,10 +5,29 @@ import { getAppConfig } from '../config/app-config';
 import { openCashDrawer } from '../printer/thermal-printer';
 import { printZXReport } from '../printer/smena-report-printer';
 import { regosVcrService } from '../fiscal/regos-vcr-service';
-import type { SmenaStats } from '../../shared/types/smena.types';
+import type { SmenaStats, SmenaFiscalStats } from '../../shared/types/smena.types';
 
 function ipcSafe<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
+}
+
+// Per-smena fiscalization aggregates (REGOS:VCR) derived from local sales.
+async function computeFiscalStats(smenaId: string): Promise<SmenaFiscalStats> {
+  const prisma = getPrismaClient();
+  type Row = { fiscal_status: string | null; cnt: number; total: number };
+  const rows = (await prisma.$queryRawUnsafe(
+    `SELECT fiscal_status, COUNT(*) as cnt, COALESCE(SUM(final_amount), 0) as total
+     FROM sales WHERE smena_id = ? GROUP BY fiscal_status`,
+    smenaId,
+  )) as Row[];
+  let fiscalizedCount = 0, fiscalizedAmount = 0, pendingCount = 0, failedCount = 0;
+  for (const r of rows) {
+    const cnt = Number(r.cnt);
+    if (r.fiscal_status === 'FISCALIZED') { fiscalizedCount = cnt; fiscalizedAmount = Number(r.total); }
+    else if (r.fiscal_status === 'PENDING') pendingCount = cnt;
+    else if (r.fiscal_status === 'FAILED') failedCount = cnt;
+  }
+  return { fiscalizedCount, fiscalizedAmount, pendingCount, failedCount };
 }
 
 async function computeSmenaStats(smenaId: string): Promise<SmenaStats> {
@@ -302,6 +321,7 @@ export function setupSmenaHandlers(): void {
     const results = await Promise.all(
       smenas.map(async (s: typeof smenas[number]) => {
         const stats = await computeSmenaStats(s.id);
+        const fiscal = await computeFiscalStats(s.id);
         return {
           ...s,
           initialCash: Number(s.initialCash),
@@ -311,6 +331,7 @@ export function setupSmenaHandlers(): void {
             amount: Number(m.amount),
           })),
           stats,
+          fiscal,
         };
       })
     );

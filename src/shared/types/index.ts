@@ -89,4 +89,7 @@ export type {
   FiscalConnectionResult,
   FiscalQueueStatus,
   FiscalLabel,
+  FiscalZReport,
+  FiscalZReportStatus,
+  FiscalActionResult,
 } from './fiscal.types';

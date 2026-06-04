@@ -13,10 +13,9 @@ export function setupFiscalHandlers(): void {
 
   ipcMain.handle('fiscal:getStatus', async () => regosVcrService.getQueueStatus());
 
-  ipcMain.handle('fiscal:retrySale', async (_event, saleId: string) => {
-    await regosVcrService.retrySale(saleId);
-    return true;
-  });
+  ipcMain.handle('fiscal:retrySale', async (_event, saleId: string) =>
+    regosVcrService.retrySale(saleId),
+  );
 
   ipcMain.handle('fiscal:refund', async (_event, saleId: string) =>
     regosVcrService.refundSale(saleId),
@@ -25,4 +24,9 @@ export function setupFiscalHandlers(): void {
   ipcMain.handle('fiscal:printDuplicate', async (_event, saleId: string) =>
     regosVcrService.printDuplicate(saleId),
   );
+
+  // Z-report (fiscal shift) — status + manual open/close for the Smena page.
+  ipcMain.handle('fiscal:zInfo', async () => regosVcrService.getZReportInfo());
+  ipcMain.handle('fiscal:zOpen', async () => regosVcrService.openZReportManual());
+  ipcMain.handle('fiscal:zClose', async () => regosVcrService.closeZReportManual());
 }

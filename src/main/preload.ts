@@ -94,6 +94,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     retrySale: (saleId: string) => ipcRenderer.invoke("fiscal:retrySale", saleId),
     refund: (saleId: string) => ipcRenderer.invoke("fiscal:refund", saleId),
     printDuplicate: (saleId: string) => ipcRenderer.invoke("fiscal:printDuplicate", saleId),
+    zInfo: () => ipcRenderer.invoke("fiscal:zInfo"),
+    zOpen: () => ipcRenderer.invoke("fiscal:zOpen"),
+    zClose: () => ipcRenderer.invoke("fiscal:zClose"),
   },
 
   // Inventory
@@ -457,9 +460,12 @@ declare global {
         ) => Promise<import("../shared/types/fiscal.types").RegosVcrConfig>;
         testConnection: () => Promise<import("../shared/types/fiscal.types").FiscalConnectionResult>;
         getStatus: () => Promise<import("../shared/types/fiscal.types").FiscalQueueStatus>;
-        retrySale: (saleId: string) => Promise<boolean>;
+        retrySale: (saleId: string) => Promise<{ ok: boolean; error?: string }>;
         refund: (saleId: string) => Promise<{ ok: boolean; fiscalSign?: string; error?: string }>;
         printDuplicate: (saleId: string) => Promise<{ ok: boolean; error?: string }>;
+        zInfo: () => Promise<import("../shared/types/fiscal.types").FiscalZReportStatus>;
+        zOpen: () => Promise<import("../shared/types/fiscal.types").FiscalActionResult>;
+        zClose: () => Promise<import("../shared/types/fiscal.types").FiscalActionResult>;
       };
       inventory: {
         createArrival: (data: unknown) => Promise<unknown>;

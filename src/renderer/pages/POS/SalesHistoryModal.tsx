@@ -453,13 +453,10 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
     e.stopPropagation();
     setFiscalizingId(sale.id);
     try {
-      await window.electronAPI.fiscal.retrySale(sale.id);
+      const res = await window.electronAPI.fiscal.retrySale(sale.id);
       await reloadToday();
-      toast.success(t('fiscalSettings.fiscalized', 'Фискализировано'));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(msg.includes('{') ? t('common.error') : msg || t('common.error'));
-      await reloadToday();
+      if (res.ok) toast.success(t('fiscalSettings.fiscalized', 'Фискализировано'));
+      else toast.error(res.error || t('common.error'));
     } finally {
       setFiscalizingId(null);
     }

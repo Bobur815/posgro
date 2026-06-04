@@ -19,11 +19,13 @@ import type {
   FiscalConnectionResult,
   FiscalQueueStatus,
   FiscalLabel,
+  FiscalZReportStatus,
 } from '../../shared/types/fiscal.types';
 
 const MAX_ATTEMPTS = 5; // cap retries for hard (business) failures
 const WORKER_INTERVAL_MS = 30_000;
 const FISCAL_DEBUG = process.env.FISCAL_DEBUG === 'true'; // verbose position/payment logs
+const ERR_ZREPORT_EMPTY = 704020; // VCR: can't close an empty Z-report — benign no-op for us
 
 interface ResolvedConfig {
   enabled: boolean;
@@ -184,7 +186,82 @@ class RegosVcrService {
       try {
         await client.zClose();
       } catch (e) {
+        // An empty Z-report (no receipts) can't be closed — that's expected, not an error.
+        if (e instanceof VcrError && e.code === ERR_ZREPORT_EMPTY) return;
         console.error('[fiscal] ZReport.Close failed:', this.errText(e));
+      }
+    });
+  }
+
+  // ── Z-report status / manual control (for the Smena page) ───────────────────
+
+  /** Current fiscal Z-report info for display (ZReport.GetInfo, no print). */
+  async getZReportInfo(): Promise<FiscalZReportStatus> {
+    const cfg = await this.resolveConfig();
+    if (!cfg.enabled) return { enabled: false, open: false };
+    const client = this.buildClient(cfg);
+    if (!client) return { enabled: true, open: false, error: 'Пароль кассира не задан' };
+    return this.runExclusive(async () => {
+      try {
+        const z = await client.zGetInfo(false);
+        const open = Boolean(z.OpenTime?.trim()) && !z.CloseTime?.trim();
+        return {
+          enabled: true,
+          open,
+          info: {
+            terminalId: z.TerminalID,
+            number: z.Number,
+            openTime: z.OpenTime,
+            closeTime: z.CloseTime,
+            totalSaleCount: z.TotalSaleCount,
+            totalSaleCash: z.TotalSaleCash / 100,
+            totalSaleCard: z.TotalSaleCard / 100,
+            totalSaleVat: z.TotalSaleVat / 100,
+            totalRefundCount: z.TotalRefundCount,
+            totalRefundCash: z.TotalRefundCash / 100,
+            totalRefundCard: z.TotalRefundCard / 100,
+          },
+        };
+      } catch (e) {
+        return { enabled: true, open: false, error: this.errText(e) };
+      }
+    });
+  }
+
+  /** Manually open the fiscal Z-report (resync when shift is open but Z-report isn't). */
+  async openZReportManual(): Promise<{ ok: boolean; error?: string }> {
+    const cfg = await this.resolveConfig();
+    if (!cfg.enabled) return { ok: false, error: 'Фискализация выключена' };
+    const client = this.buildClient(cfg);
+    if (!client) return { ok: false, error: 'Пароль кассира не задан' };
+    const smena = await getPrismaClient().smena.findFirst({
+      where: { status: 'OPEN' },
+      orderBy: { openedAt: 'desc' },
+    });
+    return this.runExclusive(async () => {
+      try {
+        await this.ensureZReportOpen(client, smena?.id ?? null);
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: this.errText(e) };
+      }
+    });
+  }
+
+  /** Manually close the fiscal Z-report (returns a result for UI feedback). */
+  async closeZReportManual(): Promise<{ ok: boolean; error?: string }> {
+    const cfg = await this.resolveConfig();
+    if (!cfg.enabled) return { ok: false, error: 'Фискализация выключена' };
+    const client = this.buildClient(cfg);
+    if (!client) return { ok: false, error: 'Пароль кассира не задан' };
+    return this.runExclusive(async () => {
+      try {
+        await client.zClose();
+        return { ok: true };
+      } catch (e) {
+        // Empty Z-report → nothing to close; treat as success so the UI isn't alarmed.
+        if (e instanceof VcrError && e.code === ERR_ZREPORT_EMPTY) return { ok: true };
+        return { ok: false, error: this.errText(e) };
       }
     });
   }
@@ -305,13 +382,19 @@ class RegosVcrService {
     }
   }
 
-  /** Manual admin retry — clears the attempt cap for one sale. */
-  async retrySale(saleId: string): Promise<void> {
+  /** Manual admin retry — clears the attempt cap for one sale. Returns a result (never throws). */
+  async retrySale(saleId: string): Promise<{ ok: boolean; error?: string }> {
     await getPrismaClient().sale.update({
       where: { id: saleId },
       data: { fiscalStatus: 'PENDING', fiscalAttempts: 0, fiscalError: null },
     });
-    await this.fiscalizeSale(saleId);
+    try {
+      await this.fiscalizeSale(saleId);
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof VcrError) return { ok: false, error: describeVcrError(e.code, e.description) };
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
   }
 
   /** Print a fiscal duplicate of a fiscalized sale's receipt. */

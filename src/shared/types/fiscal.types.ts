@@ -47,3 +47,30 @@ export interface FiscalLabel {
   barcode: string;
   label: string;
 }
+
+/** Fiscal Z-report (shift) info from the VCR — amounts already converted to sum. */
+export interface FiscalZReport {
+  terminalId: string;
+  number: number;
+  openTime: string;
+  closeTime: string;
+  totalSaleCount: number;
+  totalSaleCash: number;
+  totalSaleCard: number;
+  totalSaleVat: number;
+  totalRefundCount: number;
+  totalRefundCash: number;
+  totalRefundCard: number;
+}
+
+export interface FiscalZReportStatus {
+  enabled: boolean;
+  open: boolean;
+  info?: FiscalZReport | null;
+  error?: string;
+}
+
+export interface FiscalActionResult {
+  ok: boolean;
+  error?: string;
+}

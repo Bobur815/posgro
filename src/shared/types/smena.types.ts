@@ -10,8 +10,18 @@ export interface Smena {
   openedAt: string;
   closedAt: string | null;
   synced: boolean;
+  regosZReportId?: number | null;
   stats?: SmenaStats;
+  fiscal?: SmenaFiscalStats;
   movements?: SmenaMovement[];
+}
+
+/** Per-smena fiscalization aggregates (REGOS:VCR), derived from local sales. */
+export interface SmenaFiscalStats {
+  fiscalizedCount: number;
+  fiscalizedAmount: number;
+  pendingCount: number;
+  failedCount: number;
 }
 
 export interface SmenaMovement {

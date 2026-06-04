@@ -56,6 +56,15 @@ export interface VcrZReportInfo {
   Count: number;
   OpenTime: string;
   CloseTime: string;
+  // Totals for the current Z-report — all amounts are ×100 (tiyin).
+  TotalSaleCount: number;
+  TotalSaleCash: number;
+  TotalSaleCard: number;
+  TotalSaleVat: number;
+  TotalRefundCount: number;
+  TotalRefundCash: number;
+  TotalRefundCard: number;
+  TotalRefundVat: number;
 }
 
 export class VcrError extends Error {
@@ -191,7 +200,8 @@ export function describeVcrError(code: number, description: string): string {
   if (/маркировк/i.test(d)) return 'Неверный код маркировки — проверьте DataMatrix товара';
   if (/Ставка НДС/i.test(d)) return 'Неверная ставка НДС для товара';
   if (/ИКПУ|МХИК|icps/i.test(d)) return 'Неверный код МХИК (ИКПУ) товара';
-  if (code === 0) return 'Виртуальная касса недоступна — проверьте приложение REGOS:VCR';
+  if (code === 704020) return 'Фискальная смена пуста — закрывать нечего';
+  if (code === 0) return 'Нет связи с виртуальной кассой (REGOS:VCR)';
   if (code === 705000) return 'Неверный логин или пароль кассира';
   if (VCR_ERROR_HINTS[code]) return VCR_ERROR_HINTS[code];
   return d || `Ошибка ВКМ (${code})`;
