@@ -105,6 +105,11 @@ export class CreateProductDto {
   @IsString()
   mxik?: string;
 
+  @ApiPropertyOptional({ example: '1234567', description: 'REGOS:VCR package (unit) code from MXIK — for marked goods' })
+  @IsOptional()
+  @IsString()
+  packageCode?: string;
+
   @ApiPropertyOptional({ example: 'REGULAR', description: 'Product type (REGULAR, BULK_WEIGHTED, PREPACKAGED)' })
   @IsOptional()
   @IsIn(PRODUCT_TYPES)

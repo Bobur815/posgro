@@ -135,6 +135,7 @@ export class ProductsService {
         isOnPromotion: createProductDto.isOnPromotion ?? false,
         active: createProductDto.active ?? true,
         mxik: createProductDto.mxik,
+        packageCode: createProductDto.packageCode,
         productType: createProductDto.productType ?? 'REGULAR',
         internalCode: createProductDto.internalCode,
         bulkQuantity: createProductDto.bulkQuantity ?? 0,
