@@ -1,9 +1,14 @@
 -- Add mxik_group_code to categories
-ALTER TABLE "categories" ADD COLUMN "mxik_group_code" TEXT;
-CREATE INDEX "categories_mxik_group_code_idx" ON "categories"("mxik_group_code");
+-- Idempotent: the column already exists in some production DBs (schema drift),
+-- so guard against duplicate_column instead of failing the whole migration.
+DO $$ BEGIN
+  ALTER TABLE "categories" ADD COLUMN "mxik_group_code" TEXT;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+CREATE INDEX IF NOT EXISTS "categories_mxik_group_code_idx" ON "categories"("mxik_group_code");
 
 -- Create mxik_catalog table
-CREATE TABLE "mxik_catalog" (
+CREATE TABLE IF NOT EXISTS "mxik_catalog" (
     "id"                  SERIAL PRIMARY KEY,
     "mxik_code"           TEXT NOT NULL,
     "mxik_name"           TEXT NOT NULL,
@@ -25,7 +30,7 @@ CREATE TABLE "mxik_catalog" (
     "updated_at"          TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE UNIQUE INDEX "mxik_catalog_mxik_code_key"      ON "mxik_catalog"("mxik_code");
-CREATE INDEX        "mxik_catalog_group_code_idx"      ON "mxik_catalog"("group_code");
-CREATE INDEX        "mxik_catalog_class_code_idx"      ON "mxik_catalog"("class_code");
-CREATE INDEX        "mxik_catalog_international_code_idx" ON "mxik_catalog"("international_code");
+CREATE UNIQUE INDEX IF NOT EXISTS "mxik_catalog_mxik_code_key"      ON "mxik_catalog"("mxik_code");
+CREATE INDEX        IF NOT EXISTS "mxik_catalog_group_code_idx"      ON "mxik_catalog"("group_code");
+CREATE INDEX        IF NOT EXISTS "mxik_catalog_class_code_idx"      ON "mxik_catalog"("class_code");
+CREATE INDEX        IF NOT EXISTS "mxik_catalog_international_code_idx" ON "mxik_catalog"("international_code");
