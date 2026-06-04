@@ -26,9 +26,11 @@ ORDER BY c.store_id, c.name_ru;
 
 -- Update categories that contain products with MXIK prefix 020 or 022
 -- but whose mxik_group_code is not yet '022'.
+-- NOTE: no updated_at bump here — the PostgreSQL categories table has no
+-- updated_at column, and syncCategories() does a full (cursorless) pull every
+-- cycle, so this change propagates to terminals without one.
 UPDATE categories c
-SET mxik_group_code = '022',
-    updated_at      = NOW()
+SET mxik_group_code = '022'
 WHERE c.id IN (
     SELECT DISTINCT p.category_id
     FROM products p
