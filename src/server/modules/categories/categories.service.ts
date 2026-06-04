@@ -43,16 +43,20 @@ export class CategoriesService {
           where: { storeId, nameRu: c.nameRu, nameUz: c.nameUz },
         });
         if (existing) {
-          const data: { active?: boolean; mxikGroupCode?: string | null } = {};
+          // NOTE: mxik_group_code is intentionally NOT updated from terminal uploads.
+          // It is server-authoritative (set via the dashboard / mapping scripts) and only
+          // flows DOWN to terminals via syncCategories. Accepting it here let a terminal
+          // with a null local value wipe the server's mapping (category bounce-back).
+          const data: { active?: boolean } = {};
           if (c.active !== undefined) data.active = c.active;
-          if (c.mxikGroupCode !== undefined) data.mxikGroupCode = c.mxikGroupCode;
           if (Object.keys(data).length > 0) {
             await this.prisma.category.update({ where: { id: existing.id }, data });
           }
           updated++;
         } else {
+          // New terminal-originated category: leave mxik_group_code null for an admin to map.
           await this.prisma.category.create({
-            data: { storeId, nameUz: c.nameUz, nameRu: c.nameRu, active: c.active ?? true, mxikGroupCode: c.mxikGroupCode ?? null },
+            data: { storeId, nameUz: c.nameUz, nameRu: c.nameRu, active: c.active ?? true },
           });
           created++;
         }
