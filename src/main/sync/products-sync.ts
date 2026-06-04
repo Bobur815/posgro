@@ -438,12 +438,6 @@ export async function syncCategories(): Promise<void> {
         await prisma.systemSetting.deleteMany({ where: { key: 'last_product_sync' } });
       }
     }
-
-    // [mxik-debug] Dump the final persisted local state so we can confirm what was written.
-    const finalLocal = await prisma.category.findMany({
-      select: { id: true, nameUz: true, mxikGroupCode: true },
-    });
-
   } catch (error) {
     console.error('Failed to sync categories:', error);
     throw error;

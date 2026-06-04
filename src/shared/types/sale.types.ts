@@ -25,6 +25,7 @@ export interface Sale {
   fiscalError?: string | null;
   regosReceiptNo?: string | null;
   regosQrCodeUrl?: string | null;
+  refunded?: boolean;
 }
 
 export interface SaleItem {

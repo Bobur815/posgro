@@ -682,17 +682,6 @@ export function POSScreen() {
             .split(",")
             .map((c) => c.trim())
             .filter(Boolean);
-          console.log(
-            "[DBG barcode]",
-            JSON.stringify({
-              id: product.id,
-              cat: product.category,
-              codes: groupCodes,
-              hasSerial,
-              rawValue,
-              isPlain: /^\d{8}$|^\d{12}$|^\d{13}$/.test(rawValue),
-            }),
-          );
           if (hasSerial && groupCodes.includes("022")) {
             // Check for duplicate in current cart
             const alreadyInCart = items.some(
@@ -887,6 +876,20 @@ export function POSScreen() {
         } else {
           setQuantity((prev) => (prev === "0" ? e.key : prev + e.key));
         }
+        setError("");
+      }
+      // Non-digit printable characters (letters/symbols) — barcode mode only, so GS1
+      // DataMatrix marking codes (e.g. 01…21'RO+jTyXP)?MA93WGJv) are captured intact.
+      // ID/quantity stay numeric. Modifier combos (Ctrl/Alt/Cmd) are left as shortcuts.
+      else if (
+        inputMode === "barcode" &&
+        e.key.length === 1 &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !e.metaKey
+      ) {
+        e.preventDefault();
+        setBarcode((prev) => prev + e.key);
         setError("");
       }
       // Backspace

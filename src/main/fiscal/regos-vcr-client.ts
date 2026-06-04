@@ -2,6 +2,9 @@
 // REGOS:VCR app over HTTP. Promoted from scripts/regos-vcr-test.ts (proven against
 // vcr-test.regos.uz). VCR is single-threaded — callers must await each call.
 
+// Verbose VCR request/response logging — off unless FISCAL_DEBUG=true.
+const VCR_DEBUG = process.env.FISCAL_DEBUG === 'true';
+
 export interface VcrPosition {
   name: string;
   barcode: string;
@@ -88,20 +91,27 @@ export class RegosVcrClient {
 
   private async call<T>(method: string, params: unknown = null): Promise<T> {
     const id = this.requestId++;
+    const payload = { id, jsonrpc: '2.0' as const, method, params, auth: this.authToken };
+    // Verbose request/response logging — enable with FISCAL_DEBUG=true for field support.
+    if (VCR_DEBUG) console.log(`[VCR →] ${method}`, JSON.stringify({ ...payload, auth: '***' }));
+
     let res: Response;
     try {
       res = await fetch(this.baseUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json;charset=utf-8' },
-        body: JSON.stringify({ id, jsonrpc: '2.0', method, params, auth: this.authToken }),
+        body: JSON.stringify(payload),
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (e) {
       // Network/timeout — VCR app not reachable. Surface as a VcrError with code 0.
+      console.error(`[VCR ←] ${method} NETWORK ERROR:`, e instanceof Error ? e.message : e);
       throw new VcrError(0, e instanceof Error ? e.message : 'VCR unreachable', method);
     }
 
     const text = await res.text();
+    if (VCR_DEBUG) console.log(`[VCR ←] ${method} (HTTP ${res.status}): ${text}`);
+
     let data: VcrResponse<T>;
     try {
       data = JSON.parse(text) as VcrResponse<T>;
@@ -166,6 +176,25 @@ export class RegosVcrClient {
   getReceiptInfo(params: { Id?: string; QRCodeURL?: string; ReceiptNo?: string; Code?: string }) {
     return this.call<(VcrReceiptResult & { Code: string }) | null>('Receipt.GetInfo', params);
   }
+}
+
+/**
+ * Turn a raw VCR error (numeric code + REGOS's Russian description) into a concise,
+ * staff-friendly Russian message. Falls back to REGOS's own description when no
+ * specific mapping matches (it is already Russian and meaningful).
+ */
+export function describeVcrError(code: number, description: string): string {
+  const d = description || '';
+  if (/обязательной маркировки не задан/i.test(d)) return 'Не отсканирован код маркировки (Asl-Belgisi)';
+  if (/недействительн/i.test(d)) return 'Код маркировки недействителен (товар вне оборота)';
+  if (/не разреш'?ё?нные символы|не разрешен/i.test(d)) return 'Код маркировки содержит недопустимые символы';
+  if (/маркировк/i.test(d)) return 'Неверный код маркировки — проверьте DataMatrix товара';
+  if (/Ставка НДС/i.test(d)) return 'Неверная ставка НДС для товара';
+  if (/ИКПУ|МХИК|icps/i.test(d)) return 'Неверный код МХИК (ИКПУ) товара';
+  if (code === 0) return 'Виртуальная касса недоступна — проверьте приложение REGOS:VCR';
+  if (code === 705000) return 'Неверный логин или пароль кассира';
+  if (VCR_ERROR_HINTS[code]) return VCR_ERROR_HINTS[code];
+  return d || `Ошибка ВКМ (${code})`;
 }
 
 /** Human-readable hints for the common VCR error codes (RU surfaced to staff). */

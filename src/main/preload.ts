@@ -81,6 +81,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // MXIK catalog (proxied to VPS)
   mxik: {
     getGroups: () => ipcRenderer.invoke("mxik:getGroups"),
+    getPackages: (mxikCode: string) => ipcRenderer.invoke("mxik:getPackages", mxikCode),
+    lookupByBarcode: (barcode: string) => ipcRenderer.invoke("mxik:lookupByBarcode", barcode),
   },
 
   // REGOS:VCR fiscalization
@@ -443,6 +445,10 @@ declare global {
       };
       mxik: {
         getGroups: () => Promise<{ groupCode: string; groupName: string }[]>;
+        getPackages: (mxikCode: string) => Promise<{ code: string; name: string }[]>;
+        lookupByBarcode: (
+          barcode: string,
+        ) => Promise<{ code: string; name: string; nameRu: string } | null>;
       };
       fiscal: {
         getConfig: () => Promise<import("../shared/types/fiscal.types").RegosVcrConfig>;

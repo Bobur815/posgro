@@ -16,6 +16,7 @@ import {
   setupPrinterHandlers,
 } from "../printer/thermal-printer";
 import { convertUzbekText } from "../../shared/utils/transliterator";
+import { mapPackageNames } from "../../shared/utils/mxik-packages";
 
 export function setupIpcHandlers(): void {
   // Setup all IPC handlers
@@ -54,6 +55,72 @@ function setupMxikHandlers(): void {
       return ipcSafe(Array.isArray(groups) ? groups : []);
     } catch (error) {
       console.error("Failed to fetch MXIK groups:", error instanceof Error ? error.message : error);
+      return [];
+    }
+  });
+
+  // Look up a product's MXIK + name by barcode via tasnif.soliq.uz (main process — no
+  // browser CORS; terminal is in UZ). Mirrors the web client's mxik.searchByBarcode so the
+  // renderer can auto-fill MXIK on barcode entry the same way the web ProductForm does.
+  ipcMain.handle("mxik:lookupByBarcode", async (_event, barcode: string) => {
+    const bc = (barcode || "").trim();
+    if (!bc) return null;
+    const TASNIF = "https://tasnif.soliq.uz/api/cls-api";
+    try {
+      const searchRes = await fetch(
+        `${TASNIF}/elasticsearch/search?lang=uz_cyrl&search=${encodeURIComponent(bc)}&size=5&page=0`,
+        { signal: AbortSignal.timeout(8000) },
+      );
+      if (!searchRes.ok) return null;
+      const searchJson = (await searchRes.json()) as {
+        success?: boolean;
+        data?: Array<{ mxikCode: string; internationalCode?: string }>;
+      };
+      if (!searchJson?.success || !searchJson.data?.length) return null;
+      const match = searchJson.data.find((d) => d.internationalCode === bc) ?? searchJson.data[0];
+
+      const detailRes = await fetch(`${TASNIF}/integration-mxik/get/history/${match.mxikCode}`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!detailRes.ok) return null;
+      const detailJson = (await detailRes.json()) as {
+        data?: {
+          mxikCode: string;
+          brandName?: string | null;
+          attributeNameUz?: string | null;
+          attributeNameRu?: string | null;
+          subPositionNameUz?: string | null;
+          subPositionNameRu?: string | null;
+        };
+      };
+      const d = detailJson?.data;
+      if (!d) return null;
+      const brand = d.brandName ? `${d.brandName} ` : "";
+      return ipcSafe({
+        code: d.mxikCode,
+        name: brand + (d.attributeNameUz ?? d.subPositionNameUz ?? ""),
+        nameRu: brand + (d.attributeNameRu ?? d.subPositionNameRu ?? ""),
+      });
+    } catch (error) {
+      console.error("mxik:lookupByBarcode failed:", error instanceof Error ? error.message : error);
+      return null;
+    }
+  });
+
+  // Package (unit) codes for an MXIK — fetched from tasnif.soliq.uz directly. Done in the
+  // main process (no browser CORS) and the terminal is in Uzbekistan, so tasnif is reachable.
+  ipcMain.handle("mxik:getPackages", async (_event, mxikCode: string) => {
+    if (!/^\d{17}$/.test(mxikCode || "")) return [];
+    try {
+      const response = await fetch(
+        `https://tasnif.soliq.uz/api/cls-api/integration-mxik/get/history/${mxikCode}`,
+        { signal: AbortSignal.timeout(8000) },
+      );
+      if (!response.ok) return [];
+      const json = (await response.json()) as { data?: { packageNames?: unknown } };
+      return ipcSafe(mapPackageNames(json?.data?.packageNames));
+    } catch (error) {
+      console.error("Failed to fetch MXIK packages:", error instanceof Error ? error.message : error);
       return [];
     }
   });

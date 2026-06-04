@@ -9,6 +9,7 @@ import { getVcrPassword, hasVcrPassword, setVcrPassword } from './secret-store';
 import {
   RegosVcrClient,
   VcrError,
+  describeVcrError,
   type VcrPosition,
   type VcrPayment,
 } from './regos-vcr-client';
@@ -22,6 +23,7 @@ import type {
 
 const MAX_ATTEMPTS = 5; // cap retries for hard (business) failures
 const WORKER_INTERVAL_MS = 30_000;
+const FISCAL_DEBUG = process.env.FISCAL_DEBUG === 'true'; // verbose position/payment logs
 
 interface ResolvedConfig {
   enabled: boolean;
@@ -257,20 +259,17 @@ class RegosVcrService {
     }
 
     const sale = await prisma.sale.findUnique({ where: { id: saleId }, include: { items: true } });
-    if (!sale || sale.fiscalStatus === 'FISCALIZED') {
-      console.log(`[fiscal] skip ${saleId} — ${!sale ? 'not found' : 'already FISCALIZED'}`);
-      return;
-    }
+    if (!sale || sale.fiscalStatus === 'FISCALIZED') return;
 
     try {
-      console.log(`[fiscal] ▶ fiscalizing sale ${sale.receiptNumber} (id=${saleId}, ${sale.items.length} items, vat=${cfg.vatPercent}%)`);
       await this.ensureZReportOpen(client, sale.smenaId);
       const positions = await this.buildPositions(sale as never, cfg);
       const payments = this.buildPayments(sale as never);
-      console.log('[fiscal] positions:', JSON.stringify(positions));
-      console.log('[fiscal] payments:', JSON.stringify(payments));
-      const validated = await client.validateSale(positions, payments, false);
-      console.log('[fiscal] ValidateSale ok:', JSON.stringify(validated));
+      if (FISCAL_DEBUG) {
+        console.log('[fiscal] positions:', JSON.stringify(positions));
+        console.log('[fiscal] payments:', JSON.stringify(payments));
+      }
+      await client.validateSale(positions, payments, false);
       const result = await client.sale({
         positions,
         payments,
@@ -279,10 +278,7 @@ class RegosVcrService {
         cashier_name: sale.cashierName,
         pos_id: cfg.posId,
       });
-      console.log(
-        `[fiscal] ✓ FISCALIZED ${sale.receiptNumber} → ReceiptNo=${result.ReceiptNo} FiscalSign=${result.FiscalSign} Terminal=${result.TerminalID}`,
-      );
-      console.log(`[fiscal]   QR: ${result.QRCodeURL}`);
+      console.log(`[fiscal] FISCALIZED ${sale.receiptNumber} → ReceiptNo=${result.ReceiptNo}`);
       await prisma.sale.update({
         where: { id: saleId },
         data: {
@@ -296,7 +292,6 @@ class RegosVcrService {
           fiscalError: null,
         },
       });
-      console.log(`[fiscal] sale ${saleId} marked FISCALIZED in DB`);
     } catch (e) {
       console.error(`[fiscal] ✗ fiscalize ${saleId} failed: ${this.errText(e)}`);
       const unreachable = e instanceof VcrError && e.code === 0;
@@ -346,6 +341,7 @@ class RegosVcrService {
     return this.runExclusive(async () => {
       try {
         const result = await client.fullRefund(sale.regosQrCodeUrl!);
+        await getPrismaClient().sale.update({ where: { id: saleId }, data: { refunded: true } });
         return { ok: true, fiscalSign: result.FiscalSign };
       } catch (e) {
         return { ok: false, error: this.errText(e) };
@@ -408,7 +404,7 @@ class RegosVcrService {
   }
 
   private errText(e: unknown): string {
-    if (e instanceof VcrError) return `[${e.code}] ${e.description}`;
+    if (e instanceof VcrError) return `[${e.code}] ${describeVcrError(e.code, e.description)}`;
     return e instanceof Error ? e.message : String(e);
   }
 }

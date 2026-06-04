@@ -96,6 +96,19 @@ const FiscalBadge = styled.span<{ $ok?: boolean }>`
   color: ${({ theme, $ok }) => ($ok ? theme.colors.success : theme.colors.error)};
 `;
 
+const RefundedBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  white-space: nowrap;
+  background-color: ${({ theme }) => theme.colors.textSecondary + '20'};
+  color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
 const Amount = styled.span`
   font-weight: 700;
   font-size: 15px;
@@ -394,8 +407,9 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
     if (!deleteConfirmId) return;
     const sale = sales.find((s) => s.id === deleteConfirmId);
     // A fiscalized receipt must be reversed on the OFD before the local record is dropped,
-    // otherwise the fiscal record stays open. Refund first; abort the delete if that fails.
-    if (sale?.fiscalStatus === 'FISCALIZED') {
+    // otherwise the fiscal record stays open. Refund first (unless already refunded);
+    // abort the delete if that fails.
+    if (sale?.fiscalStatus === 'FISCALIZED' && !sale.refunded) {
       const res = await window.electronAPI.fiscal.refund(sale.id);
       if (!res.ok) {
         toast.error(res.error || t('common.error'));
@@ -518,7 +532,7 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
       <Modal
         title={`${t('pos.salesHistory')} — ${t('pos.today')}`}
         onClose={onClose}
-        width="600px"
+        width="900px"
       >
         {isLoading ? (
           <LoadingText>{t('common.loading')}</LoadingText>
@@ -542,9 +556,15 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
                         <PaynetBadge>Paynet ✓</PaynetBadge>
                       )}
                       {sale.fiscalStatus === 'FISCALIZED' && (
-                        <FiscalBadge $ok>
-                          <ShieldCheck size={12} /> {t('fiscalSettings.fiscalized', 'Фискализирован')}
-                        </FiscalBadge>
+                        sale.refunded ? (
+                          <RefundedBadge>
+                            <RotateCcw size={12} /> {t('pos.refunded', 'Возврат оформлен')}
+                          </RefundedBadge>
+                        ) : (
+                          <FiscalBadge $ok>
+                            <ShieldCheck size={12} /> {t('fiscalSettings.fiscalized', 'Фискализирован')}
+                          </FiscalBadge>
+                        )
                       )}
                       {(sale.fiscalStatus === 'FAILED' || sale.fiscalStatus === 'PENDING') && (
                         <FiscalBadge>
@@ -565,14 +585,16 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
                     )}
                     {sale.fiscalStatus === 'FISCALIZED' && (
                       <>
-                        <RefundButton
-                          onClick={(e) => { e.stopPropagation(); setRefundConfirmId(sale.id); }}
-                          disabled={refundingId === sale.id}
-                          title={t('pos.refund', 'Возврат')}
-                        >
-                          <RotateCcw size={16} />
-                          {refundingId === sale.id ? t('common.processing') : t('pos.refund', 'Возврат')}
-                        </RefundButton>
+                        {!sale.refunded && (
+                          <RefundButton
+                            onClick={(e) => { e.stopPropagation(); setRefundConfirmId(sale.id); }}
+                            disabled={refundingId === sale.id}
+                            title={t('pos.refund', 'Возврат')}
+                          >
+                            <RotateCcw size={16} />
+                            {refundingId === sale.id ? t('common.processing') : t('pos.refund', 'Возврат')}
+                          </RefundButton>
+                        )}
                         <DuplicateButton
                           onClick={(e) => handleDuplicate(sale, e)}
                           disabled={duplicatingId === sale.id}
@@ -627,11 +649,12 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
         {deleteConfirmId && (
           <ConfirmDialog
             title={t('common.delete')}
-            message={
-              sales.find((s) => s.id === deleteConfirmId)?.fiscalStatus === 'FISCALIZED'
+            message={(() => {
+              const s = sales.find((x) => x.id === deleteConfirmId);
+              return s?.fiscalStatus === 'FISCALIZED' && !s.refunded
                 ? t('pos.deleteFiscalizedConfirm', 'Чек фискализирован — при удалении будет оформлен фискальный возврат. Продолжить?')
-                : t('pos.deleteSaleConfirm')
-            }
+                : t('pos.deleteSaleConfirm');
+            })()}
             confirmLabel={t('common.delete')}
             cancelLabel={t('common.cancel')}
             variant="danger"

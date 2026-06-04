@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { CatalogEntry, MxikGroup } from "@shared/types";
+import { mapPackageNames, type MxikPackage } from "@shared/utils";
 
 export interface DeviceSession {
   id: string;
@@ -676,6 +677,19 @@ export const mxik = {
   catalogGroups: async (): Promise<MxikGroup[]> => {
     const { data } = await axiosInstance.get('/mxik/catalog/groups');
     return data;
+  },
+
+  // Package (unit) codes for an MXIK — called directly against tasnif (browser is in UZ).
+  getPackages: async (mxikCode: string): Promise<MxikPackage[]> => {
+    if (!/^\d{17}$/.test(mxikCode)) return [];
+    try {
+      const res = await fetch(`https://tasnif.soliq.uz/api/cls-api/integration-mxik/get/history/${mxikCode}`);
+      if (!res.ok) return [];
+      const json = await res.json();
+      return mapPackageNames(json?.data?.packageNames);
+    } catch {
+      return [];
+    }
   },
 
   catalogLookup: async (barcode: string): Promise<CatalogEntry | null> => {

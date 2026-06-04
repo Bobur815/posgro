@@ -587,6 +587,11 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   if (!(await columnExists(prisma, 'smenas', 'regos_z_report_id'))) {
     await prisma.$executeRaw`ALTER TABLE smenas ADD COLUMN regos_z_report_id INTEGER`;
   }
+
+  // Migration 22: refunded flag on sales (set once a fiscal full refund is issued)
+  if (!(await columnExists(prisma, 'sales', 'refunded'))) {
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN refunded INTEGER DEFAULT 0`;
+  }
 }
 
 /** True if `column` exists on `table` — silent (no thrown query, no prisma:error log). */

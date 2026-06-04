@@ -197,6 +197,7 @@ model Sale {
   regosReceiptNo  String?   @map("regos_receipt_no")
   regosFiscalAt   DateTime? @map("regos_fiscal_at")
   regosLabels     String?   @map("regos_labels") // JSON [{barcode,label}] snapshot for marked goods
+  refunded        Boolean   @default(false) // true once a fiscal full refund has been issued
 
   // Sync tracking
   synced   Boolean   @default(false)

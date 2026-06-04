@@ -34,6 +34,7 @@ import {
 } from "../../api/client";
 import type { CatalogEntry } from "@shared/types";
 import { isMxikExcluded } from "@shared/types/mxik.types";
+import { pickSingleUnitPackage, type MxikPackage } from "@shared/utils";
 import { Spinner } from "@renderer/components/common/Spinner";
 import { debounce } from "@renderer/utils/helpers";
 
@@ -303,12 +304,14 @@ export function ProductForm({
     isOnPromotion: false,
     active: true,
     mxik: initialData?.mxik || "",
+    packageCode: initialData?.packageCode || "",
     productType: isBulkWeighted
       ? ("BULK_WEIGHTED" as ProductType)
       : ("REGULAR" as ProductType),
     internalCode: initialData?.internalCode || "",
   });
   const [existingProduct, setExistingProduct] = useState<Product | null>(null);
+  const [mxikPackages, setMxikPackages] = useState<MxikPackage[]>([]);
   const [showArrivalModal, setShowArrivalModal] = useState(false);
   const [arrivalData, setArrivalData] = useState({
     quantity: "",
@@ -358,6 +361,26 @@ export function ProductForm({
       setFormData((prev) => ({ ...prev, internalCode: code }));
     });
   }, [formData.productType, isEdit]);
+
+  // Fetch MXIK package (unit) codes from tasnif when a full 17-digit MXIK is set.
+  // Marked goods need a `package_code`; default to the single-unit package.
+  useEffect(() => {
+    const mxik = formData.mxik.trim();
+    if (!/^\d{17}$/.test(mxik)) {
+      setMxikPackages([]);
+      return;
+    }
+    let active = true;
+    mxikApi.getPackages(mxik).then((pkgs) => {
+      if (!active) return;
+      setMxikPackages(pkgs);
+      if (pkgs.length > 0 && !formData.packageCode) {
+        const def = pickSingleUnitPackage(pkgs);
+        if (def) setFormData((prev) => ({ ...prev, packageCode: def.code }));
+      }
+    }).catch(() => { if (active) setMxikPackages([]); });
+    return () => { active = false; };
+  }, [formData.mxik]);
 
   const autoSelectCategory = useCallback((groupCode: string) => {
     // mxikGroupCode may be comma-separated (e.g. "007,008") for categories
@@ -756,6 +779,7 @@ export function ProductForm({
         isOnPromotion: product.isOnPromotion ?? false,
         active: product.isActive,
         mxik: product.mxik || "",
+        packageCode: product.packageCode || "",
         productType: product.productType || "REGULAR",
         internalCode: product.internalCode || "",
       });
@@ -805,6 +829,7 @@ export function ProductForm({
       isOnPromotion: formData.isOnPromotion,
       active: formData.active,
       mxik: formData.mxik || undefined,
+      packageCode: formData.packageCode || undefined,
       productType: formData.productType,
       internalCode: formData.internalCode || undefined,
     };
@@ -892,6 +917,21 @@ export function ProductForm({
                   </Button>
                 </div>
               </FormGroup>
+              {mxikPackages.length > 0 && (
+                <FormGroup>
+                  <Label>{t("products.packageCode", "Код упаковки (МХИК)")}</Label>
+                  <Select
+                    value={formData.packageCode}
+                    onChange={(e) => handleChange("packageCode", e.target.value)}
+                  >
+                    {mxikPackages.map((p) => (
+                      <option key={p.code} value={p.code}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </Select>
+                </FormGroup>
+              )}
               <FormGroup>
                 <Label>
                   {t("products.barcode")} <Req>*</Req>

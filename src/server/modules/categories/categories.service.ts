@@ -6,16 +6,10 @@ export class CategoriesService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(storeId: string) {
-    const cats = await this.prisma.category.findMany({
+    return this.prisma.category.findMany({
       where: { storeId, active: true },
       orderBy: { nameRu: 'asc' },
     });
-    // [mxik-debug] Confirm what PostgreSQL actually returns for this store.
-    console.log(
-      `[categories.findAll] storeId=${storeId} → ${cats.length} cats:`,
-      cats.map((c) => `id=${c.id} ${c.nameUz} mxik=${JSON.stringify(c.mxikGroupCode)}`),
-    );
-    return cats;
   }
 
   async create(storeId: string, data: { nameRu: string; nameUz: string; mxikGroupCode?: string | null }) {
@@ -43,11 +37,6 @@ export class CategoriesService {
 
   async syncBulk(storeId: string, categories: Array<{ nameUz: string; nameRu: string; active?: boolean; mxikGroupCode?: string | null }>) {
     let created = 0, updated = 0, errors = 0;
-    // [mxik-debug] Confirm what the POS uploads — does mxikGroupCode arrive?
-    console.log(
-      `[categories.syncBulk] storeId=${storeId} received ${categories.length}:`,
-      categories.map((c) => `${c.nameUz} mxik=${JSON.stringify(c.mxikGroupCode)}`),
-    );
     for (const c of categories) {
       try {
         const existing = await this.prisma.category.findFirst({

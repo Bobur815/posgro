@@ -6,6 +6,7 @@ export interface Category {
   nameUz: string;
   nameRu: string;
   active: boolean;
+  mxikGroupCode?: string | null;
 }
 
 interface ProductsState {
