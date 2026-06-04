@@ -151,16 +151,21 @@ async function printReceipt(saleId: string): Promise<boolean> {
 
   const settings = await loadReceiptSettings();
 
-  // Generate QR code for Paynet fiscal receipt (1% cashback for customer)
+  // Generate the Soliq OFD QR for the customer (1% cashback). Source the fiscal data
+  // from REGOS:VCR when present, else fall back to Paynet. Both point at ofd.soliq.uz.
   let fiscalQrBase64: string | undefined;
   let paynetFiscalMark: string | undefined;
+  const regosQrCodeUrl = (sale as any).regosQrCodeUrl as string | null;
+  const regosReceiptNo = (sale as any).regosReceiptNo as string | null;
   const paynetOfdUrl = (sale as any).paynetOfdUrl as string | null;
   const paynetReceiptNumber = (sale as any).paynetReceiptNumber as string | null;
-  if (paynetOfdUrl) {
+  const fiscalUrl = regosQrCodeUrl || paynetOfdUrl;
+  const fiscalReceiptNo = regosReceiptNo || paynetReceiptNumber;
+  if (fiscalUrl) {
     try {
-      const ofdParams = new URL(paynetOfdUrl).searchParams;
+      const ofdParams = new URL(fiscalUrl).searchParams;
       paynetFiscalMark = ofdParams.get('s') || undefined;
-      const dataUrl = await QRCode.toDataURL(paynetOfdUrl, { margin: 1, width: 300 });
+      const dataUrl = await QRCode.toDataURL(fiscalUrl, { margin: 1, width: 300 });
       fiscalQrBase64 = dataUrl.replace(/^data:image\/png;base64,/, '');
     } catch (err) {
       console.error('[Printer] QR code generation failed:', err);
@@ -192,7 +197,7 @@ async function printReceipt(saleId: string): Promise<boolean> {
     discountAmount: Number(sale.discountAmount),
     finalAmount: Number(sale.finalAmount),
     paymentMethod: sale.paymentMethod,
-    paynetReceiptNumber: paynetReceiptNumber || undefined,
+    paynetReceiptNumber: fiscalReceiptNo || undefined,
     paynetFiscalMark,
     fiscalQrBase64,
   };

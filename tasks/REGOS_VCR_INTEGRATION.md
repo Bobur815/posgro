@@ -696,6 +696,32 @@ interface PosgroPosSettings {
 
 ---
 
+## Receipt Printing — avoid double prints ⚠️
+
+**The problem:** REGOS:VCR **requires** a configured printer and **prints its own fiscal receipt** (with the Soliq OFD QR) on every receipt method — `Receipt.Sale`, `Receipt.FullRefund`, etc. (Without a printer, those methods fail with `705002`.) Meanwhile, posgro **also** prints a customer receipt, and as of this integration that receipt **includes the same fiscal QR** (sourced from the sale's `regosQrCodeUrl`, with the 1% cashback prompt). If both the VCR and posgro are pointed at the **same** physical thermal printer, the customer gets **two receipts** per sale.
+
+**How posgro prints the QR (implemented):**
+- `printReceipt()` in `src/main/printer/thermal-printer.ts` renders the OFD QR from `sale.regosQrCodeUrl` (falling back to Paynet's `paynetOfdUrl`). The footer shows the QR, the fiscal mark (`s` param) and "Кешбэк 1% — отсканируйте QR" / "1% cashback — QR kodni skanerlang".
+- `sales:create` **awaits** the immediate fiscalization before returning, so `regosQrCodeUrl` is persisted **before** the renderer triggers the print. Cost: ~1–2s added to checkout while the VCR responds.
+- If fiscalization fails (product missing MXIK, VCR unreachable), the receipt prints **without** the QR and the sale stays in the retry queue (surfaced by the POS fiscal-status badge).
+
+**Deployment — pick ONE printing owner per terminal:**
+
+| Option | VCR printer setting | posgro receipt auto-print | Result |
+|--------|---------------------|---------------------------|--------|
+| **A — posgro prints (recommended for us)** | a **separate / virtual** printer (or a model the shop doesn't use for customer receipts) | **ON** | One receipt, from posgro, with the cashback QR. posgro controls layout/branding. |
+| **B — VCR prints** | the shop's real thermal printer | **OFF** via the setting below | One receipt, from the VCR (standard REGOS fiscal layout). |
+
+Do **not** leave both pointed at the same physical printer with posgro auto-print ON — that produces duplicate receipts.
+
+**Toggle (built):** Settings → Фискализация → **"Чек печатает виртуальная касса (не печатать из POS)"** (`regos_vcr_prints_receipt`, exposed as `RegosVcrConfig.vcrPrintsReceipt`). When enabled (and fiscal is on):
+- POS **quick-pay** (`POSScreen`) skips its receipt auto-print.
+- The **Checkout** modal defaults its "print receipt" checkbox **off** (the cashier can still tick it for a one-off copy).
+
+Leave it **off** (default) for Option A — posgro prints the single customer receipt with the cashback QR.
+
+---
+
 ## What Customer Pays For (Commercial Model)
 
 | Component | Who pays | Amount |
@@ -713,16 +739,40 @@ posgro does not pay REGOS anything. You're just using their VCR as a fiscal laye
 
 Before going live with a customer:
 
-- [ ] `Sys.Initialize()` returns `ok: true`
-- [ ] Z-report opens with `ZReport.Open()`
-- [ ] `Receipt.ValidateSale()` passes for test item (with real MXIK code)
-- [ ] `Receipt.Sale()` returns `FiscalSign` and `QRCodeURL`
-- [ ] QR code scans to `ofd.soliq.uz` and shows valid receipt
-- [ ] `Receipt.FullRefund(qrUrl)` works on the test receipt
-- [ ] `ZReport.Close()` succeeds
-- [ ] Error codes 704010, 704011, 704019 handled gracefully in UI
-- [ ] VCR password stored encrypted, not in plaintext
-- [ ] `code` field (idempotency key) is always your internal receipt UUID
+- [x] `Sys.Initialize()` returns `ok: true` — verified 2026-06-02 (terminal `VG298430008256`)
+- [~] Z-report opens with `ZReport.Open()` — `ZReport.GetInfo` verified; shift was already open, `Open`/`Close` not re-run (shared stand)
+- [x] `Receipt.ValidateSale()` passes for test item
+- [x] `Receipt.Sale()` returns `FiscalSign` and `QRCodeURL` — `ReceiptNo 3048`, FiscalSign `222851825814`
+- [ ] QR code scans to `ofd.soliq.uz` and shows valid receipt — verify in a browser (UZ; soliq page is JS-rendered)
+- [x] `Receipt.FullRefund(qrUrl)` works on the test receipt — refund `ReceiptNo 3049`, FiscalSign `825776010404`
+- [ ] `ZReport.Close()` succeeds — not tested (would close the shared test shift)
+- [~] Error codes 704010, 704011, 704019 handled gracefully in UI — mapped in harness; UI not built yet
+- [ ] VCR password stored encrypted, not in plaintext — test creds in gitignored `.env`; real client TODO (keychain/electron-store)
+- [x] `code` field (idempotency key) is always your internal receipt UUID — harness sends unique `code` per sale
+
+### Verified test run — 2026-06-02/03 (`http://vcr-test.regos.uz`, login `kassa`, terminal `VG298430008256`)
+
+Harness: `scripts/regos-vcr-test.ts` — `npm run test:regos-vcr -- <command>` (run `all` for the full suite + coverage summary).
+
+**Full API coverage (22 documented methods):** 16 software-testable methods **PASS**, 6 require hardware/EPS or are destructive on the shared stand.
+
+| Method | Result |
+|--------|--------|
+| Sys.Initialize / Sys.GetInfo / Sys.GetOverflowInfo | ✅ PASS |
+| ZReport.GetInfo / ZReport.Open | ✅ PASS |
+| Receipt.ValidatePosition / Receipt.ValidateSale / Receipt.ValidateRefund | ✅ PASS |
+| Receipt.Sale / Receipt.GetInfo / Receipt.Duplicate / Receipt.CheckQRcodeUrl | ✅ PASS |
+| Receipt.FullRefund / Receipt.Refund (partial) | ✅ PASS |
+| Receipt.Advance / Receipt.Credit (non-fiscal) | ✅ PASS |
+| ZReport.Close | ⏭ not auto-run (closes the shared test shift — `zclose` manually) |
+| Payment.Create / Payment.Get / Payment.Cancel | ⏭ needs payment terminal (Ingenico/PAX) or EPS token |
+| Acquiring.Balance / Acquiring.Totals | ⏭ needs Ingenico/PAX terminal |
+
+**Gotchas learned (apply to the real client):**
+- **VAT rate is resolved by `icps`** in the tax registry, NOT computed as a % of `amount`. A wrong/rounded VAT amount → `701003 "Ставка НДС не найдена"`. Send the product's registered VAT amount.
+- **Marked goods** (e.g. beverages group 022 like the docs' Coca-Cola `icps 02202002001010036`, which is also 0% VAT) require a `label` (Asl-Belgisi DataMatrix) → else `701003 "Код обязательной маркировки не задан"`. Use `Receipt.ValidatePosition` for marked items.
+- **Proven non-marked smoke-test item:** `icps 02004001004002007` ("Heinz Яблоко"), amount 9000 tiyin, vat_value 1200, no `package_code`/`label` needed.
+- `package_code` is optional for non-marked goods (omit when empty).
 
 ---
 

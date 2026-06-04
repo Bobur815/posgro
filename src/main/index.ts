@@ -5,6 +5,7 @@ import { setupSetupHandlers } from "./ipc/setup-handlers";
 import { setupAutoUpdater } from "./updater/auto-updater";
 import { autoUpdater } from "electron-updater";
 import { SyncService } from "./sync/sync-service";
+import { regosVcrService } from "./fiscal/regos-vcr-service";
 import {
   initializeDatabase,
   readStoreBootstrap,
@@ -163,6 +164,9 @@ async function launchMainApp(): Promise<void> {
 
   syncService = new SyncService();
   syncService.start();
+
+  // Start the REGOS:VCR fiscalization retry worker (no-op unless fiscal is enabled)
+  regosVcrService.start();
 }
 
 async function bootstrap() {
@@ -235,6 +239,7 @@ app.whenReady().then(bootstrap);
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     syncService?.stop();
+    regosVcrService.stop();
     app.quit();
   }
 });
@@ -247,6 +252,7 @@ app.on("activate", () => {
 
 app.on("before-quit", () => {
   syncService?.stop();
+  regosVcrService.stop();
 });
 
 export { mainWindow };

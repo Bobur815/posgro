@@ -306,9 +306,16 @@ export function PinLoginPage() {
   useEffect(() => {
     window.electronAPI.config.getLocalConfig().then((cfg) => {
       if (!cfg?.apiUrl) return;
+      const baseUrl = cfg.apiUrl.replace(/\/api\/?$/, "");
       fetch(`${cfg.apiUrl}/site-config/login-banner`)
         .then((r) => r.json())
-        .then((data) => setBanner(data as LoginBanner))
+        .then((data) => {
+          const banner = data as LoginBanner;
+          if (banner.imageUrl && !banner.imageUrl.startsWith("http")) {
+            banner.imageUrl = `${baseUrl}${banner.imageUrl}`;
+          }
+          setBanner(banner);
+        })
         .catch(() => {});
     });
   }, []);

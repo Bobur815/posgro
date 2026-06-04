@@ -71,9 +71,9 @@ export function useProducts() {
     }
   }, []);
 
-  const getById = useCallback(async (id: string) => {
+  const getById = useCallback(async (id: string, opts?: { byDbId?: boolean }) => {
     try {
-      const product = await window.electronAPI.products.getById(id);
+      const product = await window.electronAPI.products.getById(id, opts);
       return product as Product | null;
     } catch (err) {
       console.error('Failed to get product:', err);

@@ -12,17 +12,17 @@ export class CategoriesService {
     });
   }
 
-  async create(storeId: string, data: { nameRu: string; nameUz: string }) {
+  async create(storeId: string, data: { nameRu: string; nameUz: string; mxikGroupCode?: string | null }) {
     return this.prisma.category.create({
-      data: { storeId, nameRu: data.nameRu, nameUz: data.nameUz },
+      data: { storeId, nameRu: data.nameRu, nameUz: data.nameUz, mxikGroupCode: data.mxikGroupCode ?? null },
     });
   }
 
-  async update(id: number, storeId: string, data: { nameRu?: string; nameUz?: string }) {
+  async update(id: number, storeId: string, data: { nameRu?: string; nameUz?: string; mxikGroupCode?: string | null }) {
     await this.findById(id, storeId);
     return this.prisma.category.update({
       where: { id },
-      data,
+      data: { ...data },
     });
   }
 
@@ -35,7 +35,7 @@ export class CategoriesService {
     return { success: true };
   }
 
-  async syncBulk(storeId: string, categories: Array<{ nameUz: string; nameRu: string; active?: boolean }>) {
+  async syncBulk(storeId: string, categories: Array<{ nameUz: string; nameRu: string; active?: boolean; mxikGroupCode?: string | null }>) {
     let created = 0, updated = 0, errors = 0;
     for (const c of categories) {
       try {
@@ -43,13 +43,16 @@ export class CategoriesService {
           where: { storeId, nameRu: c.nameRu, nameUz: c.nameUz },
         });
         if (existing) {
-          if (c.active !== undefined) {
-            await this.prisma.category.update({ where: { id: existing.id }, data: { active: c.active } });
+          const data: { active?: boolean; mxikGroupCode?: string | null } = {};
+          if (c.active !== undefined) data.active = c.active;
+          if (c.mxikGroupCode !== undefined) data.mxikGroupCode = c.mxikGroupCode;
+          if (Object.keys(data).length > 0) {
+            await this.prisma.category.update({ where: { id: existing.id }, data });
           }
           updated++;
         } else {
           await this.prisma.category.create({
-            data: { storeId, nameUz: c.nameUz, nameRu: c.nameRu, active: c.active ?? true },
+            data: { storeId, nameUz: c.nameUz, nameRu: c.nameRu, active: c.active ?? true, mxikGroupCode: c.mxikGroupCode ?? null },
           });
           created++;
         }

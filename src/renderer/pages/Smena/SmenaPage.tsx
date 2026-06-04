@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import {
@@ -8,12 +8,17 @@ import {
   X,
   Check,
   Eye,
+  ShieldCheck,
+  RefreshCw,
 } from "lucide-react";
+import type { FiscalZReportStatus } from "@shared/types";
 import { useSmena } from "../../hooks/useSmena";
 import type { Smena, SmenaStats, SmenaMovement } from "../../hooks/useSmena";
+import type { SmenaFiscalStats } from "@shared/types/smena.types";
 import { Button } from "../../components/common/Button";
 import { Modal } from "../../components/common/Modal";
 import { VirtualKeyboard } from "../../components/common/VirtualKeyboard";
+import { useToast } from "../../context/ToastContext";
 import { amountHint } from "@shared/utils";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -393,11 +398,11 @@ const KEYBOARD_HEIGHT = 360;
 
 export function SmenaPage({ onClose }: { onClose: () => void }) {
   const { t, i18n } = useTranslation();
+  const toast = useToast();
   const {
     currentSmena,
     history,
     isLoading,
-    error,
     loadCurrent,
     openSmena,
     closeSmena,
@@ -408,6 +413,7 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
   } = useSmena();
 
   const [tab, setTab] = useState<"current" | "history">("current");
+  const [historyView, setHistoryView] = useState<"cash" | "fiscal">("cash");
   const [initialCash, setInitialCash] = useState("");
   const [payInAmount, setPayInAmount] = useState("");
   const [payInNote, setPayInNote] = useState("");
@@ -415,7 +421,6 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
   const [payOutNote, setPayOutNote] = useState("");
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [finalCash, setFinalCash] = useState("");
-  const [localError, setLocalError] = useState<string | null>(null);
   const [viewSmena, setViewSmena] = useState<
     (Smena & { stats?: SmenaStats; movements?: SmenaMovement[] }) | null
   >(null);
@@ -451,9 +456,50 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
     else set(current + key);
   }
 
+  // REGOS:VCR fiscal Z-report state (ZReport.GetInfo). Open/Close happen automatically
+  // with smena open/close; these surface the fiscal shift and allow manual resync.
+  const [fiscalZ, setFiscalZ] = useState<FiscalZReportStatus | null>(null);
+  const [fiscalBusy, setFiscalBusy] = useState(false);
+
+  const loadFiscalZ = useCallback(() => {
+    window.electronAPI.fiscal
+      .zInfo()
+      .then(setFiscalZ)
+      .catch(() => setFiscalZ(null));
+  }, []);
+
+  async function handleFiscalOpen() {
+    setFiscalBusy(true);
+    try {
+      const r = await window.electronAPI.fiscal.zOpen();
+      if (r.ok) toast.success(t("smena.fiscalOpenedToast", "Фискальная смена открыта"));
+      else toast.error(r.error || t("common.error"));
+      loadFiscalZ();
+    } finally {
+      setFiscalBusy(false);
+    }
+  }
+
+  async function handleFiscalClose() {
+    setFiscalBusy(true);
+    try {
+      const r = await window.electronAPI.fiscal.zClose();
+      if (r.ok) toast.success(t("smena.fiscalClosedToast", "Фискальная смена закрыта"));
+      else toast.error(r.error || t("common.error"));
+      loadFiscalZ();
+    } finally {
+      setFiscalBusy(false);
+    }
+  }
+
   useEffect(() => {
     loadCurrent();
   }, [loadCurrent]);
+
+  // Refresh fiscal Z-report whenever the local shift changes (open/close/movements).
+  useEffect(() => {
+    loadFiscalZ();
+  }, [loadFiscalZ, currentSmena]);
 
   useEffect(() => {
     if (tab === "history") loadHistory();
@@ -488,56 +534,56 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
 
   async function handleOpen(e: React.FormEvent) {
     e.preventDefault();
-    setLocalError(null);
     const val = parseFloat(initialCash.replace(/\s/g, "")) || 0;
     try {
       await openSmena(val);
       setInitialCash("");
+      toast.success(t("smena.openedToast", "Смена открыта"));
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : String(err));
+      toast.error(err instanceof Error ? err.message : String(err));
     }
   }
 
   async function handlePayIn(e: React.FormEvent) {
     e.preventDefault();
     if (!smena) return;
-    setLocalError(null);
     const val = parseFloat(payInAmount.replace(/\s/g, "")) || 0;
     if (!val) return;
     try {
       await addMovement(smena.id, "PAY_IN", val, payInNote || undefined);
       setPayInAmount("");
       setPayInNote("");
+      toast.success(t("smena.payInToast", "Внесение наличных выполнено"));
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : String(err));
+      toast.error(err instanceof Error ? err.message : String(err));
     }
   }
 
   async function handlePayOut(e: React.FormEvent) {
     e.preventDefault();
     if (!smena) return;
-    setLocalError(null);
     const val = parseFloat(payOutAmount.replace(/\s/g, "")) || 0;
     if (!val) return;
     try {
       await addMovement(smena.id, "PAY_OUT", val, payOutNote || undefined);
       setPayOutAmount("");
       setPayOutNote("");
+      toast.success(t("smena.payOutToast", "Изъятие наличных выполнено"));
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : String(err));
+      toast.error(err instanceof Error ? err.message : String(err));
     }
   }
 
   async function handleClose() {
     if (!smena) return;
-    setLocalError(null);
     try {
       await closeSmena(smena.id, finalCashNum);
       setShowCloseModal(false);
       setFinalCash("");
+      toast.success(t("smena.closedToast", "Смена закрыта"));
       onClose();
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : String(err));
+      toast.error(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -553,7 +599,6 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
           </Tab>
         </TabRow>
 
-        {(error || localError) && <ErrorMsg>{error || localError}</ErrorMsg>}
 
         {tab === "current" && (
           <>
@@ -657,6 +702,77 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
                     </StatsGrid>
                   )}
                 </Card>
+
+                {fiscalZ?.enabled && (
+                  <Card>
+                    <SectionTitle style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
+                      <ShieldCheck size={16} /> {t("smena.fiscalShift", "Фискальная смена (REGOS:VCR)")}
+                      <StatusBadge $open={fiscalZ.open} style={{ marginLeft: 4 }}>
+                        {fiscalZ.open ? t("smena.statusOpen") : t("smena.statusClosed")}
+                      </StatusBadge>
+                      <Button
+                        variant="secondary"
+                        size="small"
+                        onClick={loadFiscalZ}
+                        disabled={fiscalBusy}
+                        tooltip={t("common.refresh", "Обновить")}
+                        style={{ marginLeft: "auto" }}
+                      >
+                        <RefreshCw size={14} />
+                      </Button>
+                    </SectionTitle>
+
+                    {fiscalZ.error ? (
+                      <ErrorMsg>{fiscalZ.error}</ErrorMsg>
+                    ) : fiscalZ.info ? (
+                      <InfoGrid>
+                        <InfoItem>
+                          <InfoLabel>{t("smena.terminal")}</InfoLabel>
+                          <InfoValue>{fiscalZ.info.terminalId}</InfoValue>
+                        </InfoItem>
+                        <InfoItem>
+                          <InfoLabel>{t("smena.fiscalZNumber", "Фискальный Z-отчёт №")}</InfoLabel>
+                          <InfoValue>№{fiscalZ.info.number}</InfoValue>
+                        </InfoItem>
+                        <InfoItem>
+                          <InfoLabel>{t("smena.cashSales")}</InfoLabel>
+                          <InfoValue>{fmt(fiscalZ.info.totalSaleCash)} so'm</InfoValue>
+                        </InfoItem>
+                        <InfoItem>
+                          <InfoLabel>{t("smena.cardSales")}</InfoLabel>
+                          <InfoValue>{fmt(fiscalZ.info.totalSaleCard)} so'm</InfoValue>
+                        </InfoItem>
+                        <InfoItem>
+                          <InfoLabel>{t("smena.returns")}</InfoLabel>
+                          <InfoValue>{fmt(fiscalZ.info.totalRefundCash + fiscalZ.info.totalRefundCard)} so'm</InfoValue>
+                        </InfoItem>
+                        <InfoItem>
+                          <InfoLabel>{t("smena.receipts")}</InfoLabel>
+                          <InfoValue>{fiscalZ.info.totalSaleCount}</InfoValue>
+                        </InfoItem>
+                      </InfoGrid>
+                    ) : null}
+
+                    {!fiscalZ.open && (
+                      <ActionRow style={{ marginTop: 12 }}>
+                        <Button onClick={handleFiscalOpen} disabled={fiscalBusy}>
+                          <ShieldCheck size={14} /> {t("smena.openFiscalShift", "Открыть фискальную смену")}
+                        </Button>
+                      </ActionRow>
+                    )}
+                    {fiscalZ.open && (
+                      <ActionRow style={{ marginTop: 12 }}>
+                        <Button
+                          variant="secondary"
+                          onClick={handleFiscalClose}
+                          disabled={fiscalBusy}
+                        >
+                          <X size={14} /> {t("smena.closeFiscalShift", "Закрыть фискальную смену")}
+                        </Button>
+                      </ActionRow>
+                    )}
+                  </Card>
+                )}
 
                 <Card>
                   <SectionTitle>{t("smena.movements")}</SectionTitle>
@@ -804,12 +920,71 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
 
         {tab === "history" && (
           <Card>
+            {fiscalZ?.enabled && (
+              <TabRow style={{ marginBottom: 12 }}>
+                <Tab
+                  $active={historyView === "cash"}
+                  onClick={() => setHistoryView("cash")}
+                >
+                  {t("smena.cashShifts", "Кассовые смены")}
+                </Tab>
+                <Tab
+                  $active={historyView === "fiscal"}
+                  onClick={() => setHistoryView("fiscal")}
+                >
+                  {t("smena.fiscalShifts", "Фискальные смены")}
+                </Tab>
+              </TabRow>
+            )}
+
             {isLoading ? (
               <p>{t("common.loading", "Loading...")}</p>
             ) : history.length === 0 ? (
               <p style={{ color: "gray", fontSize: 13 }}>
                 {t("smena.noHistory")}
               </p>
+            ) : fiscalZ?.enabled && historyView === "fiscal" ? (
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>Z#</Th>
+                    <Th>{t("smena.fiscalZNumber", "Фиск. Z-отчёт")}</Th>
+                    <Th>{t("smena.openedAt")}</Th>
+                    <Th>{t("smena.fiscalReceipts", "Фиск. чеков")}</Th>
+                    <Th>{t("smena.fiscalRevenue", "Фиск. выручка")}</Th>
+                    <Th>{t("smena.status")}</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(history as (Smena & { fiscal?: SmenaFiscalStats })[]).map((s) => {
+                    const f = s.fiscal;
+                    const unsent = (f?.pendingCount ?? 0) + (f?.failedCount ?? 0);
+                    return (
+                      <tr key={s.id}>
+                        <Td>№{s.zReportNumber}</Td>
+                        <Td>{s.regosZReportId != null ? `№${s.regosZReportId}` : "—"}</Td>
+                        <Td>{fmtDate(s.openedAt)}</Td>
+                        <Td>
+                          {f?.fiscalizedCount ?? 0}
+                          {unsent > 0 && (
+                            <span style={{ color: "#ef4444", marginLeft: 6 }}>
+                              (+{unsent} {t("smena.notFiscalizedShort", "не фиск.")})
+                            </span>
+                          )}
+                        </Td>
+                        <Td>{fmt(f?.fiscalizedAmount ?? 0)} so'm</Td>
+                        <Td>
+                          <StatusBadge $open={s.status === "OPEN"}>
+                            {s.status === "OPEN"
+                              ? t("smena.statusOpen")
+                              : t("smena.statusClosed")}
+                          </StatusBadge>
+                        </Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Table>
             ) : (
               <Table>
                 <thead>

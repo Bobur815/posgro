@@ -14,6 +14,7 @@ import {
   Scale,
   Monitor,
   Download,
+  ShieldCheck,
 } from "lucide-react";
 
 const Container = styled.div`
@@ -116,6 +117,12 @@ export function SettingsPage() {
       title: t("inventory.preWeighed"),
       description: t("bulkWeigh.preWeighedInventory"),
       path: "/settings/weighed",
+    },
+    {
+      icon: <ShieldCheck size={32} />,
+      title: t("fiscalSettings.title", "Фискализация (REGOS:VCR)"),
+      description: t("fiscalSettings.description", "Фискальный модуль и виртуальная касса"),
+      path: "/settings/fiscal",
     },
     {
       icon: <Monitor size={32} />,

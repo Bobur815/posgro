@@ -11,6 +11,8 @@ interface CreateSaleData {
   }>;
   paymentMethod: 'cash' | 'card';
   discountAmount?: number;
+  // Scanned mandatory-marking (Asl-Belgisi) codes, by line barcode — used for fiscalization
+  markingCodes?: Array<{ barcode: string; label: string }>;
 }
 
 interface Summary {

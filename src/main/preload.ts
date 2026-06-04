@@ -21,7 +21,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   products: {
     getAll: (filters?: { categoryId?: string; active?: boolean }) =>
       ipcRenderer.invoke("products:getAll", filters),
-    getById: (id: string) => ipcRenderer.invoke("products:getById", id),
+    getById: (id: string, opts?: { byDbId?: boolean }) =>
+      ipcRenderer.invoke("products:getById", id, opts),
     getByBarcode: (barcode: string) =>
       ipcRenderer.invoke("products:getByBarcode", barcode),
     findByInternalCode: (internalCode: string) =>
@@ -75,6 +76,27 @@ contextBridge.exposeInMainWorld("electronAPI", {
     update: (id: string, data: unknown) =>
       ipcRenderer.invoke("categories:update", id, data),
     delete: (id: string) => ipcRenderer.invoke("categories:delete", id),
+  },
+
+  // MXIK catalog (proxied to VPS)
+  mxik: {
+    getGroups: () => ipcRenderer.invoke("mxik:getGroups"),
+    getPackages: (mxikCode: string) => ipcRenderer.invoke("mxik:getPackages", mxikCode),
+    lookupByBarcode: (barcode: string) => ipcRenderer.invoke("mxik:lookupByBarcode", barcode),
+  },
+
+  // REGOS:VCR fiscalization
+  fiscal: {
+    getConfig: () => ipcRenderer.invoke("fiscal:getConfig"),
+    setConfig: (input: unknown) => ipcRenderer.invoke("fiscal:setConfig", input),
+    testConnection: () => ipcRenderer.invoke("fiscal:testConnection"),
+    getStatus: () => ipcRenderer.invoke("fiscal:getStatus"),
+    retrySale: (saleId: string) => ipcRenderer.invoke("fiscal:retrySale", saleId),
+    refund: (saleId: string) => ipcRenderer.invoke("fiscal:refund", saleId),
+    printDuplicate: (saleId: string) => ipcRenderer.invoke("fiscal:printDuplicate", saleId),
+    zInfo: () => ipcRenderer.invoke("fiscal:zInfo"),
+    zOpen: () => ipcRenderer.invoke("fiscal:zOpen"),
+    zClose: () => ipcRenderer.invoke("fiscal:zClose"),
   },
 
   // Inventory
@@ -350,6 +372,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("paynetReceipts:integrate", id, saleReceiptNumber, paynetReceiptNumber, ofdUrl),
   },
 
+  // Marking codes — prevent re-sale of group 022 unique QR scans
+  markingCodes: {
+    check: (code: string) =>
+      ipcRenderer.invoke("markingCodes:check", code),
+    record: (entries: { code: string; productBarcode?: string }[]) =>
+      ipcRenderer.invoke("markingCodes:record", entries),
+  },
+
   // Logger — forwards renderer errors to the main-process electron-log file
   logger: {
     error: (msg: string) => ipcRenderer.send("log:renderer", "error", msg),
@@ -377,7 +407,7 @@ declare global {
       };
       products: {
         getAll: (filters?: unknown) => Promise<unknown[]>;
-        getById: (id: string) => Promise<unknown>;
+        getById: (id: string, opts?: { byDbId?: boolean }) => Promise<unknown>;
         getByBarcode: (barcode: string) => Promise<unknown>;
         findByInternalCode: (internalCode: string) => Promise<unknown>;
         getNextInternalCode: () => Promise<string>;
@@ -415,6 +445,27 @@ declare global {
         create: (data: unknown) => Promise<unknown>;
         update: (id: string, data: unknown) => Promise<unknown>;
         delete: (id: string) => Promise<boolean>;
+      };
+      mxik: {
+        getGroups: () => Promise<{ groupCode: string; groupName: string }[]>;
+        getPackages: (mxikCode: string) => Promise<{ code: string; name: string }[]>;
+        lookupByBarcode: (
+          barcode: string,
+        ) => Promise<{ code: string; name: string; nameRu: string } | null>;
+      };
+      fiscal: {
+        getConfig: () => Promise<import("../shared/types/fiscal.types").RegosVcrConfig>;
+        setConfig: (
+          input: import("../shared/types/fiscal.types").RegosVcrConfigInput,
+        ) => Promise<import("../shared/types/fiscal.types").RegosVcrConfig>;
+        testConnection: () => Promise<import("../shared/types/fiscal.types").FiscalConnectionResult>;
+        getStatus: () => Promise<import("../shared/types/fiscal.types").FiscalQueueStatus>;
+        retrySale: (saleId: string) => Promise<{ ok: boolean; error?: string }>;
+        refund: (saleId: string) => Promise<{ ok: boolean; fiscalSign?: string; error?: string }>;
+        printDuplicate: (saleId: string) => Promise<{ ok: boolean; error?: string }>;
+        zInfo: () => Promise<import("../shared/types/fiscal.types").FiscalZReportStatus>;
+        zOpen: () => Promise<import("../shared/types/fiscal.types").FiscalActionResult>;
+        zClose: () => Promise<import("../shared/types/fiscal.types").FiscalActionResult>;
       };
       inventory: {
         createArrival: (data: unknown) => Promise<unknown>;
@@ -592,6 +643,15 @@ declare global {
           issuedAt: string;
         }>>;
         integrate: (id: string, saleReceiptNumber: string, paynetReceiptNumber: string, ofdUrl: string) => Promise<void>;
+      };
+      markingCodes: {
+        check: (code: string) => Promise<{
+          alreadySold: boolean;
+          soldAt?: string;
+          terminalId?: string;
+          source?: 'local' | 'server';
+        }>;
+        record: (entries: { code: string; productBarcode?: string }[]) => Promise<void>;
       };
       logger: {
         error: (msg: string) => void;

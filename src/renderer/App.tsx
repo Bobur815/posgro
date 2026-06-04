@@ -28,6 +28,7 @@ import { UserForm } from "./pages/Users/UserForm";
 import { SupplierList, SupplierDetails } from "./pages/Suppliers";
 import { WeighedInventoryPage } from "./pages/Inventory/WeighedInventoryPage";
 import { ScaleSettings } from "./pages/Settings/ScaleSettings";
+import { FiscalSettings } from "./pages/Settings/FiscalSettings";
 import { SyncSettings } from "./pages/Settings/SyncSettings";
 import { TerminalStatus } from "./pages/Settings/TerminalStatus";
 import { AppUpdatePage } from "./pages/Settings/AppUpdatePage";
@@ -175,6 +176,14 @@ function App() {
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
               <ScaleSettings />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="settings/fiscal"
+          element={
+            <RoleGuard allowedRoles={["ADMIN"]}>
+              <FiscalSettings />
             </RoleGuard>
           }
         />

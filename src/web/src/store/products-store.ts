@@ -5,6 +5,7 @@ export interface Category {
   id: string;
   nameUz: string;
   nameRu: string;
+  mxikGroupCode?: string | null;
   active: boolean;
 }
 

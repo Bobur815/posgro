@@ -1,10 +1,10 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { useCartStore } from "../../store/cart-store";
 import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 import { EmptyPlaceholder } from "../../components/common/EmptyPlaceholder";
-import { History, ShoppingCart, Trash, X } from "lucide-react";
+import { AlertTriangle, History, ShoppingCart, Trash, X } from "lucide-react";
 import { SalesHistoryModal } from "./SalesHistoryModal";
 import type { Sale } from "@shared/types/sale.types";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
@@ -305,6 +305,30 @@ export function Cart() {
     [loadSaleForEdit],
   );
 
+  // REGOS:VCR fiscalization status — poll so staff see unfiscalized receipts.
+  const [fiscalQueue, setFiscalQueue] = useState<{
+    enabled: boolean;
+    pending: number;
+    failed: number;
+  } | null>(null);
+  useEffect(() => {
+    let active = true;
+    const refresh = () =>
+      window.electronAPI.fiscal
+        .getStatus()
+        .then((s) => {
+          if (active) setFiscalQueue(s);
+        })
+        .catch(() => {});
+    refresh();
+    const timer = setInterval(refresh, 8000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
+  const unfiscalized = (fiscalQueue?.failed ?? 0) + (fiscalQueue?.pending ?? 0);
+
   return (
     <Container>
       <Header>
@@ -312,6 +336,27 @@ export function Cart() {
           {t("pos.cart")} ({items.length})
         </Title>
         <HeaderActions>
+          {fiscalQueue?.enabled && unfiscalized > 0 && (
+            <div
+              onClick={() => setShowHistory(true)}
+              title={t("pos.fiscalUnsentHint", "Открыть историю для фискализации")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "6px 10px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#fff",
+                cursor: "pointer",
+                background: (fiscalQueue?.failed ?? 0) > 0 ? "#d32f2f" : "#ed6c02",
+              }}
+            >
+              <AlertTriangle size={16} />
+              {t("pos.fiscalUnsent", { count: unfiscalized })}
+            </div>
+          )}
           <IconButton
             onClick={() => setShowHistory(true)}
             title={t("pos.salesHistory")}

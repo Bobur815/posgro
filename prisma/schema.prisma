@@ -45,6 +45,7 @@ model Store {
   terminalHeartbeats   TerminalHeartbeat[]
   terminalLogs         TerminalLog[]
   paynetReceipts       PaynetReceipt[]
+  soldMarkingCodes     SoldMarkingCode[]
 
   @@map("stores")
 }
@@ -95,17 +96,19 @@ model UserSession {
 // ==================== PRODUCTS & INVENTORY ====================
 
 model Category {
-  id        Int        @id @default(autoincrement())
-  storeId   String     @map("store_id")
-  store     Store      @relation(fields: [storeId], references: [id])
-  nameUz    String     @map("name_uz")
-  nameRu    String     @map("name_ru")
-  active    Boolean    @default(true)
-  products  Product[]
-  suppliers Supplier[]
-  createdAt DateTime   @default(now()) @map("created_at")
+  id            Int        @id @default(autoincrement())
+  storeId       String     @map("store_id")
+  store         Store      @relation(fields: [storeId], references: [id])
+  nameUz        String     @map("name_uz")
+  nameRu        String     @map("name_ru")
+  mxikGroupCode String?    @map("mxik_group_code") // 3-digit MXIK group, e.g. "022" — links to MxikCatalog
+  active        Boolean    @default(true)
+  products      Product[]
+  suppliers     Supplier[]
+  createdAt     DateTime   @default(now()) @map("created_at")
 
   @@index([storeId])
+  @@index([mxikGroupCode])
   @@map("categories")
 }
 
@@ -396,6 +399,22 @@ model PaynetReceipt {
   @@map("paynet_receipts")
 }
 
+// ==================== MARKING CODES (Group 022 unique QR tracking) ====================
+
+model SoldMarkingCode {
+  id             String   @id @default(cuid())
+  storeId        String   @map("store_id")
+  store          Store    @relation(fields: [storeId], references: [id])
+  code           String
+  productBarcode String?  @map("product_barcode")
+  terminalId     String   @map("terminal_id")
+  soldAt         DateTime @default(now()) @map("sold_at")
+
+  @@unique([storeId, code])
+  @@index([storeId])
+  @@map("sold_marking_codes")
+}
+
 model AuditLog {
   id       String  @id @default(cuid())
   storeId  String  @map("store_id")
@@ -414,4 +433,34 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ==================== MXIK CATALOG ====================
+
+model MxikCatalog {
+  id                Int      @id @default(autoincrement())
+  mxikCode          String   @unique @map("mxik_code")          // 17-digit code, e.g. "02201002001001003"
+  mxikName          String   @map("mxik_name") @db.Text         // Full Uzbek product name
+  groupCode         String   @map("group_code")                  // "022"
+  groupName         String   @map("group_name")                  // "ALKOGOLLI VA ALKOGOLSIZ ICHIMLIKLAR..."
+  classCode         String   @map("class_code")                  // "02201"
+  className         String   @map("class_name")                  // "Tabiiy va mineral suvlar"
+  positionCode      String   @map("position_code")               // "02201002"
+  positionName      String   @map("position_name")
+  subPositionCode   String   @map("sub_position_code")           // "02201002001"
+  subPositionName   String   @map("sub_position_name")
+  brandCode         String?  @map("brand_code")                  // "02201002001001"
+  brandName         String?  @map("brand_name")
+  attributeName     String?  @map("attribute_name") @db.Text
+  internationalCode String?  @map("international_code")          // EAN-13 barcode
+  unitName          String?  @map("unit_name")
+  commonUnitName    String?  @map("common_unit_name")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([groupCode])
+  @@index([classCode])
+  @@index([internationalCode])
+  @@map("mxik_catalog")
 }

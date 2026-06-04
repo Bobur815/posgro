@@ -541,6 +541,70 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   } catch {
     await prisma.$executeRaw`ALTER TABLE suppliers ADD COLUMN payment_type TEXT DEFAULT 'IMMEDIATE'`;
   }
+
+  // Migration 17: Add mxik_group_code to categories (group 022 marking code support)
+  try {
+    await prisma.$queryRaw`SELECT mxik_group_code FROM categories LIMIT 1`;
+  } catch {
+    await prisma.$executeRaw`ALTER TABLE categories ADD COLUMN mxik_group_code TEXT`;
+  }
+
+  // Migration 18: Create sold_marking_codes table (unique QR resale prevention)
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS sold_marking_codes (
+      id             TEXT PRIMARY KEY,
+      code           TEXT NOT NULL UNIQUE,
+      product_barcode TEXT,
+      terminal_id    TEXT NOT NULL,
+      sold_at        DATETIME NOT NULL DEFAULT (datetime('now')),
+      synced         INTEGER NOT NULL DEFAULT 0
+    )
+  `;
+
+  // Migration 19: REGOS:VCR fiscalization columns on sales
+  // (column-existence checked via pragma_table_info so a missing column does not
+  // emit a noisy prisma:error like the older SELECT-probe migrations above)
+  if (!(await columnExists(prisma, 'sales', 'fiscal_status'))) {
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN fiscal_status TEXT`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN fiscal_attempts INTEGER DEFAULT 0`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN fiscal_error TEXT`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN regos_receipt_id TEXT`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN regos_fiscal_sign TEXT`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN regos_qr_code_url TEXT`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN regos_terminal_id TEXT`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN regos_receipt_no TEXT`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN regos_fiscal_at DATETIME`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN regos_labels TEXT`;
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_sales_fiscal_status ON sales(fiscal_status)`;
+  }
+
+  // Migration 20: REGOS:VCR package code on products
+  if (!(await columnExists(prisma, 'products', 'package_code'))) {
+    await prisma.$executeRaw`ALTER TABLE products ADD COLUMN package_code TEXT`;
+  }
+
+  // Migration 21: REGOS:VCR Z-report id on smenas
+  if (!(await columnExists(prisma, 'smenas', 'regos_z_report_id'))) {
+    await prisma.$executeRaw`ALTER TABLE smenas ADD COLUMN regos_z_report_id INTEGER`;
+  }
+
+  // Migration 22: refunded flag on sales (set once a fiscal full refund is issued)
+  if (!(await columnExists(prisma, 'sales', 'refunded'))) {
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN refunded INTEGER DEFAULT 0`;
+  }
+}
+
+/** True if `column` exists on `table` — silent (no thrown query, no prisma:error log). */
+async function columnExists(
+  prisma: PrismaClientType,
+  table: string,
+  column: string,
+): Promise<boolean> {
+  const rows = (await prisma.$queryRawUnsafe(
+    `SELECT 1 FROM pragma_table_info('${table}') WHERE name = ?`,
+    column,
+  )) as unknown[];
+  return Array.isArray(rows) && rows.length > 0;
 }
 
 export async function closeDatabase(): Promise<void> {

@@ -21,6 +21,8 @@ import {
   SUPPLIER_PAYMENT_METHOD_I18N_KEYS,
 } from "@shared/constants/payment-methods";
 import { convertUzbekText } from "@shared/utils/transliterator";
+import { pickSingleUnitPackage, type MxikPackage } from "@shared/utils/mxik-packages";
+import { isMxikExcluded } from "@shared/types/mxik.types";
 import { RefreshCw, Settings } from "lucide-react";
 import { SupplierManagementModal } from "../Suppliers/SupplierManagementModal";
 import { CategoryManagementModal } from "./CategoryManagementModal";
@@ -175,6 +177,7 @@ interface ProductFormProps {
     nameRu?: string;
     nameUz?: string;
     mxik?: string;
+    packageCode?: string;
     cost?: number;
     stock?: number;
     minStock?: number;
@@ -233,6 +236,7 @@ export function ProductForm({
     isOnPromotion: false,
     active: true,
     mxik: initialData?.mxik || "",
+    packageCode: initialData?.packageCode || "",
     productType: "REGULAR" as ProductType,
     internalCode: "",
   });
@@ -253,6 +257,44 @@ export function ProductForm({
   const [isSubmittingArrival, setIsSubmittingArrival] = useState(false);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [mxikPackages, setMxikPackages] = useState<MxikPackage[]>([]);
+
+  // When the MXIK is a full 17-digit code, fetch its package (unit) codes from tasnif.
+  // Marked goods need a `package_code`; we default to the single-unit package.
+  useEffect(() => {
+    const mxik = formData.mxik.trim();
+    if (!/^\d{17}$/.test(mxik)) {
+      setMxikPackages([]);
+      return;
+    }
+    let active = true;
+    window.electronAPI.mxik.getPackages(mxik).then((pkgs) => {
+      if (!active) return;
+      const list = pkgs as MxikPackage[];
+      setMxikPackages(list);
+      // Auto-select the single-unit package only when none is set yet.
+      if (list.length > 0 && !formData.packageCode) {
+        const def = pickSingleUnitPackage(list);
+        if (def) setFormData((prev) => ({ ...prev, packageCode: def.code }));
+      }
+    }).catch(() => { if (active) setMxikPackages([]); });
+    return () => { active = false; };
+  }, [formData.mxik]);
+
+  // Auto-pick the category whose mxikGroupCode covers this MXIK's 3-digit group.
+  // mxikGroupCode may be comma-separated (e.g. "007,008") for multi-group categories.
+  const autoSelectCategory = useCallback(
+    (groupCode: string) => {
+      const cat = categories.find((c) =>
+        c.mxikGroupCode?.split(",").map((g) => g.trim()).includes(groupCode),
+      );
+      if (cat) {
+        setFormData((prev) => ({ ...prev, categoryId: String(cat.id) }));
+        toast.info(t("products.categoryAutoSelected"));
+      }
+    },
+    [categories, t, toast],
+  );
 
   useEffect(() => {
     loadCategories();
@@ -295,9 +337,32 @@ export function ProductForm({
             ? product.expiryDate.split("T")[0]
             : "",
         }));
+        return;
+      }
+
+      // New product — auto-fill MXIK + name from tasnif (same as the web ProductForm).
+      // The package effect then derives package_code from the filled MXIK.
+      try {
+        const info = await window.electronAPI.mxik.lookupByBarcode(barcode);
+        if (info?.code) {
+          if (isMxikExcluded(info.code)) {
+            toast.error(t("products.categoryNotAllowed", { category: info.nameRu || info.name }));
+            setFormData((prev) => ({ ...prev, barcode: "" }));
+            return;
+          }
+          setFormData((prev) => ({
+            ...prev,
+            mxik: info.code,
+            nameUz: prev.nameUz || info.name,
+            nameRu: prev.nameRu || info.nameRu,
+          }));
+          autoSelectCategory(info.code.slice(0, 3));
+        }
+      } catch {
+        // tasnif unreachable — manual entry, no toast needed
       }
     },
-    [searchByBarcode, isEdit],
+    [searchByBarcode, isEdit, t, toast, autoSelectCategory],
   );
 
   const handleGenerateBarcode = () => {
@@ -414,7 +479,9 @@ export function ProductForm({
   const loadProduct = async () => {
     if (!productId) return;
 
-    const product = await getById(productId);
+    // Resolve by DB primary key — productId comes from a product row's `id`, which can
+    // collide with another product's storeProductCode in the default lookup.
+    const product = await getById(productId, { byDbId: true });
     if (product) {
       setFormData({
         barcode: product.barcode,
@@ -438,6 +505,7 @@ export function ProductForm({
         isOnPromotion: product.isOnPromotion ?? false,
         active: product.isActive,
         mxik: product.mxik || "",
+        packageCode: product.packageCode || "",
         productType: product.productType || "REGULAR",
         internalCode: product.internalCode || "",
       });
@@ -468,6 +536,7 @@ export function ProductForm({
       isOnPromotion: formData.isOnPromotion,
       active: formData.active,
       mxik: formData.mxik || undefined,
+      packageCode: formData.packageCode || undefined,
       productType: formData.productType,
       internalCode: formData.internalCode || undefined,
     };
@@ -533,6 +602,21 @@ export function ProductForm({
               placeholder="00000000000000000"
               onChange={(e) => handleChange("mxik", e.target.value)}
             />
+            {mxikPackages.length > 0 && (
+              <FormGroup>
+                <Label>{t("products.packageCode", "Код упаковки (МХИК)")}</Label>
+                <Select
+                  value={formData.packageCode}
+                  onChange={(e) => handleChange("packageCode", e.target.value)}
+                >
+                  {mxikPackages.map((p) => (
+                    <option key={p.code} value={p.code}>
+                      {p.name}
+                    </option>
+                  ))}
+                </Select>
+              </FormGroup>
+            )}
             <FormGroup>
               <Label>
                 {t("products.barcode")} <Req>*</Req>

@@ -19,6 +19,7 @@ import { LogsModule } from './modules/logs/logs.module';
 import { SiteConfigModule } from './modules/site-config/site-config.module';
 import { PaynetModule } from './modules/paynet/paynet.module';
 import { AslBelgisiModule } from './modules/aslbelgisi/aslbelgisi.module';
+import { MarkingCodesModule } from './modules/marking-codes/marking-codes.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { AslBelgisiModule } from './modules/aslbelgisi/aslbelgisi.module';
     SiteConfigModule,
     PaynetModule,
     AslBelgisiModule,
+    MarkingCodesModule,
   ],
 })
 export class AppModule {}

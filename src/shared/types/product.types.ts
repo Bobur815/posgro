@@ -30,6 +30,7 @@ export interface Product {
   pendingPrice?: number | null;
   pendingPriceThreshold?: number | null;
   mxik?: string;
+  packageCode?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -62,6 +63,7 @@ export interface Category {
   storeId?: string;
   nameRu: string;
   nameUz: string;
+  mxikGroupCode?: string | null;
   parentId?: number;
   parent?: Category;
   children?: Category[];
@@ -105,6 +107,7 @@ export interface ProductCreateInput {
   discountPercent?: number;
   isOnPromotion?: boolean;
   mxik?: string;
+  packageCode?: string;
   productType?: ProductType;
   internalCode?: string;
   bulkQuantity?: number;
@@ -131,6 +134,7 @@ export interface ProductUpdateInput {
   discountPercent?: number;
   isOnPromotion?: boolean;
   mxik?: string;
+  packageCode?: string;
   productType?: ProductType;
   internalCode?: string;
   bulkQuantity?: number;

@@ -20,6 +20,12 @@ export interface Sale {
   margin?: number;
   paynetReceiptNumber?: string | null;
   paynetOfdUrl?: string | null;
+  // REGOS:VCR fiscalization
+  fiscalStatus?: string | null; // PENDING | FISCALIZED | FAILED | DISABLED
+  fiscalError?: string | null;
+  regosReceiptNo?: string | null;
+  regosQrCodeUrl?: string | null;
+  refunded?: boolean;
 }
 
 export interface SaleItem {

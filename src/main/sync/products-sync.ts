@@ -54,6 +54,35 @@ export async function syncProducts(): Promise<{ id: number; nameRu: string; stoc
     // Track the earliest updatedAt among failed products so we can roll back the cursor.
     let earliestFailedUpdatedAt: Date | null = null;
 
+    // Create a product locally, preferring the VPS id but falling back to a local
+    // autoincrement id when that id is already taken by a different product. The server
+    // matches sales by barcode (local ids are per-terminal autoincrements), so a divergent
+    // local id is safe — this prevents a unique-constraint crash when a terminal's DB and
+    // the VPS have different id lineages (e.g. after repointing to another environment).
+    const createProductLocal = async (p: typeof products[number]): Promise<void> => {
+      const data: Record<string, unknown> = {
+        barcode: p.barcode,
+        nameRu: p.nameRu,
+        nameUz: p.nameUz,
+        price: p.price,
+        cost: p.cost ?? null,
+        stock: p.stock,
+        minStock: p.minStock,
+        unit: p.unit,
+        categoryId: resolveCategoryId(p),
+        active: p.active,
+        mxik: p.mxik ?? null,
+        productType: p.productType ?? 'REGULAR',
+        internalCode: p.internalCode ?? null,
+        storeProductCode: p.storeProductCode ?? null,
+        createdAt: new Date(p.createdAt),
+        updatedAt: new Date(p.updatedAt),
+      };
+      const idTaken = await prisma.product.findUnique({ where: { id: p.id }, select: { id: true } });
+      if (!idTaken) data.id = p.id; // keep ids aligned when free; else autoincrement
+      await prisma.product.create({ data });
+    };
+
     for (const product of products) {
       // Never write negative stock from VPS to local DB — clamp to 0.
       // Negative VPS stock indicates a drift between terminals/admin edits;
@@ -110,27 +139,7 @@ export async function syncProducts(): Promise<{ id: number; nameRu: string; stoc
           const saleCount = await prisma.saleItem.count({ where: { productId: existing.id } });
           if (saleCount === 0) {
             await prisma.product.delete({ where: { id: existing.id } });
-            await prisma.product.create({
-              data: {
-                id: product.id,
-                barcode: product.barcode,
-                nameRu: product.nameRu,
-                nameUz: product.nameUz,
-                price: product.price,
-                cost: product.cost ?? null,
-                stock: product.stock,
-                minStock: product.minStock,
-                unit: product.unit,
-                categoryId: resolveCategoryId(product),
-                active: product.active,
-                mxik: product.mxik ?? null,
-                productType: product.productType ?? 'REGULAR',
-                internalCode: product.internalCode ?? null,
-                storeProductCode: product.storeProductCode ?? null,
-                createdAt: new Date(product.createdAt),
-                updatedAt: new Date(product.updatedAt),
-              },
-            });
+            await createProductLocal(product);
           } else {
             // Has sales — keep local ID, just update fields
             await prisma.product.update({
@@ -153,28 +162,8 @@ export async function syncProducts(): Promise<{ id: number; nameRu: string; stoc
             });
           }
         } else {
-          // No local product — create with VPS ID
-          await prisma.product.create({
-            data: {
-              id: product.id,
-              barcode: product.barcode,
-              nameRu: product.nameRu,
-              nameUz: product.nameUz,
-              price: product.price,
-              cost: product.cost ?? null,
-              stock: product.stock,
-              minStock: product.minStock,
-              unit: product.unit,
-              categoryId: resolveCategoryId(product),
-              active: product.active,
-              mxik: product.mxik ?? null,
-              productType: product.productType ?? 'REGULAR',
-              internalCode: product.internalCode ?? null,
-              storeProductCode: product.storeProductCode ?? null,
-              createdAt: new Date(product.createdAt),
-              updatedAt: new Date(product.updatedAt),
-            },
-          });
+          // No local product with this barcode — create it (VPS id if free, else autoincrement)
+          await createProductLocal(product);
         }
       } catch (productError) {
         // Log and skip — one bad product must not abort the entire sync
@@ -237,6 +226,8 @@ export async function syncSuppliers(): Promise<void> {
           phone: s.phone || null,
           address: s.address || null,
           active: s.active ?? true,
+          balance: s.balance ?? 0,
+          paymentType: s.paymentType ?? 'IMMEDIATE',
         },
         create: {
           id: s.id,
@@ -246,6 +237,7 @@ export async function syncSuppliers(): Promise<void> {
           address: s.address || null,
           active: s.active ?? true,
           balance: s.balance ?? 0,
+          paymentType: s.paymentType ?? 'IMMEDIATE',
         },
       });
     }
@@ -364,6 +356,7 @@ export async function syncCategories(): Promise<void> {
             nameRu: category.nameRu,
             nameUz: category.nameUz,
             active: category.active,
+            ...(category.mxikGroupCode != null ? { mxikGroupCode: category.mxikGroupCode } : {}),
           },
         });
       }
@@ -374,6 +367,7 @@ export async function syncCategories(): Promise<void> {
         const existing = await prisma.category.findFirst({
           where: { nameUz: category.nameUz },
         });
+
         if (existing) {
           if (existing.id !== category.id) {
             // ID mismatch: server uses a different ID for this category name (e.g. after
@@ -392,12 +386,12 @@ export async function syncCategories(): Promise<void> {
               if (alreadyAtServerId) {
                 await prisma.category.update({
                   where: { id: category.id },
-                  data: { nameRu: category.nameRu, nameUz: category.nameUz, active: category.active },
+                  data: { nameRu: category.nameRu, nameUz: category.nameUz, active: category.active, mxikGroupCode: category.mxikGroupCode ?? null },
                 });
               } else {
                 await prisma.$executeRaw`
-                  INSERT INTO categories (id, name_uz, name_ru, active, created_at, updated_at)
-                  VALUES (${category.id}, ${category.nameUz}, ${category.nameRu}, ${category.active ? 1 : 0}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                  INSERT INTO categories (id, name_uz, name_ru, active, mxik_group_code, created_at, updated_at)
+                  VALUES (${category.id}, ${category.nameUz}, ${category.nameRu}, ${category.active ? 1 : 0}, ${category.mxikGroupCode ?? null}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 `;
               }
             } finally {
@@ -408,21 +402,21 @@ export async function syncCategories(): Promise<void> {
           } else {
             await prisma.category.update({
               where: { id: existing.id },
-              data: { nameRu: category.nameRu, active: category.active },
+              data: { nameRu: category.nameRu, active: category.active, mxikGroupCode: category.mxikGroupCode ?? null },
             });
           }
         } else {
           // Force VPS id so new products can satisfy the FK when they sync
           try {
             await prisma.$executeRaw`
-              INSERT INTO categories (id, name_uz, name_ru, active, created_at, updated_at)
-              VALUES (${category.id}, ${category.nameUz}, ${category.nameRu}, ${category.active ? 1 : 0}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              INSERT INTO categories (id, name_uz, name_ru, active, mxik_group_code, created_at, updated_at)
+              VALUES (${category.id}, ${category.nameUz}, ${category.nameRu}, ${category.active ? 1 : 0}, ${category.mxikGroupCode ?? null}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             `;
             newCategoryAdded = true;
           } catch {
             // id collision — fall back to autoincrement (rare; new products in this category won't sync until resolved)
             await prisma.category.create({
-              data: { nameRu: category.nameRu, nameUz: category.nameUz, active: category.active },
+              data: { nameRu: category.nameRu, nameUz: category.nameUz, active: category.active, mxikGroupCode: category.mxikGroupCode ?? null },
             });
           }
         }
@@ -433,7 +427,6 @@ export async function syncCategories(): Promise<void> {
         await prisma.systemSetting.deleteMany({ where: { key: 'last_product_sync' } });
       }
     }
-
   } catch (error) {
     console.error('Failed to sync categories:', error);
     throw error;

@@ -9,6 +9,7 @@ export interface CartItem {
   stock: number;
   unit?: string;
   preWeighedItemId?: string; // Set when item came from pre-weighed inventory; never merge
+  markingCode?: string;      // Set when item is a group 022 unique QR scan; never merge
 }
 
 interface TabCart {
@@ -137,11 +138,11 @@ export const useCartStore = create<CartState>((set, get) => ({
     const state = get();
     const cart = activeCart(state);
 
-    // Pre-weighed items are never merged — each is a unique scan
-    const canMerge = !item.preWeighedItemId;
+    // Pre-weighed items and marking-code items are never merged — each is a unique scan
+    const canMerge = !item.preWeighedItemId && !item.markingCode;
     const existingIndex = canMerge
       ? cart.items.findIndex(
-          (i) => i.productId === item.productId && i.unitPrice === item.unitPrice && !i.preWeighedItemId
+          (i) => i.productId === item.productId && i.unitPrice === item.unitPrice && !i.preWeighedItemId && !i.markingCode
         )
       : -1;
 
