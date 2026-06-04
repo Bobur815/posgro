@@ -24,9 +24,13 @@ GROUP BY p.store_id, c_wrong.name_ru, c_bev.name_ru
 ORDER BY p.store_id, product_count DESC;
 */
 
--- Move products to the beverages category
+-- Move products to the beverages category.
+-- Bump updated_at so the change propagates to terminals: syncProducts() pulls
+-- incrementally on `updatedAt > last_product_sync`, so without this the move
+-- would stay server-only and could be reverted by a terminal's stale upload.
 UPDATE products p
-SET category_id = c_bev.id
+SET category_id = c_bev.id,
+    updated_at  = NOW()
 FROM categories c_bev
 WHERE c_bev.store_id = p.store_id
   AND c_bev.name_uz ILIKE '%ichimlik%'
