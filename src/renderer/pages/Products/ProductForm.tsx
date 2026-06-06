@@ -535,7 +535,7 @@ export function ProductForm({
         : 0,
       isOnPromotion: formData.isOnPromotion,
       active: formData.active,
-      mxik: formData.mxik || undefined,
+      mxik: formData.mxik,
       packageCode: formData.packageCode || undefined,
       productType: formData.productType,
       internalCode: formData.internalCode || undefined,
@@ -596,12 +596,17 @@ export function ProductForm({
       <Modal title={title} onClose={onClose} width="750px">
         <Form onSubmit={handleSubmit}>
           <Row>
-            <Input
-              label={t("products.mxik")}
-              value={formData.mxik}
-              placeholder="00000000000000000"
-              onChange={(e) => handleChange("mxik", e.target.value)}
-            />
+            <FormGroup>
+              <Label>
+                {t("products.mxik")} <Req>*</Req>
+              </Label>
+              <Input
+                value={formData.mxik}
+                placeholder="00000000000000000"
+                onChange={(e) => handleChange("mxik", e.target.value)}
+                required
+              />
+            </FormGroup>
             {mxikPackages.length > 0 && (
               <FormGroup>
                 <Label>{t("products.packageCode", "Код упаковки (МХИК)")}</Label>

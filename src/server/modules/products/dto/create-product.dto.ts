@@ -100,10 +100,10 @@ export class CreateProductDto {
   @IsBoolean()
   active?: boolean;
 
-  @ApiPropertyOptional({ example: '00000000000000000', description: 'Uzbekistan national catalog code' })
-  @IsOptional()
+  @ApiProperty({ example: '00000000000000000', description: 'Uzbekistan national catalog code' })
   @IsString()
-  mxik?: string;
+  @IsNotEmpty()
+  mxik!: string;
 
   @ApiPropertyOptional({ example: '1234567', description: 'REGOS:VCR package (unit) code from MXIK — for marked goods' })
   @IsOptional()

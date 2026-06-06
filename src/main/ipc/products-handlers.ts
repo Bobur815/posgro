@@ -320,6 +320,10 @@ export function setupProductsHandlers(): void {
 
     const prisma = getPrismaClient();
 
+    if (!data.mxik) {
+      throw new Error("MXIK code is required");
+    }
+
     // Check if barcode already exists
     const existing = await prisma.product.findUnique({
       where: { barcode: data.barcode },
