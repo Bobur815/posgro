@@ -87,6 +87,29 @@ export interface VcrPayment {
   card_type?: 1 | 2 | 3;    // 1=corporate, 2=personal, 3=social (for type=2)
   rrn?: string;               // Terminal RRN (for type=2)
 }
+```
+
+> ### ⚠️ Decision: integrated acquiring is OPTIONAL — we use plain bank terminals
+>
+> Confirmed by REGOS support (2026-06-04):
+> - **"Да, можете работать с обычными терминалами."** — you may record card payments as
+>   `type=2` **without `payment_id`**. The card transaction happens out-of-band on a
+>   regular bank terminal; the fiscal receipt just records that a card payment occurred.
+> - `Payment.Create/Get/Cancel` and `Acquiring.Balance/Totals` **require a physically
+>   connected, integrated terminal** — they cannot be tested on `vcr-test.regos.uz`.
+> - There are **no test keys / `payment_system_id`** for ЭПС (Click, Payme, Uzum).
+>
+> **What this means for posgro:**
+> - Our current `buildPayments()` (`src/main/fiscal/regos-vcr-service.ts`) is correct as-is:
+>   `CASH → {type:1}`, otherwise `{type:2, card_type:2}` with **no `payment_id`**.
+>   `card_type` is required for terminal payments; `2` (personal) is the right retail default.
+>   (Corporate buyers would need `card_type:1` — future toggle, not needed now.)
+> - Refunds are consistent: `refundSale()` → `fullRefund(QRCodeURL)` reuses the original
+>   receipt, whose `type=2`/no-`payment_id` payments are treated as terminal payments on refund.
+> - **Do NOT build** the `Payment.*` / `Acquiring.*` integrated-acquiring methods sketched
+>   below — they are out of scope unless we later adopt integrated terminals.
+
+```typescript
 
 export interface VcrRefundInfo {
   QRCodeURL?: string;         // If provided, other fields ignored

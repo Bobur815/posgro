@@ -300,6 +300,7 @@
     "testConnection": "Aloqani tekshirish",
     "connected": "Aloqa o'rnatildi",
     "vcrPrintsReceipt": "Chekni virtual kassa chop etadi (POS chop etmasin)",
+    "markingCodeCheck": "Markirovkalangan tovarlarni qayta sotishni tekshirish (022-guruh)",
     "queueStatus": "Fiskallashtirish navbati",
     "fiscalized": "Fiskallashtirildi",
     "pending": "Kutilmoqda",

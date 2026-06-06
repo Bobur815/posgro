@@ -35,6 +35,7 @@ interface ResolvedConfig {
   vatPercent: number;
   posId: string;
   vcrPrintsReceipt: boolean;
+  markingCodeCheck: boolean;
 }
 
 const SETTING_KEYS = {
@@ -44,6 +45,7 @@ const SETTING_KEYS = {
   vat: 'regos_vcr_vat',
   posId: 'regos_vcr_pos_id',
   printsReceipt: 'regos_vcr_prints_receipt',
+  markingCheck: 'regos_vcr_marking_check',
 } as const;
 
 class RegosVcrService {
@@ -82,6 +84,8 @@ class RegosVcrService {
       vatPercent: Number(map[SETTING_KEYS.vat] ?? '0') || 0,
       posId: map[SETTING_KEYS.posId] || appConfig.terminalId || 'posgro',
       vcrPrintsReceipt: map[SETTING_KEYS.printsReceipt] === 'true',
+      // Default ON — only disabled when explicitly set to 'false'.
+      markingCodeCheck: map[SETTING_KEYS.markingCheck] !== 'false',
     };
   }
 
@@ -95,6 +99,7 @@ class RegosVcrService {
       vatPercent: cfg.vatPercent,
       posId: cfg.posId,
       vcrPrintsReceipt: cfg.vcrPrintsReceipt,
+      markingCodeCheck: cfg.markingCodeCheck,
     };
   }
 
@@ -107,6 +112,7 @@ class RegosVcrService {
     if (input.vatPercent !== undefined) writes.push([SETTING_KEYS.vat, String(input.vatPercent)]);
     if (input.posId !== undefined) writes.push([SETTING_KEYS.posId, input.posId]);
     if (input.vcrPrintsReceipt !== undefined) writes.push([SETTING_KEYS.printsReceipt, String(input.vcrPrintsReceipt)]);
+    if (input.markingCodeCheck !== undefined) writes.push([SETTING_KEYS.markingCheck, String(input.markingCodeCheck)]);
 
     for (const [key, value] of writes) {
       await prisma.systemSetting.upsert({ where: { key }, update: { value }, create: { key, value } });

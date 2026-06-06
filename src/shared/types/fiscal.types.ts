@@ -13,6 +13,9 @@ export interface RegosVcrConfig {
   // When true, REGOS:VCR prints the fiscal receipt itself — posgro suppresses its own
   // receipt auto-print to avoid a duplicate (Option B in REGOS_VCR_INTEGRATION.md).
   vcrPrintsReceipt: boolean;
+  // When true (default), scanning a group-022 marking code checks SoldMarkingCode
+  // (local + server) to block reselling an already-sold unique DataMatrix QR.
+  markingCodeCheck: boolean;
 }
 
 /** Payload to update config; `password` only set when the user types a new one. */
@@ -24,6 +27,7 @@ export interface RegosVcrConfigInput {
   vatPercent?: number;
   posId?: string;
   vcrPrintsReceipt?: boolean;
+  markingCodeCheck?: boolean;
 }
 
 export interface FiscalConnectionResult {

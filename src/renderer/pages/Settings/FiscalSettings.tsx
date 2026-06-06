@@ -105,6 +105,7 @@ export function FiscalSettings() {
   const [vatPercent, setVatPercent] = useState('0');
   const [posId, setPosId] = useState('');
   const [vcrPrintsReceipt, setVcrPrintsReceipt] = useState(false);
+  const [markingCodeCheck, setMarkingCodeCheck] = useState(true);
 
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -120,6 +121,7 @@ export function FiscalSettings() {
       setVatPercent(String(cfg.vatPercent));
       setPosId(cfg.posId);
       setVcrPrintsReceipt(cfg.vcrPrintsReceipt);
+      setMarkingCodeCheck(cfg.markingCodeCheck);
     }).catch(() => {});
     window.electronAPI.fiscal.getStatus().then(setQueue).catch(() => {});
   }, []);
@@ -134,6 +136,7 @@ export function FiscalSettings() {
         vatPercent: Number(vatPercent),
         posId,
         vcrPrintsReceipt,
+        markingCodeCheck,
         ...(password ? { password } : {}),
       });
       setHasPassword(cfg.hasPassword);
@@ -214,6 +217,15 @@ export function FiscalSettings() {
             onChange={(e) => setVcrPrintsReceipt(e.target.checked)}
           />
           {t('fiscalSettings.vcrPrintsReceipt', 'Чек печатает виртуальная касса (не печатать из POS)')}
+        </Row>
+
+        <Row>
+          <input
+            type="checkbox"
+            checked={markingCodeCheck}
+            onChange={(e) => setMarkingCodeCheck(e.target.checked)}
+          />
+          {t('fiscalSettings.markingCodeCheck', 'Проверять повторную продажу маркированных товаров (группа 022)')}
         </Row>
 
         <ButtonRow>

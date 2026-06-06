@@ -692,30 +692,32 @@ export function POSScreen() {
               setError(t("pos.markingCodeInCart"));
               return;
             }
-            // Check local SQLite + server
-            try {
-              const checkResult = (await window.electronAPI.markingCodes.check(
-                normalizedNoGS,
-              )) as {
-                alreadySold: boolean;
-                soldAt?: string;
-                terminalId?: string;
-              };
-              if (checkResult.alreadySold) {
-                const when = checkResult.soldAt
-                  ? new Date(checkResult.soldAt).toLocaleString("ru-RU")
-                  : "";
-                setBarcode("");
-                setError(
-                  t("pos.markingCodeAlreadySold", {
-                    when,
-                    terminal: checkResult.terminalId ?? "",
-                  }),
-                );
-                return;
+            // Check local SQLite + server — skippable via Fiscal settings toggle
+            if (markingCheckRef.current) {
+              try {
+                const checkResult = (await window.electronAPI.markingCodes.check(
+                  normalizedNoGS,
+                )) as {
+                  alreadySold: boolean;
+                  soldAt?: string;
+                  terminalId?: string;
+                };
+                if (checkResult.alreadySold) {
+                  const when = checkResult.soldAt
+                    ? new Date(checkResult.soldAt).toLocaleString("ru-RU")
+                    : "";
+                  setBarcode("");
+                  setError(
+                    t("pos.markingCodeAlreadySold", {
+                      when,
+                      terminal: checkResult.terminalId ?? "",
+                    }),
+                  );
+                  return;
+                }
+              } catch {
+                // IPC error — allow sale rather than block
               }
-            } catch {
-              // IPC error — allow sale rather than block
             }
 
             // Add as individual item with markingCode (never merged)
@@ -964,11 +966,14 @@ export function POSScreen() {
   // When the VCR prints the fiscal receipt itself, skip posgro's own auto-print.
   // (The unfiscalized-receipts badge lives in the Cart header.)
   const vcrPrintsReceiptRef = useRef(false);
+  // Group 022 resale check (SoldMarkingCode lookup) — toggleable in Fiscal settings.
+  const markingCheckRef = useRef(true);
   useEffect(() => {
     window.electronAPI.fiscal
       .getConfig()
       .then((c) => {
         vcrPrintsReceiptRef.current = c.enabled && c.vcrPrintsReceipt;
+        markingCheckRef.current = c.markingCodeCheck;
       })
       .catch(() => {});
   }, []);
