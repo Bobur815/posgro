@@ -897,12 +897,15 @@ export function ProductForm({
           <Form onSubmit={handleSubmit}>
             <Row>
               <FormGroup>
-                <Label>{t("products.mxik")}</Label>
+                <Label>
+                  {t("products.mxik")} <Req>*</Req>
+                  </Label>
                 <div style={{ display: "flex", gap: "8px" }}>
                   <Input
                     value={formData.mxik}
                     placeholder="00000000000000000"
                     onChange={(e) => handleChange("mxik", e.target.value)}
+                    required
                     style={{ flex: 1 }}
                   />
                   <Button
