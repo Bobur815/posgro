@@ -92,6 +92,37 @@ const SpinnerIcon = styled(RefreshCw)`
   animation: ${spin} 1s linear infinite;
 `;
 
+const InstallOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: ${({ theme }) => theme.spacing.lg};
+  background-color: ${({ theme }) => theme.colors.background};
+  text-align: center;
+  padding: ${({ theme }) => theme.spacing.xl};
+`;
+
+const OverlaySpinner = styled(RefreshCw)`
+  animation: ${spin} 1s linear infinite;
+  color: ${({ theme }) => theme.colors.primary};
+`;
+
+const OverlayTitle = styled.h2`
+  margin: 0;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const OverlayHint = styled.p`
+  margin: 0;
+  max-width: 420px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-size: 15px;
+`;
+
 type UpdateState =
   | "idle"
   | "checking"
@@ -111,6 +142,7 @@ export function AppUpdatePage() {
   const [updateVersion, setUpdateVersion] = useState("");
   const [progress, setProgress] = useState({ percent: 0, bytesPerSecond: 0 });
   const [errorMsg, setErrorMsg] = useState("");
+  const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
     window.electronAPI.app
@@ -158,12 +190,28 @@ export function AppUpdatePage() {
   };
 
   const handleInstall = () => {
+    // Show the overlay first; the main process waits briefly before launching
+    // the installer so this paints, then the NSIS progress UI takes over.
+    setInstalling(true);
     window.electronAPI.updater.quitAndInstall();
   };
 
   const handleCancel = () => {
     window.electronAPI.updater.cancelDownload();
   };
+
+  if (installing) {
+    return (
+      <InstallOverlay>
+        <OverlaySpinner size={56} />
+        <OverlayTitle>
+          {t("updater.installing")}
+          {updateVersion ? ` — v${updateVersion}` : ""}
+        </OverlayTitle>
+        <OverlayHint>{t("updater.installingHint")}</OverlayHint>
+      </InstallOverlay>
+    );
+  }
 
   return (
     <Container>

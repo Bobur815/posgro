@@ -105,6 +105,29 @@ function ipcSafe<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
 
+/**
+ * Next local product code. The renderer shows/looks-up products as
+ * `storeProductCode ?? id`, so an un-coded product is displayed by its `id`.
+ * Pick a code above both the highest existing code and the highest id among
+ * un-coded products so a new code can't collide with an id-displayed product.
+ * This is a provisional value — the server reassigns the authoritative code on
+ * sync (matches the VPS `getNextStoreProductCode` logic).
+ */
+async function getNextStoreProductCode(
+  prisma: ReturnType<typeof getPrismaClient>,
+): Promise<number> {
+  const [codeAgg, uncodedIdAgg] = await Promise.all([
+    prisma.product.aggregate({ _max: { storeProductCode: true } }),
+    prisma.product.aggregate({
+      where: { storeProductCode: null },
+      _max: { id: true },
+    }),
+  ]);
+  const maxCode = codeAgg._max.storeProductCode ?? 0;
+  const maxUncodedId = uncodedIdAgg._max.id ?? 0;
+  return Math.max(maxCode, maxUncodedId) + 1;
+}
+
 export function setupProductsHandlers(): void {
   ipcMain.handle(
     "products:getAll",
@@ -333,6 +356,8 @@ export function setupProductsHandlers(): void {
       throw new Error("Product with this barcode already exists");
     }
 
+    const storeProductCode = await getNextStoreProductCode(prisma);
+
     const product = await prisma.product.create({
       data: {
         barcode: data.barcode,
@@ -355,6 +380,7 @@ export function setupProductsHandlers(): void {
         packageCode: data.packageCode || null,
         productType: data.productType || "REGULAR",
         internalCode: data.internalCode || null,
+        storeProductCode,
         active: true,
       },
       include: { category: true, supplier: true },

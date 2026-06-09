@@ -466,7 +466,9 @@
     "error": "Yangilanishni tekshirishda xato",
     "retry": "Qayta urinish",
     "cancelDownload": "Yuklashni bekor qilish",
-    "downloadCancelled": "Yuklash bekor qilindi"
+    "downloadCancelled": "Yuklash bekor qilindi",
+    "installing": "Yangilanish o'rnatilmoqda",
+    "installingHint": "O'rnatilmoqda. Kompyuterni o'chirmang — ilova avtomatik qayta ishga tushadi."
   },
   "devices": {
     "title": "Faol qurilmalar",

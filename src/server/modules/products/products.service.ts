@@ -95,6 +95,31 @@ export class ProductsService {
     });
   }
 
+  /**
+   * Next per-store product code. The renderer shows/looks-up products as
+   * `storeProductCode ?? id`, so any product WITHOUT a code is displayed by its
+   * global `id`. To stop a new code from colliding with one of those ids, the
+   * code must sit above BOTH the highest existing code and the highest id among
+   * un-coded products in this store. A fresh store has no un-coded products, so
+   * it still starts cleanly at 1; this (grandfathered) store jumps past its id
+   * range instead.
+   */
+  private async getNextStoreProductCode(storeId: string): Promise<number> {
+    const [codeAgg, uncodedIdAgg] = await Promise.all([
+      this.prisma.product.aggregate({
+        where: { storeId },
+        _max: { storeProductCode: true },
+      }),
+      this.prisma.product.aggregate({
+        where: { storeId, storeProductCode: null },
+        _max: { id: true },
+      }),
+    ]);
+    const maxCode = codeAgg._max.storeProductCode ?? 0;
+    const maxUncodedId = uncodedIdAgg._max.id ?? 0;
+    return Math.max(maxCode, maxUncodedId) + 1;
+  }
+
   async create(storeId: string, createProductDto: CreateProductDto) {
     const existing = await this.prisma.product.findFirst({
       where: { storeId, barcode: createProductDto.barcode, active: true },
@@ -106,11 +131,7 @@ export class ProductsService {
       );
     }
 
-    const maxCode = await this.prisma.product.aggregate({
-      where: { storeId },
-      _max: { storeProductCode: true },
-    });
-    const nextCode = (maxCode._max.storeProductCode ?? 0) + 1;
+    const nextCode = await this.getNextStoreProductCode(storeId);
 
     return this.prisma.product.create({
       data: {
@@ -373,6 +394,7 @@ export class ProductsService {
               bulkQuantity: p.bulkQuantity ?? 0,
               minSaleQty: p.minSaleQty ?? 0,
               maxSaleQty: p.maxSaleQty ?? 0,
+              storeProductCode: await this.getNextStoreProductCode(storeId),
             },
           });
           created++;
