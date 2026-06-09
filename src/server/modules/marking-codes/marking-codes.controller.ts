@@ -26,4 +26,25 @@ export class MarkingCodesController {
   ) {
     return this.service.record(storeId, body.codes ?? [], body.terminalId);
   }
+
+  @Post('pending')
+  @ApiOperation({
+    summary: 'Record in-circulation group-022 codes pending REGOS:VCR out-of-circulation',
+  })
+  recordPending(
+    @CurrentStore() storeId: string,
+    @Body()
+    body: {
+      codes: { code: string; productBarcode?: string; saleId?: string; circulationStatus?: string | null }[];
+      terminalId: string;
+    },
+  ) {
+    return this.service.recordPending(storeId, body.codes ?? [], body.terminalId);
+  }
+
+  @Get('pending')
+  @ApiOperation({ summary: 'List in-circulation marking codes pending fiscalization' })
+  listPending(@CurrentStore() storeId: string) {
+    return this.service.listPending(storeId);
+  }
 }

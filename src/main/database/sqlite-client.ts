@@ -592,6 +592,22 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   if (!(await columnExists(prisma, 'sales', 'refunded'))) {
     await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN refunded INTEGER DEFAULT 0`;
   }
+
+  // Migration 23: Create pending_marking_codes table (group 022 codes sold IN circulation,
+  // captured for later REGOS:VCR out-of-circulation fiscalization)
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS pending_marking_codes (
+      id                 TEXT PRIMARY KEY,
+      code               TEXT NOT NULL UNIQUE,
+      product_barcode    TEXT,
+      sale_id            TEXT,
+      terminal_id        TEXT NOT NULL,
+      circulation_status TEXT,
+      fiscalized         INTEGER NOT NULL DEFAULT 0,
+      synced             INTEGER NOT NULL DEFAULT 0,
+      created_at         DATETIME NOT NULL DEFAULT (datetime('now'))
+    )
+  `;
 }
 
 /** True if `column` exists on `table` — silent (no thrown query, no prisma:error log). */

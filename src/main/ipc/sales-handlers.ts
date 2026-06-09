@@ -4,6 +4,7 @@ import { getCurrentUser } from './auth-handlers';
 import { getAppConfig } from '../config/app-config';
 import { getServerToken } from '../sync/queue-manager';
 import { regosVcrService } from '../fiscal/regos-vcr-service';
+import { savePendingMarkingCodes } from './marking-codes-handlers';
 import { format } from 'date-fns';
 import type { Sale, SaleItem as PrismaSaleItem } from '../../generated/prisma-sqlite';
 
@@ -192,6 +193,19 @@ export function setupSalesHandlers(): void {
       }
     } catch (e) {
       console.error('[fiscal] enqueue failed:', e instanceof Error ? e.message : e);
+    }
+
+    // Capture group-022 marking codes that are still IN circulation for later REGOS:VCR
+    // out-of-circulation fiscalization (no VCR connected yet). Fire-and-forget: this hits
+    // asl-belgisi + the VPS and must not delay the sale/receipt. Never blocks the sale.
+    const markingCodes = (data.markingCodes as Array<{ barcode: string; label: string }> | undefined)
+      ?.filter((m) => m?.label) ?? [];
+    if (markingCodes.length > 0) {
+      savePendingMarkingCodes(
+        markingCodes.map((m) => ({ code: m.label, productBarcode: m.barcode, saleId: sale.id })),
+      ).catch((e) =>
+        console.error('[marking] savePending failed:', e instanceof Error ? e.message : e),
+      );
     }
 
     return ipcSafe(finalSale);

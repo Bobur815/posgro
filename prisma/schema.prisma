@@ -46,6 +46,7 @@ model Store {
   terminalLogs         TerminalLog[]
   paynetReceipts       PaynetReceipt[]
   soldMarkingCodes     SoldMarkingCode[]
+  pendingMarkingCodes  PendingMarkingCode[]
 
   @@map("stores")
 }
@@ -414,6 +415,26 @@ model SoldMarkingCode {
   @@unique([storeId, code])
   @@index([storeId])
   @@map("sold_marking_codes")
+}
+
+// Group-022 marking codes sold while still IN circulation, captured for later REGOS:VCR
+// fiscalization (taking them out of circulation). Synced from terminals so all terminals
+// and the server share one view. `fiscalized` is reserved for the future VCR step.
+model PendingMarkingCode {
+  id                String    @id @default(cuid())
+  storeId           String    @map("store_id")
+  store             Store     @relation(fields: [storeId], references: [id])
+  code              String
+  productBarcode    String?   @map("product_barcode")
+  saleId            String?   @map("sale_id")
+  terminalId        String    @map("terminal_id")
+  circulationStatus String?   @map("circulation_status")
+  fiscalized        Boolean   @default(false)
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  @@unique([storeId, code])
+  @@index([storeId])
+  @@map("pending_marking_codes")
 }
 
 model AuditLog {

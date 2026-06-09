@@ -348,6 +348,24 @@ model SoldMarkingCode {
   @@map("sold_marking_codes")
 }
 
+// Marking codes of sold group-022 products that were still IN circulation at sale time.
+// Captured because there is no REGOS:VCR to fiscalize them yet; kept here (and synced to
+// the VPS) so they can later be sent to a VCR to be taken out of circulation.
+// `fiscalized` is reserved for that future step.
+model PendingMarkingCode {
+  id                String    @id @default(cuid())
+  code              String    @unique
+  productBarcode    String?   @map("product_barcode")
+  saleId            String?   @map("sale_id")
+  terminalId        String    @map("terminal_id")
+  circulationStatus String?   @map("circulation_status") // raw asl-belgisi status (or null when unverified)
+  fiscalized        Boolean   @default(false)
+  synced            Boolean   @default(false)
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  @@map("pending_marking_codes")
+}
+
 // ==================== SYNC QUEUE ====================
 // Track what needs to be synced to server
 

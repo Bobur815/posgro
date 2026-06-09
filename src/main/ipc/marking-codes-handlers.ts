@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { getPrismaClient } from '../database/sqlite-client';
 import { getAppConfig } from '../config/app-config';
 import { getServerToken } from '../sync/queue-manager';
+import { classifyCirculation } from '../../shared/utils/circulation';
 
 interface MarkingCodeCheckResult {
   alreadySold: boolean;
@@ -13,6 +14,12 @@ interface MarkingCodeCheckResult {
 interface MarkingCodeEntry {
   code: string;
   productBarcode?: string;
+}
+
+export interface PendingMarkingCodeEntry {
+  code: string;
+  productBarcode?: string;
+  saleId?: string;
 }
 
 export function setupMarkingCodesHandlers(): void {
@@ -128,4 +135,114 @@ export function setupMarkingCodesHandlers(): void {
       }
     },
   );
+}
+
+/**
+ * Ask the VPS asl-belgisi proxy for a marking code's circulation status.
+ * Returns `reachable: false` when the server can't be consulted (offline / no token /
+ * error) so callers can apply the offline-first "save anyway" rule.
+ */
+async function verifyCirculation(
+  code: string,
+): Promise<{ status?: string; reachable: boolean }> {
+  const config = getAppConfig();
+  const token = getServerToken();
+  if (!token) return { reachable: false };
+  try {
+    const res = await fetch(`${config.vpsApiUrl}/aslbelgisi/verify`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return { reachable: false };
+    const data = (await res.json()) as { isValid?: boolean; status?: string };
+    return { status: data.status, reachable: true };
+  } catch {
+    return { reachable: false };
+  }
+}
+
+/**
+ * Capture group-022 marking codes that were sold while still IN circulation, so they can
+ * later be sent to a REGOS:VCR to be taken out of circulation. Called after a sale completes
+ * (there is no VCR connected yet). Rules:
+ *   - Skip a code ONLY when asl-belgisi positively reports it OUT of circulation.
+ *   - Save it when IN circulation, status unknown, or asl-belgisi is unreachable (offline-first).
+ * Writes locally (SQLite) first, then best-effort syncs to the VPS for cross-terminal consistency.
+ */
+export async function savePendingMarkingCodes(
+  entries: PendingMarkingCodeEntry[],
+): Promise<void> {
+  if (!entries || entries.length === 0) return;
+
+  const prisma = getPrismaClient();
+  const config = getAppConfig();
+  const terminalId = config.terminalId || 'unknown';
+  const token = getServerToken();
+
+  const toSync: Array<{
+    code: string;
+    productBarcode?: string;
+    saleId?: string;
+    circulationStatus: string | null;
+  }> = [];
+
+  for (const entry of entries) {
+    if (!entry?.code) continue;
+
+    const { status, reachable } = await verifyCirculation(entry.code);
+    // Only a confirmed OUT status excludes the code; everything else is saved.
+    if (reachable && classifyCirculation(status) === 'OUT') continue;
+
+    try {
+      await (prisma as any).pendingMarkingCode.upsert({
+        where: { code: entry.code },
+        create: {
+          code: entry.code,
+          productBarcode: entry.productBarcode ?? null,
+          saleId: entry.saleId ?? null,
+          terminalId,
+          circulationStatus: status ?? null,
+          synced: false,
+        },
+        update: {}, // first capture wins — don't overwrite
+      });
+      toSync.push({
+        code: entry.code,
+        productBarcode: entry.productBarcode,
+        saleId: entry.saleId,
+        circulationStatus: status ?? null,
+      });
+    } catch {
+      // ignore duplicate constraint errors
+    }
+  }
+
+  if (!token || toSync.length === 0) return;
+
+  try {
+    const response = await fetch(`${config.vpsApiUrl}/marking-codes/pending`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ codes: toSync, terminalId }),
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (response.ok) {
+      for (const e of toSync) {
+        await (prisma as any).pendingMarkingCode
+          .updateMany({ where: { code: e.code }, data: { synced: true } })
+          .catch(() => {});
+      }
+    }
+  } catch {
+    // left synced=false; best-effort, matches soldMarkingCode behavior
+  }
 }

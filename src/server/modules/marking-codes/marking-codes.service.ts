@@ -7,6 +7,13 @@ interface RecordEntry {
   soldAt?: string;
 }
 
+interface PendingEntry {
+  code: string;
+  productBarcode?: string;
+  saleId?: string;
+  circulationStatus?: string | null;
+}
+
 @Injectable()
 export class MarkingCodesService {
   constructor(private prisma: PrismaService) {}
@@ -55,5 +62,45 @@ export class MarkingCodesService {
     }
 
     return { recorded, conflicts };
+  }
+
+  /**
+   * Record group-022 marking codes that were sold while still IN circulation, captured for
+   * later REGOS:VCR out-of-circulation fiscalization. First capture per (store, code) wins.
+   */
+  async recordPending(
+    storeId: string,
+    entries: PendingEntry[],
+    terminalId: string,
+  ): Promise<{ recorded: number }> {
+    let recorded = 0;
+
+    for (const entry of entries) {
+      if (!entry?.code) continue;
+      await (this.prisma as any).pendingMarkingCode.upsert({
+        where: { storeId_code: { storeId, code: entry.code } },
+        create: {
+          storeId,
+          code: entry.code,
+          productBarcode: entry.productBarcode ?? null,
+          saleId: entry.saleId ?? null,
+          terminalId,
+          circulationStatus: entry.circulationStatus ?? null,
+        },
+        update: {}, // first capture wins — don't overwrite
+      });
+      recorded++;
+    }
+
+    return { recorded };
+  }
+
+  /** List pending (not-yet-fiscalized) marking codes for a store (admin/audit visibility). */
+  async listPending(storeId: string) {
+    return (this.prisma as any).pendingMarkingCode.findMany({
+      where: { storeId, fiscalized: false },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
   }
 }
