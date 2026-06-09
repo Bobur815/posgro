@@ -3,6 +3,21 @@ import { ConfigService } from '@nestjs/config';
 
 const ASL_BELGISI_BASE = 'https://xtrace.aslbelgisi.uz';
 
+// The asl-belgisi registry keys a marking code on AIs 01 (GTIN) + 21 (serial) only.
+// The trailing crypto/verification group (AI 91/92/93) is NOT part of that key —
+// including it makes /codes return an empty array (a false "not found"). Strip it.
+function stripCryptoTail(code: string): string {
+  // Real scans separate the crypto group with a GS byte (\x1d); cut at the first GS.
+  const gsIdx = code.indexOf('\x1d');
+  if (gsIdx !== -1) return code.slice(0, gsIdx);
+  // No GS (e.g. manually entered): anchor past the 01+GTIN+21 header (18 chars) and
+  // drop a trailing 91/92/93 group from the serial region, leaving the serial intact.
+  if (code.length > 18 && /^01\d{14}21/.test(code)) {
+    return code.slice(0, 18) + code.slice(18).replace(/9[123][^\x1d]*$/, '');
+  }
+  return code;
+}
+
 export interface McPublicInfo {
   isValid: boolean;
   status?: string;
@@ -32,7 +47,11 @@ export class AslBelgisiService {
       throw new HttpException('ASL BELGISI API key not configured', HttpStatus.SERVICE_UNAVAILABLE);
     }
 
-    this.logger.log(`Verifying MC (${markingCode.length} chars): ${markingCode.slice(0, 30)}...`);
+    const lookupCode = stripCryptoTail(markingCode);
+    if (lookupCode !== markingCode) {
+      this.logger.log(`Stripped crypto tail: ${markingCode.length} → ${lookupCode.length} chars`);
+    }
+    this.logger.log(`Verifying MC (${lookupCode.length} chars): ${lookupCode.slice(0, 30)}...`);
 
     let res: Response;
     try {
@@ -42,7 +61,7 @@ export class AslBelgisiService {
           'Content-Type': 'application/json;charset=UTF-8',
           'Authorization': `Bearer ${this.apiKey}`,
         },
-        body: JSON.stringify({ codes: [markingCode], addCodeHistory: false }),
+        body: JSON.stringify({ codes: [lookupCode], addCodeHistory: false }),
       });
     } catch (e) {
       this.logger.error('Network error reaching ASL BELGISI', e);

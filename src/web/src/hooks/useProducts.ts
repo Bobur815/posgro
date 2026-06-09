@@ -150,9 +150,9 @@ export function useProducts() {
     }
   }, []);
 
-  const getById = useCallback(async (id: string) => {
+  const getById = useCallback(async (id: string, byDbId = false) => {
     try {
-      const product = await productsApi.getById(id);
+      const product = await productsApi.getById(id, byDbId);
       return product ? transformProduct(product) : null;
     } catch (err) {
       console.error('Failed to get product:', err);

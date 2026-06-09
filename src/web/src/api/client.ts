@@ -105,8 +105,10 @@ export const products = {
     const { data } = await axiosInstance.get("/products", { params: filters });
     return data;
   },
-  getById: async (id: string) => {
-    const { data } = await axiosInstance.get(`/products/${id}`);
+  getById: async (id: string, byDbId = false) => {
+    const { data } = await axiosInstance.get(`/products/${id}`, {
+      params: byDbId ? { byDbId: "true" } : undefined,
+    });
     return data;
   },
   getByBarcode: async (barcode: string) => {

@@ -227,7 +227,7 @@ export function ProductDetails() {
 
   const loadProduct = async () => {
     if (!id) return;
-    const p = await getById(id);
+    const p = await getById(id, true);
     setProduct(p);
   };
 

@@ -582,9 +582,10 @@ export function ProductForm({
         console.log("[handleQrScan] calling verifyMarkingCode...");
         const mcVerif = await aslBelgisi.verifyMarkingCode(qrData);
         console.log("[handleQrScan] mcVerif:", mcVerif);
+        // Non-blocking: an unresolved marking code (not found / damaged) should not
+        // stop product creation — warn and continue with whatever data we have.
         if (!mcVerif.isValid) {
-          toast.error(t("products.invalidMarkingCode"));
-          return;
+          toast.warning(t("products.invalidMarkingCode"));
         }
 
         const VALID_MC_STATUSES = ["INTRODUCED", "APPLIED", "IN_CIRCULATION"];
@@ -596,11 +597,13 @@ export function ProductForm({
         }
 
         setMcVerification({
-          isValid: true,
+          isValid: mcVerif.isValid,
           issuerName: mcVerif.issuerName,
           status: mcVerif.status,
         });
-        toast.success(t("products.markingCodeVerified"));
+        if (mcVerif.isValid) {
+          toast.success(t("products.markingCodeVerified"));
+        }
 
         // Step 2: Check local database
         const existing = await searchByBarcode(gtin);
@@ -755,7 +758,7 @@ export function ProductForm({
   const loadProduct = async () => {
     if (!productId) return;
 
-    const product = await getById(productId);
+    const product = await getById(productId, true);
     if (product) {
       setFormData({
         barcode: product.barcode,

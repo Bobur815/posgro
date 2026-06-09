@@ -113,13 +113,20 @@ export class ProductsController {
 
   @Get(":id")
   @ApiOperation({ summary: "Get product by ID" })
+  @ApiQuery({
+    name: "byDbId",
+    required: false,
+    description:
+      "Resolve by real DB primary key only (edit/details). Default resolves storeProductCode first.",
+  })
   @ApiResponse({ status: 200, description: "Product details" })
   @ApiResponse({ status: 404, description: "Product not found" })
   async findOne(
     @CurrentStore() storeId: string,
     @Param("id", ParseIntPipe) id: number,
+    @Query("byDbId") byDbId?: string,
   ) {
-    return this.productsService.findById(id, storeId);
+    return this.productsService.findById(id, storeId, byDbId === "true");
   }
 
   @Post()

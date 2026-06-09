@@ -28,11 +28,38 @@ export class ProductsService {
     });
   }
 
-  async findById(id: number, storeId: string) {
-    const product = await this.prisma.product.findUnique({
-      where: { id },
-      include: { category: true, supplier: true },
-    });
+  async findById(id: number, storeId: string, byDbId = false) {
+    // Action buttons (edit / details) pass the real DB primary key and must resolve
+    // unambiguously. The default path below resolves storeProductCode first, which can
+    // collide with another product's DB id — so callers with the real id pass byDbId.
+    if (byDbId) {
+      const product = await this.prisma.product.findUnique({
+        where: { id },
+        include: { category: true, supplier: true },
+      });
+
+      if (!product || product.storeId !== storeId) {
+        throw new NotFoundException("Product not found");
+      }
+
+      return product;
+    }
+
+    // Default (POS id-input / stock lookup): per-store sequential code first, fall back to global id.
+    let product =
+      id > 0
+        ? await this.prisma.product.findFirst({
+            where: { storeId, storeProductCode: id, active: true },
+            include: { category: true, supplier: true },
+          })
+        : null;
+
+    if (!product) {
+      product = await this.prisma.product.findUnique({
+        where: { id },
+        include: { category: true, supplier: true },
+      });
+    }
 
     if (!product || product.storeId !== storeId) {
       throw new NotFoundException("Product not found");
