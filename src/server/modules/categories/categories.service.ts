@@ -37,11 +37,26 @@ export class CategoriesService {
 
   async syncBulk(storeId: string, categories: Array<{ nameUz: string; nameRu: string; active?: boolean; mxikGroupCode?: string | null }>) {
     let created = 0, updated = 0, errors = 0;
+
+    // Match incoming categories on a normalized `nameUz` ONLY — not exact nameRu+nameUz.
+    // The old both-names match spawned a brand-new category on every upload whenever a
+    // terminal's Russian translation drifted even slightly (or had stray whitespace/case),
+    // and an admin renaming the duplicate destroyed the match target so the next sync
+    // created yet another one (the "category bounce-back" loop). Keying on nameUz mirrors
+    // the download path in products-sync.ts (syncCategories matches by nameUz) so the two
+    // sync directions stay consistent. Categories are few, so one findMany + in-memory
+    // match is cheaper than a query per row.
+    const existingCategories = await this.prisma.category.findMany({ where: { storeId } });
+    const normalize = (s: string) => s.trim().toLowerCase();
+    const byNameUz = new Map<string, { id: number; nameUz: string }>();
+    for (const e of existingCategories) {
+      // First write wins so we attach to the lowest/canonical id on collisions.
+      if (!byNameUz.has(normalize(e.nameUz))) byNameUz.set(normalize(e.nameUz), e);
+    }
+
     for (const c of categories) {
       try {
-        const existing = await this.prisma.category.findFirst({
-          where: { storeId, nameRu: c.nameRu, nameUz: c.nameUz },
-        });
+        const existing = byNameUz.get(normalize(c.nameUz));
         if (existing) {
           // NOTE: mxik_group_code is intentionally NOT updated from terminal uploads.
           // It is server-authoritative (set via the dashboard / mapping scripts) and only
@@ -55,9 +70,12 @@ export class CategoriesService {
           updated++;
         } else {
           // New terminal-originated category: leave mxik_group_code null for an admin to map.
-          await this.prisma.category.create({
+          const newCat = await this.prisma.category.create({
             data: { storeId, nameUz: c.nameUz, nameRu: c.nameRu, active: c.active ?? true },
           });
+          // Register it so a second incoming row with the same nameUz in this same batch
+          // updates rather than creating another duplicate.
+          byNameUz.set(normalize(newCat.nameUz), newCat);
           created++;
         }
       } catch {
