@@ -390,6 +390,19 @@ export function SetupWizard() {
       setError(t('setup.errors.required_fields'));
       return;
     }
+    // The collision was already shown under the field, but nothing stopped anyone continuing past
+    // it. Two terminals sharing an id issue the same receipt numbers — `{terminalId}{yyMMdd}{seq}`
+    // with a counter held per terminal — and it surfaces only when someone tries to consolidate.
+    // Cheap to prevent here, expensive to unpick later.
+    if (isTerminalIdTaken(data.terminalId)) {
+      setError(
+        t('setup.storeInfo.terminalIdTaken', {
+          id: data.terminalId.trim(),
+          suggestion: suggestTerminalId(existingTerminalIds),
+        }),
+      );
+      return;
+    }
     setError('');
     setCurrentStep('password');
   };

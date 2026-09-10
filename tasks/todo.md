@@ -1,3 +1,40 @@
+# Phase 1 — terminal identity (done 2026-09-10)
+
+From `tasks/LAN_MAIN_TERMINAL_PLAN.md` §7: the role exists and is enforced, with no behaviour
+change. A satellite still cannot do anything — serving is Phase 2 — so the wizard deliberately
+does **not** offer the role yet. Shipping an option that produces a non-working terminal would be
+worse than not shipping it.
+
+- [x] `isMain` (default true) + `mainTerminalUrl` on `local_config`, in all three places §10.2
+      requires: `schema.sqlite.prisma`, `CREATE TABLE IF NOT EXISTS`, and migration 31
+- [x] Migration test from a pre-upgrade database, asserting the terminal comes up as a main
+- [x] Read plumbing: both fields typed on `config.getLocalConfig`
+- [x] Enforce the unique `terminalId` at setup — it was warned about but not blocked
+
+## Review
+
+**The default is the whole risk, so it is asserted rather than trusted.** `DEFAULT 1` makes the
+upgrade inert: SQLite backfills the existing row, so a shop already running two independent tills
+carries on doing exactly that. Flipping it to `DEFAULT 0` locally makes
+`legacy-upgrade.test.ts` fail with `Expected: true / Received: false`, so the test is not vacuous.
+
+`sqlite-schema.test.ts` already guards the other half — it walks the Prisma schema and asserts
+every column is reachable in `sqlite-client.ts`, so the three places cannot drift silently the way
+`audit_logs` and `regos_payment_id` did.
+
+**The duplicate-`terminalId` check existed but did nothing.** The wizard fetched the store's
+terminal ids from the VPS, suggested a free one, and rendered a "that id is taken" warning under
+the field — then let you press Continue anyway. Two terminals sharing an id issue the same receipt
+numbers, and it only surfaces when someone tries to consolidate. Now blocked.
+
+**`isMain` is deliberately not writable through `updateLocalConfig`.** Changing the role hands the
+shop's source of truth to another machine, so it needs the super-admin gate from §11.2 rather than
+riding along on the handler the login-screen gear already uses at PIN strength.
+
+404 tests pass (was 403). No version bump — bumped at deploy, per convention.
+
+---
+
 # Phase 0 — stop the silent-sales-loss footgun (done 2026-09-10)
 
 From `tasks/LAN_MAIN_TERMINAL_PLAN.md` §7. A terminal pointed at another terminal's LAN dashboard

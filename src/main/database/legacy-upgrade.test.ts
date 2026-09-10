@@ -51,6 +51,12 @@ beforeAll(async () => {
       last_sync DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  // An activated terminal, so column backfill is exercised on a real row rather than only on the
+  // column default a fresh insert would pick up.
+  await seed.$executeRawUnsafe(`
+    INSERT INTO local_config (id, store_id, store_name, terminal_id, api_url)
+    VALUES ('config', '1000', 'Legacy store', 'T1', 'https://pos.example/api')
+  `);
   await seed.$disconnect();
 
   await initializeDatabase();
@@ -106,4 +112,20 @@ describe('upgrading a database created by an older build', () => {
     const config = await getPrismaClient().localConfig.findUnique({ where: { id: 'config' } });
     expect(config?.storeName).toBe('Kept');
   }, 60_000);
+
+  /**
+   * The whole fleet upgrades into `is_main` at once, and a shop already running two independent
+   * tills has to carry on doing exactly that.
+   *
+   * `DEFAULT 1` is what makes it inert: SQLite backfills the existing row, so the terminal comes
+   * up as a main. `DEFAULT 0` would turn both of that shop's tills into satellites with nowhere to
+   * point — the same release, every terminal, at once. One character, so it is asserted rather
+   * than trusted. See tasks/LAN_MAIN_TERMINAL_PLAN.md §10.1.
+   */
+  it('leaves a terminal from before the column existed as a main', async () => {
+    const config = await getPrismaClient().localConfig.findUnique({ where: { id: 'config' } });
+    expect(config).not.toBeNull();
+    expect(config.isMain).toBe(true);
+    expect(config.mainTerminalUrl).toBeNull();
+  });
 });

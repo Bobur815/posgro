@@ -686,6 +686,14 @@ declare global {
           // Cached store operating mode. null = never activated, which means "unrestricted".
           mode: "OFFLINE_ONLY" | "ONLINE" | null;
           posAdminLocked: boolean;
+          // This terminal's role on the shop's LAN. True for every terminal in the field today,
+          // and for any new one until satellite pairing exists — see
+          // tasks/LAN_MAIN_TERMINAL_PLAN.md. Read-only here on purpose: changing the role hands
+          // the shop's source of truth to another machine, so it needs the super-admin gate rather
+          // than riding along on updateLocalConfig.
+          isMain: boolean;
+          // Where the main terminal is, on a satellite; null on a main.
+          mainTerminalUrl: string | null;
         } | null>;
         getWebAdminQr: () => Promise<{
           url: string;

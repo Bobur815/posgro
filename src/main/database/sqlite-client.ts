@@ -128,7 +128,9 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
       last_sync DATETIME DEFAULT CURRENT_TIMESTAMP,
       mode TEXT,
       pos_admin_locked INTEGER DEFAULT 0,
-      super_admin_password TEXT
+      super_admin_password TEXT,
+      is_main INTEGER DEFAULT 1,
+      main_terminal_url TEXT
     )
   `;
 
@@ -779,6 +781,20 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   // unset, so a terminal that upgrades into this gates nothing until a super admin configures one.
   if (!(await columnExists(prisma, 'local_config', 'super_admin_password'))) {
     await prisma.$executeRaw`ALTER TABLE local_config ADD COLUMN super_admin_password TEXT`;
+  }
+
+  // Migration 31: this terminal's role on the shop's LAN.
+  //
+  // `DEFAULT 1` is load-bearing, not a formality. Every terminal in the field today is a main in
+  // this model's terms, and SQLite backfills existing rows with the default — so 1 leaves a shop
+  // running two independent tills doing exactly what it did yesterday. A 0 here would turn both
+  // into satellites with nowhere to point, on every terminal in the fleet at once.
+  // See tasks/LAN_MAIN_TERMINAL_PLAN.md §10.1.
+  if (!(await columnExists(prisma, 'local_config', 'is_main'))) {
+    await prisma.$executeRaw`ALTER TABLE local_config ADD COLUMN is_main INTEGER DEFAULT 1`;
+  }
+  if (!(await columnExists(prisma, 'local_config', 'main_terminal_url'))) {
+    await prisma.$executeRaw`ALTER TABLE local_config ADD COLUMN main_terminal_url TEXT`;
   }
 }
 

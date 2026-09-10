@@ -35,6 +35,20 @@ model LocalConfig {
   // gates nothing — that is what keeps every existing terminal behaving as it does today.
   superAdminPassword String? @map("super_admin_password")
 
+  // This terminal's role on the shop's LAN.
+  //
+  // `true` describes every terminal that exists today: independent, owns its own stock, talks to
+  // the vendor's server itself. A satellite (`false`) holds no independent truth and reaches that
+  // server only through its main terminal.
+  //
+  // Defaulting to true is what makes the upgrade inert for a shop already running several
+  // terminals — see tasks/LAN_MAIN_TERMINAL_PLAN.md §10.1.
+  isMain Boolean @default(true) @map("is_main")
+
+  // Where the main terminal is, on a satellite; null on a main. A LAN address such as
+  // http://192.168.1.7:5173/api, pinned by a static lease rather than discovered.
+  mainTerminalUrl String? @map("main_terminal_url")
+
   @@map("local_config")
 }
 
