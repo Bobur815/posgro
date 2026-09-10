@@ -1,7 +1,7 @@
 # LAN multi-terminal ("main terminal") mode — design
 
-**Status:** design agreed 2026-09-10 (§1). Not started. §8 holds the questions still open — none
-of them block Phase 0 or 1.
+**Status:** design agreed 2026-09-10 (§1). Not started. Every question raised during design has
+been answered; §8 holds the one detail that follows from a decision without being stated by it.
 
 ---
 
@@ -24,6 +24,9 @@ of them block Phase 0 or 1.
 | Expect **5+ terminals** per store | concurrency is a real design input, not a corner case |
 | Several `isMain=true` terminals in one store stay allowed | they behave exactly as today — see §6.1 |
 | A satellite depends on the main being up | accepted; degraded mode defined in §5.9 |
+| **Satellite users authenticate against the main, every time** | no local password fallback; §6.9 |
+| **A satellite opens its own shift** | `Smena` already carries `terminalId`; §5.14 |
+| **Read-only work continues when the main is unreachable** | price lookups, today's sales; §5.9 |
 | Backups are the **main terminal's** responsibility | §6.6 |
 
 The satellite rule collapses to one sentence, which is what makes this tractable:
@@ -95,7 +98,10 @@ found weeks later.
 | Prints receipts | yes | **yes — its own printer, its own till** |
 | Prints weight labels | yes | yes (same printer unless `label_printer_name` is set) |
 | Bulk weighing / `BulkWeighModal` | yes | yes |
-| Prints shift (X/Z) reports | yes | follows shift ownership — §8.2 |
+| Prints shift (X/Z) reports | yes | **yes — for its own shift** |
+| Opens its own shift | yes | **yes** |
+| User login | local `users` table | **against the main, every time** |
+| Works with the main unreachable | n/a | read-only only — §5.9 |
 
 ---
 
@@ -118,10 +124,15 @@ found weeks later.
    also makes the cloned-image collision in §6.2 impossible by construction.
 7. **Point the satellite's sync client at the main** rather than the VPS, in both modes.
 8. **Two-hop replication in ONLINE mode:** VPS → main → satellite. See the cursor trap in §6.5.
-9. **Degraded mode.** Define precisely what a satellite does when the main is unreachable —
-   proposal: refuse to start a sale with a clear "main terminal unreachable" banner, keep the
-   already-open cart, and retry. Explicitly *not* "sell anyway and reconcile later", which is
-   Option B from the previous draft and reintroduces the double-sell.
+9. **Degraded mode — read-only, not offline-selling.** When the main is unreachable a satellite
+   keeps working for **price lookups and viewing today's sales**, and refuses to commit a sale
+   behind a clear "main terminal unreachable" banner, keeping the already-open cart and retrying.
+   Explicitly *not* "sell anyway and reconcile later", which reintroduces the double-sell §3
+   exists to prevent.
+
+   This means a satellite is **not** a thin client: it must keep a local read cache of the catalog
+   and prices, and a local copy of the sales it originated, or there is nothing to read when the
+   main is down. The main returning the committed sale (item 12) is what populates the latter.
 10. **Hide the two buttons** on a satellite (`TerminalAccessBar.tsx:391` and `:400`).
 11. **Fiscalization stays on the main.** Skip `regosVcrService.start()` on a satellite
     (`index.ts:179`) and drop the `regos_vcr_*` settings from its setup — the VCR is a *local*
@@ -146,6 +157,15 @@ found weeks later.
     The one behavioural change is that the `vcrPrintsReceipt()` skip at `sales-handlers.ts:38`
     becomes main-only — a satellite prints regardless, because the fiscal device is not at its
     till. See §6.7.
+13. **Login goes to the main, every time.** A satellite posts to the main's `/auth/login`, which
+    already uses the same `users` table and the same bcrypt hashes (`local-server/routes/auth.ts`)
+    — so this is a re-point, not a new auth model. It needs the terminal audience from item 4
+    rather than the browser's. No local password fallback: see the consequence in §6.9.
+14. **Shifts stay per terminal.** `Smena` already has `terminalId` and is indexed
+    `[terminalId, status]` (`schema.sqlite.prisma:174,188`), so a satellite opening its own shift
+    needs no schema change — only that the shift is created on the main and carries the
+    satellite's `terminalId`. `/smena/sync-bulk` and every reconciliation report must group by it,
+    and a satellite's X/Z report covers its own shift alone.
 
 ---
 
@@ -224,6 +244,28 @@ holds the only VCR. Given the fiscal path's history on this deployment, the retr
 behaviour deserves more care here than it needed when the blast radius was one terminal — a
 satellite must not lose a completed sale because the main's VCR was briefly unhappy.
 
+### 6.9 Read-only mode only helps a session that already exists
+
+"Authenticate against the main every time" and "read-only work continues when the main is down"
+interact in a way worth designing for rather than discovering: **a cashier who is not already
+signed in cannot sign in at all** while the main is unreachable, so they get neither selling nor
+the read-only fallback.
+
+The likely shape of this in a real shop is the 7am one — satellites powered on before the main, or
+the main not switched on at all. The read-only mode is then unreachable precisely when someone is
+standing there trying to start the day.
+
+Worth deciding as part of Phase 3, and cheap either way:
+
+- an already-open session survives the main going away and degrades to read-only (this is the
+  decision as stated), **and**
+- a satellite shows "waiting for main terminal" on the login screen rather than a failed-password
+  error, so the cause is obvious.
+
+If losing the read-only fallback at cold start turns out to matter, the smallest fix is caching
+the last successful login's bcrypt hash for that user — but that is a real weakening of "against
+the main every time", so it should be a deliberate follow-up, not slipped in.
+
 ## 7. Phasing
 
 - **Phase 0 — stop the current footgun (do first, small).** A shop pointed at a main PC today
@@ -241,10 +283,15 @@ satellite must not lose a completed sale because the main's VCR was briefly unha
 
 ## 8. Still open
 
-1. **Where do satellite users authenticate?** Against the main every time (simple, but no login
-   while the main is down — though a satellite cannot sell then anyway), or against a cached
-   users table replicated from the main?
-2. **Shift (smena) ownership.** Does a satellite open its own shift, or join the main's? Affects
-   `/smena/sync-bulk` and every reconciliation report.
-3. **Exact degraded-mode surface.** §5.9 proposes refuse-to-sell; confirm whether a satellite
-   should still allow read-only work (price lookups, viewing today's sales).
+1. **Does PIN unlock also go to the main?** "Authenticate against the main every time" was decided
+   for password login. PIN login is a separate, entirely local path today — `usersWithPin()` /
+   `findUserIdByPin()` read the local `users` table (`auth-handlers.ts:83,103`) — so the decision
+   does not automatically settle it.
+
+   Routing PIN to the main as well is the consistent reading, and is what §1 records. It does mean
+   no quick unlock while the main is down, which sharpens §6.9. Leaving PIN local instead would
+   keep cashiers working through a brief main outage in read-only mode, at the cost of one
+   credential that the main never sees.
+
+   Cheap either way; worth a deliberate answer before Phase 3 rather than whichever falls out of
+   the implementation.
