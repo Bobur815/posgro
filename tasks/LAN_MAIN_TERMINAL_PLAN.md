@@ -54,8 +54,8 @@ The satellite rule collapses to one sentence, which is what makes this tractable
 Two of those rows drive most of the work below:
 
 - **The LAN server does not run in ONLINE mode.** Since satellites must work in ONLINE mode too,
-  the main terminal has to serve them there as well. The gate at `local-server/index.ts:79`
-  becomes "OFFLINE_ONLY **or** `isMain`".
+  the main terminal has to serve them there as well — but the new gate must not switch a server on
+  for every existing shop at upgrade. See §5.2.
 - **The LAN API is the dashboard's API, not the terminal-sync API.** Of what the POS calls on
   `apiUrl`: `/auth/login`, `/products?updatedAfter=`, `/categories`, `/settings`, `/suppliers`
   and `/store-config` exist; `/sales/sync`, `/users/sync`, `/smena/sync-bulk`,
@@ -110,9 +110,18 @@ found weeks later.
 
 1. **Role on `local_config`:** `isMain: boolean`, plus `mainTerminalUrl` on a satellite. Chosen in
    the setup wizard, not by typing a URL into the Settings dialog.
-2. **Run the LAN server on a main in ONLINE mode too** — change the gate at
-   `local-server/index.ts:79` from `mode === 'OFFLINE_ONLY'` to `mode === 'OFFLINE_ONLY' || isMain`.
-   Without this, ONLINE multi-terminal cannot work at all.
+2. **Run the LAN server on a main in ONLINE mode too** — the gate at `local-server/index.ts:79` is
+   `mode === 'OFFLINE_ONLY'`, so an ONLINE terminal serves nothing. Without a change here, ONLINE
+   multi-terminal cannot work at all.
+
+   **Not** `mode === 'OFFLINE_ONLY' || isMain`, though: `isMain` defaults to true for every
+   existing terminal (§10), so that would silently start an HTTP server on the LAN of every shop
+   in the fleet on upgrade. Gate it on the shop actually having satellites — a flag set when the
+   first satellite is paired, cleared when the last is removed:
+
+   ```ts
+   mode === 'OFFLINE_ONLY' || (isMain && servesSatellites)
+   ```
 3. **Terminal-sync routes on the LAN server** — the 404 list in §2, with the *same contracts the
    VPS uses*, so one client implementation serves both hops.
 4. **A third token audience.** `posgro-local-web` guards the browser. A satellite is neither a
@@ -426,3 +435,68 @@ profile (§9.2), firewall rule (§9.2), then whether the server is listening at 
 - **A static IP on satellites.** Nothing addresses them; only the main needs a fixed address.
 - **HTTPS on the LAN.** Out of scope, but it is why §6.10's device token and rate limiting are
   requirements rather than nice-to-haves: PINs cross this wire in the clear.
+
+
+---
+
+## 10. Upgrading a shop that already runs several terminals
+
+The common case in the field today is a shop with two terminals in ONLINE mode, both independent,
+both syncing to the VPS. **That configuration must survive the upgrade untouched** — the release
+goes to every terminal in the fleet, not only to shops that want satellites.
+
+It does, on one condition.
+
+### 10.1 The default decides everything
+
+Every terminal that exists today is, in this design's terms, a main: independent, owns its stock,
+syncs to the VPS. So:
+
+```sql
+ALTER TABLE local_config ADD COLUMN is_main INTEGER DEFAULT 1
+```
+
+**`DEFAULT 1`, not `0`.** With `1` the upgrade is behaviourally inert — a two-terminal shop becomes
+a two-main shop, which §6.1 already permits and which is exactly what it was doing yesterday. With
+`0` both terminals become satellites with no `mainTerminalUrl`, and the shop stops selling.
+
+One character, whole-fleet blast radius. It deserves a test that starts from a pre-upgrade database
+and asserts `isMain === true`, in the manner of `legacy-upgrade.test.ts`.
+
+### 10.2 Three places must agree
+
+The terminal's SQLite upgrade is hand-rolled probe-then-add (`sqlite-client.ts:356`, `runMigrations`):
+
+```ts
+try   { await prisma.$queryRaw`SELECT is_main FROM local_config LIMIT 1`; }
+catch { await prisma.$executeRaw`ALTER TABLE local_config ADD COLUMN is_main INTEGER DEFAULT 1`; }
+```
+
+That covers an **existing** database. A **new** install goes through `CREATE TABLE IF NOT EXISTS
+local_config` (`sqlite-client.ts:122`) instead, and Prisma reads
+`prisma/schema.sqlite.prisma`. All three have to carry the column, or it reaches some terminals
+and not others.
+
+This has bitten before: `createSchemaIfNeeded` returned early when `local_config` already existed,
+so `audit_logs` never reached upgraded terminals and killed the shift panel on one store — the
+subject of `legacy-upgrade.test.ts`. Same shape of bug, same place.
+
+### 10.3 What does *not* change
+
+- **No PostgreSQL migration.** `isMain` is terminal-local; the VPS does not need to know which
+  terminal is main for any of this. So the server deploy carries no schema risk.
+- **Receipt numbers.** Item 6 moves numbering to the main only for *satellite* sales. Two mains
+  keep their own counters and their own `terminalId` prefixes, exactly as today.
+- **Stock.** Two mains keep independent stock, as today — including today's double-sell (§6.1).
+  The upgrade neither fixes nor worsens it.
+- **Rollback is safe.** An extra column is invisible to an older build, so downgrading the app
+  does not require touching the database.
+
+### 10.4 Check before upgrading a multi-terminal shop
+
+**Confirm the terminals have distinct `terminalId`s.** If they were set up by cloning a disk image
+they already share one, which means they are already issuing duplicate receipt numbers today
+(§6.2) — the upgrade will not cause that, but it is worth finding before adding terminals to the
+shop. On the VPS, duplicate `receipt_number` values within a store are the giveaway.
+
+---
