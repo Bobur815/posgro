@@ -50,6 +50,9 @@ export class AuthService {
       phone: user.phone,
       role: user.role,
       sessionId: session.id,
+      // Carried so `validateUser()` can re-apply the store gate the same way this login did.
+      // A POS token for an OFFLINE_ONLY store is legitimate; a dashboard one is not.
+      client: loginDto.client,
     };
 
     const token = this.jwtService.sign(payload);
@@ -126,7 +129,11 @@ export class AuthService {
     // Returning null yields a 401, which is what we want: the browser's interceptor clears the
     // session and sends them to the login page, where the next attempt explains why in a toast.
     // Throwing 403 here instead would leave them nominally signed in with every request failing.
-    if (dashboardLoginBlockReason(user.role, user.storeId, user.store)) {
+    //
+    // Judged as the client the token was minted for. Omitting it defaults to 'dashboard' and 401s
+    // every request from an OFFLINE_ONLY terminal — including the login screen's subscription
+    // panel, which exists precisely for those stores.
+    if (dashboardLoginBlockReason(user.role, user.storeId, user.store, payload.client)) {
       return null;
     }
 

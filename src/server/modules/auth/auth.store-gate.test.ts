@@ -92,6 +92,20 @@ describe('login()', () => {
     const { service } = build({ role: 'SUPER_ADMIN', storeId: null, store: null });
     await expect(service.login(creds)).resolves.toMatchObject({ token: 'signed.jwt.token' });
   });
+
+  // The token has to carry the client, or validateUser() cannot reproduce this decision.
+  it('records the calling client in the token payload', async () => {
+    const { service, jwtService } = build({ role: 'ADMIN', storeId: 's1', store: OFFLINE_ONLY });
+    await service.login({ ...creds, client: 'pos' });
+    expect(jwtService.sign).toHaveBeenCalledWith(expect.objectContaining({ client: 'pos' }));
+  });
+
+  it('lets a POS sign in to an OFFLINE_ONLY store', async () => {
+    const { service } = build({ role: 'ADMIN', storeId: 's1', store: OFFLINE_ONLY });
+    await expect(service.login({ ...creds, client: 'pos' })).resolves.toMatchObject({
+      token: 'signed.jwt.token',
+    });
+  });
 });
 
 describe('validateUser()', () => {
@@ -108,6 +122,31 @@ describe('validateUser()', () => {
     ['switched to OFFLINE_ONLY mid-session', OFFLINE_ONLY],
   ])('cuts off a running session when the store is %s', async (_label, store) => {
     const { service } = build({ role: 'ADMIN', storeId: 's1', store });
+    await expect(service.validateUser(payload)).resolves.toBeNull();
+  });
+
+  /**
+   * The OFFLINE_ONLY refusal is a *dashboard* rule. A POS terminal for such a store logs in
+   * legitimately (`client: 'pos'`), so re-checking its token as if it came from a browser 401s
+   * every request it makes — which is what left the login screen's subscription panel empty.
+   */
+  it('keeps a POS session alive for an OFFLINE_ONLY store', async () => {
+    const { service } = build({ role: 'ADMIN', storeId: 's1', store: OFFLINE_ONLY });
+    const posPayload = { ...(payload as object), client: 'pos' } as never;
+    await expect(service.validateUser(posPayload)).resolves.toMatchObject({ id: 'u1' });
+  });
+
+  // A POS token is not a skeleton key: it only relaxes the OFFLINE_ONLY rule.
+  it('still cuts off a POS session when the store is deactivated', async () => {
+    const { service } = build({ role: 'ADMIN', storeId: 's1', store: DEACTIVATED });
+    const posPayload = { ...(payload as object), client: 'pos' } as never;
+    await expect(service.validateUser(posPayload)).resolves.toBeNull();
+  });
+
+  // Tokens minted before `client` existed have no such field; they must keep being judged as
+  // dashboard sessions rather than silently gaining POS latitude.
+  it('treats a token with no client as a dashboard session', async () => {
+    const { service } = build({ role: 'ADMIN', storeId: 's1', store: OFFLINE_ONLY });
     await expect(service.validateUser(payload)).resolves.toBeNull();
   });
 
