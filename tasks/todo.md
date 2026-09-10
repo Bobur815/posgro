@@ -34,6 +34,21 @@ Replace `appleboy/ssh-action` with plain `ssh`/`scp` to get a real retry loop ke
   fails fast instead of rebuilding three times.
 - Follow-up NOT done (needs the user): rotate the five exposed secrets.
 
+### Outcome (run #81, green)
+Four runs to get there. #78 died on GitHub's YAML parser rejecting a flow-mapping scalar that
+js-yaml accepted; #79 and #80 exited 255 before auth. The cause was a trailing newline in
+SSH_HOST/SSH_USER — appleboy trimmed it, plain  tried to resolve host
+. Two hypotheses
+I pushed on the way (key formatting, IdentitiesOnly) were both wrong and both cost a run; what
+finally worked was routing diagnostics to  annotations, which are readable without
+signing in, instead of guessing again.
+
+Verified live on the VPS during run #81:
+- HEAD dbafa06, .env 0600, ~/.git-credentials 0600, secrets dir removed
+- PAT no longer in .git/config (origin is a plain URL)
+- 0 processes exposing a secret in argv, scanned mid-deploy; deploy shows as
+  - image digest unchanged (only CI files changed), so the api container correctly kept its uptime
+
 ---
 
 # Previous task (kept for reference)
