@@ -1,7 +1,7 @@
 # LAN multi-terminal ("main terminal") mode — design
 
-**Status:** design agreed 2026-09-10 (§1). Not started. Every question raised during design has
-been answered; §8 holds the one detail that follows from a decision without being stated by it.
+**Status:** design agreed and complete, 2026-09-10 (§1). Not started. Nothing is blocking
+implementation — §8 records what is deliberately deferred and what must not be deferred.
 
 ---
 
@@ -25,6 +25,7 @@ been answered; §8 holds the one detail that follows from a decision without bei
 | Several `isMain=true` terminals in one store stay allowed | they behave exactly as today — see §6.1 |
 | A satellite depends on the main being up | accepted; degraded mode defined in §5.9 |
 | **Satellite users authenticate against the main, every time** | no local password fallback; §6.9 |
+| **PIN unlock goes to the main too** | no local credential path at all on a satellite; §5.13, §6.10 |
 | **A satellite opens its own shift** | `Smena` already carries `terminalId`; §5.14 |
 | **Read-only work continues when the main is unreachable** | price lookups, today's sales; §5.9 |
 | Backups are the **main terminal's** responsibility | §6.6 |
@@ -157,10 +158,22 @@ found weeks later.
     The one behavioural change is that the `vcrPrintsReceipt()` skip at `sales-handlers.ts:38`
     becomes main-only — a satellite prints regardless, because the fiscal device is not at its
     till. See §6.7.
-13. **Login goes to the main, every time.** A satellite posts to the main's `/auth/login`, which
-    already uses the same `users` table and the same bcrypt hashes (`local-server/routes/auth.ts`)
-    — so this is a re-point, not a new auth model. It needs the terminal audience from item 4
-    rather than the browser's. No local password fallback: see the consequence in §6.9.
+13. **All login goes to the main — password *and* PIN.** Password is a re-point: the main's
+    `/auth/login` already uses the same `users` table and bcrypt hashes
+    (`local-server/routes/auth.ts`), it just needs the terminal audience from item 4 rather than
+    the browser's.
+
+    **PIN needs a new endpoint.** There is no PIN route on the LAN server today, and PIN
+    verification cannot be a lookup: PINs are bcrypt-hashed and deliberately not unique, so
+    `findUserIdByPin()` compares the candidate against *every* active user with a PIN
+    (`auth-handlers.ts:103`). That loop moves to the main.
+
+    This also forces a distinction item 4 should make explicit: the terminal token is a **device**
+    credential, established when the satellite is paired, not something a user login produces.
+    It has to already exist for the satellite to ask "is this PIN valid?" at all — and it is what
+    stops any phone on the Wi-Fi from asking the same question (§6.10).
+
+    No local credential path remains on a satellite. See §6.9 for what that means during an outage.
 14. **Shifts stay per terminal.** `Smena` already has `terminalId` and is indexed
     `[terminalId, status]` (`schema.sqlite.prisma:174,188`), so a satellite opening its own shift
     needs no schema change — only that the shift is created on the main and carries the
@@ -266,6 +279,32 @@ If losing the read-only fallback at cold start turns out to matter, the smallest
 the last successful login's bcrypt hash for that user — but that is a real weakening of "against
 the main every time", so it should be a deliberate follow-up, not slipped in.
 
+### 6.10 A 4-digit PIN becomes a network credential
+
+This is the one consequence of the design that genuinely weakens something, so it should be built
+with the mitigation rather than after it.
+
+Today a PIN is a local unlock: `PIN_PATTERN` allows **1 to 4 digits**
+(`auth-handlers.ts:70`), and `auth:loginWithPin` is **not throttled** — which is fine, because an
+attacker has to be standing at the terminal. `AttemptThrottle` exists but guards the manager
+override, not PIN login (`auth-handlers.ts:73`).
+
+Routing PIN to the main turns it into a network credential over plain HTTP on the shop LAN. At
+most 10,000 combinations, and each attempt costs the main a bcrypt compare *per user with a PIN* —
+so a brute force is simultaneously a denial of service against the terminal that now runs the
+whole shop.
+
+Required alongside item 13, not later:
+
+- the PIN endpoint accepts **only a paired terminal's device token** — never an unauthenticated
+  caller, and never the browser audience
+- per-terminal rate limiting with lockout; `AttemptThrottle` already exists and should be reused
+  rather than reinvented
+- log failed PIN attempts with the originating `terminalId`, so a shop can see it happening
+
+Worth considering separately: 4 digits is short for something that now crosses a wire. Raising the
+minimum length is a product decision, not a blocker for this design.
+
 ## 7. Phasing
 
 - **Phase 0 — stop the current footgun (do first, small).** A shop pointed at a main PC today
@@ -281,17 +320,20 @@ the main every time", so it should be a deliberate follow-up, not slipped in.
 
 ---
 
-## 8. Still open
+## 8. Deferred, and what must not be
 
-1. **Does PIN unlock also go to the main?** "Authenticate against the main every time" was decided
-   for password login. PIN login is a separate, entirely local path today — `usersWithPin()` /
-   `findUserIdByPin()` read the local `users` table (`auth-handlers.ts:83,103`) — so the decision
-   does not automatically settle it.
+Nothing is blocking. Every question raised during design has been answered, and the two items that
+would otherwise get decided by accident during implementation are written down as requirements
+instead:
 
-   Routing PIN to the main as well is the consistent reading, and is what §1 records. It does mean
-   no quick unlock while the main is down, which sharpens §6.9. Leaving PIN local instead would
-   keep cashiers working through a brief main outage in read-only mode, at the cost of one
-   credential that the main never sees.
+- **§6.10** — the PIN endpoint must ship with its rate limiting and device-token guard, not after.
+- **§6.9** — a satellite must degrade an already-open session rather than dropping it, and say
+  "waiting for main terminal" on the login screen instead of showing a password error.
 
-   Cheap either way; worth a deliberate answer before Phase 3 rather than whichever falls out of
-   the implementation.
+Two things are deliberately left for later, and neither changes the design:
+
+1. **PIN length.** Four digits is short for a credential that now crosses a wire (§6.10). Raising
+   the minimum is a product decision.
+2. **A cached-credential fallback** for cold start during a main outage (§6.9). It is a real
+   weakening of "against the main every time", so it should only happen if the 7am case turns out
+   to hurt in practice — as a deliberate follow-up, never slipped in.
