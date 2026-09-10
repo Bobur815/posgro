@@ -500,3 +500,100 @@ they already share one, which means they are already issuing duplicate receipt n
 shop. On the VPS, duplicate `receipt_number` values within a store are the giveaway.
 
 ---
+
+## 11. Changing a terminal's role
+
+### 11.1 Where it lives
+
+The login-screen gear (`TerminalAccessBar.tsx:383`), which today opens a dialog labelled
+`settings.serverUrl` and edits `localConfig.apiUrl`. Two changes:
+
+- **Relabel `settings.serverUrl` → `settings.apiUrl`** in `ru.json` and `uz.json` — three keys:
+  `serverUrl`, `serverUrlHint`, `serverUrlInvalid`. The field always wrote `apiUrl`; the label was
+  the only thing calling it something else.
+- **Add a Role section**: Main / Satellite, plus the main's address when Satellite is chosen.
+
+It stays on the login screen deliberately. A terminal being repaired or repointed is exactly the
+case where nobody can sign in, so hiding this behind a login would put it out of reach when it is
+needed. That is also why it must be gated properly:
+
+### 11.2 The gate is the super-admin password, not the terminal PIN
+
+`auth:verifyTerminalAccess` (`auth-handlers.ts:681`) accepts **a PIN or any active ADMIN's
+password** — appropriate for editing a URL, far too weak for handing the shop's source of truth to
+a different machine.
+
+Use `auth:verifySuperAdminPassword` (`auth-handlers.ts:723`) instead. It already exists, is already
+rate-limited through `overrideThrottle`, and starts no session.
+
+Two consequences to build for:
+
+- It **returns false when no super-admin password is configured** — deliberately, so a missing
+  configuration is not an open door. So **a shop cannot use satellites without one set.** Pairing
+  must refuse with that reason rather than silently falling back to the weaker gate.
+- Keep the existing unlock for the API URL field so today's behaviour is unchanged, and prompt for
+  the super-admin password only when Role actually changes. Raising the bar on the whole dialog
+  would be defensible, but it is a separate decision and should not ride along.
+
+### 11.3 The generation counter is what prevents two mains
+
+A `mainGeneration` integer on `local_config`, incremented on every promotion. A satellite records
+the highest generation it has seen from its main and **refuses to talk to a main presenting a lower
+one**.
+
+Without it, an old main that comes back from repair simply starts serving again, and any satellite
+still pointed at it silently resumes writing to a stale source of truth — a second, divergent
+shop. The counter makes that refusal automatic instead of relying on whoever did the repair
+remembering.
+
+This is scoped per pairing: a shop deliberately running two independent mains (§6.1) has two
+unrelated lineages, and a satellite only ever compares generations from the main it is paired with.
+
+### 11.4 Planned handoff — the main is still reachable
+
+The case that matters most, because scheduled maintenance is the common one.
+
+1. On the satellite: Role → **Main**, super-admin password.
+2. It asks the current main for a full snapshot — catalog, stock, open shifts, and every sale it
+   does not already hold — and for a demotion at generation *N+1*.
+3. The old main writes generation *N+1*, flips itself to Satellite pointed at the new main, and
+   stops serving.
+4. Remaining satellites are repointed at the new address (§11.6).
+
+No data is lost, because the truth is transferred while both machines are up. The old main can
+then go for service, and comes back as an ordinary satellite.
+
+### 11.5 Emergency promotion — the main is dead
+
+Allowed, because a shop that cannot sell is not an acceptable outcome, but it is a
+**disaster-recovery action and must read like one**. The promoted terminal has only its read cache
+and the sales it originated; the other tills' sales since the last sync are not on it, and its
+stock figures are as stale as its last pull.
+
+The dialog states exactly that before proceeding — what it has, what it is missing, and that the
+old main will need manual reconciliation — and requires an explicit acknowledgement, not just the
+password.
+
+On confirmation it bumps `mainGeneration` and records why: promoted from incomplete state, at what
+time, from a cache last refreshed when. That record is what the reconciliation later works from.
+
+**The old main must not be returned to service as-is.** Its data has to be reconciled and the
+machine re-paired as a satellite. The generation guard (§11.3) stops it re-serving satellites, but
+nothing stops someone selling on it directly, so this belongs in the service procedure as well as
+in code.
+
+One mitigation worth stating: **in ONLINE mode the VPS already holds the old main's sales up to its
+last successful sync**, which bounds the loss to the window since then. In OFFLINE_ONLY there is no
+such copy, which raises the stakes on §6.6 backups considerably.
+
+### 11.6 Repointing the other satellites
+
+After any promotion the remaining satellites still point at the old address. With the Role section
+in the gear dialog this is a per-terminal edit — four of them in a five-till shop, done at the
+login screen without signing in.
+
+Acceptable, and the honest starting point. If it proves annoying in the field, the improvement is
+to let a satellite hold several candidate addresses and use whichever answers with the highest
+generation — the counter already makes that safe. Not worth building until asked for.
+
+---
