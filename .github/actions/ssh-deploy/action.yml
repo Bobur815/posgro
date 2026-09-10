@@ -67,7 +67,11 @@ runs:
         chmod 700 "$work"
         trap 'rm -rf "$work"' EXIT
 
-        printf '%s\n' "$SSH_KEY" > "$work/id"
+        # appleboy/ssh-action repaired key formatting silently; `ssh -i` will not.
+        # Strip CRs and guarantee exactly one trailing newline, or OpenSSH rejects
+        # the file with "invalid format" and every attempt exits 255.
+        printf '%s' "$SSH_KEY" | tr -d '\r' > "$work/id"
+        [ -n "$(tail -c1 "$work/id")" ] && printf '\n' >> "$work/id"
         # The payload never becomes a command-line argument, here or on the VPS.
         printf '%s'   "$ENV_FILE" > "$work/env"
         printf 'https://%s:%s@github.com\n' "$REPO_OWNER" "$GH_PAT" > "$work/git-credentials"
@@ -89,6 +93,16 @@ runs:
               -o ServerAliveInterval=30
               -o ServerAliveCountMax=10
               -o BatchMode=yes)
+
+        # Fingerprints are not secret, and this turns "exit 255" into an actual
+        # diagnosis: wrong key stored, or a key OpenSSH cannot parse at all.
+        if ssh-keygen -l -f "$work/id"; then
+          echo "key parsed OK ($(wc -l < "$work/id") lines)"
+        else
+          echo "::error::SSH_KEY is not a key OpenSSH can read. Re-add the secret" \
+               "with its BEGIN/END lines and real newlines intact."
+          exit 1
+        fi
 
         SECRET_DIR=".posgro-secrets-$BRANCH"
 
@@ -125,8 +139,11 @@ runs:
         while :; do
           echo "::group::Deploy attempt $attempt/$MAX_ATTEMPTS"
           rc=0
+          # Last attempt talks loudly, so a persistent failure lands in the log
+          # with the reason rather than a bare exit code.
+          VOPT=(); [ "$attempt" -ge "$MAX_ATTEMPTS" ] && VOPT=(-v)
           {
-            ssh "${OPTS[@]}" "$SSH_USER@$SSH_HOST" \
+            ssh "${VOPT[@]}" "${OPTS[@]}" "$SSH_USER@$SSH_HOST" \
                 "mkdir -p ~/$SECRET_DIR && chmod 700 ~/$SECRET_DIR" &&
             # -p preserves the local 0600 mode; without it scp applies the remote
             # umask and the payload lands 0644 inside the 0700 dir.
