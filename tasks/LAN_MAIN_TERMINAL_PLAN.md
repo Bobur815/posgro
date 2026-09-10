@@ -205,9 +205,10 @@ identity confusion.
 ### 6.3 Static IP
 
 Chosen deliberately over discovery. It must be a real static lease — a DHCP renewal or router
-reboot that moves the main terminal takes every satellite down at once. This belongs in the
-install checklist with the firewall rule for `local_web_port`, which Windows blocks inbound by
-default.
+reboot that moves the main terminal takes every satellite down at once.
+
+Note the address belongs to the **main**, not the satellites: nothing addresses a satellite, so
+those can stay on DHCP. Commands and the rest of the network setup are in §9.
 
 ### 6.4 SQLite write contention at 5+ terminals
 
@@ -337,3 +338,91 @@ Two things are deliberately left for later, and neither changes the design:
 2. **A cached-credential fallback** for cold start during a main outage (§6.9). It is a real
    weakening of "against the main every time", so it should only happen if the 7am case turns out
    to hurt in practice — as a deliberate follow-up, never slipped in.
+
+---
+
+## 9. Install checklist
+
+Written down because it is the part that gets done from memory on a shop floor, and three of these
+steps fail silently — the shop sees "it doesn't work on Wi-Fi" with nothing in any log.
+
+**§9.1–9.3 already apply today** for the phone dashboard on an OFFLINE_ONLY store. **§9.4 onward
+is for when Phases 1–3 land** — until then, pointing a second terminal at the main gets you the
+§2.1 footgun, not a satellite.
+
+### 9.1 On the main terminal — address
+
+Give it an address that cannot move. A **DHCP reservation on the router** is better than a static
+IP configured in Windows: it survives a reinstall and cannot collide with the router's pool.
+
+```powershell
+Get-NetIPAddress -AddressFamily IPv4 | Select-Object IPAddress, InterfaceAlias
+Get-NetAdapter | Select-Object Name, MacAddress          # for the reservation
+```
+
+Record the address — every satellite is configured against it.
+
+### 9.2 On the main terminal — firewall
+
+Windows blocks the inbound port by default. The network profile must be **Private**: shop Wi-Fi is
+often classified Public, where the inbound policy is far harsher, and the rule below is scoped to
+Private so the two must match.
+
+```powershell
+Get-NetConnectionProfile                                  # confirm: NetworkCategory = Private
+Set-NetConnectionProfile -InterfaceAlias "Wi-Fi" -NetworkCategory Private
+
+New-NetFirewallRule -DisplayName "POSGRO LAN server" -Direction Inbound `
+  -Protocol TCP -LocalPort 5173 -Action Allow `
+  -Profile Private -RemoteAddress LocalSubnet
+```
+
+`-RemoteAddress LocalSubnet` keeps the port off any other network the machine later joins. It
+matters: this port accepts PIN attempts (§6.10).
+
+Confirm it is actually listening:
+
+```powershell
+Get-NetTCPConnection -LocalPort 5173 -State Listen
+```
+
+**5173 is the default, not a requirement** — `DEFAULT_PORT` (`local-server/index.ts:24`), overridden
+by the `local_web_port` row in `system_settings`. There is no need to invent a port such as 8888;
+if you do change it, change the firewall rule to match. Nothing in the UI writes that setting, so
+it is an installer-level value.
+
+### 9.3 On the router
+
+- **Turn AP / client isolation OFF.** Most consumer routers and nearly every "guest" SSID isolate
+  wireless clients from one another, so a satellite reaches the internet but not the main terminal.
+  This is the single most common cause of "works on cable, not on Wi-Fi", and nothing on the
+  Windows side can reveal it.
+- Main and satellites on the **same SSID / VLAN / subnet**.
+- Prefer **Ethernet for tills** where the building allows it — it removes both problems above and
+  the latency variance on every sale commit, which now includes a LAN round trip.
+
+### 9.4 On each satellite
+
+- **Never clone the main's disk image.** Duplicate `terminalId` means duplicate receipt numbers
+  (§6.2), discovered only at consolidation. Each terminal gets its own identity at setup.
+- Set `isMain = false` and point `mainTerminalUrl` at the address from §9.1.
+- No printer setup changes: a satellite keeps its own printer (§5.12).
+- No `regos_vcr_*` settings: it does not fiscalize (§5.11).
+
+### 9.5 Verify, from the satellite
+
+```powershell
+Test-NetConnection -ComputerName <main-ip> -Port 5173     # TcpTestSucceeded : True
+```
+
+If that fails, work through it in this order — cheapest first: AP isolation (§9.3), network
+profile (§9.2), firewall rule (§9.2), then whether the server is listening at all (§9.2).
+
+### 9.6 Not required — skip these
+
+- **File and Printer Sharing / Network Discovery.** This is a plain HTTP server on a TCP port, not
+  an SMB share.
+- **A dedicated port** such as 8888 — see §9.2.
+- **A static IP on satellites.** Nothing addresses them; only the main needs a fixed address.
+- **HTTPS on the LAN.** Out of scope, but it is why §6.10's device token and rate limiting are
+  requirements rather than nice-to-haves: PINs cross this wire in the clear.
