@@ -1,3 +1,43 @@
+# Phase 2 (slice 1) — the main can serve (done 2026-09-10)
+
+From `tasks/LAN_MAIN_TERMINAL_PLAN.md` §7. Phase 2 is large, so it lands in slices; this one is the
+foundation the rest needs. Still no behaviour change for any existing shop.
+
+- [x] `paired_terminals` table — the shop's terminal registry, `terminal_id` as primary key so two
+      tills cannot claim the same one (§6.2)
+- [x] `shouldServeLocally()` — pure, mirroring `sync-policy.ts`, with the gate the plan called for
+- [x] The LAN server now starts for a main **with satellites** in either mode, not only OFFLINE_ONLY
+- [x] `GET /terminal/info` — public identity endpoint, the counterpart to Phase 0's `/health` probe
+
+## Review
+
+**The gate is not `isMain`.** §5.2 originally proposed `mode === 'OFFLINE_ONLY' || isMain`, which
+would have opened a listening socket in every shop running the app, since `isMain` defaults to true
+across the whole fleet. Paired satellites are the honest signal: no rows, no server. Six of the ten
+`serve-policy.test.ts` cases exist to hold that line.
+
+**Two URL fields, two questions.** `apiUrl` asks "is this the vendor's server?" and is validated by
+`/health`, which this server must never answer or Phase 0's guard stops working.
+`mainTerminalUrl` asks "is this our main terminal?" and is validated by `/terminal/info`. The
+integration test asserts both halves against the real router, so neither can be broken silently.
+
+`/terminal/info` is public because a satellite reaches it before pairing has given it any
+credential. It returns service, role, store id and terminal id — enough to refuse a main belonging
+to a different shop, which matters where two businesses share a building's wifi — and a test pins
+the key list so nothing about takings, stock or people can be added to it by accident.
+
+417 tests pass (was 404). One flake seen once in the full run — `no such table: smenas`, a table
+this change does not touch — which did not reproduce in four subsequent runs. Not attributed; noted
+in case it recurs.
+
+## Next in Phase 2
+
+- Pairing: how a satellite gets its device credential and its row in `paired_terminals`
+- The `posgro-lan-terminal` token audience (§5.4)
+- The terminal-sync routes (§5.3)
+
+---
+
 # Phase 1 — terminal identity (done 2026-09-10)
 
 From `tasks/LAN_MAIN_TERMINAL_PLAN.md` §7: the role exists and is enforced, with no behaviour

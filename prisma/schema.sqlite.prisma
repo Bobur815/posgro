@@ -52,6 +52,28 @@ model LocalConfig {
   @@map("local_config")
 }
 
+/// Satellites paired with this terminal. Rows exist only on a main, and only after someone pairs
+/// a till — so this is empty on every terminal in the field, which is what keeps the LAN server
+/// switched off for shops that upgrade into the feature without using it.
+///
+/// It is also the terminal registry for the shop's LAN: `terminalId` is the primary key, so a
+/// second till cannot pair under an id already taken (see tasks/LAN_MAIN_TERMINAL_PLAN.md §6.2 —
+/// duplicate ids mean duplicate receipt numbers, found only at consolidation).
+model PairedTerminal {
+  terminalId String @id @map("terminal_id")
+  name       String?
+
+  /// bcrypt hash of the device secret issued at pairing — never the secret itself. This is a
+  /// *device* credential, not a user's: it is what lets a satellite ask "is this PIN valid?"
+  /// before anybody has logged in (§5.13).
+  secretHash String @map("secret_hash")
+
+  pairedAt   DateTime  @default(now()) @map("paired_at")
+  lastSeenAt DateTime? @map("last_seen_at")
+
+  @@map("paired_terminals")
+}
+
 // ==================== USER MANAGEMENT ====================
 
 model User {

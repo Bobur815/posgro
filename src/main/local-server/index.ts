@@ -6,6 +6,7 @@ import { getLanAddress } from '../network/lan-address';
 import { verifyToken } from './auth';
 import { buildRouter } from './routes';
 import { StaticFiles } from './static-files';
+import { shouldServeLocally } from './serve-policy';
 import { HttpError, Router, sendError, sendJson, type RequestContext } from './router';
 
 /**
@@ -15,9 +16,13 @@ import { HttpError, Router, sendError, sendJson, type RequestContext } from './r
  * the store's data is already here in SQLite. So the terminal serves both halves on the shop's
  * own Wi-Fi and the owner opens it on their phone with no internet at all.
  *
- * Only started for an OFFLINE_ONLY store. An ONLINE store's dashboard is the real one, backed by
- * the server that is authoritative for it; running a second, divergent copy against a local
- * replica would be a way to show people stale numbers.
+ * Started for an OFFLINE_ONLY store, and for a main terminal that has satellites paired to it —
+ * those exist in ONLINE mode too and have to be answered somewhere.
+ *
+ * Not started for an ordinary ONLINE store: its dashboard is the real one, backed by the server
+ * that is authoritative for it, and running a second divergent copy against a local replica would
+ * be a way to show people stale numbers. See `serve-policy.ts` for why paired satellites are the
+ * condition rather than `isMain`.
  */
 
 /** Same default as the QR builder in `../ipc/handlers.ts`, and the port Vite uses in dev. */
@@ -66,17 +71,23 @@ async function resolvePort(): Promise<number> {
 }
 
 /**
- * Start the server if this store is OFFLINE_ONLY, stop it otherwise.
+ * Start or stop the server to match what this terminal is currently for (`serve-policy.ts`).
  *
- * Safe to call repeatedly — on every launch and whenever a sync cycle reports a changed mode —
- * so flipping a store to OFFLINE_ONLY takes effect without a restart, and flipping it back
- * closes the listener rather than leaving the shop network served by a stale terminal.
+ * Safe to call repeatedly — on every launch and whenever a sync cycle reports a changed mode — so
+ * flipping a store to OFFLINE_ONLY, or pairing the first satellite, takes effect without a
+ * restart, and the reverse closes the listener rather than leaving the shop network served by a
+ * stale terminal.
  */
 export async function syncLocalServerWithMode(): Promise<void> {
   const prisma = getPrismaClient();
   const config = await prisma.localConfig.findUnique({ where: { id: 'config' } });
 
-  if (config?.mode === 'OFFLINE_ONLY') {
+  // Counted only when it could matter: an OFFLINE_ONLY store already serves, and this runs on
+  // every sync cycle.
+  const pairedCount =
+    config?.mode === 'OFFLINE_ONLY' ? 0 : await prisma.pairedTerminal.count();
+
+  if (shouldServeLocally(config, pairedCount)) {
     await startLocalServer();
   } else {
     await stopLocalServer();

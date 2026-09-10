@@ -134,6 +134,28 @@ describe('the server itself', () => {
     expect(res.status).toBe(404);
   });
 
+  /**
+   * The other half of that pair. A satellite cannot use `/health` to check its `mainTerminalUrl`,
+   * precisely because this server must not answer it — so it asks here instead. Public, because a
+   * satellite reaches this before pairing has given it any credential.
+   */
+  it('identifies itself on /terminal/info without a token', async () => {
+    const res = await fetch(`http://127.0.0.1:${PORT}/api/terminal/info`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      service: 'posgro-terminal',
+      role: 'main',
+      store_id: 'store-test',
+      terminal_id: 'T1',
+    });
+  });
+
+  // It says what a satellite needs to pick the right machine, and nothing about the business.
+  it('leaks nothing else on /terminal/info', async () => {
+    const body = await (await fetch(`http://127.0.0.1:${PORT}/api/terminal/info`)).json();
+    expect(Object.keys(body).sort()).toEqual(['role', 'service', 'store_id', 'terminal_id']);
+  });
+
   // Only meaningful once `npm run build:web` has staged the dashboard, which a fresh checkout has
   // not — so this is skipped rather than failed there, and runs for real in a release build.
   const built = existsSync(join(__dirname, '..', '..', '..', 'dist-web', 'index.html'));

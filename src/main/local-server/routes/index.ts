@@ -9,6 +9,7 @@ import { productRoutes } from './products';
 import { reconciliationRoutes } from './reconciliation';
 import { salesRoutes } from './sales';
 import { supplierRoutes } from './suppliers';
+import { terminalRoutes } from './terminal';
 import { userRoutes } from './users';
 
 /**
@@ -37,5 +38,6 @@ export function buildRouter(): Router {
     ...mxikRoutes,
     ...markingRoutes,
     ...logRoutes,
+    ...terminalRoutes,
   ]);
 }

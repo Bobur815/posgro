@@ -796,6 +796,22 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   if (!(await columnExists(prisma, 'local_config', 'main_terminal_url'))) {
     await prisma.$executeRaw`ALTER TABLE local_config ADD COLUMN main_terminal_url TEXT`;
   }
+
+  // Migration 32: the satellites paired with this terminal.
+  //
+  // Empty on every terminal that upgrades into it, which is deliberate: the LAN server starts for
+  // an ONLINE store only once this table has a row, so a shop that never pairs a till sees no
+  // change at all. `terminal_id` is the primary key, so the shop's LAN cannot end up with two
+  // tills claiming the same id.
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS paired_terminals (
+      terminal_id  TEXT PRIMARY KEY,
+      name         TEXT,
+      secret_hash  TEXT NOT NULL,
+      paired_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_seen_at DATETIME
+    )
+  `;
 }
 
 /** True if `column` exists on `table` — silent (no thrown query, no prisma:error log). */
