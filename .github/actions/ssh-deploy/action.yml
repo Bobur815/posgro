@@ -67,6 +67,12 @@ runs:
         chmod 700 "$work"
         trap 'rm -rf "$work"' EXIT
 
+        # Secrets routinely arrive with a stray trailing newline; ssh would then
+        # try to resolve "host\n" and exit 255 before any auth. appleboy trimmed
+        # these for us.
+        SSH_HOST="$(printf '%s' "$SSH_HOST" | tr -d '[:space:]')"
+        SSH_USER="$(printf '%s' "$SSH_USER" | tr -d '[:space:]')"
+
         # appleboy/ssh-action repaired key formatting silently; `ssh -i` will not.
         # Strip CRs and guarantee exactly one trailing newline, or OpenSSH rejects
         # the file with "invalid format" and every attempt exits 255.
@@ -86,7 +92,15 @@ runs:
           echo "::warning::SSH_KNOWN_HOSTS not set — host key accepted on trust (TOFU)."
         fi
 
+        # IdentitiesOnly + publickey-only are load-bearing, not tidiness: sshd on
+        # the VPS sets MaxAuthTries 3, and plain ssh offers agent/default
+        # identities before -i. Any two of those exhaust the budget and the server
+        # disconnects before our key is ever tried — exit 255, no auth log entry.
+        # appleboy/ssh-action never hit this because its Go client offers only the
+        # key it was given.
         OPTS=(-i "$work/id"
+              -o IdentitiesOnly=yes
+              -o PreferredAuthentications=publickey
               -o "StrictHostKeyChecking=$strict"
               -o "UserKnownHostsFile=$work/known_hosts"
               -o ConnectTimeout=15
@@ -164,6 +178,15 @@ runs:
           # Any other code came from the deploy script — fail fast, don't rebuild.
           if [ "$rc" -ne 255 ] || [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then
             echo "❌ Deploy failed (exit $rc)"
+            # Run-log access needs sign-in, but annotations are public — put the
+            # diagnosis where it can actually be read. Values are described, not
+            # printed: GitHub masks secrets, so echoing them yields only "***".
+            echo "::error::deploy failed rc=$rc; host len=${#SSH_HOST}" \
+                 "dns=$(getent hosts "$SSH_HOST" >/dev/null 2>&1 && echo ok || echo FAIL)" \
+                 "port22=$( (exec 3<>/dev/tcp/"$SSH_HOST"/22) >/dev/null 2>&1 && echo open || echo BLOCKED)" \
+                 "user len=${#SSH_USER}; keyfp=$(ssh-keygen -lf "$work/id" 2>&1 | awk '{print $2}')"
+            ssh -v "${OPTS[@]}" "$SSH_USER@$SSH_HOST" true >"$work/probe.log" 2>&1 || true
+            echo "::error::ssh -v tail: $(tr '\n' '~' < "$work/probe.log" | tail -c 700)"
             exit "$rc"
           fi
 
