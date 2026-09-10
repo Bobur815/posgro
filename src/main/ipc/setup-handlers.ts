@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { getAppConfig, updateConfig } from '../config/app-config';
+import { probeApiUrl } from '../config/api-url-probe';
 import { getPrismaClient, writeStoreBootstrap, closeDatabase, initializeDatabase } from '../database/sqlite-client';
 import { setServerToken } from '../sync/queue-manager';
 import { seedLocalDatabase } from '../database/seed';
@@ -68,6 +69,14 @@ export function setupSetupHandlers(getSetupWindow: () => BrowserWindow | null, o
     // The wizard chooses the server, not the build: a terminal being set up against staging must
     // authenticate there, and it is the only chance to say so before anything is written.
     const vpsApiUrl = resolveServerUrl(data.serverUrl);
+
+    // The same guard `config:updateLocalConfig` applies, because setup is the other place a server
+    // URL is chosen — and the more likely one. A terminal's LAN dashboard answers both `/auth/login`
+    // and `/stores/:id`, so the whole wizard would succeed against another till and leave a
+    // terminal that never uploads a sale.
+    if ((await probeApiUrl(vpsApiUrl)) === 'not-pos-server') {
+      throw new Error('setup.errors.not_pos_server');
+    }
 
     try {
       const response = await fetch(`${vpsApiUrl}/auth/login`, {

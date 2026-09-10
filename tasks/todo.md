@@ -1,3 +1,38 @@
+# Phase 0 — stop the silent-sales-loss footgun (done 2026-09-10)
+
+From `tasks/LAN_MAIN_TERMINAL_PLAN.md` §7. A terminal pointed at another terminal's LAN dashboard
+logs in fine (the LAN server has `/auth/login`), pulls the catalog, and never uploads a sale
+(`/sales/sync` is not there). Nothing surfaced it.
+
+- [x] `probeApiUrl()` — `GET {url}/health`, three-valued so an unreachable server is never
+      mistaken for a wrong one
+- [x] Guard `config:updateLocalConfig` (the login-screen gear), checked before the write
+- [x] Guard `setup:authenticate` — setup is the other place a URL is chosen, and the LAN server
+      answers `/stores/:id` too, so the whole wizard would have succeeded against another till
+- [x] Say why: new `settings.apiUrlNotPosServer` / `setup.errors.not_pos_server` (ru + uz)
+- [x] Fixed the wizard swallowing every `setup.errors.*` as the generic "login failed"
+- [x] Locked the discriminator in against the real LAN router rather than inferring it
+
+## Review
+
+`/health` is registered by the VPS (`server/main.ts:85`) and absent from the LAN router. Verified
+both ways: live `GET /api/health` returns the health payload on prod and staging, and the
+local-server integration test now asserts the LAN server 404s there — so adding `/health` to it
+later fails loudly instead of quietly disabling the guard.
+
+Two things the live check changed:
+
+- **A 200 alone is not enough.** `/web/health` returns 200, because the dashboard SPA fallback
+  serves index.html for any path — so a `/web` instead of `/api` typo would have passed. The body
+  has to be the health payload.
+- **Only a definitive answer blocks.** 500/502/503 and unreachable are inconclusive. Refusing a URL
+  because the VPS happened to be restarting would send a technician chasing a problem that does not
+  exist, and would stop a terminal being configured before the network is up.
+
+403 tests pass (was 393). No version bump — bumped at deploy, per convention.
+
+---
+
 # CI deploy hardening — 2026-09-10
 
 ## Context

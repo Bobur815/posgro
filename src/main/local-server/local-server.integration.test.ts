@@ -120,6 +120,20 @@ describe('the server itself', () => {
     expect(getLocalServerStatus()).toMatchObject({ running: true, port: PORT });
   });
 
+  /**
+   * `probeApiUrl()` refuses a server URL by asking for `/health` and treating 404 as "this is not a
+   * POS API" — which is what stops a terminal being pointed at another terminal's LAN dashboard,
+   * where it would log in happily and never upload a sale.
+   *
+   * That discriminator is only sound while this server genuinely has no `/health`. Asserted here
+   * against the real router rather than inferred, so adding one later fails loudly instead of
+   * quietly turning the guard off.
+   */
+  it('has no /health route, which is what api-url-probe keys on', async () => {
+    const res = await fetch(`http://127.0.0.1:${PORT}/api/health`);
+    expect(res.status).toBe(404);
+  });
+
   // Only meaningful once `npm run build:web` has staged the dashboard, which a fresh checkout has
   // not — so this is skipped rather than failed there, and runs for real in a release build.
   const built = existsSync(join(__dirname, '..', '..', '..', 'dist-web', 'index.html'));

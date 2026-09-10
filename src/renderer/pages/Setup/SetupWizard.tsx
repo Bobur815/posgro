@@ -371,8 +371,12 @@ export function SetupWizard() {
       }));
       setCurrentStep('storeInfo');
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'setup.errors.login_failed';
-      setError(t(msg, { defaultValue: t('setup.errors.login_failed') }));
+      // Electron wraps a thrown key as `Error invoking remote method '...': Error: setup.errors.x`,
+      // so passing the message straight to t() never matched and every failure — wrong password,
+      // wrong store, wrong server — read as the generic "login failed".
+      const raw = e instanceof Error ? e.message : '';
+      const key = raw.match(/(setup\.errors\.[A-Za-z0-9_.]+)/)?.[1];
+      setError(t(key ?? 'setup.errors.login_failed'));
     } finally {
       setIsLoading(false);
     }

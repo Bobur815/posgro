@@ -321,7 +321,12 @@ export function TerminalAccessBar() {
       await window.electronAPI.config.updateLocalConfig({ apiUrl: trimmed });
       close();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("settings.serverUrlInvalid"));
+      // The main process throws a translation key; Electron wraps it as
+      // `Error invoking remote method '...': Error: settings.foo`, so dig the key back out.
+      // Without this the dialog showed that whole string to whoever is standing at the terminal.
+      const raw = e instanceof Error ? e.message : "";
+      const key = raw.match(/(settings\.[A-Za-z0-9_.]+)/)?.[1];
+      setError(key ? t(key) : t("settings.serverUrlInvalid"));
     } finally {
       setBusy(false);
     }

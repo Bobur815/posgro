@@ -844,7 +844,8 @@
     "pinRemoved": "PIN-kod o'chirildi",
     "pinChangeFailed": "PIN-kodni o'zgartirib bo'lmadi",
     "webAdminLocalHint": "Boshqaruv paneli shu terminalda ishlaydi. Telefoningizni xuddi shu Wi-Fi tarmog'iga ulang va kodni skanerlang.",
-    "webAdminUnavailable": "Panelni ochish uchun manzil yo'q. Terminal tarmoqqa ulanganini tekshiring."
+    "webAdminUnavailable": "Panelni ochish uchun manzil yo'q. Terminal tarmoqqa ulanganini tekshiring.",
+    "apiUrlNotPosServer": "Bu manzilda POS serveri yo’q — bu boshqa terminalga o’xshaydi. Undan sotuvlar yuborilmaydi, shuning uchun manzil saqlanmadi."
   },
   "updater": {
     "currentVersion": "Joriy versiya",
@@ -1337,7 +1338,8 @@
       "network_error": "Serverga ulanishda xato",
       "login_failed": "Kirish xatosi",
       "required_fields": "Barcha majburiy maydonlarni to'ldiring",
-      "invalid_server_url": "http:// yoki https:// bilan boshlanadigan to'g'ri manzil kiriting"
+      "invalid_server_url": "http:// yoki https:// bilan boshlanadigan to'g'ri manzil kiriting",
+      "not_pos_server": "Bu manzilda POS serveri yo’q — bu boshqa terminalga o’xshaydi. Ta’minotchi bergan server manzilini kiriting."
     }
   },
   "superAdmin": {

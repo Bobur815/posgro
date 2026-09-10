@@ -12,6 +12,7 @@ import { setupFiscalHandlers } from "./fiscal-handlers";
 import { setupUzQrHandlers } from "./uzqr-handlers";
 import { setupSubscriptionHandlers } from "./subscription-handlers";
 import { getAppConfig, updateConfig } from "../config/app-config";
+import { probeApiUrl } from "../config/api-url-probe";
 import { getLanAddress } from "../network/lan-address";
 import { getLocalServerStatus } from "../local-server";
 import { getAuthToken, getServerToken, clearServerToken } from "../sync/queue-manager";
@@ -930,6 +931,19 @@ function setupAppHandlers(): void {
       const previousApiUrl = (
         await prisma.localConfig.findUnique({ where: { id: "config" }, select: { apiUrl: true } })
       )?.apiUrl;
+
+      // Refuse a server this terminal could log into but never sync to — pointing it at another
+      // terminal's LAN dashboard is silent sales loss, not an error anyone would notice. Checked
+      // before the write so a rejected URL leaves the terminal exactly as it was.
+      //
+      // Only a definitive answer blocks: an unreachable server proves nothing, and a technician
+      // configuring a terminal before the network is up must still be able to save.
+      if (data.apiUrl && data.apiUrl !== previousApiUrl) {
+        if ((await probeApiUrl(data.apiUrl)) === "not-pos-server") {
+          throw new Error("settings.apiUrlNotPosServer");
+        }
+      }
+
       const result = await prisma.localConfig.update({
         where: { id: "config" },
         data,
