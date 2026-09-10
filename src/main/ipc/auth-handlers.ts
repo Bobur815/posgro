@@ -4,6 +4,7 @@ import * as jwt from 'jsonwebtoken';
 import { getPrismaClient } from '../database/sqlite-client';
 import { setAuthToken, clearAuthToken, setServerToken, clearServerToken } from '../sync/queue-manager';
 import { AttemptThrottle } from './override-throttle';
+import { refreshSubscriptionCache } from './subscription-handlers';
 import { getAppConfig } from '../config/app-config';
 import type { AuthUser } from '../../shared/types/user.types';
 
@@ -298,6 +299,7 @@ export function setupAuthHandlers(): void {
           console.warn(`VPS returned token for store ${tokenInfo.storeId}, expected ${storeId} — skipping server token`);
         } else {
           setServerToken(sToken);
+          serverTokenObtained = true;
           await prisma.systemSetting.upsert({
             where: { key: 'server_token' },
             update: { value: sToken },
@@ -329,6 +331,20 @@ export function setupAuthHandlers(): void {
           // Invalid token format — ignore
         }
       }
+    }
+
+    // Refresh the cached subscription snapshot while the credential is known good.
+    //
+    // Only when this login actually got a token from the VPS: an offline login would just log a
+    // failure every time, and the login screen would still have the same cache either way.
+    //
+    // Deliberately not awaited. It is a courtesy refresh for a dialog nobody has opened yet, so
+    // it must not add a network round trip to the cashier's login, and its own error handling
+    // already reduces every failure to a cached result.
+    if (serverTokenObtained) {
+      void refreshSubscriptionCache().catch(() => {
+        /* already logged, and a stale snapshot is the designed fallback */
+      });
     }
 
     // Set current user

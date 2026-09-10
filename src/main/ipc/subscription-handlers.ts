@@ -114,77 +114,88 @@ async function readCache(prisma: ReturnType<typeof getPrismaClient>): Promise<Ca
   }
 }
 
-export function setupSubscriptionHandlers(): void {
-  ipcMain.handle('subscription:get', async (): Promise<StoreSubscription> => {
-    const prisma = getPrismaClient();
-    const config = getAppConfig();
+/**
+ * Read the live subscription state and refresh the cache, falling back to the cached snapshot.
+ *
+ * Exported because a button press must not be the only thing that ever runs it. An OFFLINE_ONLY
+ * store never syncs (`shouldSync()` is false for it), so without a second caller this request is
+ * the terminal's only contact with the VPS — the cache would only ever be as fresh as the last
+ * time someone opened the dialog, and a token that had stopped working would go unnoticed until
+ * then. `auth-handlers` calls this after a login that obtained a fresh token.
+ */
+export async function refreshSubscriptionCache(): Promise<StoreSubscription> {
+  const prisma = getPrismaClient();
+  const config = getAppConfig();
 
-    // Set as each failure mode is ruled out, so the renderer can say what to do about a blank
-    // dialog instead of showing dashes with no explanation.
-    let reason: SubscriptionFailureReason = 'unreachable';
-    try {
-      const token = await readServerToken(prisma);
-      if (!token) {
-        // An OFFLINE_ONLY store cannot get one. The server refuses /auth/login for such a store
-        // (403 auth.errors.store_offline_only), so the setup token is the only one it ever holds
-        // and nothing can replace it once it expires and is dropped. Telling this shop to "sign in
-        // with a password" would be advice they cannot follow, so name the real situation.
-        const localConfig = await prisma.localConfig
-          .findUnique({ where: { id: 'config' } })
-          .catch(() => null);
-        reason = localConfig?.mode === 'OFFLINE_ONLY' ? 'offline-only-store' : 'no-credential';
-        throw new Error('NO_SERVER_TOKEN');
-      }
-
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-      let response: Response;
-      try {
-        response = await fetch(`${config.vpsApiUrl}/store-config/subscription`, {
-          signal: controller.signal,
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      } finally {
-        clearTimeout(timer);
-      }
-      if (!response.ok) {
-        // It answered, so the network is fine — an expired token (401) or an older server.
-        reason = 'server-error';
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data = (await response.json()) as SubscriptionResponse;
-      const fresh: CachedSubscription = {
-        storeId: data.store_id ?? null,
-        storeName: data.store_name ?? null,
-        plan: data.subscription_plan ?? null,
-        expiresAt: data.subscription_expires_at ?? null,
-        aiPlan: data.ai_plan ?? 'free',
-        balanceUzs: typeof data.balance_uzs === 'number' ? data.balance_uzs : null,
-        qrDataUrl: await renderQr(data.payment?.qr_payload ?? ''),
-        paymentUrl: data.payment?.payment_url ?? '',
-        supportPhone: data.payment?.support_phone ?? '',
-      };
-
-      const value = JSON.stringify(fresh);
-      await prisma.systemSetting.upsert({
-        where: { key: CACHE_KEY },
-        update: { value },
-        create: { key: CACHE_KEY, value },
-      });
-
-      return toResult(fresh, false);
-    } catch (e) {
-      // Offline, no credential, or an older server without the endpoint — show what we last saw,
-      // and say which it was. Logged too: this is uploaded, so a store reporting an empty dialog
-      // can be diagnosed without a remote session. An OFFLINE_ONLY store is the expected steady
-      // state rather than a fault, so it logs at info — a warning per button press would be noise.
-      const line = `[subscription] live read failed (${reason}): ${e instanceof Error ? e.message : e}`;
-      if (reason === 'offline-only-store') log.info(line);
-      else log.warn(line);
-      return toResult(await readCache(prisma), true, reason);
+  // Set as each failure mode is ruled out, so the renderer can say what to do about a blank
+  // dialog instead of showing dashes with no explanation.
+  let reason: SubscriptionFailureReason = 'unreachable';
+  try {
+    const token = await readServerToken(prisma);
+    if (!token) {
+      // An OFFLINE_ONLY store cannot get one. The server refuses /auth/login for such a store
+      // (403 auth.errors.store_offline_only), so the setup token is the only one it ever holds
+      // and nothing can replace it once it expires and is dropped. Telling this shop to "sign in
+      // with a password" would be advice they cannot follow, so name the real situation.
+      const localConfig = await prisma.localConfig
+        .findUnique({ where: { id: 'config' } })
+        .catch(() => null);
+      reason = localConfig?.mode === 'OFFLINE_ONLY' ? 'offline-only-store' : 'no-credential';
+      throw new Error('NO_SERVER_TOKEN');
     }
-  });
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(`${config.vpsApiUrl}/store-config/subscription`, {
+        signal: controller.signal,
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!response.ok) {
+      // It answered, so the network is fine — an expired token (401) or an older server.
+      reason = 'server-error';
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = (await response.json()) as SubscriptionResponse;
+    const fresh: CachedSubscription = {
+      storeId: data.store_id ?? null,
+      storeName: data.store_name ?? null,
+      plan: data.subscription_plan ?? null,
+      expiresAt: data.subscription_expires_at ?? null,
+      aiPlan: data.ai_plan ?? 'free',
+      balanceUzs: typeof data.balance_uzs === 'number' ? data.balance_uzs : null,
+      qrDataUrl: await renderQr(data.payment?.qr_payload ?? ''),
+      paymentUrl: data.payment?.payment_url ?? '',
+      supportPhone: data.payment?.support_phone ?? '',
+    };
+
+    const value = JSON.stringify(fresh);
+    await prisma.systemSetting.upsert({
+      where: { key: CACHE_KEY },
+      update: { value },
+      create: { key: CACHE_KEY, value },
+    });
+
+    return toResult(fresh, false);
+  } catch (e) {
+    // Offline, no credential, or an older server without the endpoint — show what we last saw,
+    // and say which it was. Logged too: this is uploaded, so a store reporting an empty dialog
+    // can be diagnosed without a remote session. An OFFLINE_ONLY store is the expected steady
+    // state rather than a fault, so it logs at info — a warning per button press would be noise.
+    const line = `[subscription] live read failed (${reason}): ${e instanceof Error ? e.message : e}`;
+    if (reason === 'offline-only-store') log.info(line);
+    else log.warn(line);
+    return toResult(await readCache(prisma), true, reason);
+  }
+}
+
+export function setupSubscriptionHandlers(): void {
+  ipcMain.handle('subscription:get', (): Promise<StoreSubscription> => refreshSubscriptionCache());
 
   /**
    * Open the self-service payment link in the customer's own browser. The URL comes from the

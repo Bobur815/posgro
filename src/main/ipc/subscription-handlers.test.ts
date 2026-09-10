@@ -37,7 +37,7 @@ jest.mock('../database/sqlite-client', () => ({ getPrismaClient: () => prismaMoc
 jest.mock('qrcode', () => ({ toDataURL: async () => 'data:image/png;base64,QR' }));
 
 import { ipcMain } from 'electron';
-import { setupSubscriptionHandlers } from './subscription-handlers';
+import { setupSubscriptionHandlers, refreshSubscriptionCache } from './subscription-handlers';
 import type { StoreSubscription } from '../../shared/types/store.types';
 
 /** The registered `subscription:get` handler. */
@@ -224,5 +224,35 @@ describe('failures are named, not swallowed', () => {
     settings({ token: null, cache: { value: 'not json' } });
 
     await expect(getHandler()()).resolves.toMatchObject({ storeName: null, stale: true });
+  });
+});
+
+/**
+ * The login path calls `refreshSubscriptionCache()` directly rather than going through IPC, so
+ * the export has to carry the same contract the dialog relies on. An OFFLINE_ONLY store never
+ * syncs, which makes this the only thing that keeps the snapshot current between button presses.
+ */
+describe('refreshSubscriptionCache(), the export the login path uses', () => {
+  it('writes the fresh snapshot to the cache', async () => {
+    await refreshSubscriptionCache();
+
+    expect(prismaMock.systemSetting.upsert).toHaveBeenCalledTimes(1);
+    const written = JSON.parse(prismaMock.systemSetting.upsert.mock.calls[0][0].update.value);
+    expect(written).toMatchObject({ storeId: 'store-1000', plan: 'standard', balanceUzs: 250000 });
+  });
+
+  it('is the same code path the dialog invokes', async () => {
+    await expect(refreshSubscriptionCache()).resolves.toEqual(await getHandler()());
+  });
+
+  // Called for its side effect on a login nobody is watching, so a failure must resolve to the
+  // cached snapshot rather than reject into an unhandled rejection.
+  it('never rejects when the server is unreachable', async () => {
+    settings({ token: 'jwt-token', cache: cachedRow() });
+    global.fetch = jest.fn(async () => {
+      throw new Error('ECONNREFUSED');
+    }) as unknown as typeof fetch;
+
+    await expect(refreshSubscriptionCache()).resolves.toMatchObject({ stale: true, plan: 'standard' });
   });
 });
