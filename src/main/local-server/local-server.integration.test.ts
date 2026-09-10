@@ -27,6 +27,8 @@ jest.mock('electron', () => ({
 
 import { initializeDatabase, closeDatabase, getPrismaClient } from '../database/sqlite-client';
 import { startLocalServer, stopLocalServer, getLocalServerStatus } from './index';
+import { cancelPairingCode, issuePairingCode } from './pairing';
+import * as bcrypt from 'bcryptjs';
 
 const PORT = 5399;
 let token = '';
@@ -154,6 +156,55 @@ describe('the server itself', () => {
   it('leaks nothing else on /terminal/info', async () => {
     const body = await (await fetch(`http://127.0.0.1:${PORT}/api/terminal/info`)).json();
     expect(Object.keys(body).sort()).toEqual(['role', 'service', 'store_id', 'terminal_id']);
+  });
+});
+
+describe('pairing a satellite', () => {
+  const pair = (body: unknown) =>
+    fetch(`http://127.0.0.1:${PORT}/api/terminal/pair`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  beforeEach(() => cancelPairingCode());
+
+  it('exchanges a live code for a device secret and the store identity', async () => {
+    const { code } = issuePairingCode();
+
+    const res = await pair({ code, terminalId: 'T2', name: 'Till 2' });
+    expect(res.status).toBe(201);
+
+    const body = await res.json();
+    expect(body).toMatchObject({ store_id: 'store-test', main_terminal_id: 'T1' });
+    expect(body.secret).toMatch(/^[0-9a-f]{64}$/);
+
+    // Stored hashed, never in the clear: a copied database must not yield working credentials.
+    const row = await getPrismaClient().pairedTerminal.findUnique({ where: { terminalId: 'T2' } });
+    expect(row.secretHash).not.toBe(body.secret);
+    expect(await bcrypt.compare(body.secret, row.secretHash)).toBe(true);
+  });
+
+  it('refuses a wrong code', async () => {
+    issuePairingCode();
+    expect((await pair({ code: '000000', terminalId: 'T3' })).status).toBe(403);
+  });
+
+  it('refuses when no code has been issued', async () => {
+    expect((await pair({ code: '123456', terminalId: 'T3' })).status).toBe(403);
+  });
+
+  // Duplicate ids mean duplicate receipt numbers, and the main's own id is the one most likely to
+  // be typed by mistake when a machine has been cloned.
+  it('refuses the main terminal’s own id', async () => {
+    const { code } = issuePairingCode();
+    expect((await pair({ code, terminalId: 'T1' })).status).toBe(400);
+  });
+
+  it('leaves the code unusable after a successful pairing', async () => {
+    const { code } = issuePairingCode();
+    expect((await pair({ code, terminalId: 'T4' })).status).toBe(201);
+    expect((await pair({ code, terminalId: 'T5' })).status).toBe(403);
   });
 
   // Only meaningful once `npm run build:web` has staged the dashboard, which a fresh checkout has

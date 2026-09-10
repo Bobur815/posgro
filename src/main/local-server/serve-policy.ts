@@ -24,7 +24,14 @@ export interface ServeConfig {
 export function shouldServeLocally(
   config: ServeConfig | null | undefined,
   pairedTerminalCount: number,
+  /**
+   * True while a pairing code is outstanding. Without this the feature could never start: the
+   * server runs once a satellite is paired, but a satellite has to reach the server in order to
+   * pair. Issuing a code opens the door for the few minutes the code lives.
+   */
+  pairingOpen = false,
 ): boolean {
   if (config?.mode === 'OFFLINE_ONLY') return true;
-  return config?.isMain === true && pairedTerminalCount > 0;
+  if (config?.isMain !== true) return false;
+  return pairedTerminalCount > 0 || pairingOpen;
 }

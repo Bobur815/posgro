@@ -7,6 +7,7 @@ import { verifyToken } from './auth';
 import { buildRouter } from './routes';
 import { StaticFiles } from './static-files';
 import { shouldServeLocally } from './serve-policy';
+import { isPairingOpen } from './pairing';
 import { HttpError, Router, sendError, sendJson, type RequestContext } from './router';
 
 /**
@@ -87,7 +88,7 @@ export async function syncLocalServerWithMode(): Promise<void> {
   const pairedCount =
     config?.mode === 'OFFLINE_ONLY' ? 0 : await prisma.pairedTerminal.count();
 
-  if (shouldServeLocally(config, pairedCount)) {
+  if (shouldServeLocally(config, pairedCount, isPairingOpen())) {
     await startLocalServer();
   } else {
     await stopLocalServer();

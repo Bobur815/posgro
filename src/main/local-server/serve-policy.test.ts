@@ -46,4 +46,24 @@ describe('shouldServeLocally', () => {
   ])('does not serve when the config says nothing (%s)', (_label, config) => {
     expect(shouldServeLocally(config, 2)).toBe(false);
   });
+
+  /**
+   * Without this the feature could never start. The server runs once a satellite is paired, and a
+   * satellite has to reach the server in order to pair — so issuing a code has to open the door,
+   * and its expiry has to close it again.
+   */
+  describe('while a pairing code is outstanding', () => {
+    it('serves a main that has no satellites yet', () => {
+      expect(shouldServeLocally({ mode: 'ONLINE', isMain: true }, 0, true)).toBe(true);
+    });
+
+    it('stops serving once the code lapses and nothing paired', () => {
+      expect(shouldServeLocally({ mode: 'ONLINE', isMain: true }, 0, false)).toBe(false);
+    });
+
+    // An open code is not a way around the role: a satellite still answers nobody.
+    it('does not let a satellite serve', () => {
+      expect(shouldServeLocally({ mode: 'ONLINE', isMain: false }, 0, true)).toBe(false);
+    });
+  });
 });

@@ -1,3 +1,48 @@
+# Phase 2 (slice 2) — pairing (done 2026-09-10)
+
+How a satellite gets a device credential and its row in `paired_terminals`. Main-side protocol and
+IPC; the dialogs come with the §11 gear work.
+
+- [x] `pairing.ts` — six-digit code, single-use, ten-minute life, CSPRNG, in memory
+- [x] `POST /terminal/pair` — redeems a code for a device secret, stored only as a bcrypt hash
+- [x] `pairing:issueCode` / `getCode` / `cancelCode` / `list` / `remove`, gated on the super-admin
+      password (§11.2)
+- [x] The gate opens while a code is live, which is what lets the first satellite in at all
+
+## Review
+
+**A code, not the super-admin password typed into the satellite.** That password would otherwise
+cross the shop LAN in clear text — the wire §6.10 already worries about for PINs — and it is the
+credential that can hand the whole shop to another machine. A pairing code is short-lived,
+single-use, and worthless once redeemed. `issueCode` verifies the password itself rather than
+trusting a prior `verifySuperAdminPassword` call, so a caller cannot verify once and mint codes
+forever.
+
+**Designing this found a hole in slice 1.** The LAN server starts once a satellite is paired — but
+a satellite has to reach that server *to* pair, so the first one could never get in. Issuing a code
+now opens the door for as long as the code lives; a successful pairing leaves a row, which is what
+keeps it open afterwards. `shouldServeLocally()` takes a third argument for it, with three tests
+including the one that matters: an open code must not let a *satellite* serve.
+
+**Refusals that matter, and the reason asserted rather than the status.** The endpoint answers 403
+both for a bad code and for a throttled caller, so the tests match on the message — otherwise a
+lockout would satisfy a test meant to prove the code check works. It also refuses the main's own
+`terminalId`, which is the one most likely to be typed after cloning a machine, and refuses to pair
+at all when this terminal is not a main.
+
+The secret is returned exactly once and stored as bcrypt, asserted in the integration test: a main
+whose database is later copied cannot be used to impersonate its own satellites.
+
+436 tests pass (was 417).
+
+## Next in Phase 2
+
+- The `posgro-lan-terminal` token audience — verifying the device secret on each request (§5.4)
+- The terminal-sync routes (§5.3)
+- Satellite side: redeeming a code and writing its own config
+
+---
+
 # Phase 2 (slice 1) — the main can serve (done 2026-09-10)
 
 From `tasks/LAN_MAIN_TERMINAL_PLAN.md` §7. Phase 2 is large, so it lands in slices; this one is the

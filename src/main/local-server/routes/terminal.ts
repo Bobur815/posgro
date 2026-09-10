@@ -1,5 +1,15 @@
-import { db } from '../helpers';
-import { notFound, type Route } from '../router';
+import * as bcrypt from 'bcryptjs';
+import { db, required } from '../helpers';
+import { badRequest, forbidden, notFound, type Route } from '../router';
+import { AttemptThrottle } from '../../ipc/override-throttle';
+import { generateDeviceSecret, redeemPairingCode } from '../pairing';
+
+/**
+ * A six-digit code is only safe with something in front of it. bcrypt does not help here — the
+ * code is compared as a string — so this is the whole defence against someone on the shop wifi
+ * walking the keyspace.
+ */
+const pairingThrottle = new AttemptThrottle();
 
 /**
  * How a satellite works out what it is talking to.
@@ -35,6 +45,69 @@ export const terminalRoutes: Route[] = [
         // where two businesses share a building's wifi.
         store_id: config.storeId,
         terminal_id: config.terminalId,
+      };
+    },
+  },
+
+  /**
+   * Redeem a pairing code for this satellite's device credential.
+   *
+   * Public because a satellite has nothing to authenticate with yet — the code *is* the
+   * authentication, which is why it is single-use, expires in minutes, and sits behind a throttle.
+   *
+   * The secret is returned exactly once and stored only as a bcrypt hash, so a main terminal whose
+   * database is later copied cannot be used to impersonate its own satellites.
+   */
+  {
+    method: 'POST',
+    path: '/terminal/pair',
+    public: true,
+    handler: async ({ body }) => {
+      if (pairingThrottle.isLockedOut()) {
+        throw forbidden('Too many attempts. Wait a minute and try again.');
+      }
+
+      const code = String(required(body?.code, 'code'));
+      const terminalId = String(required(body?.terminalId, 'terminalId')).trim();
+      if (!terminalId) throw badRequest('terminalId must not be empty');
+
+      const config = await db().localConfig.findUnique({ where: { id: 'config' } });
+      if (!config) throw notFound('Terminal not configured');
+
+      // A satellite cannot pair with a satellite: the row it would create is meaningless, and the
+      // shop would end up with a terminal pointed at something that owns nothing.
+      if (!config.isMain) throw forbidden('This terminal is not a main terminal');
+
+      // Duplicate ids mean duplicate receipt numbers (§6.2), and the main's own id is the one most
+      // likely to be typed by mistake when cloning a machine.
+      if (terminalId === config.terminalId) {
+        throw badRequest('That terminal id belongs to the main terminal');
+      }
+
+      if (!redeemPairingCode(code)) {
+        pairingThrottle.recordFailure();
+        throw forbidden('Pairing code is wrong or has expired');
+      }
+      pairingThrottle.reset();
+
+      const secret = generateDeviceSecret();
+      const secretHash = await bcrypt.hash(secret, 10);
+      const name = typeof body?.name === 'string' ? body.name.trim() || null : null;
+
+      // Upsert rather than create: re-pairing a till that was wiped and reinstalled is ordinary,
+      // and it already required a fresh code to get here.
+      await db().pairedTerminal.upsert({
+        where: { terminalId },
+        update: { secretHash, name, pairedAt: new Date() },
+        create: { terminalId, secretHash, name },
+      });
+
+      return {
+        // The only time this is ever readable. The satellite stores it; the main keeps the hash.
+        secret,
+        store_id: config.storeId,
+        store_name: config.storeName,
+        main_terminal_id: config.terminalId,
       };
     },
   },
