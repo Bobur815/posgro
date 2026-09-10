@@ -4,18 +4,44 @@ description: >
   sensitive reaches the remote command line. Retries SSH transport failures.
 
 inputs:
-  host:          { description: SSH host,                required: true }
-  username:      { description: SSH user,                required: true }
-  key:           { description: SSH private key,         required: true }
-  known_hosts:   { description: Pinned host key. Omitted:falls back to accept-new (TOFU), required: false, default: '' }
-  env_file:      { description: Full .env contents,      required: true }
-  gh_pat:        { description: PAT for the git clone,   required: true }
-  repo_owner:    { description: GitHub owner,            required: true }
-  repo_name:     { description: GitHub repo,             required: true }
-  branch:        { description: Branch to deploy,        required: true }
-  project_dir:   { description: Dir under $HOME on the VPS, required: true }
-  deploy_script: { description: Repo-relative script to exec, required: true }
-  max_attempts:  { description: Tries on SSH transport failure, required: false, default: '3' }
+  host:
+    description: "SSH host"
+    required: true
+  username:
+    description: "SSH user"
+    required: true
+  key:
+    description: "SSH private key"
+    required: true
+  known_hosts:
+    description: "Pinned host key. When empty, falls back to accept-new (TOFU)."
+    required: false
+    default: ""
+  env_file:
+    description: "Full .env contents"
+    required: true
+  gh_pat:
+    description: "PAT used for the git clone"
+    required: true
+  repo_owner:
+    description: "GitHub owner"
+    required: true
+  repo_name:
+    description: "GitHub repo"
+    required: true
+  branch:
+    description: "Branch to deploy"
+    required: true
+  project_dir:
+    description: "Directory under HOME on the VPS"
+    required: true
+  deploy_script:
+    description: "Repo-relative script to exec"
+    required: true
+  max_attempts:
+    description: "Tries on SSH transport failure"
+    required: false
+    default: "3"
 
 runs:
   using: composite

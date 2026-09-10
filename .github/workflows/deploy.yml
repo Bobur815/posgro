@@ -13,7 +13,7 @@ jobs:
     steps:
       # Needed only for .github/actions/ssh-deploy — the deploy scripts themselves
       # are pulled on the VPS from the branch being deployed.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Deploy to production
         uses: ./.github/actions/ssh-deploy
