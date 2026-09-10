@@ -19,7 +19,7 @@ of them block Phase 0 or 1.
 | A satellite has no `subscription.status` button | `TerminalAccessBar.tsx:400` |
 | A satellite does not serve the web admin at all | cashier station, not an admin station |
 | **Only the main fiscalizes** (REGOS VCR) | it runs the only VCR; §5.11 |
-| **Only the main prints receipts** | §5.12, and confirm the physical consequence in §8.4 |
+| **Every terminal prints its own receipt**, satellites included | at its own till, on its own printer; §5.12 |
 | Expect **5+ terminals** per store | concurrency is a real design input, not a corner case |
 | Several `isMain=true` terminals in one store stay allowed | they behave exactly as today — see §6.1 |
 | A satellite depends on the main being up | accepted; degraded mode defined in §5.9 |
@@ -91,9 +91,10 @@ found weeks later.
 | `subscription.status` button | shown | **hidden** |
 | `settings.serverUrl` button | shown (VPS URL) | shown, but points at the main terminal |
 | Fiscalization (REGOS VCR) | **yes — the only VCR** | no; the main fiscalizes on its behalf |
-| Prints receipts | **yes — the only printer** | no; the main prints |
-| Prints weight labels | yes | **see §6.7 — this one may need rethinking** |
-| Prints shift (X/Z) reports | yes | no |
+| Prints receipts | yes | **yes — its own printer, its own till** |
+| Prints weight labels | yes | yes (same printer unless `label_printer_name` is set) |
+| Bulk weighing / `BulkWeighModal` | yes | yes |
+| Prints shift (X/Z) reports | yes | follows shift ownership — §8.2 |
 
 ---
 
@@ -126,10 +127,20 @@ found weeks later.
     service on `127.0.0.1:22298`, so a satellite has nothing to talk to. A satellite's sale must
     carry its originating `terminalId` into the fiscal record, or every receipt in the shop
     fiscalizes as if the main rang it up.
-12. **Printing stays on the main.** The sale commit already goes to the main (item 5), so the
-    receipt is printed at the end of that same call rather than being sent back. Shift X/Z reports
-    (`smena-report-printer.ts`) follow the same rule. A satellite needs no `PRINTER_NAME` and no
-    printer setup step at all.
+12. **Printing stays local — the fiscal *data* is what travels.** A satellite keeps its own
+    printer and prints its own receipt at its own till, exactly as it does today. What it cannot
+    do is produce the fiscal fields, so **the sale-commit response must carry `regosQrCodeUrl` and
+    `regosReceiptNo` back** with the sale; without them the customer gets paper with no Soliq OFD
+    QR and loses the 1% cashback.
+
+    The sequencing already exists and should be preserved rather than reinvented:
+    `printSaleReceipt()` (`sales-handlers.ts:37`) awaits the in-flight fiscalization so the QR
+    lands on the paper, and **a failed fiscalization still prints** — the customer must not be
+    held up by a fiscal problem. Over the LAN that becomes: the main commits, fiscalizes, and
+    returns; the satellite prints whatever came back, fiscal or not.
+
+    Satellites therefore keep `PRINTER_NAME` and the printer setup step, and bulk weighing works
+    at a satellite because the label printer resolves the same way it does today.
 
 ---
 
@@ -182,16 +193,17 @@ switched off at closing time like any other till. Automatic local backup is no l
 
 ---
 
-### 6.7 Weight labels have no printer on a satellite
+### 6.7 A VCR that prints the receipt itself
 
-Label printing falls back to the receipt printer when no dedicated one is set —
-`label_printer_name || printerConfig.name` (`thermal-printer.ts:315`). A satellite with no printer
-therefore has nowhere to print a weight label, which means **bulk weighing cannot happen at a
-satellite**: `BulkWeighModal` prints a barcode label that the cart then scans.
+`printSaleReceipt()` opens with `if (await regosVcrService.vcrPrintsReceipt()) return;`
+(`sales-handlers.ts:38`) — in some configurations the fiscal device prints the paper and the app
+deliberately does not.
 
-If the shop weighs goods at more than one station, either satellites keep a label printer (and
-"only the main prints" means *receipts and reports* only), or all weighing moves to the main. This
-is a shop-floor decision, not a code one — §8.4.
+That device is attached to the **main**. So in a shop configured that way, a satellite's receipt
+would emerge at the main terminal, which is exactly the layout §5.12 is designed to avoid. Either
+those shops are not candidates for satellites, or a satellite must print the app receipt even when
+`vcrPrintsReceipt()` is true. Worth settling before Phase 3 — it is a one-line branch, but only if
+someone has decided which way it goes.
 
 ### 6.8 Fiscalization is now shop-wide, not per-till
 
@@ -224,12 +236,5 @@ satellite must not lose a completed sale because the main's VCR was briefly unha
    `/smena/sync-bulk` and every reconciliation report.
 3. **Exact degraded-mode surface.** §5.9 proposes refuse-to-sell; confirm whether a satellite
    should still allow read-only work (price lookups, viewing today's sales).
-4. **Where does the paper come out?** "Only the main prints" is recorded, but it has a shop-floor
-   consequence worth confirming before Phase 3: a customer served at satellite till #3 has no
-   receipt at that till. Either that is intended (one central receipt point, satellites are
-   order-taking stations), or "only the main prints" means *the main owns the print job* and it
-   should still be sent to a printer at the originating till. The second reading is more work and
-   changes item 12.
-
-   The same question decides §6.7: whether a satellite keeps a label printer so bulk weighing can
-   happen there, or whether all weighing moves to the main.
+4. **Shops whose VCR prints the receipt itself** (§6.7) — does a satellite print the app receipt
+   anyway, or are those shops simply not candidates for satellites?
