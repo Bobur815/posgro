@@ -70,6 +70,9 @@ runs:
         bootstrap=$(cat <<EOF
         set -euo pipefail
         SEC="\$HOME/$SECRET_DIR"
+        # The 0700 dir is what actually keeps other users out; this makes the
+        # files themselves right too even if scp -p carried a foreign umask.
+        chmod 600 "\$SEC"/* 2>/dev/null || true
         install -m 600 "\$SEC/git-credentials" "\$HOME/.git-credentials"
         git config --global credential.helper store
         DIR="\$HOME/$PROJECT_DIR"
@@ -99,7 +102,9 @@ runs:
           {
             ssh "${OPTS[@]}" "$SSH_USER@$SSH_HOST" \
                 "mkdir -p ~/$SECRET_DIR && chmod 700 ~/$SECRET_DIR" &&
-            scp "${OPTS[@]}" "$work/env" "$work/git-credentials" \
+            # -p preserves the local 0600 mode; without it scp applies the remote
+            # umask and the payload lands 0644 inside the 0700 dir.
+            scp -p "${OPTS[@]}" "$work/env" "$work/git-credentials" \
                 "$SSH_USER@$SSH_HOST:~/$SECRET_DIR/" &&
             ssh "${OPTS[@]}" "$SSH_USER@$SSH_HOST" bash -s <<< "$bootstrap"
           } || rc=$?
