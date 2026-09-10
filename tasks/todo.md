@@ -1,3 +1,43 @@
+# CI deploy hardening — 2026-09-10
+
+## Context
+`deploy-staging.yml` failed on `2a96c2b` with `ssh: handshake failed ... read: connection reset
+by peer`. Investigation on the VPS ruled out the obvious causes:
+
+- CI key `github-actions-grocery-pos` IS in `bobur`'s `authorized_keys` and authenticates fine
+- host healthy (load 0.72 / 3 cores, 5.3 GB free), containers healthy
+- fail2ban has no GitHub range banned; only **1** `Failed publickey` in the whole auth.log
+
+Remaining explanation: sshd `MaxStartups` (default `10:30:100`) randomly drops new unauthenticated
+connections while the box is under constant brute force (`Total failed: 19283`). Manual re-run
+succeeded, which fits an intermittent transport fault.
+
+## Tasks
+- [x] 1. `sudo systemctl restart nginx` gap — only `reload` is in the NOPASSWD allowlist, so the
+      new-HTTPS-block branch would hang on a password prompt. Use `sudo -n` + fall back to reload.
+- [x] 2. Stop leaking secrets into `ps` — `envs: GH_PAT` and the inline `ENV_FILE` heredoc put
+      GH_PAT, JWT_SECRET, DB_PASSWORD, ANTHROPIC_API_KEY and ASLBELGISI_API_KEY in the process
+      args of every deploy, readable by any local user on a box shared with `yettibuloq`.
+- [x] 3. Retry on SSH transport failure so a random MaxStartups drop can't fail the whole deploy.
+
+## Approach
+Move the deploy bodies into `scripts/deploy/{staging,production}.sh` (versioned, reviewable) and
+reduce the remote command to a bootstrap piped over **stdin**, so nothing sensitive — and in fact
+nothing at all — appears on the remote command line. Secrets travel by `scp` into a 0600 file.
+Replace `appleboy/ssh-action` with plain `ssh`/`scp` to get a real retry loop keyed on exit 255.
+
+## Review
+- Secrets no longer appear in `ps`: the remote command is literally `bash -s`, script arrives on stdin.
+- PAT no longer persisted in `.git/config` — origin is a plain URL, auth via `~/.git-credentials` (0600).
+- DB password sync moved off argv (piped to `psql -f -`) — it was visible in `ps` too.
+- Retry only on exit 255 (ssh transport), never on a genuine deploy failure, so a broken build
+  fails fast instead of rebuilding three times.
+- Follow-up NOT done (needs the user): rotate the five exposed secrets.
+
+---
+
+# Previous task (kept for reference)
+
 # Task — The terminal's Analytics page, matched to the dashboard's
 
 ## What the two pages now share
