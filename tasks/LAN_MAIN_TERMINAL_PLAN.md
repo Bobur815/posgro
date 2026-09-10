@@ -20,6 +20,7 @@ of them block Phase 0 or 1.
 | A satellite does not serve the web admin at all | cashier station, not an admin station |
 | **Only the main fiscalizes** (REGOS VCR) | it runs the only VCR; §5.11 |
 | **Every terminal prints its own receipt**, satellites included | at its own till, on its own printer; §5.12 |
+| A satellite prints even when the VCR would print | the fiscal device is at the main, not its till; §6.7 |
 | Expect **5+ terminals** per store | concurrency is a real design input, not a corner case |
 | Several `isMain=true` terminals in one store stay allowed | they behave exactly as today — see §6.1 |
 | A satellite depends on the main being up | accepted; degraded mode defined in §5.9 |
@@ -142,6 +143,10 @@ found weeks later.
     Satellites therefore keep `PRINTER_NAME` and the printer setup step, and bulk weighing works
     at a satellite because the label printer resolves the same way it does today.
 
+    The one behavioural change is that the `vcrPrintsReceipt()` skip at `sales-handlers.ts:38`
+    becomes main-only — a satellite prints regardless, because the fiscal device is not at its
+    till. See §6.7.
+
 ---
 
 ## 6. Risks and traps
@@ -193,17 +198,24 @@ switched off at closing time like any other till. Automatic local backup is no l
 
 ---
 
-### 6.7 A VCR that prints the receipt itself
+### 6.7 A VCR that prints the receipt itself — settled
 
 `printSaleReceipt()` opens with `if (await regosVcrService.vcrPrintsReceipt()) return;`
 (`sales-handlers.ts:38`) — in some configurations the fiscal device prints the paper and the app
-deliberately does not.
+deliberately does not. That device is attached to the **main**.
 
-That device is attached to the **main**. So in a shop configured that way, a satellite's receipt
-would emerge at the main terminal, which is exactly the layout §5.12 is designed to avoid. Either
-those shops are not candidates for satellites, or a satellite must print the app receipt even when
-`vcrPrintsReceipt()` is true. Worth settling before Phase 3 — it is a one-line branch, but only if
-someone has decided which way it goes.
+**Decision: a satellite always prints the app receipt, even when `vcrPrintsReceipt()` is true.**
+The skip becomes main-only:
+
+```ts
+if (isMain && await regosVcrService.vcrPrintsReceipt()) return;
+```
+
+Otherwise a satellite's customer would be sent to the main terminal to collect their paper.
+
+The one consequence to expect: in such a shop the two tills hand out different-looking receipts —
+the VCR's own at the main, the app's at each satellite. Both are valid; it is worth telling the
+shop so it is not reported as a bug.
 
 ### 6.8 Fiscalization is now shop-wide, not per-till
 
@@ -236,5 +248,3 @@ satellite must not lose a completed sale because the main's VCR was briefly unha
    `/smena/sync-bulk` and every reconciliation report.
 3. **Exact degraded-mode surface.** §5.9 proposes refuse-to-sell; confirm whether a satellite
    should still allow read-only work (price lookups, viewing today's sales).
-4. **Shops whose VCR prints the receipt itself** (§6.7) — does a satellite print the app receipt
-   anyway, or are those shops simply not candidates for satellites?
