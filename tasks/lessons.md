@@ -98,3 +98,21 @@ running offline.
 - When a symptom is "the API did not return X", identify WHICH server answered before concluding
   anything about deployment. Here the natural guess — "staging is not deployed to the VPS" — was
   reasonable and still wrong, because the VPS was not in the request path.
+
+## A narrow grep is not evidence something is missing
+
+Checking whether the release build regenerates the SQLite Prisma client, I looked at `build:pos`,
+`prebuild`, and `postinstall`, found nothing, and reported that the build depends on whatever
+happens to be on the build machine — recommending a fix to `build:pos`.
+
+The script is called **`prebuild:pos`**, and npm runs `pre<script>` automatically for any script
+name. It already ran `prisma:generate:sqlite`. The grep covered the generic `prebuild` and the
+specific `build:pos`, and missed the specific `prebuild:pos` sitting between them.
+
+**Rule:** when the conclusion is "X does not happen", print the whole neighbourhood rather than
+grepping for the names X would have. `node -p "JSON.stringify(require('./package.json').scripts)"`
+would have shown it immediately, and costs the same as the grep that missed it.
+
+The half that was real stands: `src/generated/` is gitignored (`.gitignore:79`, zero tracked
+files), so CLAUDE.md calling that client "committed" was wrong — it is regenerated per build. Being
+right about the symptom is not being right about the cause.
