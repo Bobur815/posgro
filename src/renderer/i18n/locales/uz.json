@@ -61,6 +61,7 @@
       "login_failed": "Kirish xatosi",
       "server_not_configured": "Noto'g'ri Store ID. Server sozlamalarini tekshiring.",
       "pin_taken": "Bu PIN-kod boshqa xodimda mavjud",
+      "pin_locked": "Bu kassadan juda ko'p noto'g'ri PIN-kod kiritildi. Bir daqiqa kuting yoki parol bilan kiring.",
       "store_inactive": "Do'kon o'chirilgan, shuning uchun boshqaruv paneliga kirib bo'lmaydi. Ishni tiklash uchun qo'llab-quvvatlash xizmatiga murojaat qiling.",
       "store_offline_only": "Bu do'kon oflayn rejimda ishlaydi: barcha ma'lumotlar serverda emas, terminalning o'zida saqlanadi. Boshqaruv panelini terminalning o'zidan oching — telefoningizni xuddi shu Wi-Fi tarmog'iga ulab, uning kirish ekranidagi QR-kodni skanerlang."
     },

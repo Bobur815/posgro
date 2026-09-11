@@ -8,6 +8,7 @@ import { invoiceRoutes, logRoutes, markingRoutes, mxikRoutes, siteConfigRoutes, 
 import { productRoutes } from './products';
 import { reconciliationRoutes } from './reconciliation';
 import { salesRoutes } from './sales';
+import { satelliteRoutes } from './satellite';
 import { supplierRoutes } from './suppliers';
 import { terminalRoutes } from './terminal';
 import { userRoutes } from './users';
@@ -39,5 +40,6 @@ export function buildRouter(): Router {
     ...markingRoutes,
     ...logRoutes,
     ...terminalRoutes,
+    ...satelliteRoutes,
   ]);
 }

@@ -100,7 +100,7 @@ export async function syncProducts(): Promise<
         boxBarcode: p.boxBarcode ?? null,
         storeProductCode: p.storeProductCode ?? null,
         createdAt: new Date(p.createdAt),
-        updatedAt: new Date(p.updatedAt),
+        // updatedAt is left to Prisma — see the note on the update below.
       };
       const idTaken = await prisma.product.findUnique({
         where: { id: p.id },
@@ -187,7 +187,13 @@ export async function syncProducts(): Promise<
               boxPrice: product.boxPrice ?? null,
               boxBarcode: product.boxBarcode ?? null,
               storeProductCode: product.storeProductCode ?? null,
-              updatedAt: new Date(product.updatedAt),
+              // No `updatedAt: product.updatedAt` — Prisma stamps this machine's clock instead.
+              // A local row's updatedAt then means one thing, "last changed here", whether the
+              // change came from the server or from a sale on this till. Copying the server's
+              // value mixed two clocks in one column, and a main's satellites page through that
+              // column with a cursor (LAN plan §6.5): a server-stamped row older than a
+              // sale-stamped one already seen would have been skipped for good. The pull cursor
+              // below is unaffected — it reads the server's values off the response, not the rows.
             },
           });
         } else {

@@ -128,7 +128,9 @@ export async function syncSmenas(): Promise<SmenaSyncResult> {
     const totals = await computeShiftTotals(s.id);
     payload.push({
       id: s.id,
-      terminalId: config.terminalId || s.terminalId,
+      // The shift's own till, not this machine's: a main holds its satellites' shifts too, and
+      // the server reconciles each drawer per terminal (§5.14).
+      terminalId: s.terminalId || config.terminalId,
       cashierId: s.cashierId,
       cashierName: s.cashierName || s.cashierId,
       cashierPhone: phoneByCashierId.get(s.cashierId) ?? undefined,

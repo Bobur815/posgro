@@ -104,8 +104,13 @@ const TX_OPTIONS = { maxWait: 10_000, timeout: 20_000 };
 
 let tail: Promise<unknown> = Promise.resolve();
 
-/** Run `fn` after everything queued before it, whether that succeeded or not. */
-function serially<T>(fn: () => Promise<T>): Promise<T> {
+/**
+ * Run `fn` after everything queued before it, whether that succeeded or not.
+ *
+ * Exported for the shift writes in `shifts.ts`: opening or closing a shift in the middle of a
+ * commit could otherwise file a sale under a shift that closed a moment earlier.
+ */
+export function serially<T>(fn: () => Promise<T>): Promise<T> {
   const run = tail.then(fn, fn);
   tail = run.catch(() => undefined);
   return run;

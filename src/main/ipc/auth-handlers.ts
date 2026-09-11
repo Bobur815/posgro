@@ -4,6 +4,7 @@ import * as jwt from 'jsonwebtoken';
 import { getPrismaClient } from '../database/sqlite-client';
 import { setAuthToken, clearAuthToken, setServerToken, clearServerToken } from '../sync/queue-manager';
 import { AttemptThrottle } from './override-throttle';
+import { PIN_PATTERN, findUserIdByPin, hashNewPin, usersWithPin } from '../auth/pin';
 import { refreshSubscriptionCache } from './subscription-handlers';
 import { getAppConfig } from '../config/app-config';
 import type { AuthUser } from '../../shared/types/user.types';
@@ -66,71 +67,8 @@ async function restorePersistedServerToken(
   return false;
 }
 
-/** A quick-login PIN is 1 to 4 digits — short by design, it only ever unlocks a local session. */
-const PIN_PATTERN = /^\d{1,4}$/;
-
 /** Guards the manager-override prompt against being guessed at on an unattended till. */
 const overrideThrottle = new AttemptThrottle();
-
-type PinCandidate = { id: string; pin: string | null };
-
-/**
- * Active users of this terminal's store that carry a PIN.
- *
- * The store scope matters: a terminal caches users from whichever store it was last set up
- * against, and a stale row from another store must never be able to unlock this one.
- */
-async function usersWithPin(
-  prisma: ReturnType<typeof getPrismaClient>,
-  extra: { excludeUserId?: string } = {},
-): Promise<PinCandidate[]> {
-  const localConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
-  const storeId = localConfig?.storeId;
-
-  return prisma.user.findMany({
-    where: {
-      active: true,
-      pin: { not: null },
-      ...(storeId ? { storeId } : {}),
-      ...(extra.excludeUserId ? { id: { not: extra.excludeUserId } } : {}),
-    },
-    select: { id: true, pin: true },
-    orderBy: { createdAt: 'asc' },
-  });
-}
-
-/** The user whose PIN this is, or null. Compares against every candidate — PINs are not unique by construction. */
-async function findUserIdByPin(
-  prisma: ReturnType<typeof getPrismaClient>,
-  pin: string,
-): Promise<string | null> {
-  for (const candidate of await usersWithPin(prisma)) {
-    if (candidate.pin && (await bcrypt.compare(pin, candidate.pin))) return candidate.id;
-  }
-  return null;
-}
-
-/**
- * Hash a PIN for `userId`, rejecting a PIN another active user already owns.
- *
- * Two people sharing a PIN would make PIN login ambiguous — whoever was created first would
- * silently take over the other's session, including their shift and their name on the receipt.
- */
-async function hashNewPin(
-  prisma: ReturnType<typeof getPrismaClient>,
-  pin: string,
-  userId: string,
-): Promise<string> {
-  if (!PIN_PATTERN.test(pin)) {
-    throw new Error('auth.errors.invalid_pin_format');
-  }
-  for (const candidate of await usersWithPin(prisma, { excludeUserId: userId })) {
-    if (candidate.pin && (await bcrypt.compare(pin, candidate.pin))) {
-      throw new Error('auth.errors.pin_taken');
-    }
-  }
-  return bcrypt.hash(pin, 10);
-}
 
 export function setupAuthHandlers(): void {
   ipcMain.handle('auth:login', async (_event, phone: string, password: string) => {

@@ -6,11 +6,22 @@ move to the main; a satellite commits through it and keeps a read cache. One com
 - [x] 3.0 LAN tokens signed with a per-main secret, not the installer-baked `JWT_SECRET`;
       diagnose the ECONNRESET failures in the full test run
 - [x] 3.1 `commitSale()` — one serialized, transactional, idempotent commit path; IPC unchanged
-- [ ] 3.2 The main answers satellites: login, PIN (throttled per terminal), user session,
+- [x] 3.2 The main answers satellites: login, PIN (throttled per terminal), user session,
       sale commit, shifts, catalog pull; sync uploads each row under its own terminal id
 - [ ] 3.3 The satellite talks only to its main: `main-link`, IPC routing, local sale cache,
       local printing, no VCR, sync loop pointed at the main
 - [ ] 3.4 Degraded mode (MAIN_UNREACHABLE, "waiting for main terminal") and satellite write guards
+
+## Decisions made while building (for the review)
+
+- **Satellites get no users table from the main.** Login goes to the main and a sale row keeps only
+  a cashier id, so `/terminal/sync/users` was dropped — one less place a password hash could leave.
+- **Product identity crosses the wire as the canonical barcode, not the id.** A satellite that used
+  to be an independent till keeps its own ids for barcode-matched products (products-sync keeps a
+  local id when the server's is taken), so its `productId` can name a different product on the
+  main. The main resolves lines by barcode; the stock it returns carries barcodes back.
+- **The main stamps its own clock on pulled products** (products-sync no longer copies the VPS
+  `updatedAt`), so the column a satellite pages through runs on one clock (§6.5).
 
 ---
 

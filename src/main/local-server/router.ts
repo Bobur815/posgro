@@ -22,8 +22,32 @@ export interface RequestContext {
   user?: AuthenticatedUser;
   /** Which satellite is calling, on a `terminal` route. Absent everywhere else. */
   terminal?: { terminalId: string };
+  /** Who is signed in at that satellite, on a route that declares `session`. */
+  session?: SessionUser;
   req: IncomingMessage;
 }
+
+/** A person at a satellite, re-read from the main's own `users` table on every request. */
+export interface SessionUser {
+  id: string;
+  phone: string;
+  role: string;
+  nameRu: string;
+  nameUz: string;
+}
+
+/**
+ * The header a satellite sends its user session in. Separate from `Authorization`, which carries
+ * the device token: every person-level request needs both, the till *and* the person at it.
+ */
+export const SESSION_HEADER = 'x-user-session';
+
+/**
+ * The 401 message for a missing or dead session — distinct from a dead device token, because the
+ * satellite's answers differ: a device token it simply renews; a session means someone has to sign
+ * in again.
+ */
+export const SESSION_REQUIRED = 'SESSION_REQUIRED';
 
 export interface AuthenticatedUser {
   id: string;
@@ -51,6 +75,12 @@ export interface Route {
    * a satellite's device token opens nothing a person would use.
    */
   audience?: 'web' | 'terminal';
+  /**
+   * On a `terminal` route: also require a signed-in person at that satellite (`SESSION_HEADER`),
+   * issued to that same terminal, for a user who is still active here. Anything a cashier does —
+   * selling, opening a shift, changing their PIN — declares this.
+   */
+  session?: boolean;
 }
 
 /**

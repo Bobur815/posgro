@@ -73,7 +73,9 @@ export async function syncSales(): Promise<SalesSyncResult> {
           cashierId: sale.cashierId,
           cashierName: sale.cashierName || sale.cashierId,
           cashierPhone: sale.cashierId ? (cashierPhoneById.get(sale.cashierId) ?? undefined) : undefined,
-          terminalId: config.terminalId,
+          // The till that rang the sale up — on a main, a satellite's sales are committed here
+          // and must not reach the server filed under the main's id.
+          terminalId: sale.terminalId || config.terminalId,
           createdAt: sale.createdAt.toISOString(),
           items: sale.items.map((item: typeof sale.items[number]) => ({
             id: item.id,

@@ -135,6 +135,41 @@ export function verifyTerminalToken(header: string | undefined): TerminalIdentit
 }
 
 /**
+ * A person signed in at a satellite.
+ *
+ * The device token says which till is calling; this says who is standing at it. Without it a main
+ * would take whatever cashier id a satellite asserted, and "satellite users authenticate against
+ * the main, every time" (§1) would mean nothing — the main would never have checked anything.
+ *
+ * Issued only by the main's login routes and bound to the terminal that logged in (`tid`), so a
+ * session copied off one till is worthless on another. Twelve hours, like the dashboard's: a shift.
+ */
+const SESSION_AUDIENCE = 'posgro-lan-session';
+const SESSION_TTL = '12h';
+
+export function signSessionToken(userId: string, terminalId: string): string {
+  return jwt.sign({ sub: userId, tid: terminalId }, secret(), {
+    audience: SESSION_AUDIENCE,
+    expiresIn: SESSION_TTL,
+  });
+}
+
+/** The user id, when `token` is a live session issued to `terminalId`; otherwise null. */
+export function verifySessionToken(
+  token: string | undefined,
+  terminalId: string,
+): { userId: string } | null {
+  if (!token) return null;
+  try {
+    const payload = jwt.verify(token, secret(), { audience: SESSION_AUDIENCE }) as jwt.JwtPayload;
+    if (!payload.sub || payload.tid !== terminalId) return null;
+    return { userId: String(payload.sub) };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Throttle password guessing.
  *
  * The dashboard's login form is reachable by anyone on the shop Wi-Fi, and store PINs and

@@ -22,6 +22,13 @@ const dataDir = mkdtempSync(join(tmpdir(), 'posgro-local-server-'));
 // failures. A generous ceiling only changes how long a genuinely hung test takes to fail.
 jest.setTimeout(30_000);
 
+// electron-log wants a running Electron at import time. The router reaches it through the fiscal
+// service a satellite's sale is settled by; quiet and inspectable here instead.
+jest.mock('../logger', () => ({
+  log: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+  flushLogs: () => [],
+}));
+
 jest.mock('electron', () => ({
   app: {
     getPath: () => dataDir,

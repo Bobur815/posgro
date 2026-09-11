@@ -5,9 +5,9 @@ import { getAppConfig } from '../config/app-config';
 import { getServerToken } from '../sync/queue-manager';
 import { regosVcrService } from '../fiscal/regos-vcr-service';
 import { printReceipt } from '../printer/thermal-printer';
-import { savePendingMarkingCodes } from './marking-codes-handlers';
 import { format } from 'date-fns';
 import { commitSale, deleteSale, updateSale } from '../sales/commit-sale';
+import { settleSale, type SettleOptions } from '../sales/settle-sale';
 import {
   rankProducts,
   rankingCategories,
@@ -40,69 +40,20 @@ async function printSaleReceipt(saleId: string, fiscalizing: Promise<void> | nul
 }
 
 /**
- * Everything that happens to a sale once its rows are written: mark it for the fiscal queue, kick
- * the OFD round-trip if this sale fiscalizes now, and print the paper receipt.
+ * Everything that happens to a sale once its rows are written: the fiscal step (settle-sale.ts,
+ * shared with a main answering its satellites) and then the paper receipt on this till's printer.
  *
  * Shared by sales:create and sales:update so an edited receipt goes through exactly the same
  * pipeline a new one does — the previous split (create only) is why editing a sale left it
  * un-fiscalized and unprinted.
  *
- * Never throws and never blocks: the OFD round-trip and the printer both run in the background so
- * the cashier gets the sale back immediately. A failure leaves the sale PENDING/FAILED for a later
- * retry, which is the whole point of the offline-first design.
+ * Never blocks on the printer: the cashier gets the sale back immediately.
  */
-async function finalizeSale(
-  saleId: string,
-  data: { fiscalize?: boolean; regosPaymentId?: string },
-  regosLabels: string | null,
-): Promise<void> {
-  const prisma = getPrismaClient();
-  // Set when the OFD round-trip was kicked off, so the receipt print can wait for it and put the
-  // fiscal QR on the paper. Already .catch()-ed — awaiting it never throws.
-  let fiscalizing: Promise<void> | null = null;
-  try {
-    if (await regosVcrService.isEnabled()) {
-      await prisma.sale.update({
-        where: { id: saleId },
-        // fiscalAttempts/fiscalError are cleared, not just carried over. On create they are
-        // already empty; on an edit the contents just changed, so failures recorded against the
-        // previous version no longer apply — leaving the count would let an edited sale start
-        // at or over MAX_ATTEMPTS and be skipped by processPending forever.
-        data: { fiscalStatus: 'PENDING', regosLabels, fiscalAttempts: 0, fiscalError: null },
-      });
-      // A UzQR sale fiscalizes NOW regardless of the checkbox: REGOS forbids reusing a
-      // Payment.Create payment across receipts, so deferring would strand the payment_id and
-      // the buyer's money with it.
-      if (data.fiscalize || data.regosPaymentId) {
-        fiscalizing = regosVcrService.fiscalizeSale(saleId).catch((e) =>
-          console.error('[fiscal] immediate fiscalize failed (will retry):', e instanceof Error ? e.message : e),
-        );
-      }
-    } else {
-      await prisma.sale.update({
-        where: { id: saleId },
-        data: { fiscalStatus: 'DISABLED', regosLabels },
-      });
-    }
-  } catch (e) {
-    console.error('[fiscal] enqueue failed:', e instanceof Error ? e.message : e);
-  }
-
+async function finalizeSale(saleId: string, data: SettleOptions): Promise<void> {
+  const { fiscalizing } = await settleSale(saleId, data, getAppConfig().terminalId);
   printSaleReceipt(saleId, fiscalizing).catch((e) =>
     console.error('[printer] auto receipt print failed:', e instanceof Error ? e.message : e),
   );
-}
-
-/**
- * The marking labels scanned for a sale, serialized for sale.regosLabels — the authoritative
- * sale→marking-code link that markingCodes:removeForSale reads to free the SoldMarkingCode rows
- * when the receipt is later deleted or refunded.
- */
-function serializeMarkingLabels(
-  markingCodes: Array<{ barcode: string; label: string }> | undefined,
-): { labels: Array<{ barcode: string; label: string }>; json: string | null } {
-  const labels = markingCodes?.filter((l) => l?.barcode && l?.label) ?? [];
-  return { labels, json: labels.length ? JSON.stringify(labels) : null };
 }
 
 export function setupSalesHandlers(): void {
@@ -122,34 +73,11 @@ export function setupSalesHandlers(): void {
       cashierName: currentUser.nameRu,
     });
 
-    // Snapshot the scanned group-020/022 marking labels on the sale row, ALWAYS — not only when
-    // fiscalization is enabled. sale.regosLabels is the authoritative sale→marking-code link that
-    // markingCodes:removeForSale reads to free the SoldMarkingCode rows when this receipt is later
-    // deleted or refunded, so the items can be sold again (the stored label equals SoldMarkingCode.
-    // code). Persisting it synchronously here — rather than relying on the fire-and-forget
-    // savePendingMarkingCodes below — also avoids a race where a quick delete runs before that
-    // pending row is written.
-    const { labels: markingLabels, json: regosLabels } = serializeMarkingLabels(
-      data.markingCodes as Array<{ barcode: string; label: string }> | undefined,
-    );
-
-    // REGOS:VCR fiscalization + paper receipt. Opt-in per sale: the sale is always saved as
-    // PENDING and only sent to the OFD now when the caller asked (data.fiscalize — quick pay
-    // always does, the checkout modal follows its checkbox). Otherwise it stays PENDING and can be
-    // fiscalized later from Sales History.
-    await finalizeSale(sale.id, data, regosLabels);
-
-    // Capture the sale's group-022 marking codes for later REGOS:VCR out-of-circulation
-    // fiscalization (no VCR connected yet). No asl-belgisi lookup happens here — circulation is
-    // checked on the /marking-check screen, not during a sale. Fire-and-forget anyway: the local
-    // write is followed by a best-effort VPS sync, and neither may delay the sale/receipt.
-    if (markingLabels.length > 0) {
-      savePendingMarkingCodes(
-        markingLabels.map((m) => ({ code: m.label, productBarcode: m.barcode, saleId: sale.id })),
-      ).catch((e) =>
-        console.error('[marking] savePending failed:', e instanceof Error ? e.message : e),
-      );
-    }
+    // Marking-label snapshot, REGOS:VCR fiscalization and the paper receipt. Fiscalization is
+    // opt-in per sale: the sale is always saved as PENDING and only sent to the OFD now when the
+    // caller asked (data.fiscalize — quick pay always does, the checkout modal follows its
+    // checkbox). Otherwise it stays PENDING and can be fiscalized later from Sales History.
+    await finalizeSale(sale.id, data);
 
     return ipcSafe(sale);
   });
@@ -252,18 +180,7 @@ export function setupSalesHandlers(): void {
 
     // Same fiscal + print pipeline a new sale gets. The edit replaced the contents, so the labels
     // are re-snapshotted from what was just scanned rather than carried over from the old version.
-    const { labels: markingLabels, json: regosLabels } = serializeMarkingLabels(
-      data.markingCodes as Array<{ barcode: string; label: string }> | undefined,
-    );
-    await finalizeSale(saleId, data, regosLabels);
-
-    if (markingLabels.length > 0) {
-      savePendingMarkingCodes(
-        markingLabels.map((m) => ({ code: m.label, productBarcode: m.barcode, saleId })),
-      ).catch((e) =>
-        console.error('[marking] savePending failed:', e instanceof Error ? e.message : e),
-      );
-    }
+    await finalizeSale(saleId, data);
 
     return ipcSafe(updatedSale);
   });
