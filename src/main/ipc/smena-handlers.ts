@@ -12,6 +12,8 @@ import {
   shiftHistory,
   shiftReport,
 } from '../sales/shifts';
+import { isSatellite } from '../lan/role';
+import * as satellite from '../lan/satellite-ops';
 
 /**
  * This till's shifts. The database side lives in `sales/shifts.ts`, shared with a main terminal
@@ -19,11 +21,16 @@ import {
  * cash drawer, drive its VCR, print on its printer.
  */
 export function setupSmenaHandlers(): void {
-  ipcMain.handle('smena:getCurrent', async () => currentShift(getAppConfig().terminalId));
+  ipcMain.handle('smena:getCurrent', async () =>
+    (await isSatellite()) ? satellite.getCurrentShift() : currentShift(getAppConfig().terminalId),
+  );
 
   ipcMain.handle('smena:open', async (_event, data: { initialCash: number }) => {
     const currentUser = getCurrentUser();
     if (!currentUser) throw new Error('Not authenticated');
+
+    // A satellite's shift lives on its main (§5.14); the drawer is still this till's own.
+    if (await isSatellite()) return satellite.openShift(data.initialCash);
 
     const smena = await openShift(getAppConfig().terminalId, currentUser, data.initialCash);
 
@@ -43,6 +50,8 @@ export function setupSmenaHandlers(): void {
     amount: number;
     note?: string;
   }) => {
+    if (await isSatellite()) return satellite.addMovement(data);
+
     const movement = await addShiftMovement(data);
 
     if (data.type === 'PAY_IN') {
@@ -58,6 +67,8 @@ export function setupSmenaHandlers(): void {
     smenaId: string;
     finalCash: number;
   }) => {
+    if (await isSatellite()) return satellite.closeShift(data.smenaId, data.finalCash);
+
     const { smena, stats } = await closeShift(data.smenaId, data.finalCash);
 
     // Flush any pending fiscalizations into this shift, then close the VCR Z-report.
@@ -80,6 +91,8 @@ export function setupSmenaHandlers(): void {
   });
 
   ipcMain.handle('smena:printZReport', async (_event, smenaId: string) => {
+    if (await isSatellite()) return satellite.printShiftReport(smenaId, false);
+
     const report = await shiftReport(smenaId);
     if (!report) throw new Error('Smena not found');
 
@@ -88,6 +101,8 @@ export function setupSmenaHandlers(): void {
   });
 
   ipcMain.handle('smena:printXReport', async (_event, smenaId: string) => {
+    if (await isSatellite()) return satellite.printShiftReport(smenaId, true);
+
     const report = await shiftReport(smenaId);
     if (!report || report.smena.status !== 'OPEN') throw new Error('SMENA_NOT_OPEN');
 
@@ -96,6 +111,8 @@ export function setupSmenaHandlers(): void {
   });
 
   ipcMain.handle('smena:getHistory', async (_event, filters?: { limit?: number }) =>
-    shiftHistory(getAppConfig().terminalId, filters?.limit ?? 50),
+    (await isSatellite())
+      ? satellite.getShiftHistory(filters?.limit ?? 50)
+      : shiftHistory(getAppConfig().terminalId, filters?.limit ?? 50),
   );
 }

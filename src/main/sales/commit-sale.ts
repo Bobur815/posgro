@@ -132,7 +132,10 @@ export function updateSale(
   );
 }
 
-export function deleteSale(saleId: string, requester: SaleRequester): Promise<SaleWithItems> {
+export function deleteSale(
+  saleId: string,
+  requester: SaleRequester,
+): Promise<{ sale: SaleWithItems; stock: StockAfter[] }> {
   return serially(() =>
     db().$transaction((tx) => deleteInTx(tx, saleId, requester), TX_OPTIONS),
   );
@@ -253,7 +256,11 @@ async function updateInTx(
   return { sale, stock: await stockAfter(tx, [...existing.items, ...sale.items]) };
 }
 
-async function deleteInTx(tx: Tx, saleId: string, requester: SaleRequester): Promise<SaleWithItems> {
+async function deleteInTx(
+  tx: Tx,
+  saleId: string,
+  requester: SaleRequester,
+): Promise<{ sale: SaleWithItems; stock: StockAfter[] }> {
   const sale = await tx.sale.findUnique({ where: { id: saleId }, include: { items: true } });
   if (!sale) throw new Error('Sale not found');
   assertMayTouch(sale, requester);
@@ -281,7 +288,7 @@ async function deleteInTx(tx: Tx, saleId: string, requester: SaleRequester): Pro
     }),
   );
 
-  return sale;
+  return { sale, stock: await stockAfter(tx, sale.items) };
 }
 
 // ── pieces ──────────────────────────────────────────────────────────────────────────────────────

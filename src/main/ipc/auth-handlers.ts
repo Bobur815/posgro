@@ -5,6 +5,8 @@ import { getPrismaClient } from '../database/sqlite-client';
 import { setAuthToken, clearAuthToken, setServerToken, clearServerToken } from '../sync/queue-manager';
 import { AttemptThrottle } from './override-throttle';
 import { PIN_PATTERN, findUserIdByPin, hashNewPin, usersWithPin } from '../auth/pin';
+import { isSatellite } from '../lan/role';
+import * as satellite from '../lan/satellite-ops';
 import { refreshSubscriptionCache } from './subscription-handlers';
 import { getAppConfig } from '../config/app-config';
 import type { AuthUser } from '../../shared/types/user.types';
@@ -72,6 +74,14 @@ const overrideThrottle = new AttemptThrottle();
 
 export function setupAuthHandlers(): void {
   ipcMain.handle('auth:login', async (_event, phone: string, password: string) => {
+    // A satellite checks nobody itself: the main's users table is the only one that counts (§6.9),
+    // and there is no local fallback — not to its own stale rows, and not to the VPS.
+    if (await isSatellite()) {
+      const { user, token } = await satellite.login(phone, password);
+      currentUser = user;
+      return { token, user };
+    }
+
     const prisma = getPrismaClient();
     const config = getAppConfig();
 
@@ -301,6 +311,13 @@ export function setupAuthHandlers(): void {
   });
 
   ipcMain.handle('auth:loginWithPin', async (_event, pin: string) => {
+    // PIN too goes to the main, where it is throttled per till and logged (§6.10).
+    if (await isSatellite()) {
+      const { user, token } = await satellite.loginWithPin(pin);
+      currentUser = user;
+      return { token, user };
+    }
+
     const prisma = getPrismaClient();
     const config = getAppConfig();
 
@@ -370,6 +387,7 @@ export function setupAuthHandlers(): void {
    * different server (config:updateLocalConfig).
    */
   ipcMain.handle('auth:logout', async () => {
+    if (await isSatellite()) await satellite.logout();
     await clearAuthToken();
     currentUser = null;
   });
@@ -385,6 +403,13 @@ export function setupAuthHandlers(): void {
   ipcMain.handle('auth:restoreSession', async (_event, token: string) => {
     if (!token) {
       return null;
+    }
+
+    // On a satellite the token is the main's session: the main decides, or — with the main away —
+    // the session that was already open carries on read-only (§6.9).
+    if (await isSatellite()) {
+      currentUser = await satellite.restoreSession(token);
+      return currentUser;
     }
 
     const config = getAppConfig();
@@ -544,6 +569,7 @@ export function setupAuthHandlers(): void {
     if (!currentUser) {
       throw new Error('Not authenticated');
     }
+    if (await isSatellite()) return satellite.changePassword(currentPassword, newPassword);
 
     const prisma = getPrismaClient();
     const user = await prisma.user.findUnique({ where: { id: currentUser.id } });
@@ -588,6 +614,7 @@ export function setupAuthHandlers(): void {
 
   // Whether PIN login is offered at all on this terminal — true as soon as anyone here has a PIN.
   ipcMain.handle('auth:isPinConfigured', async () => {
+    if (await isSatellite()) return satellite.isPinConfigured();
     const prisma = getPrismaClient();
     return (await usersWithPin(prisma)).length > 0;
   });
@@ -595,6 +622,7 @@ export function setupAuthHandlers(): void {
   // Whether the signed-in user personally has a PIN (drives "set up your PIN" after a password login).
   ipcMain.handle('auth:hasPin', async () => {
     if (!currentUser) return false;
+    if (await isSatellite()) return satellite.hasPin();
     const prisma = getPrismaClient();
     const user = await prisma.user.findUnique({
       where: { id: currentUser.id },
@@ -607,6 +635,7 @@ export function setupAuthHandlers(): void {
     if (!currentUser) {
       throw new Error('Not authenticated');
     }
+    if (await isSatellite()) return satellite.removePin();
     const prisma = getPrismaClient();
     await prisma.user.update({ where: { id: currentUser.id }, data: { pin: null } });
     return true;
@@ -680,6 +709,7 @@ export function setupAuthHandlers(): void {
     if (!currentUser) {
       throw new Error('Not authenticated');
     }
+    if (await isSatellite()) return satellite.setupPin(pin);
 
     const prisma = getPrismaClient();
     const hashedPin = await hashNewPin(prisma, pin, currentUser.id);

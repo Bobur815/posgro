@@ -16,6 +16,7 @@ import {
   probeMainTerminal,
 } from '../lan/main-terminal-client';
 import { log } from '../logger';
+import { DEVICE_SECRET_KEY, SESSION_USER_KEY, resetMainLink } from '../lan/main-link';
 
 /**
  * Pairing satellites, from the main terminal's side.
@@ -35,14 +36,24 @@ const issueThrottle = new AttemptThrottle();
 /** Separate from issuing: joining is done on a different machine by a different person. */
 const joinThrottle = new AttemptThrottle();
 
-/**
- * Where a satellite keeps the device secret it was issued.
- *
+/*
+ * A satellite keeps the device secret it was issued under DEVICE_SECRET_KEY (lan/main-link.ts).
  * Plaintext, like the `server_token` row beside it — this is a credential the machine must present,
  * so it has to be readable here. What limits the damage is that it is worth nothing anywhere else:
  * it names one terminal, on one main, on one shop network.
  */
-const DEVICE_SECRET_KEY = 'lan_device_secret';
+
+/**
+ * What a role change leaves behind that belongs to the old role: the catalog cursor (a satellite
+ * pages through its main's clock, a main through the VPS's — carrying one over would skip rows,
+ * §6.5), the signed-in person's saved profile, and whatever the link held in memory.
+ */
+async function forgetPreviousRole(prisma: ReturnType<typeof getPrismaClient>): Promise<void> {
+  await prisma.systemSetting.deleteMany({
+    where: { key: { in: ['last_product_sync', SESSION_USER_KEY] } },
+  });
+  resetMainLink();
+}
 
 export function setupPairingHandlers(): void {
   /**
@@ -187,6 +198,7 @@ export function setupPairingHandlers(): void {
         where: { id: 'config' },
         data: { isMain: false, mainTerminalUrl: url },
       });
+      await forgetPreviousRole(prisma);
 
       // A satellite serves nothing, so this closes the listener if one was open.
       await syncLocalServerWithMode();
@@ -219,6 +231,7 @@ export function setupPairingHandlers(): void {
       where: { id: 'config' },
       data: { isMain: true, mainTerminalUrl: null },
     });
+    await forgetPreviousRole(prisma);
     await syncLocalServerWithMode();
     return true;
   });

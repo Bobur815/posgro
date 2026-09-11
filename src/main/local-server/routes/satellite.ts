@@ -361,13 +361,13 @@ export const satelliteRoutes: Route[] = [
     handler: (ctx) =>
       answering(async () => {
         const who = person(ctx);
-        const sale = await deleteSale(ctx.params.id, {
+        const { sale, stock } = await deleteSale(ctx.params.id, {
           userId: who.id,
           phone: who.phone,
           role: who.role,
           terminalId: ctx.terminal!.terminalId,
         });
-        return { deleted: true, id: sale.id };
+        return { deleted: true, id: sale.id, stock };
       }),
   },
 

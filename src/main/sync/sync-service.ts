@@ -7,7 +7,9 @@ import { uploadLocalData } from './upload-sync';
 import { getAppConfig } from '../config/app-config';
 import { getPrismaClient } from '../database/sqlite-client';
 import { getServerToken, clearServerToken } from './queue-manager';
-import { shouldSync, shouldUploadMasterData } from './sync-policy';
+import { shouldUploadMasterData, syncTarget } from './sync-policy';
+import { syncWithMain } from '../lan/main-sync';
+import { MainLinkError } from '../lan/main-link';
 import { syncLocalServerWithMode } from '../local-server';
 import { flushLogs } from '../logger';
 
@@ -76,9 +78,15 @@ export class SyncService {
       const prisma = getPrismaClient();
       const localConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
 
-      // An OFFLINE_ONLY store's SQLite is the source of truth and it has no server to sync with.
-      // Checked here rather than in start() so a mode learned after launch takes effect at once.
-      if (!shouldSync(localConfig)) {
+      // An OFFLINE_ONLY main's SQLite is the source of truth and it has no server to sync with; a
+      // satellite's server is its main, in either mode, and never the VPS (LAN plan §1). Checked
+      // here rather than in start() so a mode or role learned after launch takes effect at once.
+      const target = syncTarget(localConfig);
+      if (target === 'none') {
+        return;
+      }
+      if (target === 'main') {
+        await this.syncWithMainTerminal();
         return;
       }
 
@@ -200,6 +208,29 @@ export class SyncService {
       this.notifyRenderer('sync:failed', { message: errorMessage });
     } finally {
       this.isSyncing = false;
+    }
+  }
+
+  /**
+   * A satellite's cycle: refresh the read cache from the main. An unreachable main is not an error
+   * worth a toast every cycle — the reachability banner already says it, and selling is refused at
+   * the moment it matters — so it is only recorded.
+   */
+  private async syncWithMainTerminal(): Promise<void> {
+    try {
+      const stockConflicts = await syncWithMain();
+      this.lastSyncTime = new Date();
+      this.notifyRenderer('sync:completed');
+      if (stockConflicts.length > 0) {
+        this.notifyRenderer('sync:stockConflict', stockConflicts);
+      }
+    } catch (error) {
+      if (error instanceof MainLinkError) {
+        this.lastError = error.code;
+        console.warn(`[sync] main terminal: ${error.code}`);
+        return;
+      }
+      throw error;
     }
   }
 

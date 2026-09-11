@@ -17,6 +17,7 @@ import { getServerToken } from "./sync/queue-manager";
 import { stopLocalServer, syncLocalServerWithMode } from "./local-server";
 import { getCurrentUser } from "./ipc/auth-handlers";
 import { log } from "./logger";
+import { isSatellite } from "./lan/role";
 
 // Disable GPU acceleration — prevents renderer crash on remote desktop sessions
 // (AnyDesk, RDP, TeamViewer) where no real GPU is available.
@@ -176,7 +177,10 @@ async function launchMainApp(): Promise<void> {
   // REGOS:VCR fiscalization startup (logs resolved config). The periodic background retry worker
   // was removed — fiscalization runs on new-sale, on shift close, and via the manual
   // "Fiscalise all old receipts" admin button.
-  regosVcrService.start();
+  //
+  // Not on a satellite: the VCR is a local service on the main terminal, so a satellite has nothing
+  // to talk to — the main fiscalizes its sales for it (LAN plan §5.11).
+  if (!(await isSatellite())) regosVcrService.start();
 }
 
 async function bootstrap() {

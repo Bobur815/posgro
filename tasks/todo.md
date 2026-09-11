@@ -8,7 +8,7 @@ move to the main; a satellite commits through it and keeps a read cache. One com
 - [x] 3.1 `commitSale()` — one serialized, transactional, idempotent commit path; IPC unchanged
 - [x] 3.2 The main answers satellites: login, PIN (throttled per terminal), user session,
       sale commit, shifts, catalog pull; sync uploads each row under its own terminal id
-- [ ] 3.3 The satellite talks only to its main: `main-link`, IPC routing, local sale cache,
+- [x] 3.3 The satellite talks only to its main: `main-link`, IPC routing, local sale cache,
       local printing, no VCR, sync loop pointed at the main
 - [ ] 3.4 Degraded mode (MAIN_UNREACHABLE, "waiting for main terminal") and satellite write guards
 

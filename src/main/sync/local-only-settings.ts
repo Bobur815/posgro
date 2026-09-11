@@ -39,4 +39,6 @@ export const LOCAL_ONLY_SETTINGS = new Set([
   // the machine would let another terminal of the store impersonate this one on the shop network.
   'lan_signing_secret',
   'lan_device_secret',
+  // Who is signed in at a satellite, kept so an open session survives a restart read-only (§6.9).
+  'lan_session_user',
 ]);

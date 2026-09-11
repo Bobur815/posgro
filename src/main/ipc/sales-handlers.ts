@@ -8,6 +8,8 @@ import { printReceipt } from '../printer/thermal-printer';
 import { format } from 'date-fns';
 import { commitSale, deleteSale, updateSale } from '../sales/commit-sale';
 import { settleSale, type SettleOptions } from '../sales/settle-sale';
+import { isSatellite } from '../lan/role';
+import * as satellite from '../lan/satellite-ops';
 import {
   rankProducts,
   rankingCategories,
@@ -62,6 +64,10 @@ export function setupSalesHandlers(): void {
     if (!currentUser) {
       throw new Error('Not authenticated');
     }
+
+    // A satellite sells through its main, which owns the stock (§3): nothing here is decremented,
+    // and nothing is sold at all while the main cannot be reached (§5.9).
+    if (await isSatellite()) return satellite.createSale(data);
 
     // Stock check, shift, receipt number and the decrement happen in one serialized transaction —
     // the same path a satellite's sale takes when this terminal is its main (commit-sale.ts).
@@ -170,6 +176,8 @@ export function setupSalesHandlers(): void {
       throw new Error('Not authenticated');
     }
 
+    if (await isSatellite()) return satellite.updateSale(saleId, data);
+
     // Guards (owner, fiscalized, paid by UzQR), the stock swap and the rewrite run as one
     // transaction in the same queue as new sales — so a refused edit leaves stock as it was.
     const { sale: updatedSale } = await updateSale(saleId, data, {
@@ -191,8 +199,10 @@ export function setupSalesHandlers(): void {
       throw new Error('Not authenticated');
     }
 
+    if (await isSatellite()) return satellite.deleteSale(saleId);
+
     // Stock back on the shelf, the rows gone, and the return recorded for the Z-report — together.
-    const sale = await deleteSale(saleId, {
+    const { sale } = await deleteSale(saleId, {
       userId: currentUser.id,
       phone: currentUser.phone,
       role: currentUser.role,

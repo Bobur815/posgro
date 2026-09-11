@@ -3,16 +3,33 @@ import { getAppConfig } from "../config/app-config";
 import { getServerToken } from "./queue-manager";
 import { LOCAL_ONLY_SETTINGS } from "./local-only-settings";
 
-export async function syncProducts(): Promise<
+/**
+ * Where the catalog comes from. The VPS for an ordinary terminal; the main terminal for a satellite
+ * (tasks/LAN_MAIN_TERMINAL_PLAN.md §5.8), which serves the same shapes so every parser below reads
+ * both hops unchanged.
+ */
+export interface PullSource {
+  /** True for the vendor server — gates the housekeeping that only makes sense there. */
+  isVps: boolean;
+  /** GET a resource (products, categories, settings); null when there is no credential. */
+  get(resource: string, query?: string): Promise<Pick<Response, "ok" | "statusText" | "json"> | null>;
+}
+
+export const vpsSource: PullSource = {
+  isVps: true,
+  async get(resource, query = "") {
+    const token = getServerToken();
+    if (!token) return null;
+    return fetch(`${getAppConfig().vpsApiUrl}/${resource}${query}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  },
+};
+
+export async function syncProducts(source: PullSource = vpsSource): Promise<
   { id: number; nameRu: string; stock: number }[]
 > {
   const prisma = getPrismaClient();
-  const config = getAppConfig();
-
-  const token = getServerToken();
-  if (!token) {
-    throw new Error("No server token available — log in first to sync");
-  }
 
   // Get last sync timestamp
   const lastSyncSetting = await prisma.systemSetting.findUnique({
@@ -21,14 +38,13 @@ export async function syncProducts(): Promise<
   const lastSync = lastSyncSetting?.value || new Date(0).toISOString();
 
   try {
-    const response = await fetch(
-      `${config.vpsApiUrl}/products?updatedAfter=${encodeURIComponent(lastSync)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
+    const response = await source.get(
+      "products",
+      `?updatedAfter=${encodeURIComponent(lastSync)}`,
     );
+    if (!response) {
+      throw new Error("No server token available — log in first to sync");
+    }
 
     if (!response.ok) {
       throw new Error(`Failed to fetch products: ${response.statusText}`);
@@ -389,21 +405,14 @@ export async function syncUsers(): Promise<void> {
   }
 }
 
-export async function syncCategories(): Promise<void> {
+export async function syncCategories(source: PullSource = vpsSource): Promise<void> {
   const prisma = getPrismaClient();
-  const config = getAppConfig();
-
-  const token = getServerToken();
-  if (!token) {
-    throw new Error("No server token available — log in first to sync");
-  }
 
   try {
-    const response = await fetch(`${config.vpsApiUrl}/categories`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const response = await source.get("categories");
+    if (!response) {
+      throw new Error("No server token available — log in first to sync");
+    }
 
     if (!response.ok) {
       throw new Error(`Failed to fetch categories: ${response.statusText}`);
@@ -524,24 +533,21 @@ export async function syncCategories(): Promise<void> {
   }
 }
 
-export async function syncSettings(): Promise<void> {
+export async function syncSettings(source: PullSource = vpsSource): Promise<void> {
   const prisma = getPrismaClient();
   const config = getAppConfig();
   const token = getServerToken();
-  if (!token) return;
 
   try {
-    const response = await fetch(`${config.vpsApiUrl}/settings`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!response.ok) return;
+    const response = await source.get("settings");
+    if (!response || !response.ok) return;
 
     const settings = (await response.json()) as Record<string, string>;
 
     // One-time cleanup: older builds leaked the machine-scoped fiscal secret to the VPS. If the
     // server still holds it, delete it so it stops being served to (and clobbering) terminals.
     // Self-terminating — once deleted it never reappears in the response, so no flag is needed.
-    if ("regos_vcr_password_enc" in settings) {
+    if (source.isVps && token && "regos_vcr_password_enc" in settings) {
       try {
         await fetch(`${config.vpsApiUrl}/settings/regos_vcr_password_enc`, {
           method: "DELETE",
