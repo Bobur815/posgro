@@ -32,11 +32,16 @@ describe('shouldServeLocally', () => {
     expect(shouldServeLocally({ mode: 'ONLINE', isMain: false }, 3)).toBe(false);
   });
 
-  // An OFFLINE_ONLY satellite still serves nothing of its own — but the store-level rule wins,
-  // because that is what the shop's dashboard is served from today and demoting a till must not
-  // take the dashboard offline.
-  it('still serves an OFFLINE_ONLY store regardless of role', () => {
-    expect(shouldServeLocally({ mode: 'OFFLINE_ONLY', isMain: false }, 0)).toBe(true);
+  /**
+   * A satellite serves nothing, and the role is checked before the mode.
+   *
+   * The tempting reading is that an OFFLINE_ONLY store must always serve its own dashboard, so the
+   * mode should win. It must not: in an OFFLINE_ONLY shop with a main and satellites, the
+   * dashboard comes from the main. Letting the mode win would leave two machines serving the same
+   * shop's dashboard from two different databases, one of which owns nothing.
+   */
+  it('never serves from a satellite, even in an OFFLINE_ONLY store', () => {
+    expect(shouldServeLocally({ mode: 'OFFLINE_ONLY', isMain: false }, 0)).toBe(false);
   });
 
   it.each([

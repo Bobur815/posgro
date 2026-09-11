@@ -284,6 +284,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
     confirmClose: () => ipcRenderer.send("app:confirm-close"),
   },
 
+  // Terminal pairing on the shop's LAN. Role changes are gated on the super-admin password in
+  // the main process, so the password travels with each call rather than being verified once.
+  pairing: {
+    issueCode: (superAdminPassword: string) =>
+      ipcRenderer.invoke("pairing:issueCode", superAdminPassword),
+    getCode: () => ipcRenderer.invoke("pairing:getCode"),
+    cancelCode: () => ipcRenderer.invoke("pairing:cancelCode"),
+    list: () => ipcRenderer.invoke("pairing:list"),
+    remove: (terminalId: string) => ipcRenderer.invoke("pairing:remove", terminalId),
+    joinAsSatellite: (
+      superAdminPassword: string,
+      input: { mainTerminalUrl: string; code: string; name?: string },
+    ) => ipcRenderer.invoke("pairing:joinAsSatellite", superAdminPassword, input),
+    leave: (superAdminPassword: string) =>
+      ipcRenderer.invoke("pairing:leave", superAdminPassword),
+  },
+
   // Login-screen banner. Cached in the main process so it renders with no internet.
   banner: {
     get: () => ipcRenderer.invoke("banner:get"),
@@ -681,6 +698,26 @@ declare global {
         relaunch: () => Promise<void>;
         onCloseRequested: (callback: () => void) => () => void;
         confirmClose: () => void;
+      };
+      pairing: {
+        issueCode: (superAdminPassword: string) => Promise<{
+          code: string;
+          expiresAt: number;
+          /** Null when the listener could not bind — the code alone would be unusable. */
+          mainTerminalUrl: string | null;
+          serverError: string | null;
+        }>;
+        getCode: () => Promise<{ code: string; expiresAt: number } | null>;
+        cancelCode: () => Promise<boolean>;
+        list: () => Promise<
+          Array<{ terminalId: string; name: string | null; pairedAt: string; lastSeenAt: string | null }>
+        >;
+        remove: (terminalId: string) => Promise<boolean>;
+        joinAsSatellite: (
+          superAdminPassword: string,
+          input: { mainTerminalUrl: string; code: string; name?: string },
+        ) => Promise<{ storeName: string; mainTerminalId: string }>;
+        leave: (superAdminPassword: string) => Promise<boolean>;
       };
       banner: {
         get: () => Promise<{ imageUrl: string; title: string; subtitle: string }>;

@@ -845,7 +845,18 @@
     "pinChangeFailed": "PIN-kodni o'zgartirib bo'lmadi",
     "webAdminLocalHint": "Boshqaruv paneli shu terminalda ishlaydi. Telefoningizni xuddi shu Wi-Fi tarmog'iga ulang va kodni skanerlang.",
     "webAdminUnavailable": "Panelni ochish uchun manzil yo'q. Terminal tarmoqqa ulanganini tekshiring.",
-    "apiUrlNotPosServer": "Bu manzilda POS serveri yo’q — bu boshqa terminalga o’xshaydi. Undan sotuvlar yuborilmaydi, shuning uchun manzil saqlanmadi."
+    "apiUrlNotPosServer": "Bu manzilda POS serveri yo’q — bu boshqa terminalga o’xshaydi. Undan sotuvlar yuborilmaydi, shuning uchun manzil saqlanmadi.",
+    "pairingThrottled": "Urinishlar juda ko‘p. Bir daqiqa kutib, qayta urinib ko‘ring.",
+    "pairingNeedsSuperAdmin": "Terminallarni bog‘lash uchun super-administrator paroli kerak. Uni boshqaruv panelida o‘rnating.",
+    "pairingNotMain": "Bu terminal asosiy emas, u boshqa terminallarni ulay olmaydi.",
+    "superAdminPasswordWrong": "Super-administrator paroli noto‘g‘ri.",
+    "cannotDemoteWithSatellites": "Bu terminalga boshqalari ulangan. Avval ularni uzing.",
+    "terminalNotConfigured": "Terminal hali sozlanmagan.",
+    "pairingFailed": "Terminallarni bog‘lab bo‘lmadi. Qayta urinib ko‘ring.",
+    "mainTerminal_not_a_terminal": "Bu manzilda POSGRO terminali yo‘q. Asosiy terminal manzilini tekshiring.",
+    "mainTerminal_not_a_main": "Bu manzilda asosiy emas, tobe terminal turibdi.",
+    "mainTerminal_different_store": "Bu asosiy terminal boshqa do‘konga tegishli.",
+    "mainTerminal_unreachable": "Asosiy terminal mavjud emas. Tarmoqni va uning yoqilganini tekshiring."
   },
   "updater": {
     "currentVersion": "Joriy versiya",

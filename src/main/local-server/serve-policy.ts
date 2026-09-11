@@ -31,6 +31,12 @@ export function shouldServeLocally(
    */
   pairingOpen = false,
 ): boolean {
+  // A satellite serves nothing — not the dashboard, not other tills (§1, §4). In an OFFLINE_ONLY
+  // shop the dashboard comes from the main, so this has to be checked before the mode: otherwise
+  // demoting a till would leave two machines serving the same shop's dashboard from two different
+  // databases, one of which owns nothing.
+  if (config?.isMain === false) return false;
+
   if (config?.mode === 'OFFLINE_ONLY') return true;
   if (config?.isMain !== true) return false;
   return pairedTerminalCount > 0 || pairingOpen;
