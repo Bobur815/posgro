@@ -1,3 +1,19 @@
+# Phase 3 — truth moves to the main (started 2026-09-11)
+
+From `tasks/LAN_MAIN_TERMINAL_PLAN.md` §7. Stock, receipt numbers, shifts, login and fiscalization
+move to the main; a satellite commits through it and keeps a read cache. One commit per slice.
+
+- [x] 3.0 LAN tokens signed with a per-main secret, not the installer-baked `JWT_SECRET`;
+      diagnose the ECONNRESET failures in the full test run
+- [ ] 3.1 `commitSale()` — one serialized, transactional, idempotent commit path; IPC unchanged
+- [ ] 3.2 The main answers satellites: login, PIN (throttled per terminal), user session,
+      sale commit, shifts, catalog pull; sync uploads each row under its own terminal id
+- [ ] 3.3 The satellite talks only to its main: `main-link`, IPC routing, local sale cache,
+      local printing, no VCR, sync loop pointed at the main
+- [ ] 3.4 Degraded mode (MAIN_UNREACHABLE, "waiting for main terminal") and satellite write guards
+
+---
+
 # Phase 2 (slice 2) — pairing (done 2026-09-10)
 
 How a satellite gets a device credential and its row in `paired_terminals`. Main-side protocol and

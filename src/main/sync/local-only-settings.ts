@@ -33,4 +33,10 @@ export const LOCAL_ONLY_SETTINGS = new Set([
   // Syncing it lets another terminal's blob overwrite the local row, after which decryption
   // throws and the cashier password silently resolves to ''.
   'regos_vcr_password_enc',
+
+  // ── LAN credentials (tasks/LAN_MAIN_TERMINAL_PLAN.md) ──
+  // The key this main signs LAN tokens with, and a satellite's device secret. Either one leaving
+  // the machine would let another terminal of the store impersonate this one on the shop network.
+  'lan_signing_secret',
+  'lan_device_secret',
 ]);

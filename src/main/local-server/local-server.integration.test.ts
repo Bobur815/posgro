@@ -29,6 +29,7 @@ import { initializeDatabase, closeDatabase, getPrismaClient } from '../database/
 import { startLocalServer, stopLocalServer, getLocalServerStatus } from './index';
 import { cancelPairingCode, issuePairingCode } from './pairing';
 import * as bcrypt from 'bcryptjs';
+import * as jwt from 'jsonwebtoken';
 
 const PORT = 5399;
 let token = '';
@@ -462,6 +463,22 @@ describe('auth', () => {
     });
     expect(res.status).toBe(401);
   });
+
+  /**
+   * `JWT_SECRET` is baked into the installer, so it is the same on every terminal in the fleet. A
+   * token signed with it — correctly shaped, correct audience — must still open nothing, or anyone
+   * with a copy of the installer could walk into any shop's dashboard or pose as any satellite.
+   */
+  it.each([
+    ['a dashboard token', 'posgro-local-web', { sub: 'user-admin', phone: '+998900000001', role: 'ADMIN' }, '/products'],
+    ['a terminal token', 'posgro-lan-terminal', { sub: 'T2', kind: 'terminal' }, '/terminal/whoami'],
+  ])('refuses %s signed with the installer’s baked secret', async (_label, audience, claims, path) => {
+    const forged = jwt.sign(claims, process.env.JWT_SECRET!, { audience, expiresIn: '1h' });
+    const res = await fetch(`http://127.0.0.1:${PORT}/api${path}`, {
+      headers: { Authorization: `Bearer ${forged}` },
+    });
+    expect(res.status).toBe(401);
+  });
 });
 
 describe('products', () => {
@@ -556,6 +573,45 @@ describe('settings', () => {
 
   it('returns every setting as one map', async () => {
     expect((await api('GET', '/settings')).json).toMatchObject({ receipt_header: 'Test Shop' });
+  });
+
+  /**
+   * The VPS never holds these keys, so the dashboard has never needed them — and served from here
+   * they would hand any signed-in user the stored VPS token and the key LAN tokens are signed with.
+   */
+  describe("the terminal's own keys", () => {
+    beforeAll(async () => {
+      await getPrismaClient().systemSetting.upsert({
+        where: { key: 'server_token' },
+        update: { value: 'vps-token' },
+        create: { key: 'server_token', value: 'vps-token' },
+      });
+    });
+
+    it('leaves them out of the map', async () => {
+      const { json } = await api('GET', '/settings');
+      expect(json).not.toHaveProperty('lan_signing_secret');
+      expect(json).not.toHaveProperty('server_token');
+    });
+
+    it('reads one as absent', async () => {
+      expect((await api('GET', '/settings/lan_signing_secret')).json).toEqual({
+        key: 'lan_signing_secret',
+        value: null,
+      });
+    });
+
+    it('refuses to overwrite or delete one', async () => {
+      expect((await api('PUT', '/settings/lan_signing_secret', { value: 'mine' })).status).toBe(403);
+      expect((await api('DELETE', '/settings/lan_signing_secret')).status).toBe(403);
+    });
+
+    it('does exist, so leaving it out is the filter and not an accident', async () => {
+      const row = await getPrismaClient().systemSetting.findUnique({
+        where: { key: 'lan_signing_secret' },
+      });
+      expect(row?.value).toMatch(/^[0-9a-f]{64}$/);
+    });
   });
 });
 

@@ -1,6 +1,6 @@
 import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
-import { getAppConfig } from '../config/app-config';
+import { randomBytes } from 'crypto';
 import { getPrismaClient } from '../database/sqlite-client';
 import { forbidden, unauthorized, type AuthenticatedUser } from './router';
 
@@ -32,8 +32,39 @@ interface TokenPayload {
   role: string;
 }
 
+/**
+ * The key every LAN token is signed with — one per main terminal, generated on first use.
+ *
+ * It used to be `getAppConfig().jwtSecret`, which is `JWT_SECRET` baked into the installer (or its
+ * hardcoded fallback) and therefore identical on every terminal in the fleet. Anyone holding a copy
+ * of the installer could mint a dashboard token for any shop, or a terminal token for any satellite
+ * id — walking straight past pairing, and past the device-token guard in front of PIN login (§6.10).
+ *
+ * Kept in `system_settings` and listed in `LOCAL_ONLY_SETTINGS`, so it never leaves this machine:
+ * uploaded, it would be shared with every other terminal of the store.
+ */
+const SIGNING_SECRET_KEY = 'lan_signing_secret';
+let signingSecret: string | null = null;
+
+/** Load (or create) the signing key. The server awaits this before it accepts a connection. */
+export async function loadSigningSecret(): Promise<void> {
+  if (signingSecret) return;
+  const prisma = getPrismaClient();
+  // Upsert with an empty update, then read back: if two callers race, both end up with whichever
+  // value landed first rather than each caching its own.
+  await prisma.systemSetting.upsert({
+    where: { key: SIGNING_SECRET_KEY },
+    update: {},
+    create: { key: SIGNING_SECRET_KEY, value: randomBytes(32).toString('hex') },
+  });
+  const row = await prisma.systemSetting.findUnique({ where: { key: SIGNING_SECRET_KEY } });
+  signingSecret = row?.value ?? null;
+}
+
+/** Fails closed: an unloaded key signs nothing and verifies nothing. */
 function secret(): string {
-  return getAppConfig().jwtSecret || 'local-secret-key';
+  if (!signingSecret) throw new Error('LAN signing secret not loaded');
+  return signingSecret;
 }
 
 export function signToken(user: TokenPayload): string {

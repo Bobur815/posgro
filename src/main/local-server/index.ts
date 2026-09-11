@@ -3,7 +3,7 @@ import { join } from 'path';
 import { app } from 'electron';
 import { getPrismaClient } from '../database/sqlite-client';
 import { getLanAddress } from '../network/lan-address';
-import { verifyToken, verifyTerminalToken } from './auth';
+import { loadSigningSecret, verifyToken, verifyTerminalToken } from './auth';
 import { buildRouter } from './routes';
 import { StaticFiles } from './static-files';
 import { shouldServeLocally } from './serve-policy';
@@ -98,6 +98,7 @@ export async function syncLocalServerWithMode(): Promise<void> {
 export async function startLocalServer(): Promise<void> {
   if (server) return;
 
+  await loadSigningSecret();
   const port = await resolvePort();
   const statics = new StaticFiles(webRoot());
   const router = buildRouter();
