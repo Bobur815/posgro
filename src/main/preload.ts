@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 
+/** Mirrors `MainLinkStatus` in lan/main-link.ts; kept here so preload imports no main-process code. */
+export interface LanLinkStatus {
+  /** Null until the first request has been made. */
+  reachable: boolean | null;
+  lastContactAt: string | null;
+}
+
 // Expose protected methods to the renderer process
 contextBridge.exposeInMainWorld("electronAPI", {
   // Authentication
@@ -300,6 +307,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ) => ipcRenderer.invoke("pairing:joinAsSatellite", superAdminPassword, input),
     leave: (superAdminPassword: string) =>
       ipcRenderer.invoke("pairing:leave", superAdminPassword),
+  },
+
+  // A satellite's line to its main terminal: whether it is up, for the "unreachable" banner.
+  lan: {
+    getStatus: () => ipcRenderer.invoke("lan:getStatus"),
+    onStatus: (callback: (status: LanLinkStatus) => void) => {
+      const handler = (_event: IpcRendererEvent, status: LanLinkStatus) => callback(status);
+      ipcRenderer.on("lan:status", handler);
+      return () => ipcRenderer.removeListener("lan:status", handler);
+    },
   },
 
   // Login-screen banner. Cached in the main process so it renders with no internet.
@@ -722,6 +739,11 @@ declare global {
           input: { mainTerminalUrl: string; code: string; name?: string },
         ) => Promise<{ storeName: string; mainTerminalId: string }>;
         leave: (superAdminPassword: string) => Promise<boolean>;
+      };
+      lan: {
+        /** Null on a terminal that is not a satellite. */
+        getStatus: () => Promise<LanLinkStatus | null>;
+        onStatus: (callback: (status: LanLinkStatus) => void) => () => void;
       };
       banner: {
         get: () => Promise<{ imageUrl: string; title: string; subtitle: string }>;

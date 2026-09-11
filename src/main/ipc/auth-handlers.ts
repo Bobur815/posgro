@@ -10,6 +10,7 @@ import * as satellite from '../lan/satellite-ops';
 import { refreshSubscriptionCache } from './subscription-handlers';
 import { getAppConfig } from '../config/app-config';
 import type { AuthUser } from '../../shared/types/user.types';
+import { assertNotSatellite } from '../lan/satellite-guard';
 
 interface JwtPayload {
   sub: string;
@@ -487,6 +488,7 @@ export function setupAuthHandlers(): void {
   });
 
   ipcMain.handle('users:create', async (_event, data) => {
+    await assertNotSatellite();
     if (!currentUser || currentUser.role !== 'ADMIN') {
       throw new Error('Unauthorized');
     }
@@ -526,6 +528,7 @@ export function setupAuthHandlers(): void {
   });
 
   ipcMain.handle('users:update', async (_event, id: string, data) => {
+    await assertNotSatellite();
     if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.id !== id)) {
       throw new Error('Unauthorized');
     }
@@ -593,6 +596,7 @@ export function setupAuthHandlers(): void {
   });
 
   ipcMain.handle('users:delete', async (_event, id: string) => {
+    await assertNotSatellite();
     if (!currentUser || currentUser.role !== 'ADMIN') {
       throw new Error('Unauthorized');
     }

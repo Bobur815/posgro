@@ -2,18 +2,32 @@ import { ipcMain } from "electron";
 import { regosVcrService } from "../fiscal/regos-vcr-service";
 import { stats, recentSales, reset } from "../fiscal/fiscal-timing";
 import type { RegosVcrConfigInput } from "../../shared/types/fiscal.types";
+import { assertNotSatellite } from "../lan/satellite-guard";
+
+/**
+ * Actions that drive the VCR. On a satellite there is none — it is a local service on the main (LAN
+ * plan §5.11) — so these are refused there rather than failing on a connection to nothing.
+ */
+function mainOnly<A extends unknown[], R>(fn: (...args: A) => Promise<R>) {
+  return async (...args: A): Promise<R> => {
+    await assertNotSatellite();
+    return fn(...args);
+  };
+}
 
 export function setupFiscalHandlers(): void {
   ipcMain.handle("fiscal:getConfig", async () => regosVcrService.getConfig());
 
   ipcMain.handle(
     "fiscal:setConfig",
-    async (_event, input: RegosVcrConfigInput) =>
+    mainOnly(async (_event, input: RegosVcrConfigInput) =>
       regosVcrService.setConfig(input),
+    ),
   );
 
-  ipcMain.handle("fiscal:testConnection", async () =>
-    regosVcrService.testConnection(),
+  ipcMain.handle(
+    "fiscal:testConnection",
+    mainOnly(async () => regosVcrService.testConnection()),
   );
 
   ipcMain.handle("fiscal:getStatus", async () =>
@@ -33,8 +47,9 @@ export function setupFiscalHandlers(): void {
     return true;
   });
 
-  ipcMain.handle("fiscal:retrySale", async (_event, saleId: string) =>
-    regosVcrService.retrySale(saleId),
+  ipcMain.handle(
+    "fiscal:retrySale",
+    mainOnly(async (_event, saleId: string) => regosVcrService.retrySale(saleId)),
   );
 
   // Read-only: reconstruct the exact Receipt.Sale payload sent to REGOS:VCR for a receipt,
@@ -46,27 +61,34 @@ export function setupFiscalHandlers(): void {
   // Bulk: fiscalise all old (group-022) receipts and disable the rest. Manual replacement for
   // the removed background retry worker. Streams live progress to the caller's window over
   // 'fiscal:bulkProgress' so the Fiscal Settings screen can render a progress UI.
-  ipcMain.handle("fiscal:fiscalizeOld", async (event) =>
-    regosVcrService.fiscalizeOldReceipts((p) => {
-      if (!event.sender.isDestroyed())
-        event.sender.send("fiscal:bulkProgress", p);
-    }),
+  ipcMain.handle(
+    "fiscal:fiscalizeOld",
+    mainOnly(async (event: Electron.IpcMainInvokeEvent) =>
+      regosVcrService.fiscalizeOldReceipts((p) => {
+        if (!event.sender.isDestroyed())
+          event.sender.send("fiscal:bulkProgress", p);
+      }),
+    ),
   );
 
-  ipcMain.handle("fiscal:refund", async (_event, saleId: string) =>
-    regosVcrService.refundSale(saleId),
+  ipcMain.handle(
+    "fiscal:refund",
+    mainOnly(async (_event, saleId: string) => regosVcrService.refundSale(saleId)),
   );
 
-  ipcMain.handle("fiscal:printDuplicate", async (_event, saleId: string) =>
-    regosVcrService.printDuplicate(saleId),
+  ipcMain.handle(
+    "fiscal:printDuplicate",
+    mainOnly(async (_event, saleId: string) => regosVcrService.printDuplicate(saleId)),
   );
 
   // Z-report (fiscal shift) — status + manual open/close for the Smena page.
   ipcMain.handle("fiscal:zInfo", async () => regosVcrService.getZReportInfo());
-  ipcMain.handle("fiscal:zOpen", async () =>
-    regosVcrService.openZReportManual(),
+  ipcMain.handle(
+    "fiscal:zOpen",
+    mainOnly(async () => regosVcrService.openZReportManual()),
   );
-  ipcMain.handle("fiscal:zClose", async () =>
-    regosVcrService.closeZReportManual(),
+  ipcMain.handle(
+    "fiscal:zClose",
+    mainOnly(async () => regosVcrService.closeZReportManual()),
   );
 }

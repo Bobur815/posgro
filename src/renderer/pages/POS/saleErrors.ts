@@ -42,6 +42,20 @@ export function parseSaleError(
     if (parsed.code === "SALE_HAS_PAYMENT") {
       return t("errors.saleHasPayment");
     }
+    // A satellite that cannot reach its main terminal refuses to sell rather than selling from its
+    // own copy of the stock; the cart stays as it is, so the cashier retries once the main is back.
+    if (parsed.code === "MAIN_UNREACHABLE") {
+      return t("errors.mainUnreachable");
+    }
+    if (parsed.code === "MAIN_SESSION_EXPIRED") {
+      return t("errors.mainSessionExpired");
+    }
+    if (parsed.code === "DEVICE_UNPAIRED") {
+      return t("errors.deviceUnpaired");
+    }
+    if (parsed.code === "SATELLITE_READ_ONLY") {
+      return t("errors.satelliteReadOnly");
+    }
   } catch {
     // not JSON, fall through
   }

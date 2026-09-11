@@ -62,6 +62,8 @@
       "server_not_configured": "Noto'g'ri Store ID. Server sozlamalarini tekshiring.",
       "pin_taken": "Bu PIN-kod boshqa xodimda mavjud",
       "pin_locked": "Bu kassadan juda ko'p noto'g'ri PIN-kod kiritildi. Bir daqiqa kuting yoki parol bilan kiring.",
+      "main_unreachable": "Asosiy kassa kutilmoqda: u o'chiq yoki tarmoqda mavjud emas. U paydo bo'lishi bilan kirish mumkin bo'ladi.",
+      "device_unpaired": "Asosiy kassa bu terminalni endi tanimaydi — uni qayta ulash kerak.",
       "store_inactive": "Do'kon o'chirilgan, shuning uchun boshqaruv paneliga kirib bo'lmaydi. Ishni tiklash uchun qo'llab-quvvatlash xizmatiga murojaat qiling.",
       "store_offline_only": "Bu do'kon oflayn rejimda ishlaydi: barcha ma'lumotlar serverda emas, terminalning o'zida saqlanadi. Boshqaruv panelini terminalning o'zidan oching — telefoningizni xuddi shu Wi-Fi tarmog'iga ulab, uning kirish ekranidagi QR-kodni skanerlang."
     },
@@ -954,7 +956,12 @@
     "insufficientStock": "\"{{name}}\" mahsuloti yetarli emas. Mavjud: {{available}}, so'ralgan: {{requested}}",
     "noInternet": "Internet aloqasi yo'q",
     "saleAlreadyFiscalized": "Chek allaqachon fiskallashtirilgan — uni o'zgartirib bo'lmaydi. Qaytarishni rasmiylashtiring va yangi chek chiqaring.",
-    "saleHasPayment": "Chek bo'yicha to'lov qabul qilingan — uni o'zgartirib bo'lmaydi. Qaytarishni rasmiylashtiring va yangi chek chiqaring."
+    "saleHasPayment": "Chek bo'yicha to'lov qabul qilingan — uni o'zgartirib bo'lmaydi. Qaytarishni rasmiylashtiring va yangi chek chiqaring.",
+    "mainUnreachable": "Asosiy kassa bilan aloqa yo'q — savdo o'tkazilmadi. Savat saqlandi: asosiy kassa yoqilgan va tarmoqda ekanini tekshirib, qayta urinib ko'ring.",
+    "mainSessionExpired": "Asosiy kassadagi sessiya tugadi. Chiqib, qayta kiring.",
+    "deviceUnpaired": "Asosiy kassa bu terminalni endi tanimaydi — uni qayta ulash kerak.",
+    "satelliteReadOnly": "Bu asosiy kassada bajariladi: bu yerda faqat uning ma'lumotlari nusxasi.",
+    "mainUnreachableBanner": "Asosiy kassa bilan aloqa yo'q. Savdo qilib bo'lmaydi — narxlar va bugungi cheklarni ko'rish mumkin."
   },
   "sync": {
     "syncSuccess": "Sinxronizatsiya muvaffaqiyatli",

@@ -73,12 +73,31 @@ async function adopt(res: { user: RemoteUser; session: string }): Promise<{ user
   return { user, token: res.session };
 }
 
+/**
+ * The login screen speaks `auth.errors.*` keys. A main that cannot be reached is not a wrong
+ * password, and must not read like one: at 7am, satellites powered on before the main is the
+ * everyday case, and "waiting for the main terminal" is what tells the cashier why (§6.9).
+ */
+async function asLoginError<T>(attempt: Promise<T>): Promise<T> {
+  try {
+    return await attempt;
+  } catch (err) {
+    if (err instanceof MainLinkError) {
+      if (err.code === 'MAIN_UNREACHABLE') throw new Error('auth.errors.main_unreachable');
+      if (err.code === 'DEVICE_UNPAIRED') throw new Error('auth.errors.device_unpaired');
+    }
+    throw err;
+  }
+}
+
 export async function login(phone: string, password: string) {
-  return adopt(await mainRequest('POST', '/terminal/auth/login', { body: { phone, password } }));
+  return adopt(
+    await asLoginError(mainRequest('POST', '/terminal/auth/login', { body: { phone, password } })),
+  );
 }
 
 export async function loginWithPin(pin: string) {
-  return adopt(await mainRequest('POST', '/terminal/auth/pin', { body: { pin } }));
+  return adopt(await asLoginError(mainRequest('POST', '/terminal/auth/pin', { body: { pin } })));
 }
 
 /**

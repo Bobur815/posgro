@@ -10,7 +10,7 @@ move to the main; a satellite commits through it and keeps a read cache. One com
       sale commit, shifts, catalog pull; sync uploads each row under its own terminal id
 - [x] 3.3 The satellite talks only to its main: `main-link`, IPC routing, local sale cache,
       local printing, no VCR, sync loop pointed at the main
-- [ ] 3.4 Degraded mode (MAIN_UNREACHABLE, "waiting for main terminal") and satellite write guards
+- [x] 3.4 Degraded mode (MAIN_UNREACHABLE, "waiting for main terminal") and satellite write guards
 
 ## Decisions made while building (for the review)
 

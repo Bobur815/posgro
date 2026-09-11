@@ -50,6 +50,7 @@ type Satellite = {
   sqlite: typeof import('../database/sqlite-client');
   ops: typeof import('./satellite-ops');
   sync: typeof import('./main-sync');
+  guard: typeof import('./satellite-guard');
   link: typeof import('./main-link');
   printer: { printReceipt: jest.Mock };
 };
@@ -119,6 +120,7 @@ beforeAll(async () => {
       sqlite: require('../database/sqlite-client'),
       ops: require('./satellite-ops'),
       sync: require('./main-sync'),
+      guard: require('./satellite-guard'),
       link: require('./main-link'),
       printer: require('../printer/thermal-printer'),
     };
@@ -299,5 +301,27 @@ describe('a satellite and its main', () => {
     it('offers no PIN login, rather than a PIN pad that cannot work', async () => {
       expect(await sat.ops.isPinConfigured()).toBe(false);
     });
+
+    // §6.9: the 7am case. Not a wrong password — the login screen says what is actually wrong.
+    it('says it is waiting for the main, not that the password is wrong', async () => {
+      expect(await codeOf(sat.ops.login('+998901112233', 'pass1234'))).toBe(
+        'auth.errors.main_unreachable',
+      );
+    });
+  });
+});
+
+/**
+ * Writes only the main may make. On the satellite they would land in a read cache the next pull
+ * overwrites, and the main would never hear of them — a change the cashier believes happened.
+ */
+describe('the satellite write guard', () => {
+  it('refuses on the satellite', async () => {
+    expect(await codeOf(sat.guard.assertNotSatellite())).toBe('SATELLITE_READ_ONLY');
+  });
+
+  it('lets the main through', async () => {
+    const { assertNotSatellite } = require('./satellite-guard');
+    await expect(assertNotSatellite()).resolves.toBeUndefined();
   });
 });

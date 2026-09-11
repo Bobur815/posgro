@@ -1,4 +1,4 @@
-import { ipcMain, app, net } from "electron";
+import { ipcMain, app, net, BrowserWindow } from "electron";
 import QRCode from "qrcode";
 import { setupAuthHandlers } from "./auth-handlers";
 import { setupProductsHandlers } from "./products-handlers";
@@ -26,6 +26,10 @@ import {
 import { convertUzbekText } from "../../shared/utils/transliterator";
 import { mapPackageNames } from "../../shared/utils/mxik-packages";
 import { findBarcodeMatch } from "../../shared/utils/mxik-lookup";
+import { assertNotSatellite } from "../lan/satellite-guard";
+import { getMainLinkStatus, onMainLinkStatus } from "../lan/main-link";
+import { isSatellite } from "../lan/role";
+import { LOCAL_ONLY_SETTINGS } from "../sync/local-only-settings";
 
 /** Host probed by `app:isOnline` when the caller names none. */
 const DEFAULT_ONLINE_PROBE_URL = "https://pos.bobur-dev.uz";
@@ -225,11 +229,13 @@ function setupCategoriesHandlers(): void {
   });
 
   ipcMain.handle("categories:create", async (_event, data) => {
+    await assertNotSatellite();
     const prisma = getPrismaClient();
     return prisma.category.create({ data });
   });
 
   ipcMain.handle("categories:update", async (_event, id: string, data) => {
+    await assertNotSatellite();
     const prisma = getPrismaClient();
     return prisma.category.update({
       where: { id: Number(id) },
@@ -238,6 +244,7 @@ function setupCategoriesHandlers(): void {
   });
 
   ipcMain.handle("categories:delete", async (_event, id: string) => {
+    await assertNotSatellite();
     const prisma = getPrismaClient();
     await prisma.category.update({
       where: { id: Number(id) },
@@ -346,6 +353,7 @@ function setupSuppliersHandlers(): void {
         paymentType?: string;
       },
     ) => {
+      await assertNotSatellite();
       const prisma = getPrismaClient();
       const supplier = await prisma.supplier.create({
         data: {
@@ -377,6 +385,7 @@ function setupSuppliersHandlers(): void {
         paymentType?: string;
       },
     ) => {
+      await assertNotSatellite();
       const prisma = getPrismaClient();
       const supplier = await prisma.supplier.update({
         where: { id },
@@ -396,6 +405,7 @@ function setupSuppliersHandlers(): void {
 
   // Delete supplier: hard delete if no arrivals/transactions, soft delete otherwise
   ipcMain.handle("suppliers:delete", async (_event, id: string) => {
+    await assertNotSatellite();
     const prisma = getPrismaClient();
 
     const arrivalsCount = await prisma.inventoryArrival.count({ where: { supplierId: id } });
@@ -469,6 +479,7 @@ function setupSuppliersHandlers(): void {
         createdBy: string;
       },
     ) => {
+      await assertNotSatellite();
       const prisma = getPrismaClient();
 
       // Determine balance change based on transaction type
@@ -529,6 +540,7 @@ function setupSuppliersHandlers(): void {
         paidAt?: string;
       },
     ) => {
+      await assertNotSatellite();
       const prisma = getPrismaClient();
 
       // Get original transaction to calculate balance difference
@@ -578,6 +590,7 @@ function setupSuppliersHandlers(): void {
 
   // Delete transaction and reverse balance
   ipcMain.handle("suppliers:deleteTransaction", async (_event, id: string) => {
+    await assertNotSatellite();
     const prisma = getPrismaClient();
 
     const transaction = await prisma.supplierTransaction.findUnique({
@@ -643,6 +656,7 @@ function setupSuppliersHandlers(): void {
         createdBy: string;
       },
     ) => {
+      await assertNotSatellite();
       const prisma = getPrismaClient();
 
       const transaction = await prisma.supplierTransaction.create({
@@ -671,6 +685,7 @@ function setupSuppliersHandlers(): void {
 
 function setupInventoryHandlers(): void {
   ipcMain.handle("inventory:createArrival", async (_event, data) => {
+    await assertNotSatellite();
     const prisma = getPrismaClient();
 
     const cost = data.cost ?? 0;
@@ -805,6 +820,9 @@ function setupSettingsHandlers(): void {
   });
 
   ipcMain.handle("settings:set", async (_event, key: string, value: string) => {
+    // A store setting on a satellite is its main's, overwritten by the next pull; only what
+    // belongs to this machine (printer names, label size) is this till's to change.
+    if (!LOCAL_ONLY_SETTINGS.has(key)) await assertNotSatellite();
     const prisma = getPrismaClient();
     await prisma.systemSetting.upsert({
       where: { key },
@@ -880,6 +898,20 @@ function setupAppHandlers(): void {
   ipcMain.handle("config:getLocalConfig", async () => {
     const prisma = getPrismaClient();
     return prisma.localConfig.findUnique({ where: { id: "config" } });
+  });
+
+  /**
+   * Whether a satellite can reach its main — null on a terminal that is not a satellite, which has
+   * no main to lose. Drives the "main terminal unreachable" banner (LAN plan §5.9); changes are
+   * pushed on `lan:status` as they happen, so the banner appears on the failed sale that caused it.
+   */
+  ipcMain.handle("lan:getStatus", async () =>
+    (await isSatellite()) ? getMainLinkStatus() : null,
+  );
+  onMainLinkStatus((status) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send("lan:status", status);
+    }
   });
 
   /**
