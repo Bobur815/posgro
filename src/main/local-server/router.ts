@@ -18,8 +18,10 @@ export interface RequestContext {
   query: Record<string, string>;
   /** Parsed JSON body, or `{}` for a request without one. */
   body: any;
-  /** The authenticated user, absent on a `public` route. */
+  /** The authenticated user, absent on a `public` route and on a `terminal` one. */
   user?: AuthenticatedUser;
+  /** Which satellite is calling, on a `terminal` route. Absent everywhere else. */
+  terminal?: { terminalId: string };
   req: IncomingMessage;
 }
 
@@ -40,6 +42,15 @@ export interface Route {
   public?: boolean;
   /** Restrict to these roles. Omitted means any authenticated user. */
   roles?: string[];
+  /**
+   * Which credential this route accepts. Omitted means the dashboard's — every route that existed
+   * before satellites did.
+   *
+   * `terminal` routes are driven by a paired satellite and are closed to the browser, so a phone
+   * on the shop wifi cannot reach them even with a valid dashboard login. The reverse holds too:
+   * a satellite's device token opens nothing a person would use.
+   */
+  audience?: 'web' | 'terminal';
 }
 
 /**

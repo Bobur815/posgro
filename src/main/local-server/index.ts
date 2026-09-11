@@ -3,7 +3,7 @@ import { join } from 'path';
 import { app } from 'electron';
 import { getPrismaClient } from '../database/sqlite-client';
 import { getLanAddress } from '../network/lan-address';
-import { verifyToken } from './auth';
+import { verifyToken, verifyTerminalToken } from './auth';
 import { buildRouter } from './routes';
 import { StaticFiles } from './static-files';
 import { shouldServeLocally } from './serve-policy';
@@ -187,13 +187,23 @@ async function handleApi(
   const { route, params } = matched;
 
   try {
-    const user = verifyToken(req.headers.authorization);
+    // A terminal route is driven by a paired satellite, never by a browser — so it is checked
+    // against the terminal audience alone. A dashboard token must not open it, and a satellite's
+    // device token must not open anything a person would use.
+    const isTerminalRoute = route.audience === 'terminal';
+    const terminal = isTerminalRoute ? verifyTerminalToken(req.headers.authorization) : null;
+    const user = isTerminalRoute ? null : verifyToken(req.headers.authorization);
+
     if (!route.public) {
-      // The SPA's axios interceptor turns a 401 into a logout and a redirect to the login page,
-      // which is exactly right for an expired token on a phone left open overnight.
-      if (!user) return sendError(res, 401, 'Unauthorized');
-      if (route.roles && !route.roles.includes(user.role)) {
-        return sendError(res, 403, 'Access denied');
+      if (isTerminalRoute) {
+        if (!terminal) return sendError(res, 401, 'Unauthorized');
+      } else {
+        // The SPA's axios interceptor turns a 401 into a logout and a redirect to the login page,
+        // which is exactly right for an expired token on a phone left open overnight.
+        if (!user) return sendError(res, 401, 'Unauthorized');
+        if (route.roles && !route.roles.includes(user.role)) {
+          return sendError(res, 403, 'Access denied');
+        }
       }
     }
 
@@ -202,6 +212,7 @@ async function handleApi(
       query: Object.fromEntries(url.searchParams),
       body: await readJsonBody(req),
       user: user ?? undefined,
+      terminal: terminal ?? undefined,
       req,
     };
 

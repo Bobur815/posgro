@@ -1,8 +1,9 @@
 import * as bcrypt from 'bcryptjs';
 import { db, required } from '../helpers';
-import { badRequest, forbidden, notFound, type Route } from '../router';
+import { badRequest, forbidden, notFound, unauthorized, type Route } from '../router';
 import { AttemptThrottle } from '../../ipc/override-throttle';
 import { generateDeviceSecret, redeemPairingCode } from '../pairing';
+import { signTerminalToken } from '../auth';
 
 /**
  * A six-digit code is only safe with something in front of it. bcrypt does not help here — the
@@ -10,6 +11,9 @@ import { generateDeviceSecret, redeemPairingCode } from '../pairing';
  * walking the keyspace.
  */
 const pairingThrottle = new AttemptThrottle();
+
+/** Separate from the pairing throttle: a wrong secret and a wrong code are different mistakes. */
+const tokenThrottle = new AttemptThrottle();
 
 /**
  * How a satellite works out what it is talking to.
@@ -110,5 +114,56 @@ export const terminalRoutes: Route[] = [
         main_terminal_id: config.terminalId,
       };
     },
+  },
+
+  /**
+   * Exchange the device secret for a short-lived terminal token.
+   *
+   * Public in the router's sense — the secret in the body *is* the credential. Every other
+   * terminal route then takes the token, so the secret crosses the wire once an hour rather than
+   * on every request.
+   *
+   * Also where a satellite finds out it has been unpaired: the row is gone, so it gets a 401 and
+   * stops, rather than carrying on against a main that no longer recognises it.
+   */
+  {
+    method: 'POST',
+    path: '/terminal/token',
+    public: true,
+    handler: async ({ body }) => {
+      if (tokenThrottle.isLockedOut()) {
+        throw forbidden('Too many attempts. Wait a minute and try again.');
+      }
+
+      const terminalId = String(required(body?.terminalId, 'terminalId')).trim();
+      const secret = String(required(body?.secret, 'secret'));
+
+      const row = await db().pairedTerminal.findUnique({ where: { terminalId } });
+      // Same answer whether the terminal is unknown or the secret is wrong: which of the two it
+      // was is not something an unauthenticated caller should be able to learn.
+      if (!row || !(await bcrypt.compare(secret, row.secretHash))) {
+        tokenThrottle.recordFailure();
+        throw unauthorized('Unknown terminal or wrong secret');
+      }
+      tokenThrottle.reset();
+
+      await db().pairedTerminal.update({
+        where: { terminalId },
+        data: { lastSeenAt: new Date() },
+      });
+
+      return { token: signTerminalToken(terminalId), terminal_id: terminalId };
+    },
+  },
+
+  /**
+   * A satellite confirming its credential still works — and the first route to use the terminal
+   * audience, so the split is exercised rather than merely declared.
+   */
+  {
+    method: 'GET',
+    path: '/terminal/whoami',
+    audience: 'terminal',
+    handler: async ({ terminal }) => ({ terminal_id: terminal?.terminalId ?? null }),
   },
 ];

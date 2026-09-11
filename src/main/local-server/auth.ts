@@ -57,6 +57,53 @@ export function verifyToken(header: string | undefined): AuthenticatedUser | nul
 }
 
 /**
+ * A satellite terminal's credential.
+ *
+ * Its own audience, because a satellite is neither of the things this server already knows about.
+ * `posgro-local-web` belongs to a browser on the shop wifi; sharing it would mean any phone that
+ * can open the dashboard could also drive the terminal-sync endpoints, and a satellite's token
+ * could open the dashboard. They have different lifetimes and different threat models.
+ *
+ * This is a **device** credential, not a person's. It has to exist before anyone has logged in —
+ * a satellite asks the main "is this PIN valid?" while its login screen is still showing (§5.13),
+ * so there is no user to carry here, only which terminal is calling.
+ */
+const TERMINAL_AUDIENCE = 'posgro-lan-terminal';
+
+/**
+ * Short next to the dashboard's 12 hours. A satellite is a program that can re-authenticate from
+ * its stored secret without troubling anyone, so there is no reason to leave a long-lived token
+ * lying about on a till.
+ */
+const TERMINAL_TOKEN_TTL = '1h';
+
+export interface TerminalIdentity {
+  terminalId: string;
+}
+
+export function signTerminalToken(terminalId: string): string {
+  return jwt.sign({ sub: terminalId, kind: 'terminal' }, secret(), {
+    audience: TERMINAL_AUDIENCE,
+    expiresIn: TERMINAL_TOKEN_TTL,
+  });
+}
+
+/** Which satellite a request is coming from, or null if it is not a valid terminal token. */
+export function verifyTerminalToken(header: string | undefined): TerminalIdentity | null {
+  const match = /^Bearer\s+(.+)$/i.exec(header ?? '');
+  if (!match) return null;
+  try {
+    const payload = jwt.verify(match[1], secret(), {
+      audience: TERMINAL_AUDIENCE,
+    }) as jwt.JwtPayload;
+    if (!payload.sub || payload.kind !== 'terminal') return null;
+    return { terminalId: String(payload.sub) };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Throttle password guessing.
  *
  * The dashboard's login form is reachable by anyone on the shop Wi-Fi, and store PINs and

@@ -201,6 +201,94 @@ describe('pairing a satellite', () => {
     expect((await pair({ code, terminalId: 'T1' })).status).toBe(400);
   });
 
+  describe('the terminal audience', () => {
+    let secret = '';
+
+    beforeAll(async () => {
+      cancelPairingCode();
+      const { code } = issuePairingCode();
+      const res = await fetch(`http://127.0.0.1:${PORT}/api/terminal/pair`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, terminalId: 'T9' }),
+      });
+      secret = (await res.json()).secret;
+    });
+
+    const getToken = async (body: unknown) =>
+      fetch(`http://127.0.0.1:${PORT}/api/terminal/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const whoami = (auth?: string) =>
+      fetch(`http://127.0.0.1:${PORT}/api/terminal/whoami`, {
+        headers: auth ? { Authorization: `Bearer ${auth}` } : {},
+      });
+
+    it('exchanges the device secret for a token', async () => {
+      const res = await getToken({ terminalId: 'T9', secret });
+      expect(res.status).toBe(201);
+
+      const { token } = await res.json();
+      const me = await whoami(token);
+      expect(me.status).toBe(200);
+      expect(await me.json()).toEqual({ terminal_id: 'T9' });
+    });
+
+    it('answers the same way for a wrong secret and an unknown terminal', async () => {
+      const wrongSecret = await getToken({ terminalId: 'T9', secret: 'nope' });
+      const unknown = await getToken({ terminalId: 'T404', secret });
+
+      expect(wrongSecret.status).toBe(401);
+      expect(unknown.status).toBe(401);
+      // Which of the two it was is not something an unauthenticated caller should learn.
+      expect((await wrongSecret.json()).message).toBe((await unknown.json()).message);
+    });
+
+    /**
+     * The whole point of a separate audience. A phone on the shop wifi can hold a perfectly valid
+     * dashboard login; it must not be able to drive the terminal endpoints with it.
+     */
+    it('refuses a dashboard token on a terminal route', async () => {
+      // Logged in here rather than reusing the module-level token, which a later block sets — a
+      // test that silently passes because its credential was empty would prove nothing.
+      const login = await fetch(`http://127.0.0.1:${PORT}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: '+998900000001', password: 'secret123' }),
+      });
+      const { token: webToken } = await login.json();
+      expect(webToken).toBeTruthy();
+
+      expect((await whoami(webToken)).status).toBe(401);
+    });
+
+    // And the reverse, so a satellite's device credential opens nothing a person would use.
+    it('refuses a terminal token on a dashboard route', async () => {
+      const { token: terminalToken } = await (await getToken({ terminalId: 'T9', secret })).json();
+      const res = await fetch(`http://127.0.0.1:${PORT}/api/products`, {
+        headers: { Authorization: `Bearer ${terminalToken}` },
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it('refuses a terminal route with no credential at all', async () => {
+      expect((await whoami()).status).toBe(401);
+    });
+
+    it('stops working once the satellite is unpaired', async () => {
+      const { token: live } = await (await getToken({ terminalId: 'T9', secret })).json();
+      expect((await whoami(live)).status).toBe(200);
+
+      await getPrismaClient().pairedTerminal.delete({ where: { terminalId: 'T9' } });
+      // The token is still cryptographically valid until it expires — what stops is getting a new
+      // one, which is the satellite's signal that it has been removed.
+      expect((await getToken({ terminalId: 'T9', secret })).status).toBe(401);
+    });
+  });
+
   it('leaves the code unusable after a successful pairing', async () => {
     const { code } = issuePairingCode();
     expect((await pair({ code, terminalId: 'T4' })).status).toBe(201);
