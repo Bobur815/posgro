@@ -116,3 +116,17 @@ would have shown it immediately, and costs the same as the grep that missed it.
 The half that was real stands: `src/generated/` is gitignored (`.gitignore:79`, zero tracked
 files), so CLAUDE.md calling that client "committed" was wrong — it is regenerated per build. Being
 right about the symptom is not being right about the cause.
+
+## A column that is constant in every sample row is not identified by that sample
+
+The Rongta PLU export (`src/shared/utils/rongta-txp.ts`) labelled TXP column 4 "department" and
+column 7 "barcode type", and its doc comment called the layout "confirmed against a capture". It
+wasn't. The factory sample file has the same value in columns 4 and 6–9 on every row, so matching
+it against the capture only proved where those values sit, not what they mean. The column guesses
+were wrong, and so was the price unit. The sample's `90` is 0.90, but the export wrote whole sums.
+An import into the PLU manager showed both at once: "Barcode 2" and 23000 displayed as 230,00.
+
+**Rule:** a field is identified only by data that varies it. When writing a file for someone
+else's software, separate "position confirmed" from "meaning guessed" in the code and in the
+report, and say which columns to check on screen after the first import. Treat a sample value
+like `90` as the unit's first clue: a price that small usually has implied decimals.
