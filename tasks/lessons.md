@@ -174,3 +174,24 @@ a bare `\n`. With mixed endings git stops normalising the file, and three files 
 **Rule:** after scripting edits in this repo (CRLF working copies), count line endings before
 staging — a file with both CRLF and bare LF, or any `\r\r\n`, is broken. Prefer the Edit tool,
 which preserves them; and never pass code containing backticks through a shell string.
+
+## A process killer that matches on command-line text can match its own shell
+
+The instance helper stopped Electron by `CommandLine -like '*ho-t1*'`. The shell running it had
+`ho-t1.log` in its own command line, so it killed itself (exit 255, nothing launched). The fix that
+followed required a `"` the real command line does not contain, and matched nothing. Separately, a
+`| grep | tail` after launching Electron hung for five minutes: the pipe stays open while the
+app's child processes hold inherited handles.
+
+**Rule:** kill by process name *and* an anchored regex on the exact argument
+(`Name -eq 'electron.exe' -and CommandLine -match 'user-data-dir=\S*ho-t1(\s|"|$)'`), and send a
+background launcher's output to a file, never through a pipe.
+
+## A new test that listens on a port must check which ports the other suites use
+
+`handoff.e2e.test.ts` took 5398–5400, already used by `satellite.integration` and
+`local-server.integration`. Alone every suite passed; in the parallel full run ten tests of another
+suite failed, which looked like load flakiness until the ports were compared.
+
+**Rule:** before choosing a port in a test, grep `*.test.ts` for `PORT =` and `listen(`; when a
+suite fails only in the full run, check shared ports before blaming load.

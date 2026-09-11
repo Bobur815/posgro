@@ -1,3 +1,6 @@
+import { createWriteStream } from 'fs';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import { getPrismaClient } from '../database/sqlite-client';
 import { fetchTerminalToken, normaliseMainUrl, type TerminalTokenGrant } from './main-terminal-client';
 import { judgeMain, type LineagePosition } from './lineage';
@@ -193,6 +196,8 @@ export interface MainRequestOptions {
    */
   idempotent?: boolean;
   timeoutMs?: number;
+  /** Extra headers — the handoff token, which never goes in a URL or a body that might be logged. */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -219,6 +224,7 @@ export async function mainRequest<T = any>(
         method,
         signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
         headers: {
+          ...options.headers,
           Authorization: `Bearer ${token}`,
           ...(options.person && session ? { 'X-User-Session': session } : {}),
           ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
@@ -256,6 +262,40 @@ export async function mainRequest<T = any>(
     }
     throw new Error(message);
   }
+}
+
+/**
+ * Download a file from the main to `destination`, streamed — a whole database, for taking over
+ * the main role (§11.4). Same device token and the same failure codes as `mainRequest`, and no
+ * retry: the caller owns what a half-written file means.
+ */
+export async function mainDownload(
+  path: string,
+  destination: string,
+  headers: Record<string, string> = {},
+  timeoutMs = 10 * 60_000,
+): Promise<void> {
+  const { url, token } = await currentDeviceToken();
+  let response: Response;
+  try {
+    response = await fetch(`${url}${path}`, {
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: { Authorization: `Bearer ${token}`, ...headers },
+    });
+  } catch (err) {
+    if (!isNetworkError(err)) throw err;
+    markReachable(false);
+    throw new MainLinkError('MAIN_UNREACHABLE');
+  }
+  markReachable(true);
+  if (!response.ok || !response.body) {
+    const body = safeJson(await response.text());
+    throw new Error(typeof body?.message === 'string' ? body.message : `HTTP ${response.status}`);
+  }
+  await pipeline(
+    Readable.fromWeb(response.body as import('stream/web').ReadableStream),
+    createWriteStream(destination),
+  );
 }
 
 function safeJson(text: string): any {

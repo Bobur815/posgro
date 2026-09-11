@@ -18,6 +18,8 @@ import { stopLocalServer, syncLocalServerWithMode } from "./local-server";
 import { getCurrentUser } from "./ipc/auth-handlers";
 import { log } from "./logger";
 import { isSatellite } from "./lan/role";
+import { applyPendingTakeover } from "./lan/takeover";
+import { onHandedOff } from "./local-server/handoff";
 
 // Disable GPU acceleration — prevents renderer crash on remote desktop sessions
 // (AnyDesk, RDP, TeamViewer) where no real GPU is available.
@@ -185,8 +187,26 @@ async function launchMainApp(): Promise<void> {
 
 async function bootstrap() {
   try {
+    // A takeover of the main role (LAN plan §11.4) swaps this till's database for the copy it took
+    // from the old main — here, before anything opens the file, because a live SQLite file cannot
+    // be replaced from under its client.
+    const takeover = await applyPendingTakeover().catch((err) => {
+      log.error("[takeover] could not finish a pending takeover:", err);
+      return "pending" as const;
+    });
+    if (takeover !== "none") log.warn(`[takeover] at startup: ${takeover}`);
+
     // Initialize local SQLite database
     await initializeDatabase();
+
+    // Having handed the main role to another till, this one is its satellite: restart as one, so
+    // nothing started for the old role (the VCR service, the LAN server, sync) keeps running.
+    onHandedOff(() => {
+      setTimeout(() => {
+        app.relaunch({ args: process.argv.slice(1) });
+        app.exit(0);
+      }, 1500);
+    });
 
     // Register all IPC handlers once (sync handlers reference module-level syncService)
     setupIpcHandlers();

@@ -193,22 +193,28 @@ async function ownShift(smenaId: string, terminalId?: string) {
   return smena;
 }
 
-export async function addShiftMovement(
+/**
+ * In the queue too: a pay-in filed against a shift that is closing at that moment would miss the
+ * Z-report — and the queue is where a handoff's write freeze is enforced (§11.4).
+ */
+export function addShiftMovement(
   data: { smenaId: string; type: 'PAY_IN' | 'PAY_OUT'; amount: number; note?: string },
   terminalId?: string,
 ) {
-  const smena = await ownShift(data.smenaId, terminalId);
-  if (!smena || smena.status !== 'OPEN') throw new Error('SMENA_NOT_OPEN');
+  return serially(async () => {
+    const smena = await ownShift(data.smenaId, terminalId);
+    if (!smena || smena.status !== 'OPEN') throw new Error('SMENA_NOT_OPEN');
 
-  const movement = await getPrismaClient().smenaMovement.create({
-    data: {
-      smenaId: data.smenaId,
-      type: data.type,
-      amount: data.amount,
-      note: data.note ?? null,
-    },
+    const movement = await getPrismaClient().smenaMovement.create({
+      data: {
+        smenaId: data.smenaId,
+        type: data.type,
+        amount: data.amount,
+        note: data.note ?? null,
+      },
+    });
+    return plain(movement);
   });
-  return plain(movement);
 }
 
 export function closeShift(smenaId: string, finalCash: number, terminalId?: string) {

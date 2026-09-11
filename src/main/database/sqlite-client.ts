@@ -57,18 +57,44 @@ export function writeStoreBootstrap(storeId: string): void {
   );
 }
 
-export async function initializeDatabase(): Promise<void> {
-  // Get the user data path for the database file
-  const userDataPath = app.getPath('userData');
-
-  // Determine which DB file to use based on the bootstrap config.
-  // Each store gets its own isolated SQLite file (pos-{storeId}.db).
-  // Falls back to pos-local.db for existing installs without a bootstrap file.
+/**
+ * The terminal's database file. Each store gets its own isolated SQLite file (pos-{storeId}.db);
+ * an install without a bootstrap file keeps the older pos-local.db.
+ */
+export function databaseFilePath(): string {
   const bootstrapStoreId = readStoreBootstrap();
   const dbFileName = bootstrapStoreId ? `pos-${bootstrapStoreId}.db` : 'pos-local.db';
-  const dbPath = path.join(userDataPath, dbFileName);
+  return path.join(app.getPath('userData'), dbFileName);
+}
 
-  console.log(`[db] Opening database: ${dbFileName} (storeId=${bootstrapStoreId ?? 'unset'})`);
+/**
+ * A client on the SQLite file at `dbPath`, connected, with every table this file owns created and
+ * every migration run — so a file that came from somewhere else (a main handing its role over,
+ * §11.4) is brought to this version's schema before anything reads it.
+ */
+export async function openDatabaseAt(dbPath: string): Promise<PrismaClientType> {
+  const client = new PrismaClient({
+    datasources: {
+      db: {
+        url: `file:${dbPath}`,
+      },
+    },
+    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+  });
+  try {
+    await client.$connect();
+    await createSchemaIfNeeded(client);
+    await runMigrations(client);
+  } catch (error) {
+    await client.$disconnect().catch(() => undefined);
+    throw error;
+  }
+  return client;
+}
+
+export async function initializeDatabase(): Promise<void> {
+  const dbPath = databaseFilePath();
+  console.log(`[db] Opening database: ${path.basename(dbPath)} (storeId=${readStoreBootstrap() ?? 'unset'})`);
 
   // Ensure directory exists
   const dbDir = path.dirname(dbPath);
@@ -79,25 +105,8 @@ export async function initializeDatabase(): Promise<void> {
   // Set environment variable for Prisma
   process.env.DATABASE_URL = `file:${dbPath}`;
 
-  // Initialize Prisma client
-  prisma = new PrismaClient({
-    datasources: {
-      db: {
-        url: `file:${dbPath}`,
-      },
-    },
-    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
-  });
-
-  // Test connection and create schema
   try {
-    await prisma.$connect();
-
-    // Create tables if they don't exist
-    await createSchemaIfNeeded(prisma);
-
-    // Run migrations for existing databases
-    await runMigrations(prisma);
+    prisma = await openDatabaseAt(dbPath);
   } catch (error) {
     console.error('Failed to connect to database:', error);
     throw error;

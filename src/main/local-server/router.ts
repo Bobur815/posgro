@@ -81,6 +81,26 @@ export interface Route {
    * selling, opening a shift, changing their PIN — declares this.
    */
   session?: boolean;
+  /**
+   * Answered while a handoff holds the write freeze (§11.4). Every other non-GET route is refused
+   * then with `MAIN_HANDING_OFF`: the new main's copy of the database is being taken, and a write
+   * that lands after it is lost. Set on the routes a satellite needs to stay connected (its token,
+   * signing in, its heartbeat) — whose writes are bookkeeping nothing depends on — and on the
+   * handoff's own.
+   */
+  duringHandoff?: boolean;
+}
+
+/**
+ * A handler's answer that is a file, not JSON — streamed rather than read into memory, since the
+ * one user of it is a whole database (§11.4). `cleanup` runs once the response has finished or the
+ * connection dropped, for a file that exists only to be sent.
+ */
+export class FileReply {
+  constructor(
+    readonly path: string,
+    readonly cleanup?: () => void,
+  ) {}
 }
 
 /**

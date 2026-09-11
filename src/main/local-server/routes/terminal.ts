@@ -134,6 +134,8 @@ export const terminalRoutes: Route[] = [
     method: 'POST',
     path: '/terminal/token',
     public: true,
+    // A satellite refused a token reads it as "unpaired" — the wrong conclusion during a handoff.
+    duringHandoff: true,
     handler: async ({ body }) => {
       if (tokenThrottle.isLockedOut()) {
         throw forbidden('Too many attempts. Wait a minute and try again.');
@@ -193,6 +195,7 @@ export const terminalRoutes: Route[] = [
     method: 'POST',
     path: '/terminals/heartbeat',
     audience: 'terminal',
+    duringHandoff: true,
     handler: async ({ body, terminal }) => {
       const terminalId = terminal!.terminalId;
 

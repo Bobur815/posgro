@@ -5,8 +5,32 @@
       Join/leave/`requireSuperAdmin` moved out of the IPC file (`lan/role-change.ts`,
       `auth/super-admin.ts`) so the e2e harness drives the real code. 7 e2e cases, 6 shown red with
       the guard off (the 7th is the positive join); 638 tests, tsc, build green.
-- [ ] B: handoff code on the old main; freeze + `VACUUM INTO` snapshot; stage/patch/complete/swap
+- [x] B: handoff code on the old main; freeze + `VACUUM INTO` snapshot; stage/patch/complete/swap
       with a crash-safe marker; `pairing:repoint`; UI; three-instance run
+
+## Review
+
+**A** (`84df81e`): a satellite refuses a main that was replaced — same lineage at a lower
+generation, or another lineage at its main's address — at every token fetch; join refuses one;
+leaving a main makes the next generation.
+
+**B**: the main role moves while both machines are up. The old main issues a handoff code; the
+satellite taking over presents it; the old main freezes every write path, drains what was under
+way (queue, settles, fiscal device), and streams a `VACUUM INTO` copy of its database. The
+satellite stages and patches it (its id, generation + 1, its own machine settings, the old main
+paired under a new secret), the old main confirms by becoming its satellite and restarting, and
+the satellite swaps the copy in at its own restart. A marker makes a crash at any step end in one
+main, or in a pending takeover the operator resolves. Other satellites repoint without a code.
+
+Verified: 16 e2e cases in `handoff.e2e.test.ts` plus 2 drain/freeze unit cases, each guard shown
+red with its code disabled (freeze, machine settings, demotion, settle wait); 656 tests, tsc,
+build. Three real instances, driven over CDP: handoff from the dialog, T1 restarting as T2's
+satellite, repoint on T3, sales at all three through T2, and T1's old database refused by T3.
+
+Found on the way: `fetchTerminalToken` accepted a 200 with no token (fixed); my own test ports
+collided with two existing suites (moved).
+
+Not verifiable here: a real REGOS VCR on the new main, two physical machines on a LAN.
 
 ---
 

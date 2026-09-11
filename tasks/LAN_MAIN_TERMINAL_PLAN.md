@@ -3,8 +3,8 @@
 **Status:** Phases 0–4 and the §11 pairing dialog implemented on `dev` (2026-09-10 → 2026-09-11) —
 see §12 for what shipped, what changed from the design while building it, and what is still open.
 A shop can pair a satellite from the login-screen gear, and the satellite shows only what it can
-do. §11.3's generation guard is in; §11.4's planned handoff is next. §8 records what is
-deliberately deferred and what must not be deferred.
+do. §11.3's generation guard, §11.4's planned handoff and §11.6's repointing are in. §8 records
+what is deliberately deferred and what must not be deferred.
 
 ---
 
@@ -630,7 +630,8 @@ generation — the counter already makes that safe. Not worth building until ask
 | 3.4 | `359b22d` | Degraded mode (banner, login message) and the satellite write guard |
 | §11 | `82ba622` | The pairing dialog in the login-screen gear: pair, remove, re-pair, leave — every act behind the super-admin password; a role change restarts the app |
 | 4 | `66ed843` | Trim: a satellite is "admin-locked" like a cashier-only store, plus hidden login-bar buttons, settings tiles, shop reports and VCR receipt actions; its drawer/scale toggles work |
-| §11.3 | (this commit) | Lineage + generation: a satellite refuses a replaced main (`MAIN_SUPERSEDED`), join refuses one, leaving a main makes the next generation |
+| §11.3 | `84df81e` | Lineage + generation: a satellite refuses a replaced main (`MAIN_SUPERSEDED`), join refuses one, leaving a main makes the next generation |
+| §11.4, §11.6 | (this commit) | Planned handoff: handoff code on the old main, write freeze, whole-database copy, staged swap with a crash-safe marker; "Change main address" for the other satellites |
 
 Proven end to end in `src/main/lan/satellite.e2e.test.ts`: a real main (LAN server + database)
 and a satellite with its own database, in one process, over HTTP — catalog pull, login, shift,
@@ -667,6 +668,35 @@ switched off.
 - **The guard sits at token fetch**, not on every request: a token is fetched at start, hourly, and
   after any 401 — and a different machine at the address means a different signing key, hence a
   401. Nothing reaches a superseded main without passing it.
+- **§11.4's consent is a handoff code, not the super-admin password over the wire.** The old main
+  issues it on its own screen (behind the password there), like a pairing code; the satellite
+  types it in. The password never crosses the LAN, and the machine being demoted has agreed.
+- **§11.4's snapshot is the whole database file** (`VACUUM INTO`, streamed), not a list of tables
+  to copy — nothing can be forgotten. The new main then patches the copy: its own terminal id,
+  `isMain`, generation + 1, its own printers / label size / VCR config / drawer / scale / price
+  tags, no LAN credentials of either old role, its own pairing row removed, and the old main paired
+  under a secret it mints. The VPS token and sync cursors travel with the data on purpose — they
+  describe what in *that copy* has reached the VPS (which dedupes sale uploads by id anyway).
+- **The old main freezes every write while the copy is taken**, and drains first: the sale queue,
+  the settling of sales it has just let through (their fiscal status and marking labels are written
+  after the commit's turn — `drainSaleWrites`), and the fiscal device's own queue. A fiscalization
+  that had not started stays PENDING and is done once, by the new main. Sync pauses too. The freeze
+  is enforced in `serially` (sales, shifts, cash movements), in `assertNotSatellite` (every
+  master-data IPC write) and at the LAN server (every non-GET route that has not opted in with
+  `duringHandoff` — token, sign-in, heartbeat, the handoff's own). It lapses after 5 minutes if
+  the new main never confirms; the new main aborts it at once when it gives up.
+- **The swap happens at the new main's next start**, before the database opens (a live SQLite file
+  cannot be replaced from under its client on Windows). `handoff-pending.json` records whether the
+  old main confirmed. Unconfirmed at startup: the old main still a main at the old generation →
+  the copy is discarded; not a main → swap; no answer — which is also what a freshly demoted main
+  looks like, since a satellite serves nothing — → the takeover stays pending and the dialog asks
+  the operator to finish or discard it. Guessing either way costs more than asking.
+- **§11.6's repoint needs no code.** The other satellites' pairings travelled with the database, so
+  "Change main address" only proves the new address is the same shop, the same lineage at a
+  generation not below what the till has seen, and that its existing secret works there.
+- **A token-less 200 used to count as a token.** `fetchTerminalToken` returned `''` for any 200
+  without one, which a satellite would then send as its Bearer. Found by the repoint test's fake
+  main; a 200 with no token is now a refusal.
 
 ### 12.3 Still open
 
@@ -679,7 +709,13 @@ Needed before a shop can use this:
 - ~~**§11.3 generation guard**~~ — done. Proven in `satellite.e2e.test.ts`: a satellite follows its
   main forward, refuses one lowered underneath it or of another lineage (sale, sync and login all
   say `MAIN_SUPERSEDED`), join refuses a superseded main, leaving bumps the generation.
-- **§11.4 planned handoff** and §11.6 repointing — next.
+- ~~**§11.4 planned handoff** and §11.6 repointing~~ — done. Proven in `handoff.e2e.test.ts`
+  (freeze refuses sales and lapses/aborts; the new main holds every sale and the stock, keeps its
+  own machine settings, serves the old main's other satellites on their existing secrets; the old
+  main sells through it; repoint refusals; the three startup-recovery branches) and on three real
+  instances: T1 handed over to T2 from the dialog, T1 restarted as T2's satellite, T3 repointed,
+  all three sold through T2 with receipt numbers continuing, and T1's pre-handoff database brought
+  back as a main at the same address was refused by T3 (`MAIN_SUPERSEDED`, login says so).
 - ~~**Phase 4 trim**~~ — done. Verified on two real instances: the satellite shows POS, shift,
   products (read-only), receipts, marking check, and its own printer/scale/labels/update settings;
   the main still shows everything.
@@ -699,7 +735,14 @@ Decisions still open, found while trimming:
 Deferred, each a known gap rather than a bug:
 
 - **Pre-weighed labels** (`weighedItems:*`) are per-till. A label printed at one till and scanned at
-  another is not found; its SOLD mark is not recorded on the main.
+  another is not found; its SOLD mark is not recorded on the main. A handoff makes it sharper: the
+  new main's own labels (and its SoldMarkingCode rows) are replaced by the old main's with the
+  database — kept only in `pos-{store}.pre-handoff.db`.
+- **The VCR stays with its machine** (§11.4): a new main without REGOS VCR configured queues its
+  receipts as not fiscalized. The takeover dialog says so; nothing moves the device config.
+- **An intermittent full-suite failure** in `satellite.e2e`'s "older generation" case, seen once
+  in ~7 full runs and never alone. Most likely the 8 s client timeout on a token fetch whose
+  bcrypt check ran on a saturated machine — which reads as unreachable, not superseded.
 - **`markingCodes:check`** consults the till's own SoldMarkingCode table and the VPS; a satellite has
   no VPS token, so a marked item sold at one till is not caught as already-sold at another.
 - **`/logs/upload`** from satellites needs a forwarding queue on the main (§5.3).

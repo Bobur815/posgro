@@ -9,7 +9,13 @@ import {
 import { getLocalServerStatus, syncLocalServerWithMode } from '../local-server';
 import { requireSuperAdmin } from '../auth/super-admin';
 import { newLineage } from '../lan/lineage';
-import { joinMain, leaveMain, type JoinInput } from '../lan/role-change';
+import { joinMain, leaveMain, repointMain, type JoinInput } from '../lan/role-change';
+import { cancelHandoffCode, getHandoffState, issueHandoffCode } from '../local-server/handoff';
+import {
+  getPendingTakeover,
+  resolvePendingTakeover,
+  takeOverAsMain,
+} from '../lan/takeover';
 import { log } from '../logger';
 
 /**
@@ -118,4 +124,50 @@ export function setupPairingHandlers(): void {
     await leaveMain(superAdminPassword);
     return true;
   });
+
+  // ── Handing the main role to another till (§11.4) ──────────────────────────────────────────
+
+  /**
+   * On the main: consent to a handoff, as a code for the till taking over. Only a till already
+   * paired with this main can take it over, so with none paired there is nobody to hand over to.
+   */
+  ipcMain.handle('pairing:issueHandoffCode', async (_event, superAdminPassword: string) => {
+    const config = await requireSuperAdmin(superAdminPassword);
+    if (!config.isMain) throw new Error('settings.pairingNotMain');
+    if ((await getPrismaClient().pairedTerminal.count()) === 0) {
+      throw new Error('settings.handoffNoSatellites');
+    }
+    const issued = issueHandoffCode();
+    log.warn('[handoff] handoff code issued');
+    return issued;
+  });
+
+  ipcMain.handle('pairing:getHandoffState', async () => getHandoffState());
+
+  ipcMain.handle('pairing:cancelHandoffCode', async () => {
+    cancelHandoffCode();
+    return true;
+  });
+
+  /** On a satellite: take the main role over. The renderer restarts the app on success. */
+  ipcMain.handle('pairing:takeOver', async (_event, superAdminPassword: string, code: string) =>
+    takeOverAsMain(superAdminPassword, { code }),
+  );
+
+  ipcMain.handle('pairing:pendingTakeover', async () => getPendingTakeover());
+
+  ipcMain.handle(
+    'pairing:resolveTakeover',
+    async (_event, superAdminPassword: string, action: 'finish' | 'discard') => {
+      await resolvePendingTakeover(superAdminPassword, action === 'finish' ? 'finish' : 'discard');
+      return true;
+    },
+  );
+
+  /** On a satellite: its main's new address, after a handoff (§11.6). */
+  ipcMain.handle(
+    'pairing:repoint',
+    async (_event, superAdminPassword: string, mainTerminalUrl: string) =>
+      repointMain(superAdminPassword, mainTerminalUrl),
+  );
 }

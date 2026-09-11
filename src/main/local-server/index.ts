@@ -1,5 +1,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
+import { createReadStream } from 'fs';
+import { stat } from 'fs/promises';
 import { join } from 'path';
+import { pipeline } from 'stream/promises';
 import { app } from 'electron';
 import { getPrismaClient } from '../database/sqlite-client';
 import { getLanAddress } from '../network/lan-address';
@@ -8,7 +11,10 @@ import { buildRouter } from './routes';
 import { StaticFiles } from './static-files';
 import { shouldServeLocally } from './serve-policy';
 import { isPairingOpen } from './pairing';
+import { onHandedOff } from './handoff';
+import { HANDING_OFF, isWriteFrozen } from '../sales/write-freeze';
 import {
+  FileReply,
   HttpError,
   Router,
   SESSION_HEADER,
@@ -36,7 +42,7 @@ import {
  */
 
 /** Same default as the QR builder in `../ipc/handlers.ts`, and the port Vite uses in dev. */
-const DEFAULT_PORT = 5173;
+export const DEFAULT_PORT = 5173;
 const MAX_BODY_BYTES = 12 * 1024 * 1024; // Generous enough for a base64 invoice photo.
 /** Idle keep-alive, deliberately longer than any client's own — see startLocalServer. */
 const KEEP_ALIVE_MS = 65_000;
@@ -53,6 +59,11 @@ export interface LocalServerStatus {
 }
 
 let lastError: string | null = null;
+
+// A main that has handed its role over is a satellite, and a satellite serves nothing (§11.4).
+onHandedOff(() => {
+  void stopLocalServer();
+});
 
 export function getLocalServerStatus(): LocalServerStatus {
   const address = getLanAddress();
@@ -249,6 +260,12 @@ async function handleApi(
       };
     }
 
+    // A handoff is taking the new main's copy of this database (§11.4): a write now would be lost.
+    // In a sale refusal's shape, so a satellite's screen names it and keeps the cart.
+    if (method !== 'GET' && isWriteFrozen() && !route.duringHandoff) {
+      return sendError(res, 409, JSON.stringify({ code: HANDING_OFF }));
+    }
+
     const ctx: RequestContext = {
       params,
       query: Object.fromEntries(url.searchParams),
@@ -260,12 +277,29 @@ async function handleApi(
     };
 
     const result = await route.handler(ctx);
+    if (result instanceof FileReply) return await sendFile(res, result);
     sendJson(res, method === 'POST' ? 201 : 200, result);
   } catch (err) {
     if (err instanceof HttpError) return sendError(res, err.status, err.message);
     // Never let an internal message reach the network — it can carry file paths or SQL.
     console.error(`[local-server] ${method} ${apiPath} failed:`, err);
     sendError(res, 500, 'Internal error');
+  }
+}
+
+async function sendFile(res: ServerResponse, reply: FileReply): Promise<void> {
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    reply.cleanup?.();
+  };
+  try {
+    const { size } = await stat(reply.path);
+    res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': size });
+    await pipeline(createReadStream(reply.path), res);
+  } finally {
+    cleanup();
   }
 }
 

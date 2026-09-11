@@ -186,7 +186,10 @@ export async function fetchTerminalToken(
     });
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
     if (!response.ok) throw new Error(String(body?.message ?? `HTTP ${response.status}`));
-    return { token: String(body?.token ?? ''), ...positionOf(body) };
+    // A 200 is not a token: anything can answer one, and an empty Bearer would only be refused
+    // later, somewhere less clear. Whatever answered did not recognise this terminal.
+    if (typeof body?.token !== 'string' || !body.token) throw new Error('No token in the answer');
+    return { token: body.token, ...positionOf(body) };
   } finally {
     done();
   }

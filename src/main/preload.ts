@@ -310,6 +310,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ) => ipcRenderer.invoke("pairing:joinAsSatellite", superAdminPassword, input),
     leave: (superAdminPassword: string) =>
       ipcRenderer.invoke("pairing:leave", superAdminPassword),
+    issueHandoffCode: (superAdminPassword: string) =>
+      ipcRenderer.invoke("pairing:issueHandoffCode", superAdminPassword),
+    getHandoffState: () => ipcRenderer.invoke("pairing:getHandoffState"),
+    cancelHandoffCode: () => ipcRenderer.invoke("pairing:cancelHandoffCode"),
+    takeOver: (superAdminPassword: string, code: string) =>
+      ipcRenderer.invoke("pairing:takeOver", superAdminPassword, code),
+    pendingTakeover: () => ipcRenderer.invoke("pairing:pendingTakeover"),
+    resolveTakeover: (superAdminPassword: string, action: "finish" | "discard") =>
+      ipcRenderer.invoke("pairing:resolveTakeover", superAdminPassword, action),
+    repoint: (superAdminPassword: string, mainTerminalUrl: string) =>
+      ipcRenderer.invoke("pairing:repoint", superAdminPassword, mainTerminalUrl),
   },
 
   // A satellite's line to its main terminal: whether it is up, for the "unreachable" banner.
@@ -747,6 +758,22 @@ declare global {
           input: { mainTerminalUrl: string; code: string; name?: string },
         ) => Promise<{ storeName: string; mainTerminalId: string }>;
         leave: (superAdminPassword: string) => Promise<boolean>;
+        /** On a main: consent to handing the main role over (§11.4). */
+        issueHandoffCode: (superAdminPassword: string) => Promise<{ code: string; expiresAt: number }>;
+        getHandoffState: () => Promise<{
+          code: string | null;
+          expiresAt: number | null;
+          /** A satellite has begun taking over: writes are frozen here. */
+          inProgress: boolean;
+        }>;
+        cancelHandoffCode: () => Promise<boolean>;
+        /** On a satellite: take the main role over; the app must restart afterwards. */
+        takeOver: (superAdminPassword: string, code: string) => Promise<{ newMainUrl: string }>;
+        /** A takeover whose confirmation never arrived, waiting for the operator. */
+        pendingTakeover: () => Promise<{ oldMainUrl: string; at: string } | null>;
+        resolveTakeover: (superAdminPassword: string, action: "finish" | "discard") => Promise<boolean>;
+        /** On a satellite: its main's new address (§11.6). */
+        repoint: (superAdminPassword: string, mainTerminalUrl: string) => Promise<{ mainTerminalId: string }>;
       };
       lan: {
         /** Null on a terminal that is not a satellite. */

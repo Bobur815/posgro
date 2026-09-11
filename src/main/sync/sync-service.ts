@@ -12,6 +12,7 @@ import { syncWithMain } from '../lan/main-sync';
 import { MainLinkError } from '../lan/main-link';
 import { syncLocalServerWithMode } from '../local-server';
 import { flushLogs } from '../logger';
+import { isWriteFrozen } from '../sales/write-freeze';
 
 function decodeTokenStoreId(token: string): string | null | undefined {
   try {
@@ -68,6 +69,11 @@ export class SyncService {
 
   async sync(): Promise<void> {
     if (this.isSyncing) {
+      return;
+    }
+    // Handing the main role over (§11.4): what this cycle would write here — pulled products,
+    // "uploaded" marks — would land after the new main's copy was taken. The new main syncs it.
+    if (isWriteFrozen()) {
       return;
     }
 

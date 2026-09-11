@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { getPrismaClient } from '../database/sqlite-client';
 import { toPieces } from '../../shared/utils/pack';
 import type { Prisma, PrismaClient, Sale, SaleItem } from '../../generated/prisma-sqlite';
+import { HANDING_OFF, isWriteFrozen } from './write-freeze';
 
 /**
  * The one place a sale changes stock.
@@ -109,17 +110,62 @@ let tail: Promise<unknown> = Promise.resolve();
  *
  * Exported for the shift writes in `shifts.ts`: opening or closing a shift in the middle of a
  * commit could otherwise file a sale under a shift that closed a moment earlier.
+ *
+ * Refuses with `MAIN_HANDING_OFF` while a handoff holds the write freeze (§11.4) — checked when
+ * `fn`'s turn comes rather than when it was queued, so a request waiting behind the freeze is
+ * refused too, instead of landing after the new main's copy was taken.
  */
 export function serially<T>(fn: () => Promise<T>): Promise<T> {
-  const run = tail.then(fn, fn);
+  const guarded = () => {
+    if (isWriteFrozen()) return Promise.reject(new SaleRefusedError({ code: HANDING_OFF }));
+    return fn();
+  };
+  const run = tail.then(guarded, guarded);
   tail = run.catch(() => undefined);
   return run;
 }
 
+/**
+ * Sales committed here whose `settleSale` has not finished yet. Settling writes to the sale — its
+ * fiscal status, its marking labels — after the commit's own turn in the queue is over, so a
+ * handoff that only drained the queue could copy the sale without them.
+ */
+const awaitingSettle = new Set<string>();
+
+/** Called by `settleSale` when it is done with a sale, whether it succeeded or not. */
+export function markSettled(saleId: string): void {
+  awaitingSettle.delete(saleId);
+}
+
+/** Test seam: forget commits a test never settled. Production never calls this. */
+export function __forgetUnsettled(): void {
+  awaitingSettle.clear();
+}
+
+/**
+ * Wait until nothing that was already under way can still write a sale: every queued commit has
+ * had its turn, and every committed sale has been settled — or `settleWithinMs` has passed, since a
+ * caller that crashed between the two would otherwise hold the handoff forever.
+ *
+ * For a handoff, after `freezeWrites()`: nothing new can start, and this is what lets the copy be
+ * taken once what had started is finished.
+ */
+export async function drainSaleWrites(settleWithinMs = 10_000): Promise<void> {
+  await tail;
+  const deadline = Date.now() + settleWithinMs;
+  while (awaitingSettle.size > 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 export function commitSale(input: SaleInput, actor: SaleActor): Promise<CommitResult> {
-  return serially(() =>
-    db().$transaction((tx) => commitInTx(tx, input, actor), TX_OPTIONS),
-  );
+  return serially(async () => {
+    const result = await db().$transaction((tx) => commitInTx(tx, input, actor), TX_OPTIONS);
+    // Recorded inside the queue's turn, so a drain that comes after this commit sees it. A replay
+    // wrote nothing, and its caller does not settle it again.
+    if (!result.replayed) awaitingSettle.add(result.sale.id);
+    return result;
+  });
 }
 
 export function updateSale(
@@ -127,9 +173,14 @@ export function updateSale(
   input: SaleInput,
   requester: SaleRequester,
 ): Promise<{ sale: SaleWithItems; stock: StockAfter[] }> {
-  return serially(() =>
-    db().$transaction((tx) => updateInTx(tx, saleId, input, requester), TX_OPTIONS),
-  );
+  return serially(async () => {
+    const result = await db().$transaction(
+      (tx) => updateInTx(tx, saleId, input, requester),
+      TX_OPTIONS,
+    );
+    awaitingSettle.add(saleId);
+    return result;
+  });
 }
 
 export function deleteSale(

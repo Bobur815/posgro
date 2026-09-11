@@ -56,6 +56,10 @@ export function parseSaleError(
     if (parsed.code === "MAIN_SUPERSEDED") {
       return t("errors.mainSuperseded");
     }
+    // The main is handing its role to another till (§11.4) — seconds; the cart is kept.
+    if (parsed.code === "MAIN_HANDING_OFF") {
+      return t("errors.mainHandingOff");
+    }
     if (parsed.code === "SATELLITE_READ_ONLY") {
       return t("errors.satelliteReadOnly");
     }

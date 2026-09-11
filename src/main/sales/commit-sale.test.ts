@@ -25,7 +25,16 @@ jest.mock('electron', () => ({
 }));
 
 import { initializeDatabase, closeDatabase, getPrismaClient } from '../database/sqlite-client';
-import { commitSale, deleteSale, updateSale, type SaleInput } from './commit-sale';
+import {
+  __forgetUnsettled,
+  commitSale,
+  deleteSale,
+  drainSaleWrites,
+  markSettled,
+  updateSale,
+  type SaleInput,
+} from './commit-sale';
+import { freezeWrites, thawWrites } from './write-freeze';
 
 const MAIN = { terminalId: 'T1', cashierId: 'user-1', cashierName: 'Кассир' };
 const SATELLITE = { terminalId: 'T2', cashierId: 'user-1', cashierName: 'Кассир' };
@@ -235,6 +244,48 @@ describe('deleteSale', () => {
 
     const attempt = deleteSale(sale.id, { ...ADMIN, terminalId: 'T2' });
     await expect(attempt).rejects.toThrow('Unauthorized');
+    expect(await stockOf(p.id)).toBe(4);
+  });
+});
+
+/**
+ * What a main handing its role over waits for before its database is copied (§11.4): not only the
+ * queue, but the settling of sales the queue has let through — whose fiscal status and marking
+ * labels are written after the commit's turn is over.
+ */
+describe('drainSaleWrites', () => {
+  // The commits above were never settled — nothing in this file plays the IPC handler.
+  beforeAll(() => __forgetUnsettled());
+
+  it('waits for a committed sale to be settled, and no longer', async () => {
+    const p = await product(5);
+    const { sale } = await commitSale(cart(line(p)), MAIN);
+
+    let drainedAt = 0;
+    const drain = drainSaleWrites(5_000).then(() => {
+      drainedAt = Date.now();
+    });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(drainedAt).toBe(0);
+
+    const settledAt = Date.now();
+    markSettled(sale.id);
+    await drain;
+    // Well inside the 5 s deadline: it was the settle that let it go, not the clock.
+    expect(drainedAt - settledAt).toBeLessThan(1_000);
+  });
+
+  it('refuses a commit while writes are frozen, and takes it again once thawed', async () => {
+    const p = await product(5);
+    freezeWrites(60_000);
+    try {
+      expect(codeOf(await commitSale(cart(line(p)), MAIN).catch((e) => e))).toBe('MAIN_HANDING_OFF');
+      expect(await stockOf(p.id)).toBe(5);
+    } finally {
+      thawWrites();
+    }
+    const { sale } = await commitSale(cart(line(p)), MAIN);
+    markSettled(sale.id);
     expect(await stockOf(p.id)).toBe(4);
   });
 });

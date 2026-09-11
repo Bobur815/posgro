@@ -122,6 +122,64 @@ export async function joinMain(
 }
 
 /**
+ * Point this satellite at its main's new address (§11.6) — after a handoff moved the main role to
+ * another till, which this one's pairing travelled to with the database.
+ *
+ * No code and no re-pairing: the credential this till already holds is what proves the new main
+ * is the one it belongs to. Refused unless the address answers as a main of the same shop, in the
+ * same lineage at a generation no lower than this till has seen, and accepts that credential.
+ */
+export async function repointMain(
+  superAdminPassword: string,
+  mainTerminalUrl: string,
+): Promise<{ mainTerminalId: string }> {
+  const prisma = getPrismaClient();
+  const config = await requireSuperAdmin(superAdminPassword);
+  if (config.isMain !== false) throw new Error('settings.repointNotSatellite');
+
+  const url = normaliseMainUrl(mainTerminalUrl ?? '');
+  const probe = await probeMainTerminal(url, config.storeId);
+  if (!probe.ok) throw new Error(`settings.mainTerminal_${probe.reason.replace(/-/g, '_')}`);
+
+  const { lineage, generation } = probe.info;
+  if (config.lanLineage && lineage && lineage !== config.lanLineage) {
+    // Another chain of mains: not where this till's pairing went. Pairing with it is the way in.
+    throw new Error('settings.repointOtherLineage');
+  }
+  if (config.lanLineage && lineage === config.lanLineage && generation < config.mainGeneration) {
+    throw new Error('settings.mainTerminal_superseded');
+  }
+
+  const secret = await prisma.systemSetting.findUnique({ where: { key: DEVICE_SECRET_KEY } });
+  try {
+    if (!secret?.value) throw new Error('no device secret');
+    await fetchTerminalToken(url, config.terminalId, secret.value);
+  } catch (err) {
+    log.warn(`[pairing] repointing to ${url} failed: ${err instanceof Error ? err.message : err}`);
+    const name = (err as { name?: string } | null)?.name;
+    if (name === 'TypeError' || name === 'AbortError' || name === 'TimeoutError') {
+      throw new Error('settings.mainTerminal_unreachable');
+    }
+    throw new Error('settings.repointNotPaired');
+  }
+
+  await prisma.localConfig.update({
+    where: { id: 'config' },
+    data: {
+      mainTerminalUrl: url,
+      lanLineage: lineage ?? config.lanLineage,
+      mainGeneration: Math.max(generation, config.mainGeneration ?? 0),
+    },
+  });
+  // A different machine is a different clock: the catalog cursor starts over (§6.5), and the
+  // session the old address issued is dead at the new one.
+  await forgetPreviousRole();
+
+  log.info(`[pairing] repointed to main ${probe.info.terminalId} at ${url}`);
+  return { mainTerminalId: probe.info.terminalId };
+}
+
+/**
  * Stop being a satellite and go back to being an independent main — §11.5's emergency promotion.
  *
  * Deliberately local-only: it does not ask the main to forget this terminal, because the usual

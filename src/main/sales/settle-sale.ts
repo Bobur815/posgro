@@ -1,6 +1,7 @@
 import { getPrismaClient } from '../database/sqlite-client';
 import { regosVcrService } from '../fiscal/regos-vcr-service';
 import { savePendingMarkingCodes } from '../ipc/marking-codes-handlers';
+import { markSettled } from './commit-sale';
 
 /**
  * What happens to a sale once `commitSale` has written it: the marking-label snapshot, the fiscal
@@ -89,14 +90,19 @@ export async function settleSale(
   // fiscalization. No asl-belgisi lookup happens here — circulation is checked on the
   // /marking-check screen, not during a sale. Fire-and-forget: the local write is followed by a
   // best-effort VPS sync, and neither may delay the sale or its receipt.
+  let markingSaved: Promise<unknown> = Promise.resolve();
   if (labels.length > 0) {
-    savePendingMarkingCodes(
+    markingSaved = savePendingMarkingCodes(
       labels.map((m) => ({ code: m.label, productBarcode: m.barcode, saleId })),
       terminalId,
     ).catch((e) =>
       console.error('[marking] savePending failed:', e instanceof Error ? e.message : e),
     );
   }
+
+  // Settled once the local writes are down. The fiscal round-trip is not waited for here — a
+  // handoff waits for that through the VCR's own queue.
+  void markingSaved.finally(() => markSettled(saleId));
 
   return { fiscalizing };
 }

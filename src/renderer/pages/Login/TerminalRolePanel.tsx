@@ -56,13 +56,27 @@ interface LiveCode {
   serverError: string | null;
 }
 
+interface Handoff {
+  code: string | null;
+  expiresAt: number | null;
+  inProgress: boolean;
+}
+
 type Mode =
   | { kind: "idle" }
   | { kind: "issue" }
   | { kind: "code" }
   | { kind: "remove"; terminalId: string }
   | { kind: "join" }
-  | { kind: "leave" };
+  | { kind: "leave" }
+  // §11.4: on the main, consenting to a handoff; on a satellite, taking over.
+  | { kind: "handoff" }
+  | { kind: "handoffCode" }
+  | { kind: "takeover" }
+  // §11.6: a satellite's main moved.
+  | { kind: "repoint" }
+  // A takeover whose confirmation never arrived: the operator decides.
+  | { kind: "resolve"; action: "finish" | "discard" };
 
 /** How long the app waits after a role change before restarting, so the toast can be read. */
 const RELAUNCH_DELAY_MS = 1800;
@@ -87,6 +101,8 @@ export function TerminalRolePanel({ config }: { config: Config }) {
   const [acknowledged, setAcknowledged] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [handoff, setHandoff] = useState<Handoff | null>(null);
+  const [pendingTakeover, setPendingTakeover] = useState<{ oldMainUrl: string; at: string } | null>(null);
 
   const pairing = window.electronAPI.pairing;
 
@@ -114,8 +130,40 @@ export function TerminalRolePanel({ config }: { config: Config }) {
           }
         })
         .catch(() => undefined);
+      void pairing
+        .getHandoffState()
+        .then((state) => {
+          if (state.code || state.inProgress) {
+            setHandoff(state);
+            setMode({ kind: "handoffCode" });
+          }
+        })
+        .catch(() => undefined);
+    } else {
+      void pairing.pendingTakeover().then(setPendingTakeover).catch(() => undefined);
     }
   }, [config.isMain, loadSatellites, pairing]);
+
+  // While a handoff code is on screen: tick, and follow the handoff once a till has begun it. When
+  // it completes, this terminal restarts by itself as that till's satellite.
+  useEffect(() => {
+    if (mode.kind !== "handoffCode") return;
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    const poll = setInterval(async () => {
+      const state = await pairing.getHandoffState().catch(() => null);
+      if (!state) return;
+      if (!state.code && !state.inProgress) {
+        setHandoff(null);
+        setMode({ kind: "idle" });
+        return;
+      }
+      setHandoff(state);
+    }, CODE_POLL_MS);
+    return () => {
+      clearInterval(tick);
+      clearInterval(poll);
+    };
+  }, [mode.kind, pairing]);
 
   // While a code is on screen: tick the countdown, and notice when it has been used or has lapsed.
   useEffect(() => {
@@ -201,6 +249,47 @@ export function TerminalRolePanel({ config }: { config: Config }) {
     act(async () => {
       await pairing.leave(password);
       relaunchSoon(t("settings.lanRole.left"));
+    });
+
+  const issueHandoff = () =>
+    act(async () => {
+      const issued = await pairing.issueHandoffCode(password);
+      setHandoff({ ...issued, inProgress: false });
+      setNow(Date.now());
+      reset({ kind: "handoffCode" });
+    });
+
+  const cancelHandoff = () =>
+    act(async () => {
+      await pairing.cancelHandoffCode();
+      setHandoff(null);
+      reset();
+    });
+
+  const takeOver = () =>
+    act(async () => {
+      try {
+        const { newMainUrl } = await pairing.takeOver(password, pairingCode.trim());
+        relaunchSoon(t("settings.lanRole.tookOver", { url: newMainUrl }));
+      } catch (e) {
+        // Not confirmed either way: the choice is now the operator's, shown as the pending notice.
+        setPendingTakeover(await pairing.pendingTakeover().catch(() => null));
+        throw e;
+      }
+    });
+
+  const resolveTakeover = (action: "finish" | "discard") =>
+    act(async () => {
+      await pairing.resolveTakeover(password, action);
+      relaunchSoon(
+        action === "finish" ? t("settings.lanRole.pendingFinished") : t("settings.lanRole.pendingDiscarded"),
+      );
+    });
+
+  const repoint = () =>
+    act(async () => {
+      await pairing.repoint(password, mainUrl.trim());
+      relaunchSoon(t("settings.lanRole.repointed"));
     });
 
   const passwordField = (onEnter: () => void) => (
@@ -293,6 +382,70 @@ export function TerminalRolePanel({ config }: { config: Config }) {
           onClick={leave}
         >
           {t("settings.lanRole.leaveConfirm")}
+        </ActionButton>
+      </Actions>
+    </>
+  );
+
+  const takeoverForm = (
+    <>
+      <Notice>{t("settings.lanRole.takeOverWarning")}</Notice>
+      {/* The fiscal device is per machine (§11.4): it does not come along. */}
+      <Notice $danger>{t("settings.lanRole.takeOverVcr")}</Notice>
+      <Field>
+        <Label>{t("settings.lanRole.handoffCode")}</Label>
+        <TextInput
+          value={pairingCode}
+          autoFocus
+          inputMode="numeric"
+          maxLength={6}
+          onChange={(e) => setPairingCode(e.target.value.replace(/\D/g, ""))}
+        />
+      </Field>
+      <Field>
+        <Label>{t("settings.lanRole.superAdminPassword")}</Label>
+        <TextInput type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+      </Field>
+      {busy && <Hint>{t("settings.lanRole.takingOver")}</Hint>}
+      {error && <ErrorText>{error}</ErrorText>}
+      <Actions>
+        {cancelButton}
+        <ActionButton
+          type="button"
+          $primary
+          disabled={busy || pairingCode.length !== 6 || !password}
+          onClick={takeOver}
+        >
+          {t("settings.lanRole.takeOverConfirm")}
+        </ActionButton>
+      </Actions>
+    </>
+  );
+
+  const repointForm = (
+    <>
+      <Hint>{t("settings.lanRole.repointHint")}</Hint>
+      <Field>
+        <Label>{t("settings.lanRole.mainAddress")}</Label>
+        <TextInput
+          value={mainUrl}
+          autoFocus
+          spellCheck={false}
+          placeholder="http://192.168.1.10:5173/api"
+          onChange={(e) => setMainUrl(e.target.value)}
+        />
+      </Field>
+      {passwordField(() => mainUrl.trim() && repoint())}
+      {error && <ErrorText>{error}</ErrorText>}
+      <Actions>
+        {cancelButton}
+        <ActionButton
+          type="button"
+          $primary
+          disabled={busy || !mainUrl.trim() || !password}
+          onClick={repoint}
+        >
+          {t("settings.lanRole.repointConfirm")}
         </ActionButton>
       </Actions>
     </>
@@ -414,6 +567,46 @@ export function TerminalRolePanel({ config }: { config: Config }) {
 
           {mode.kind === "join" && joinForm}
 
+          {mode.kind === "handoff" && (
+            <>
+              <Notice>{t("settings.lanRole.handoffWarning")}</Notice>
+              {passwordField(issueHandoff)}
+              {error && <ErrorText>{error}</ErrorText>}
+              <Actions>
+                {cancelButton}
+                <ActionButton type="button" $primary disabled={busy || !password} onClick={issueHandoff}>
+                  {t("settings.lanRole.handoffIssue")}
+                </ActionButton>
+              </Actions>
+            </>
+          )}
+
+          {mode.kind === "handoffCode" && handoff && (
+            <Field>
+              {handoff.inProgress ? (
+                // Writes are frozen here now; the till taking over finishes in seconds, and this
+                // one restarts as its satellite.
+                <Notice>{t("settings.lanRole.handoffInProgress")}</Notice>
+              ) : (
+                <>
+                  <Hint>{t("settings.lanRole.handoffCodeTitle")}</Hint>
+                  <CodeDisplay>{handoff.code}</CodeDisplay>
+                  {handoff.expiresAt && (
+                    <Hint style={{ textAlign: "center" }}>
+                      {t("settings.lanRole.codeExpires", { time: formatCountdown(handoff.expiresAt - now) })}
+                    </Hint>
+                  )}
+                  {error && <ErrorText>{error}</ErrorText>}
+                  <Actions>
+                    <ActionButton type="button" onClick={cancelHandoff} disabled={busy}>
+                      {t("settings.lanRole.cancelCode")}
+                    </ActionButton>
+                  </Actions>
+                </>
+              )}
+            </Field>
+          )}
+
           {mode.kind === "idle" && (
             <>
               {codeOutcome && (
@@ -430,6 +623,11 @@ export function TerminalRolePanel({ config }: { config: Config }) {
                       {t("settings.lanRole.addSatellite")}
                     </ActionButton>
                   </Actions>
+                  {satellites.length > 0 && (
+                    <TextButton type="button" onClick={() => reset({ kind: "handoff" })}>
+                      {t("settings.lanRole.handoff")}
+                    </TextButton>
+                  )}
                   <TextButton type="button" onClick={() => reset({ kind: "join" })}>
                     {t("settings.lanRole.becomeSatellite")}
                   </TextButton>
@@ -442,10 +640,64 @@ export function TerminalRolePanel({ config }: { config: Config }) {
 
       {!config.isMain && (
         <>
+          {/* A takeover that stopped between the copy and the old main's confirmation. Only the
+              person in the shop can see whether the old main restarted as a satellite. */}
+          {pendingTakeover && (
+            <>
+              <Notice $danger>
+                {t("settings.lanRole.pendingTakeover", { url: pendingTakeover.oldMainUrl })}
+              </Notice>
+              {mode.kind === "resolve" ? (
+                <>
+                  {passwordField(() => resolveTakeover(mode.action))}
+                  {error && <ErrorText>{error}</ErrorText>}
+                  <Actions>
+                    {cancelButton}
+                    <ActionButton
+                      type="button"
+                      $primary={mode.action === "finish"}
+                      $danger={mode.action === "discard"}
+                      disabled={busy || !password}
+                      onClick={() => resolveTakeover(mode.action)}
+                    >
+                      {mode.action === "finish"
+                        ? t("settings.lanRole.pendingFinish")
+                        : t("settings.lanRole.pendingDiscard")}
+                    </ActionButton>
+                  </Actions>
+                </>
+              ) : (
+                canAct && (
+                  <Actions style={{ justifyContent: "flex-start" }}>
+                    <ActionButton type="button" onClick={() => reset({ kind: "resolve", action: "finish" })}>
+                      {t("settings.lanRole.pendingFinish")}
+                    </ActionButton>
+                    <ActionButton type="button" $danger onClick={() => reset({ kind: "resolve", action: "discard" })}>
+                      {t("settings.lanRole.pendingDiscard")}
+                    </ActionButton>
+                  </Actions>
+                )
+              )}
+            </>
+          )}
           {mode.kind === "join" && joinForm}
           {mode.kind === "leave" && leaveForm}
-          {mode.kind === "idle" && canAct && (
+          {mode.kind === "takeover" && takeoverForm}
+          {mode.kind === "repoint" && repointForm}
+          {mode.kind === "idle" && canAct && !pendingTakeover && (
             <>
+              <TextButton type="button" onClick={() => reset({ kind: "takeover" })}>
+                {t("settings.lanRole.takeOver")}
+              </TextButton>
+              <TextButton
+                type="button"
+                onClick={() => {
+                  setMainUrl(config.mainTerminalUrl ?? "");
+                  reset({ kind: "repoint" });
+                }}
+              >
+                {t("settings.lanRole.repoint")}
+              </TextButton>
               <TextButton type="button" onClick={() => reset({ kind: "join" })}>
                 {t("settings.lanRole.joinOther")}
               </TextButton>

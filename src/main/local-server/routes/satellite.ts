@@ -154,6 +154,9 @@ export const satelliteRoutes: Route[] = [
     method: 'POST',
     path: '/terminal/auth/login',
     audience: 'terminal',
+    // Signing in writes nothing that matters; refusing it would lock cashiers out for a handoff
+    // that lasts seconds.
+    duringHandoff: true,
     handler: async ({ body, terminal }) => {
       const phone = String(required(body?.phone, 'phone'));
       const password = String(required(body?.password, 'password'));
@@ -191,6 +194,7 @@ export const satelliteRoutes: Route[] = [
     method: 'POST',
     path: '/terminal/auth/pin',
     audience: 'terminal',
+    duringHandoff: true,
     handler: async ({ body, terminal }) => {
       const terminalId = terminal!.terminalId;
       const throttle = pinThrottleFor(terminalId);
