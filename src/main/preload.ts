@@ -284,6 +284,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     confirmClose: () => ipcRenderer.send("app:confirm-close"),
   },
 
+  // Login-screen banner. Cached in the main process so it renders with no internet.
+  banner: {
+    get: () => ipcRenderer.invoke("banner:get"),
+  },
+
   // Local config (VPS connection settings)
   config: {
     getLocalConfig: () => ipcRenderer.invoke("config:getLocalConfig"),
@@ -676,6 +681,9 @@ declare global {
         relaunch: () => Promise<void>;
         onCloseRequested: (callback: () => void) => () => void;
         confirmClose: () => void;
+      };
+      banner: {
+        get: () => Promise<{ imageUrl: string; title: string; subtitle: string }>;
       };
       config: {
         getLocalConfig: () => Promise<{

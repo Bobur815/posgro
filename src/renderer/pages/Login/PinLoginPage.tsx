@@ -361,21 +361,15 @@ export function PinLoginPage() {
     window.electronAPI.auth.isPinConfigured().then(setPinConfigured);
   }, []);
 
+  // Asked of the main process, not fetched here. It caches the last banner — image included, as a
+  // data URL — so a till with no internet still shows one, which is most tills most of the time.
+  // Fetching from the renderer meant a blank panel whenever the wifi was down, and always on an
+  // OFFLINE_ONLY store, whose apiUrl points at a server it is never expected to reach.
   useEffect(() => {
-    window.electronAPI.config.getLocalConfig().then((cfg) => {
-      if (!cfg?.apiUrl) return;
-      const baseUrl = cfg.apiUrl.replace(/\/api\/?$/, "");
-      fetch(`${cfg.apiUrl}/site-config/login-banner`)
-        .then((r) => r.json())
-        .then((data) => {
-          const banner = data as LoginBanner;
-          if (banner.imageUrl && !banner.imageUrl.startsWith("http")) {
-            banner.imageUrl = `${baseUrl}${banner.imageUrl}`;
-          }
-          setBanner(banner);
-        })
-        .catch(() => {});
-    });
+    window.electronAPI.banner
+      .get()
+      .then(setBanner)
+      .catch(() => {});
   }, []);
 
   const [saved] = useState(loadSaved);
