@@ -1,5 +1,19 @@
 # Scale Integration — What To Change Later
 
+> **Rongta support, 2026-09-08.** They did not answer any of the seven questions — not the port,
+> not the protocol, not the RS-232 pinout, not the service menu. Their whole reply was: *"For the
+> machine in September 2025, please use the new version of the upper computer"*, with
+> `RLS1000_SETUP_V2.0.30.52.zip` attached.
+>
+> That is still the unblocker, just not an answer. The software in use was **v1.129, build 2018.05**
+> — seven years older than the scale — which explains why it could not connect over either
+> interface despite the scale replying to ping. Install V2.0.30.52, get it talking to the scale,
+> and the Wireshark capture in §2 becomes possible. The capture is what yields §1 and §2; Rongta
+> have effectively declined to shortcut it.
+>
+> Do the capture in the same session as the first successful connection — that connection is the
+> only thing currently known to be fragile.
+
 ## 1. TCP Port
 
 **When:** After Wireshark capture or RLS1000 software docs
@@ -63,10 +77,13 @@ Confirmed barcodes:
 
 ---
 
-## 4. Recreate Unit Tests
+## 4. Recreate Unit Tests ✅ RESOLVED (2026-09-11)
 
-**When:** Same time as #3
-**File:** recreate `src/shared/utils/weightBarcode.test.ts` (was deleted to fix CI)
+`src/shared/utils/weightBarcode.test.ts` is back — 27 cases, built on the two barcodes scanned
+from real printed labels. Both their EAN-13 check digits verify, which is independent evidence the
+field boundaries are right: a wrong split would still parse, but the check digit could not agree by
+accident. Also covers the section digit being ignored, the 2-decimal scale setting, and the price
+rounding.
 
 Write tests using real barcode numbers scanned from actual printed labels to guarantee the parser matches what the scale actually produces.
 
