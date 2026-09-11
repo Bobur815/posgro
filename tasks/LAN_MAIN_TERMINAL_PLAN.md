@@ -3,7 +3,7 @@
 **Status:** Phases 0–4 and the §11 pairing dialog implemented on `dev` (2026-09-10 → 2026-09-11) —
 see §12 for what shipped, what changed from the design while building it, and what is still open.
 A shop can pair a satellite from the login-screen gear, and the satellite shows only what it can
-do. §11.3–11.4 (generation counter, planned handoff) are not started. §8 records what is
+do. §11.3's generation guard is in; §11.4's planned handoff is next. §8 records what is
 deliberately deferred and what must not be deferred.
 
 ---
@@ -629,7 +629,8 @@ generation — the counter already makes that safe. Not worth building until ask
 | 3.3 | `b2a674e` | The satellite side: `lan/main-link.ts`, IPC routing, local cache and printing, sync to the main |
 | 3.4 | `359b22d` | Degraded mode (banner, login message) and the satellite write guard |
 | §11 | `82ba622` | The pairing dialog in the login-screen gear: pair, remove, re-pair, leave — every act behind the super-admin password; a role change restarts the app |
-| 4 | (this commit) | Trim: a satellite is "admin-locked" like a cashier-only store, plus hidden login-bar buttons, settings tiles, shop reports and VCR receipt actions; its drawer/scale toggles work |
+| 4 | `66ed843` | Trim: a satellite is "admin-locked" like a cashier-only store, plus hidden login-bar buttons, settings tiles, shop reports and VCR receipt actions; its drawer/scale toggles work |
+| §11.3 | (this commit) | Lineage + generation: a satellite refuses a replaced main (`MAIN_SUPERSEDED`), join refuses one, leaving a main makes the next generation |
 
 Proven end to end in `src/main/lan/satellite.e2e.test.ts`: a real main (LAN server + database)
 and a satellite with its own database, in one process, over HTTP — catalog pull, login, shift,
@@ -656,6 +657,16 @@ switched off.
   main, so no satellite needs anyone's password hash.
 - **§5.3's `/sales/sync` shape was never built.** A satellite's sale is committed on the main, not
   recorded after the fact; the VPS-shaped route would have recorded sales without touching stock.
+- **§11.3 needed a lineage id beside the counter.** A bare generation cannot tell "an older main of
+  this shop" from "another shop's main", which is what "scoped per pairing" asks for. So
+  `local_config` carries `lan_lineage` (a UUID the first main mints when it issues its first
+  pairing code) and `main_generation`. A satellite adopts its main's pair, follows a higher
+  generation in the same lineage, and refuses a lower one — and refuses a *different* lineage at
+  its main's address too, since that is not the main it was paired with. Joining an unrelated
+  lineage stays allowed: that is a deliberate act behind the super-admin password.
+- **The guard sits at token fetch**, not on every request: a token is fetched at start, hourly, and
+  after any 401 — and a different machine at the address means a different signing key, hence a
+  401. Nothing reaches a superseded main without passing it.
 
 ### 12.3 Still open
 
@@ -664,7 +675,11 @@ Needed before a shop can use this:
 - ~~**§11 gear dialog**~~ — done (`TerminalRolePanel.tsx`). Verified by pairing two real instances
   on one machine. The sign-out-after-joining concern is met by restarting the app on any role
   change. §11.5's emergency promotion ships as "stop being a satellite" with its warning,
-  acknowledgement and a logged record; the generation bump waits for §11.3.
+  acknowledgement and a logged record, and (since §11.3) moves the lineage to the next generation.
+- ~~**§11.3 generation guard**~~ — done. Proven in `satellite.e2e.test.ts`: a satellite follows its
+  main forward, refuses one lowered underneath it or of another lineage (sale, sync and login all
+  say `MAIN_SUPERSEDED`), join refuses a superseded main, leaving bumps the generation.
+- **§11.4 planned handoff** and §11.6 repointing — next.
 - ~~**Phase 4 trim**~~ — done. Verified on two real instances: the satellite shows POS, shift,
   products (read-only), receipts, marking check, and its own printer/scale/labels/update settings;
   the main still shows everything.
@@ -691,7 +706,6 @@ Deferred, each a known gap rather than a bug:
 - **The VPS dashboard's terminal list** does not see satellites; their heartbeat goes to the main.
 - **Satellite sync interval** is the same 5 minutes as VPS sync; a price change on the main reaches
   a satellite's display within that. Commits always use the main's figures, so this is cosmetic.
-- **§11.3 `mainGeneration`**, promotion and handoff (§11.4–11.5).
 
 Noticed along the way, outside this work:
 

@@ -64,6 +64,7 @@
       "pin_locked": "Bu kassadan juda ko'p noto'g'ri PIN-kod kiritildi. Bir daqiqa kuting yoki parol bilan kiring.",
       "main_unreachable": "Asosiy kassa kutilmoqda: u o'chiq yoki tarmoqda mavjud emas. U paydo bo'lishi bilan kirish mumkin bo'ladi.",
       "device_unpaired": "Asosiy kassa bu terminalni endi tanimaydi — uni qayta ulash kerak.",
+      "main_superseded": "Asosiy kassa manzilida eski, almashtirilgan kassa javob beryapti. Joriy asosiy kassa manzilini kiriting.",
       "store_inactive": "Do'kon o'chirilgan, shuning uchun boshqaruv paneliga kirib bo'lmaydi. Ishni tiklash uchun qo'llab-quvvatlash xizmatiga murojaat qiling.",
       "store_offline_only": "Bu do'kon oflayn rejimda ishlaydi: barcha ma'lumotlar serverda emas, terminalning o'zida saqlanadi. Boshqaruv panelini terminalning o'zidan oching — telefoningizni xuddi shu Wi-Fi tarmog'iga ulab, uning kirish ekranidagi QR-kodni skanerlang."
     },
@@ -870,6 +871,7 @@
     "mainTerminal_not_a_main": "Bu manzilda asosiy emas, tobe terminal turibdi.",
     "mainTerminal_different_store": "Bu asosiy terminal boshqa do‘konga tegishli.",
     "mainTerminal_unreachable": "Asosiy terminal mavjud emas. Tarmoqni va uning yoqilganini tekshiring.",
+    "mainTerminal_superseded": "Bu asosiy terminal allaqachon boshqasi bilan almashtirilgan. Joriy asosiy terminalga ulaning.",
     "pairingCodeWrong": "Kod noto'g'ri yoki muddati tugagan. Asosiy terminalda yangi kod oling.",
     "pairingIdIsMain": "Bu terminalning raqami asosiy terminalnikiga teng — ehtimol disk nusxalangan. Unga boshqa terminal raqamini bering.",
     "lanRole": {
@@ -998,6 +1000,8 @@
     "mainUnreachable": "Asosiy kassa bilan aloqa yo'q — savdo o'tkazilmadi. Savat saqlandi: asosiy kassa yoqilgan va tarmoqda ekanini tekshirib, qayta urinib ko'ring.",
     "mainSessionExpired": "Asosiy kassadagi sessiya tugadi. Chiqib, qayta kiring.",
     "deviceUnpaired": "Asosiy kassa bu terminalni endi tanimaydi — uni qayta ulash kerak.",
+    "mainSuperseded": "Asosiy kassa manzilida eski, almashtirilgan kassa javob beryapti — hisob bo'linib ketmasligi uchun savdo o'tkazilmadi. Joriy asosiy kassa manzilini kiriting.",
+    "mainSupersededBanner": "Asosiy kassa manzilida eski, almashtirilgan kassa javob beryapti. Savdo qilib bo'lmaydi — joriy asosiy kassa manzilini kiriting.",
     "satelliteReadOnly": "Bu asosiy kassada bajariladi: bu yerda faqat uning ma'lumotlari nusxasi.",
     "mainUnreachableBanner": "Asosiy kassa bilan aloqa yo'q. Savdo qilib bo'lmaydi — narxlar va bugungi cheklarni ko'rish mumkin."
   },

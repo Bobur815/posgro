@@ -1,5 +1,6 @@
 import { getPrismaClient } from '../database/sqlite-client';
-import { fetchTerminalToken, normaliseMainUrl } from './main-terminal-client';
+import { fetchTerminalToken, normaliseMainUrl, type TerminalTokenGrant } from './main-terminal-client';
+import { judgeMain, type LineagePosition } from './lineage';
 
 /**
  * A satellite's one line to its main terminal (tasks/LAN_MAIN_TERMINAL_PLAN.md §5.7).
@@ -31,7 +32,14 @@ export type MainLinkCode =
   /** The main no longer recognises this terminal: it was unpaired there. */
   | 'DEVICE_UNPAIRED'
   /** Called on a terminal that is not a satellite — a bug, not a network state. */
-  | 'NOT_A_SATELLITE';
+  | 'NOT_A_SATELLITE'
+  /**
+   * What answers at the main's address is not this till's main any more: an older generation of
+   * its lineage — a main that was replaced and has come back — or a different lineage entirely
+   * (§11.3). Talking to it would split the shop, so the till refuses until it is pointed at the
+   * current main.
+   */
+  | 'MAIN_SUPERSEDED';
 
 export class MainLinkError extends Error {
   constructor(readonly code: MainLinkCode) {
@@ -43,6 +51,8 @@ export interface MainLinkStatus {
   /** Null until the first request has been made. */
   reachable: boolean | null;
   lastContactAt: string | null;
+  /** The main at the address was refused as superseded (§11.3) — reachable, but not ours. */
+  superseded: boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 8_000;
@@ -51,7 +61,7 @@ const TOKEN_MARGIN_MS = 5 * 60_000;
 
 let deviceToken: { value: string; expiresAt: number } | null = null;
 let session: string | null = null;
-let status: MainLinkStatus = { reachable: null, lastContactAt: null };
+let status: MainLinkStatus = { reachable: null, lastContactAt: null, superseded: false };
 const listeners = new Set<(s: MainLinkStatus) => void>();
 
 export function getMainLinkStatus(): MainLinkStatus {
@@ -64,11 +74,12 @@ export function onMainLinkStatus(listener: (s: MainLinkStatus) => void): () => v
   return () => listeners.delete(listener);
 }
 
-function markReachable(reachable: boolean): void {
-  const changed = status.reachable !== reachable;
+function markReachable(reachable: boolean, superseded = false): void {
+  const changed = status.reachable !== reachable || status.superseded !== superseded;
   status = {
     reachable,
     lastContactAt: reachable ? new Date().toISOString() : status.lastContactAt,
+    superseded,
   };
   if (changed) for (const listener of listeners) listener(status);
 }
@@ -85,10 +96,15 @@ export function getSession(): string | null {
 export function resetMainLink(): void {
   deviceToken = null;
   session = null;
-  status = { reachable: null, lastContactAt: null };
+  status = { reachable: null, lastContactAt: null, superseded: false };
 }
 
-async function linkConfig(): Promise<{ url: string; terminalId: string; secret: string }> {
+async function linkConfig(): Promise<{
+  url: string;
+  terminalId: string;
+  secret: string;
+  position: LineagePosition;
+}> {
   const prisma = getPrismaClient();
   const config = await prisma.localConfig.findUnique({ where: { id: 'config' } });
   if (!config || config.isMain !== false || !config.mainTerminalUrl) {
@@ -97,7 +113,12 @@ async function linkConfig(): Promise<{ url: string; terminalId: string; secret: 
   const secret = await prisma.systemSetting.findUnique({ where: { key: DEVICE_SECRET_KEY } });
   // A satellite with no secret cannot prove who it is to anyone; to the main it is unpaired.
   if (!secret?.value) throw new MainLinkError('DEVICE_UNPAIRED');
-  return { url: normaliseMainUrl(config.mainTerminalUrl), terminalId: config.terminalId, secret: secret.value };
+  return {
+    url: normaliseMainUrl(config.mainTerminalUrl),
+    terminalId: config.terminalId,
+    secret: secret.value,
+    position: { lineage: config.lanLineage ?? null, generation: config.mainGeneration ?? 0 },
+  };
 }
 
 function expiryOf(token: string): number {
@@ -122,14 +143,14 @@ function isNetworkError(err: unknown): boolean {
 }
 
 async function currentDeviceToken(force = false): Promise<{ url: string; token: string }> {
-  const { url, terminalId, secret } = await linkConfig();
+  const { url, terminalId, secret, position } = await linkConfig();
   if (!force && deviceToken && deviceToken.expiresAt - TOKEN_MARGIN_MS > Date.now()) {
     return { url, token: deviceToken.value };
   }
 
-  let token: string;
+  let grant: TerminalTokenGrant;
   try {
-    token = await fetchTerminalToken(url, terminalId, secret);
+    grant = await fetchTerminalToken(url, terminalId, secret);
   } catch (err) {
     if (isNetworkError(err)) {
       markReachable(false);
@@ -140,8 +161,25 @@ async function currentDeviceToken(force = false): Promise<{ url: string; token: 
     deviceToken = null;
     throw new MainLinkError('DEVICE_UNPAIRED');
   }
-  deviceToken = { value: token, expiresAt: expiryOf(token) };
-  return { url, token };
+
+  // The split-brain guard (§11.3), checked where it cannot be skipped: every token passes here —
+  // at start, hourly, and whenever the machine at this address stops recognising the last one,
+  // which is what a different main answering there looks like (its signing key is its own).
+  const verdict = judgeMain(position, grant);
+  if (verdict === 'superseded') {
+    deviceToken = null;
+    markReachable(true, true);
+    throw new MainLinkError('MAIN_SUPERSEDED');
+  }
+  if (verdict === 'record') {
+    await getPrismaClient().localConfig.update({
+      where: { id: 'config' },
+      data: { lanLineage: grant.lineage, mainGeneration: grant.generation },
+    });
+  }
+
+  deviceToken = { value: grant.token, expiresAt: expiryOf(grant.token) };
+  return { url, token: grant.token };
 }
 
 export interface MainRequestOptions {

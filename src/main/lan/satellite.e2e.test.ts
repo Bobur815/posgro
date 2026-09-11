@@ -40,6 +40,7 @@ jest.mock('../printer/smena-report-printer', () => ({
 import * as bcrypt from 'bcryptjs';
 import { initializeDatabase, closeDatabase, getPrismaClient } from '../database/sqlite-client';
 import { startLocalServer, stopLocalServer } from '../local-server';
+import { cancelPairingCode, issuePairingCode } from '../local-server/pairing';
 
 const PORT = 5397;
 const SECRET = 'e2e-device-secret';
@@ -52,6 +53,7 @@ type Satellite = {
   sync: typeof import('./main-sync');
   guard: typeof import('./satellite-guard');
   link: typeof import('./main-link');
+  roles: typeof import('./role-change');
   printer: { printReceipt: jest.Mock };
 };
 let sat: Satellite;
@@ -122,6 +124,7 @@ beforeAll(async () => {
       sync: require('./main-sync'),
       guard: require('./satellite-guard'),
       link: require('./main-link'),
+      roles: require('./role-change'),
       printer: require('../printer/thermal-printer'),
     };
     require('../config/app-config').updateConfig({ terminalId: 'T2' });
@@ -346,5 +349,105 @@ describe('the satellite write guard', () => {
   it('lets the main through', async () => {
     const { assertNotSatellite } = require('./satellite-guard');
     await expect(assertNotSatellite()).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * The split-brain guard (§11.3). A main that was replaced and comes back — from repair, or at an
+ * address a till still has — must not quietly become the shop's source of truth again: a till that
+ * wrote to it would be building a second, divergent shop.
+ *
+ * `resetMainLink()` is the satellite restarting: it forgets its token, so the next request fetches
+ * one — which is where the guard sits, as it does after an hourly expiry or a 401 from a machine
+ * that is not the one that signed the last token.
+ */
+describe('the lineage guard (§11.3)', () => {
+  const SUPER = 'super-admin-pw';
+  const setMain = (lanLineage: string | null, mainGeneration: number) =>
+    mainDb().localConfig.update({ where: { id: 'config' }, data: { lanLineage, mainGeneration } });
+  const satConfig = () => satDb().localConfig.findUnique({ where: { id: 'config' } });
+
+  beforeAll(async () => {
+    await startLocalServer();
+    await satDb().localConfig.update({
+      where: { id: 'config' },
+      data: { superAdminPassword: await bcrypt.hash(SUPER, 10) },
+    });
+    await setMain('L-shop', 2);
+    sat.link.resetMainLink();
+  });
+
+  it("takes its main's lineage and generation on first contact", async () => {
+    await sat.sync.syncWithMain();
+    expect(await satConfig()).toMatchObject({ lanLineage: 'L-shop', mainGeneration: 2 });
+  });
+
+  it('refuses a main of its lineage that is an older generation than it has seen', async () => {
+    await setMain('L-shop', 1);
+    sat.link.resetMainLink();
+    const salesBefore = await mainDb().sale.count();
+
+    expect(await codeOf(sat.sync.syncWithMain())).toBe('MAIN_SUPERSEDED');
+    expect(sat.link.getMainLinkStatus()).toMatchObject({ reachable: true, superseded: true });
+    expect(await codeOf(sat.ops.createSale(cartOf(1, 1)))).toBe('MAIN_SUPERSEDED');
+    // …and the login screen says so, rather than "wrong password".
+    expect(await codeOf(sat.ops.login('+998901112233', 'pass1234'))).toBe('auth.errors.main_superseded');
+
+    expect(await mainDb().sale.count()).toBe(salesBefore);
+    // What it has seen is not rewritten by what it refused.
+    expect(await satConfig()).toMatchObject({ lanLineage: 'L-shop', mainGeneration: 2 });
+  });
+
+  it('refuses a main of a different lineage at the same address', async () => {
+    await setMain('L-other', 9);
+    sat.link.resetMainLink();
+    expect(await codeOf(sat.sync.syncWithMain())).toBe('MAIN_SUPERSEDED');
+  });
+
+  it('follows its lineage forward to a newer generation', async () => {
+    await setMain('L-shop', 3);
+    sat.link.resetMainLink();
+    await sat.sync.syncWithMain();
+    expect(sat.link.getMainLinkStatus().superseded).toBe(false);
+    expect(await satConfig()).toMatchObject({ lanLineage: 'L-shop', mainGeneration: 3 });
+  });
+
+  it('will not pair with a superseded main', async () => {
+    await setMain('L-shop', 1);
+    const code = issuePairingCode().code;
+    try {
+      expect(
+        await codeOf(sat.roles.joinMain(SUPER, { mainTerminalUrl: `http://127.0.0.1:${PORT}/api`, code })),
+      ).toBe('settings.mainTerminal_superseded');
+      // Refused before the code was spent, and before anything was written here.
+      expect(await satConfig()).toMatchObject({ mainGeneration: 3, isMain: false });
+    } finally {
+      cancelPairingCode();
+      await setMain('L-shop', 3);
+    }
+  });
+
+  it('pairs with the current main, and takes its position', async () => {
+    await setMain('L-shop', 4);
+    const { code } = issuePairingCode();
+    await sat.roles.joinMain(SUPER, { mainTerminalUrl: `http://127.0.0.1:${PORT}/api`, code });
+    expect(await satConfig()).toMatchObject({ lanLineage: 'L-shop', mainGeneration: 4, isMain: false });
+    // The fresh secret is the one it now uses.
+    await sat.sync.syncWithMain();
+  });
+
+  /**
+   * §11.5's emergency promotion makes this till the next generation, so every till that later sees
+   * it will refuse the main it left, should that one come back believing it is still in charge.
+   */
+  it('becomes the next generation of its lineage when it leaves its main', async () => {
+    await sat.roles.leaveMain(SUPER);
+    expect(await satConfig()).toMatchObject({
+      isMain: true,
+      mainTerminalUrl: null,
+      lanLineage: 'L-shop',
+      mainGeneration: 5,
+    });
+    expect(await satDb().systemSetting.findUnique({ where: { key: 'lan_device_secret' } })).toBeNull();
   });
 });

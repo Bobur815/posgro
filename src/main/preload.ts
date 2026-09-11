@@ -5,6 +5,8 @@ export interface LanLinkStatus {
   /** Null until the first request has been made. */
   reachable: boolean | null;
   lastContactAt: string | null;
+  /** The main at the address was refused as superseded (§11.3) — reachable, but not ours. */
+  superseded: boolean;
 }
 
 // Expose protected methods to the renderer process

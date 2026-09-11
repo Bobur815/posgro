@@ -168,7 +168,17 @@ describe('the server itself', () => {
   // It says what a satellite needs to pick the right machine, and nothing about the business.
   it('leaks nothing else on /terminal/info', async () => {
     const body = await (await fetch(`http://127.0.0.1:${PORT}/api/terminal/info`)).json();
-    expect(Object.keys(body).sort()).toEqual(['role', 'service', 'store_id', 'terminal_id']);
+    // lineage/generation added for §11.3: a till about to pair needs them before it has a
+    // credential. They say which chain of mains this is, nothing about takings, stock or people —
+    // and a lineage is no key to anything: a device secret is still needed to use it.
+    expect(Object.keys(body).sort()).toEqual([
+      'generation',
+      'lineage',
+      'role',
+      'service',
+      'store_id',
+      'terminal_id',
+    ]);
   });
 });
 

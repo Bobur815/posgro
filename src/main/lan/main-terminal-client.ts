@@ -13,6 +13,18 @@ export interface MainTerminalInfo {
   role: 'main' | 'satellite';
   storeId: string;
   terminalId: string;
+  /** Where it stands in its lineage (§11.3). Null lineage from a main too old to say. */
+  lineage: string | null;
+  generation: number;
+}
+
+/** A lineage position from a main's JSON answer — tolerant of an older main that omits it. */
+function positionOf(
+  body: Record<string, unknown> | null,
+): { lineage: string | null; generation: number } {
+  const lineage = typeof body?.lineage === 'string' && body.lineage ? body.lineage : null;
+  const generation = Number(body?.generation);
+  return { lineage, generation: Number.isInteger(generation) && generation >= 0 ? generation : 0 };
 }
 
 export type ProbeResult =
@@ -59,6 +71,7 @@ export async function probeMainTerminal(
       role: body.role === 'main' ? 'main' : 'satellite',
       storeId: String(body.store_id ?? ''),
       terminalId: String(body.terminal_id ?? ''),
+      ...positionOf(body),
     };
 
     if (info.role !== 'main') return { ok: false, reason: 'not-a-main' };
@@ -150,12 +163,19 @@ export async function pairWithMain(
   }
 }
 
+export interface TerminalTokenGrant {
+  token: string;
+  /** The issuing main's lineage position, for the split-brain guard (§11.3). */
+  lineage: string | null;
+  generation: number;
+}
+
 /** Trade the stored device secret for a short-lived terminal token. */
 export async function fetchTerminalToken(
   url: string,
   terminalId: string,
   secret: string,
-): Promise<string> {
+): Promise<TerminalTokenGrant> {
   const { signal, done } = withTimeout();
   try {
     const response = await fetch(`${normaliseMainUrl(url)}/terminal/token`, {
@@ -166,7 +186,7 @@ export async function fetchTerminalToken(
     });
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
     if (!response.ok) throw new Error(String(body?.message ?? `HTTP ${response.status}`));
-    return String(body?.token ?? '');
+    return { token: String(body?.token ?? ''), ...positionOf(body) };
   } finally {
     done();
   }

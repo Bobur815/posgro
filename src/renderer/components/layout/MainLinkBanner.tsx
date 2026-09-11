@@ -13,7 +13,7 @@ import { WifiOff } from 'lucide-react';
  * until the first request has actually failed.
  */
 
-type LinkStatus = { reachable: boolean | null; lastContactAt: string | null };
+type LinkStatus = { reachable: boolean | null; lastContactAt: string | null; superseded?: boolean };
 
 const Bar = styled.div`
   position: sticky;
@@ -54,6 +54,16 @@ export function MainLinkBanner() {
     };
   }, []);
 
+  // A superseded main answers, so it is not "unreachable" — but this till must not sell through it
+  // either, and the fix is different: point the till at the current main (§11.3).
+  if (status?.superseded) {
+    return (
+      <Bar role="alert">
+        <WifiOff size={18} />
+        {t('errors.mainSupersededBanner')}
+      </Bar>
+    );
+  }
   if (status?.reachable !== false) return null;
 
   return (

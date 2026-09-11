@@ -1,3 +1,15 @@
+# §11.3 generation guard + §11.4 planned handoff (started 2026-09-11)
+
+- [x] A: `lan_lineage` + `main_generation` (schema ×3, migration 34); info/token carry them;
+      `MAIN_SUPERSEDED` at token fetch; join refuses a superseded main; leave bumps the generation.
+      Join/leave/`requireSuperAdmin` moved out of the IPC file (`lan/role-change.ts`,
+      `auth/super-admin.ts`) so the e2e harness drives the real code. 7 e2e cases, 6 shown red with
+      the guard off (the 7th is the positive join); 638 tests, tsc, build green.
+- [ ] B: handoff code on the old main; freeze + `VACUUM INTO` snapshot; stage/patch/complete/swap
+      with a crash-safe marker; `pairing:repoint`; UI; three-instance run
+
+---
+
 # Phase 4 — trim what a satellite cannot do (started 2026-09-11)
 
 From `tasks/LAN_MAIN_TERMINAL_PLAN.md` §7 Phase 4 (§4, §5.10).

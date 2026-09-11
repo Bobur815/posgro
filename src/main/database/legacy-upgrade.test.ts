@@ -133,4 +133,12 @@ describe('upgrading a database created by an older build', () => {
     expect(config.isMain).toBe(true);
     expect(config.mainTerminalUrl).toBeNull();
   });
+
+  // §11.3: an upgraded terminal belongs to no lineage yet, so the generation guard compares
+  // nothing until a main pairs its first till.
+  it('upgrades into no lineage and generation zero', async () => {
+    const config = await getPrismaClient().localConfig.findUnique({ where: { id: 'config' } });
+    expect(config.lanLineage).toBeNull();
+    expect(config.mainGeneration).toBe(0);
+  });
 });

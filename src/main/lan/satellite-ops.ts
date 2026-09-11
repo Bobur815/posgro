@@ -85,6 +85,7 @@ async function asLoginError<T>(attempt: Promise<T>): Promise<T> {
     if (err instanceof MainLinkError) {
       if (err.code === 'MAIN_UNREACHABLE') throw new Error('auth.errors.main_unreachable');
       if (err.code === 'DEVICE_UNPAIRED') throw new Error('auth.errors.device_unpaired');
+      if (err.code === 'MAIN_SUPERSEDED') throw new Error('auth.errors.main_superseded');
     }
     throw err;
   }

@@ -49,6 +49,15 @@ model LocalConfig {
   // http://192.168.1.7:5173/api, pinned by a static lease rather than discovered.
   mainTerminalUrl String? @map("main_terminal_url")
 
+  // Which chain of mains this terminal belongs to, and how far along it (LAN plan §11.3). A main
+  // names its lineage (a UUID) the first time it pairs a till; a satellite takes its main's. The
+  // generation goes up by one at every promotion — on a main it is its own, on a satellite the
+  // highest it has seen — so a main that was replaced cannot quietly start serving again: its
+  // satellites see a lower generation in the same lineage and refuse it. Null / 0 on every
+  // terminal that has never been part of a pairing.
+  lanLineage     String? @map("lan_lineage")
+  mainGeneration Int     @default(0) @map("main_generation")
+
   @@map("local_config")
 }
 

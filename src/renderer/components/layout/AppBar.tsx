@@ -200,7 +200,12 @@ export function AppBar() {
       await refreshStatus();
       // A satellite's cycle does not throw when the main is away (the banner already says so),
       // so ask the link rather than reporting a success that did not happen.
-      if (isSatellite && (await window.electronAPI.lan.getStatus())?.reachable === false) {
+      const link = isSatellite ? await window.electronAPI.lan.getStatus() : null;
+      if (link?.superseded) {
+        toast.error(t('errors.mainSupersededBanner'));
+        return;
+      }
+      if (link?.reachable === false) {
         toast.error(t('errors.mainUnreachableBanner'));
         return;
       }

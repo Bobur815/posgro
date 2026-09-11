@@ -34,7 +34,16 @@ describe('probeMainTerminal', () => {
     answers(MAIN);
     await expect(probeMainTerminal('http://192.168.1.7:5173/api')).resolves.toEqual({
       ok: true,
-      info: { role: 'main', storeId: '1000', terminalId: 'T1' },
+      // A main from before §11.3 says nothing about its lineage: no chain, generation zero.
+      info: { role: 'main', storeId: '1000', terminalId: 'T1', lineage: null, generation: 0 },
+    });
+  });
+
+  it('reads where a main stands in its lineage', async () => {
+    answers({ ...MAIN, lineage: 'L-1', generation: 3 });
+    await expect(probeMainTerminal('http://192.168.1.7:5173/api')).resolves.toEqual({
+      ok: true,
+      info: { role: 'main', storeId: '1000', terminalId: 'T1', lineage: 'L-1', generation: 3 },
     });
   });
 

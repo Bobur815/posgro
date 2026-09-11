@@ -130,7 +130,9 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
       pos_admin_locked INTEGER DEFAULT 0,
       super_admin_password TEXT,
       is_main INTEGER DEFAULT 1,
-      main_terminal_url TEXT
+      main_terminal_url TEXT,
+      lan_lineage TEXT,
+      main_generation INTEGER NOT NULL DEFAULT 0
     )
   `;
 
@@ -819,6 +821,18 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   if (!(await columnExists(prisma, 'paired_terminals', 'unsynced_count'))) {
     await prisma.$executeRaw`
       ALTER TABLE paired_terminals ADD COLUMN unsynced_count INTEGER NOT NULL DEFAULT 0
+    `;
+  }
+
+  // Migration 34: the lineage and generation that keep a replaced main from serving again
+  // (LAN plan §11.3). Null and 0 are "never part of a pairing", which is every terminal upgrading
+  // into this — nothing compares anything until a main pairs its first till.
+  if (!(await columnExists(prisma, 'local_config', 'lan_lineage'))) {
+    await prisma.$executeRaw`ALTER TABLE local_config ADD COLUMN lan_lineage TEXT`;
+  }
+  if (!(await columnExists(prisma, 'local_config', 'main_generation'))) {
+    await prisma.$executeRaw`
+      ALTER TABLE local_config ADD COLUMN main_generation INTEGER NOT NULL DEFAULT 0
     `;
   }
 }

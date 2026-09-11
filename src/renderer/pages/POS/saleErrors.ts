@@ -53,6 +53,9 @@ export function parseSaleError(
     if (parsed.code === "DEVICE_UNPAIRED") {
       return t("errors.deviceUnpaired");
     }
+    if (parsed.code === "MAIN_SUPERSEDED") {
+      return t("errors.mainSuperseded");
+    }
     if (parsed.code === "SATELLITE_READ_ONLY") {
       return t("errors.satelliteReadOnly");
     }
