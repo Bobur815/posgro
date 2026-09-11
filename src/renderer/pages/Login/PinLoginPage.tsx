@@ -93,7 +93,7 @@ const RightSubtitle = styled.p`
  * Measured in Electron's Chromium from 1024×600 to 2560×1440: nothing clipped, keys centred,
  * and 64px keys at 768 exactly as before.
  */
-const LoginCard = styled.div<{ $kbOpen?: boolean }>`
+const LoginCard = styled.div`
   /*
    * Keys take whatever height is left over. 440px is everything else stacked up — logo, subtitle,
    * dots, login button, mode switch, terminal bar and the panel's padding — and 5.125 is the pad
@@ -114,7 +114,6 @@ const LoginCard = styled.div<{ $kbOpen?: boolean }>`
   width: 100%;
   max-width: 400px;
   text-align: center;
-  transform: translateY(${({ $kbOpen }) => ($kbOpen ? "-60px" : "0")});
   transition: transform 0.3s ease;
 
   /* Sitting above centre is decorative, and a negative margin is not safe in the sense above:
@@ -362,21 +361,15 @@ export function PinLoginPage() {
     window.electronAPI.auth.isPinConfigured().then(setPinConfigured);
   }, []);
 
+  // Asked of the main process, not fetched here. It caches the last banner — image included, as a
+  // data URL — so a till with no internet still shows one, which is most tills most of the time.
+  // Fetching from the renderer meant a blank panel whenever the wifi was down, and always on an
+  // OFFLINE_ONLY store, whose apiUrl points at a server it is never expected to reach.
   useEffect(() => {
-    window.electronAPI.config.getLocalConfig().then((cfg) => {
-      if (!cfg?.apiUrl) return;
-      const baseUrl = cfg.apiUrl.replace(/\/api\/?$/, "");
-      fetch(`${cfg.apiUrl}/site-config/login-banner`)
-        .then((r) => r.json())
-        .then((data) => {
-          const banner = data as LoginBanner;
-          if (banner.imageUrl && !banner.imageUrl.startsWith("http")) {
-            banner.imageUrl = `${baseUrl}${banner.imageUrl}`;
-          }
-          setBanner(banner);
-        })
-        .catch(() => {});
-    });
+    window.electronAPI.banner
+      .get()
+      .then(setBanner)
+      .catch(() => {});
   }, []);
 
   const [saved] = useState(loadSaved);
@@ -581,7 +574,7 @@ export function PinLoginPage() {
   return (
     <Container>
       <LeftPanel>
-        <LoginCard $kbOpen={keyboardOpen}>
+        <LoginCard >
           <LogoBrand>
             <POSGROIcon theme={themeMode} size={72} />
             <BrandName>POSGRO</BrandName>

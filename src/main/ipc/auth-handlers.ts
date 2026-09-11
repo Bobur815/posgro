@@ -3,6 +3,8 @@ import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import { getPrismaClient } from '../database/sqlite-client';
 import { setAuthToken, clearAuthToken, setServerToken, clearServerToken } from '../sync/queue-manager';
+import { AttemptThrottle } from './override-throttle';
+import { refreshSubscriptionCache } from './subscription-handlers';
 import { getAppConfig } from '../config/app-config';
 import type { AuthUser } from '../../shared/types/user.types';
 
@@ -66,6 +68,9 @@ async function restorePersistedServerToken(
 
 /** A quick-login PIN is 1 to 4 digits — short by design, it only ever unlocks a local session. */
 const PIN_PATTERN = /^\d{1,4}$/;
+
+/** Guards the manager-override prompt against being guessed at on an unattended till. */
+const overrideThrottle = new AttemptThrottle();
 
 type PinCandidate = { id: string; pin: string | null };
 
@@ -160,7 +165,7 @@ export function setupAuthHandlers(): void {
         const serverRes = await fetch(`${vpsApiUrl}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storeId, phone, password }),
+          body: JSON.stringify({ storeId, phone, password, client: 'pos' }),
         });
         console.log(`[auth:login] VPS response status: ${serverRes.status}`);
         if (serverRes.ok) {
@@ -233,7 +238,7 @@ export function setupAuthHandlers(): void {
         const serverRes = await fetch(`${vpsApiUrl}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storeId, phone, password }),
+          body: JSON.stringify({ storeId, phone, password, client: 'pos' }),
         });
         if (serverRes.ok) {
           const { token: sToken } = await serverRes.json() as { token: string };
@@ -284,7 +289,7 @@ export function setupAuthHandlers(): void {
       const serverRes = await fetch(`${vpsApiUrl}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId, phone, password }),
+        body: JSON.stringify({ storeId, phone, password, client: 'pos' }),
       });
       if (serverRes.ok) {
         const { token: sToken } = await serverRes.json() as { token: string };
@@ -294,6 +299,7 @@ export function setupAuthHandlers(): void {
           console.warn(`VPS returned token for store ${tokenInfo.storeId}, expected ${storeId} — skipping server token`);
         } else {
           setServerToken(sToken);
+          serverTokenObtained = true;
           await prisma.systemSetting.upsert({
             where: { key: 'server_token' },
             update: { value: sToken },
@@ -325,6 +331,20 @@ export function setupAuthHandlers(): void {
           // Invalid token format — ignore
         }
       }
+    }
+
+    // Refresh the cached subscription snapshot while the credential is known good.
+    //
+    // Only when this login actually got a token from the VPS: an offline login would just log a
+    // failure every time, and the login screen would still have the same cache either way.
+    //
+    // Deliberately not awaited. It is a courtesy refresh for a dialog nobody has opened yet, so
+    // it must not add a network round trip to the cashier's login, and its own error handling
+    // already reduces every failure to a cached result.
+    if (serverTokenObtained) {
+      void refreshSubscriptionCache().catch(() => {
+        /* already logged, and a stale snapshot is the designed fallback */
+      });
     }
 
     // Set current user
@@ -673,6 +693,46 @@ export function setupAuthHandlers(): void {
     for (const admin of admins) {
       if (await bcrypt.compare(secret, admin.password)) return true;
     }
+    return false;
+  });
+
+  /**
+   * Whether this store has a manager-override password at all.
+   *
+   * The renderer asks first so it can skip the prompt entirely when none is configured. That is
+   * what keeps every existing terminal behaving exactly as it does today: no override set means
+   * nothing is gated.
+   */
+  ipcMain.handle('auth:hasSuperAdminPassword', async () => {
+    const prisma = getPrismaClient();
+    const config = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+    return Boolean(config?.superAdminPassword);
+  });
+
+  /**
+   * Check the manager-override password.
+   *
+   * Compared locally against the bcrypt hash cached from the server, so it works for an
+   * OFFLINE_ONLY store that never reaches the network. Side-effect-free like
+   * `auth:verifyTerminalAccess`: returns a boolean, starts no session, changes nothing.
+   *
+   * Returns false when no override is configured. A caller that wants "allowed because none is
+   * set" must ask `auth:hasSuperAdminPassword` — answering true to an empty password here would
+   * turn a missing configuration into an open door.
+   */
+  ipcMain.handle('auth:verifySuperAdminPassword', async (_event, password: string) => {
+    if (!password) return false;
+    if (overrideThrottle.isLockedOut()) return false;
+
+    const prisma = getPrismaClient();
+    const config = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+    if (!config?.superAdminPassword) return false;
+
+    if (await bcrypt.compare(password, config.superAdminPassword)) {
+      overrideThrottle.reset();
+      return true;
+    }
+    overrideThrottle.recordFailure();
     return false;
   });
 

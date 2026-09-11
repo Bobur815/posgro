@@ -60,7 +60,9 @@
       "no_cashier_found": "Faol kassir hisobi topilmadi",
       "login_failed": "Kirish xatosi",
       "server_not_configured": "Noto'g'ri Store ID. Server sozlamalarini tekshiring.",
-      "pin_taken": "Bu PIN-kod boshqa xodimda mavjud"
+      "pin_taken": "Bu PIN-kod boshqa xodimda mavjud",
+      "store_inactive": "Do'kon o'chirilgan, shuning uchun boshqaruv paneliga kirib bo'lmaydi. Ishni tiklash uchun qo'llab-quvvatlash xizmatiga murojaat qiling.",
+      "store_offline_only": "Bu do'kon oflayn rejimda ishlaydi: barcha ma'lumotlar serverda emas, terminalning o'zida saqlanadi. Boshqaruv panelini terminalning o'zidan oching — telefoningizni xuddi shu Wi-Fi tarmog'iga ulab, uning kirish ekranidagi QR-kodni skanerlang."
     },
     "serverSettings": "Server sozlamalari",
     "storeId": "Store ID",
@@ -79,7 +81,7 @@
     "inventory": "Ombor",
     "arrivals": "Kirimlar",
     "stocktake": "Inventarizatsiya",
-    "reconciliation": "Solishtirish",
+    "reconciliation": "Audit",
     "users": "Foydalanuvchilar",
     "settings": "Sozlamalar",
     "userSettings": "Sozlamalarim",
@@ -238,7 +240,7 @@
     "uzqrPaidButSaleFailed": "To'lov o'tdi, lekin chek yaratilmadi. Administratorga xabar bering."
   },
   "reconciliation": {
-    "title": "Solishtirish",
+    "title": "Audit",
     "from": "Dan",
     "to": "Gacha",
     "refresh": "Yangilash",
@@ -546,7 +548,17 @@
     "labelPrinterName": "Yorliq printeri",
     "labelWidthMm": "Yorliq kengligi (mm)",
     "testPrint": "Test chop etish",
-    "saved": "Sozlamalar saqlandi"
+    "saved": "Sozlamalar saqlandi",
+    "pluExportTitle": "Rongta tarozisi uchun mahsulotlar (PLU)",
+    "pluExportHint": "C:\\RLS\\posgro-plu.TXP faylini yangilaydi (yo'q bo'lsa, yaratadi): RLS1000 PLU-menejeri uchun barcha faol kg mahsulotlari. LF-kod = mahsulotning ichki kodi, shtrixkoddagi kod = do'kondagi mahsulot kodi (eski mahsulotlarda — ID), 1 kg narxi, o'zbekcha nomi lotinda (kirill avtomatik o'giriladi). PLU-menejerda: «Import from TXP file» → ro'yxatni tekshiring → «Download». Yuklash tarozidagi barcha mahsulotlarni almashtiradi.",
+    "pluExportButton": "PLU faylni yangilash (.TXP)",
+    "pluExportDone": "{{count}} ta mahsulot saqlandi: {{path}}",
+    "pluExportSkipped": "Faylga kirmadi ({{count}}):",
+    "pluSkip_no_name": "o'zbekcha nomi yo'q",
+    "pluSkip_no_internal_code": "ichki kodi yo'q (LF-kod uchun kerak)",
+    "pluSkip_code_too_long": "kod 6 raqamdan uzun",
+    "pluSkip_duplicate_code": "kod takrorlanadi",
+    "pluSkip_code_taken": "ID boshqa mahsulot kodi bilan bir xil — mahsulotga kod bering"
   },
   "fiscalSettings": {
     "title": "Fiskallashtirish (REGOS:VCR)",
@@ -585,7 +597,40 @@
     "uzqrEnabled": "REGOS orqali UzQR to'lovi (kassa ekranida QR kod)",
     "uzqrHint": "Xaridor ekrandagi QR kodni skanerlaydi. Chek faqat to'lov tasdiqlangandan keyin yaratiladi. O'chirilgan bo'lsa — UzQR QR kodsiz oddiy to'lov turi bo'lib qoladi.",
     "uzqrPollMs": "So'rov oralig'i, ms",
-    "uzqrTimeoutMs": "To'lovni kutish, ms"
+    "uzqrTimeoutMs": "To'lovni kutish, ms",
+    "timings": {
+      "ms": "ms",
+      "sec": "s",
+      "title": "Fiskallashtirish vaqti",
+      "empty": "Hozircha ma'lumot yo'q — u ushbu terminalda birinchi fiskallashtirishdan keyin paydo bo'ladi. Hisoblagichlar dastur qayta ishga tushganda tozalanadi.",
+      "median": "mediana",
+      "p95": "95-protsentil",
+      "max": "maksimum",
+      "count": "chek",
+      "countWithFailed": "chek / xato",
+      "phaseCol": "Bosqich",
+      "methodCol": "Metod",
+      "vcrCalls": "Virtual kassaga so'rovlar",
+      "recent": "Oxirgi cheklar",
+      "refresh": "Yangilash",
+      "reset": "Hisoblagichlarni tozalash",
+      "hint": "Asosiy vaqt «REGOS kassasi»da bo'lsa — kechikish kassa tomonida. «Navbatni kutish»da bo'lsa — cheklar bir-birining ortidan navbatga turmoqda. Qolgan bosqichlar shu kompyuterda bajariladi.",
+      "phase": {
+        "queue": "Navbatni kutish",
+        "config": "Sozlamalar",
+        "load": "Chekni o'qish",
+        "zreport": "Z-hisobot",
+        "build": "Pozitsiyalarni tayyorlash",
+        "vcrSale": "REGOS kassasi",
+        "persist": "Saqlash",
+        "recover": "Chekni tiklash"
+      },
+      "calls": "so'rov"
+    },
+    "groupConnection": "Ulanish",
+    "groupVat": "QQS",
+    "groupBehaviour": "Chop etish va markirovka",
+    "groupUzqr": "UzQR"
   },
   "reports": {
     "title": "Hisobotlar",
@@ -685,7 +730,9 @@
     "bestSellers": "Eng yaxshi 10 ta",
     "worstSellers": "Eng yomon 10 ta",
     "rankScope": "{{total}} ta faol mahsulotdan. Umuman sotilmagan: {{neverSold}} ta.",
-    "rankNoCost": "Tannarxi yo'q — foydada hisobga olinmaydi: {{count}} ta."
+    "rankNoCost": "Tannarxi yo'q — foydada hisobga olinmaydi: {{count}} ta.",
+    "allCategories": "Barcha kategoriyalar",
+    "otherCategories": "Boshqalar"
   },
   "users": {
     "title": "Foydalanuvchilar",
@@ -805,7 +852,21 @@
     "pinMismatch": "PIN-kodlar mos kelmaydi",
     "pinChanged": "PIN-kod muvaffaqiyatli o'zgartirildi",
     "pinRemoved": "PIN-kod o'chirildi",
-    "pinChangeFailed": "PIN-kodni o'zgartirib bo'lmadi"
+    "pinChangeFailed": "PIN-kodni o'zgartirib bo'lmadi",
+    "webAdminLocalHint": "Boshqaruv paneli shu terminalda ishlaydi. Telefoningizni xuddi shu Wi-Fi tarmog'iga ulang va kodni skanerlang.",
+    "webAdminUnavailable": "Panelni ochish uchun manzil yo'q. Terminal tarmoqqa ulanganini tekshiring.",
+    "apiUrlNotPosServer": "Bu manzilda POS serveri yo’q — bu boshqa terminalga o’xshaydi. Undan sotuvlar yuborilmaydi, shuning uchun manzil saqlanmadi.",
+    "pairingThrottled": "Urinishlar juda ko‘p. Bir daqiqa kutib, qayta urinib ko‘ring.",
+    "pairingNeedsSuperAdmin": "Terminallarni bog‘lash uchun super-administrator paroli kerak. Uni boshqaruv panelida o‘rnating.",
+    "pairingNotMain": "Bu terminal asosiy emas, u boshqa terminallarni ulay olmaydi.",
+    "superAdminPasswordWrong": "Super-administrator paroli noto‘g‘ri.",
+    "cannotDemoteWithSatellites": "Bu terminalga boshqalari ulangan. Avval ularni uzing.",
+    "terminalNotConfigured": "Terminal hali sozlanmagan.",
+    "pairingFailed": "Terminallarni bog‘lab bo‘lmadi. Qayta urinib ko‘ring.",
+    "mainTerminal_not_a_terminal": "Bu manzilda POSGRO terminali yo‘q. Asosiy terminal manzilini tekshiring.",
+    "mainTerminal_not_a_main": "Bu manzilda asosiy emas, tobe terminal turibdi.",
+    "mainTerminal_different_store": "Bu asosiy terminal boshqa do‘konga tegishli.",
+    "mainTerminal_unreachable": "Asosiy terminal mavjud emas. Tarmoqni va uning yoqilganini tekshiring."
   },
   "updater": {
     "currentVersion": "Joriy versiya",
@@ -890,7 +951,9 @@
     "productNotFound": "ID {{id}} bo'lgan mahsulot topilmadi",
     "productInactive": "\"{{name}}\" mahsuloti nofaol",
     "insufficientStock": "\"{{name}}\" mahsuloti yetarli emas. Mavjud: {{available}}, so'ralgan: {{requested}}",
-    "noInternet": "Internet aloqasi yo'q"
+    "noInternet": "Internet aloqasi yo'q",
+    "saleAlreadyFiscalized": "Chek allaqachon fiskallashtirilgan — uni o'zgartirib bo'lmaydi. Qaytarishni rasmiylashtiring va yangi chek chiqaring.",
+    "saleHasPayment": "Chek bo'yicha to'lov qabul qilingan — uni o'zgartirib bo'lmaydi. Qaytarishni rasmiylashtiring va yangi chek chiqaring."
   },
   "sync": {
     "syncSuccess": "Sinxronizatsiya muvaffaqiyatli",
@@ -1146,7 +1209,24 @@
     "perpetual": "Muddatsiz",
     "storeBalanceTitle": "Do'kon balansi",
     "storeBalance": "Balans",
-    "pricePerMonth": "so'm/oy"
+    "pricePerMonth": "so'm/oy",
+    "statusTitle": "Do'kon obunasi",
+    "aiPlan": "AI tarifi",
+    "aiPlanFree": "Bepul",
+    "aiPlanPaid": "Pullik",
+    "offlineHint": "Server bilan aloqa yo'q — oxirgi saqlangan ma'lumotlar ko'rsatilmoqda.",
+    "payAction": "To'lash",
+    "payTitle": "Obunani to'lash",
+    "payScanHint": "Obunani to'lash uchun istalgan mobil bank ilovasi orqali quyidagi QR-kodni skanerlang.",
+    "payCallHint": "To'lovni amalga oshirganingizdan so'ng, albatta, call-markazimizga qo'ng'iroq qiling va to'lov haqida xabar bering, shunda biz obunangizni qo'lda yangilashimiz mumkin bo'ladi.",
+    "payLinkHint": "Agar operatorga qo'ng'iroq qilmasdan obunani avtomatik ravishda uzaytirishni istasangiz, quyidagi havola orqali Click, Payme yoki Paynet ilovalari orqali to'lovni amalga oshiring. To'lovdan so'ng obuna darhol uzaytiriladi.",
+    "payOnline": "Onlayn to'lash",
+    "store": "Do'kon",
+    "unknownStore": "Noma'lum",
+    "noCredentialHint": "Serverga kirish ma'lumotlari yo'q. Obuna ma'lumotlarini yangilash uchun parol bilan kiring (PIN-kod bilan emas).",
+    "serverErrorHint": "Server xatolik qaytardi — sessiya muddati tugagan bo'lishi mumkin. Parol bilan qayta kiring yoki qo'llab-quvvatlashga murojaat qiling.",
+    "offlineOnlyStoreHint": "Do'kon avtonom rejimda ishlaydi, shuning uchun terminal serverdan obuna ma'lumotlarini ololmaydi. Yetkazib beruvchiga murojaat qiling: {{phone}}",
+    "supportUnknown": "qo'llab-quvvatlash telefoni ko'rsatilmagan"
   },
   "smena": {
     "viewDetails": "Batafsil",
@@ -1231,7 +1311,9 @@
       "storeId": "Do'kon ID",
       "storeIdPlaceholder": "Masalan: 1000",
       "submit": "Kirish",
-      "loading": "Tekshirilmoqda..."
+      "loading": "Tekshirilmoqda...",
+      "serverUrl": "Server manzili",
+      "serverUrlHint": "Ushbu terminal ulanadigan server. Boshqacha ko'rsatilmagan bo'lsa, standart holicha qoldiring."
     },
     "storeInfo": {
       "title": "Do'kon ma'lumotlari",
@@ -1276,7 +1358,14 @@
       "admin_required": "Sozlash uchun administrator hisobi kerak",
       "network_error": "Serverga ulanishda xato",
       "login_failed": "Kirish xatosi",
-      "required_fields": "Barcha majburiy maydonlarni to'ldiring"
+      "required_fields": "Barcha majburiy maydonlarni to'ldiring",
+      "invalid_server_url": "http:// yoki https:// bilan boshlanadigan to'g'ri manzil kiriting",
+      "not_pos_server": "Bu manzilda POS serveri yo’q — bu boshqa terminalga o’xshaydi. Ta’minotchi bergan server manzilini kiriting."
     }
+  },
+  "superAdmin": {
+    "title": "Administrator tasdig'i",
+    "hint": "Bu amal himoyalangan. Davom etish uchun do'kon administratori parolini kiriting.",
+    "wrongPassword": "Parol noto'g'ri. Agar urinishlar juda ko'p bo'lsa, bir daqiqa kuting."
   }
 }

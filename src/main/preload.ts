@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     isPinConfigured: () => ipcRenderer.invoke("auth:isPinConfigured"),
     verifyTerminalAccess: (secret: string) =>
       ipcRenderer.invoke("auth:verifyTerminalAccess", secret),
+    hasSuperAdminPassword: () => ipcRenderer.invoke("auth:hasSuperAdminPassword"),
+    verifySuperAdminPassword: (password: string) =>
+      ipcRenderer.invoke("auth:verifySuperAdminPassword", password),
     setupPin: (pin: string) => ipcRenderer.invoke("auth:setupPin", pin),
     hasPin: () => ipcRenderer.invoke("auth:hasPin"),
     removePin: () => ipcRenderer.invoke("auth:removePin"),
@@ -114,6 +117,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     previewPayload: (saleId: string) => ipcRenderer.invoke("fiscal:previewPayload", saleId),
     refund: (saleId: string) => ipcRenderer.invoke("fiscal:refund", saleId),
     printDuplicate: (saleId: string) => ipcRenderer.invoke("fiscal:printDuplicate", saleId),
+    getTimings: () => ipcRenderer.invoke("fiscal:getTimings"),
+    resetTimings: () => ipcRenderer.invoke("fiscal:resetTimings"),
     zInfo: () => ipcRenderer.invoke("fiscal:zInfo"),
     zOpen: () => ipcRenderer.invoke("fiscal:zOpen"),
     zClose: () => ipcRenderer.invoke("fiscal:zClose"),
@@ -228,6 +233,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     updateConfig: (ip: string, port: number) =>
       ipcRenderer.invoke("scale:updateConfig", ip, port),
     getConfig: () => ipcRenderer.invoke("scale:getConfig"),
+    exportTxp: () => ipcRenderer.invoke("scale:exportTxp"),
   },
 
   // Settings
@@ -266,7 +272,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // App info
   app: {
     getVersion: () => ipcRenderer.invoke("app:getVersion"),
-    isOnline: (): Promise<boolean> => ipcRenderer.invoke("app:isOnline"),
+    isOnline: (url?: string): Promise<boolean> =>
+      ipcRenderer.invoke("app:isOnline", url),
     getTerminalId: () => ipcRenderer.invoke("app:getTerminalId"),
     getStoreInfo: () => ipcRenderer.invoke("app:getStoreInfo"),
     quit: () => ipcRenderer.invoke("app:quit"),
@@ -276,6 +283,28 @@ contextBridge.exposeInMainWorld("electronAPI", {
       return () => ipcRenderer.removeListener("app:close-requested", callback);
     },
     confirmClose: () => ipcRenderer.send("app:confirm-close"),
+  },
+
+  // Terminal pairing on the shop's LAN. Role changes are gated on the super-admin password in
+  // the main process, so the password travels with each call rather than being verified once.
+  pairing: {
+    issueCode: (superAdminPassword: string) =>
+      ipcRenderer.invoke("pairing:issueCode", superAdminPassword),
+    getCode: () => ipcRenderer.invoke("pairing:getCode"),
+    cancelCode: () => ipcRenderer.invoke("pairing:cancelCode"),
+    list: () => ipcRenderer.invoke("pairing:list"),
+    remove: (terminalId: string) => ipcRenderer.invoke("pairing:remove", terminalId),
+    joinAsSatellite: (
+      superAdminPassword: string,
+      input: { mainTerminalUrl: string; code: string; name?: string },
+    ) => ipcRenderer.invoke("pairing:joinAsSatellite", superAdminPassword, input),
+    leave: (superAdminPassword: string) =>
+      ipcRenderer.invoke("pairing:leave", superAdminPassword),
+  },
+
+  // Login-screen banner. Cached in the main process so it renders with no internet.
+  banner: {
+    get: () => ipcRenderer.invoke("banner:get"),
   },
 
   // Local config (VPS connection settings)
@@ -302,6 +331,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.on("config:modeChanged", handler);
       return () => ipcRenderer.removeListener("config:modeChanged", handler);
     },
+  },
+
+  // Store subscription status + how to pay for it (shown on the login screen)
+  subscription: {
+    get: () => ipcRenderer.invoke("subscription:get"),
+    openPaymentLink: (url: string) =>
+      ipcRenderer.invoke("subscription:openPaymentLink", url),
   },
 
   // Smena (shift) management
@@ -331,6 +367,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       phone: string;
       password: string;
       storeId: string;
+      /** Server the wizard authenticates against; falls back to the compiled-in URL. */
+      serverUrl?: string;
     }) => ipcRenderer.invoke("setup:authenticate", data),
     complete: (data: {
       storeId: string;
@@ -342,6 +380,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
       taxRate: string;
       syncInterval: string;
       token: string;
+      serverUrl?: string;
       mode?: string;
       posAdminLocked?: boolean;
     }) => ipcRenderer.invoke("setup:complete", data),
@@ -462,6 +501,10 @@ declare global {
         ) => Promise<boolean>;
         isPinConfigured: () => Promise<boolean>;
         verifyTerminalAccess: (secret: string) => Promise<boolean>;
+        /** Whether this store has a manager-override password configured at all. */
+        hasSuperAdminPassword: () => Promise<boolean>;
+        /** Check the manager-override password. False when none is set — ask hasSuperAdminPassword first. */
+        verifySuperAdminPassword: (password: string) => Promise<boolean>;
         setupPin: (pin: string) => Promise<boolean>;
         hasPin: () => Promise<boolean>;
         removePin: () => Promise<boolean>;
@@ -551,6 +594,8 @@ declare global {
         ) => Promise<import("../shared/types/fiscal.types").FiscalSalePreview | null>;
         refund: (saleId: string) => Promise<{ ok: boolean; fiscalSign?: string; error?: string }>;
         printDuplicate: (saleId: string) => Promise<{ ok: boolean; error?: string }>;
+        getTimings: () => Promise<import("../shared/types/fiscal.types").FiscalTimings>;
+        resetTimings: () => Promise<boolean>;
         zInfo: () => Promise<import("../shared/types/fiscal.types").FiscalZReportStatus>;
         zOpen: () => Promise<import("../shared/types/fiscal.types").FiscalActionResult>;
         zClose: () => Promise<import("../shared/types/fiscal.types").FiscalActionResult>;
@@ -618,6 +663,9 @@ declare global {
         getAll: (filters?: unknown) => Promise<unknown>;
         delete: (id: string) => Promise<boolean>;
       };
+      scale: {
+        exportTxp: () => Promise<import("../shared/utils/rongta-txp").TxpExportResult>;
+      };
       settings: {
         get: (key: string) => Promise<string | null>;
         set: (key: string, value: string) => Promise<void>;
@@ -646,13 +694,37 @@ declare global {
       };
       app: {
         getVersion: () => Promise<string>;
-        isOnline: () => Promise<boolean>;
+        /** Probes `url` when given, otherwise the production server. */
+        isOnline: (url?: string) => Promise<boolean>;
         getTerminalId: () => Promise<string>;
         getStoreInfo: () => Promise<{ storeId: string; storeName: string }>;
         quit: () => Promise<void>;
         relaunch: () => Promise<void>;
         onCloseRequested: (callback: () => void) => () => void;
         confirmClose: () => void;
+      };
+      pairing: {
+        issueCode: (superAdminPassword: string) => Promise<{
+          code: string;
+          expiresAt: number;
+          /** Null when the listener could not bind — the code alone would be unusable. */
+          mainTerminalUrl: string | null;
+          serverError: string | null;
+        }>;
+        getCode: () => Promise<{ code: string; expiresAt: number } | null>;
+        cancelCode: () => Promise<boolean>;
+        list: () => Promise<
+          Array<{ terminalId: string; name: string | null; pairedAt: string; lastSeenAt: string | null }>
+        >;
+        remove: (terminalId: string) => Promise<boolean>;
+        joinAsSatellite: (
+          superAdminPassword: string,
+          input: { mainTerminalUrl: string; code: string; name?: string },
+        ) => Promise<{ storeName: string; mainTerminalId: string }>;
+        leave: (superAdminPassword: string) => Promise<boolean>;
+      };
+      banner: {
+        get: () => Promise<{ imageUrl: string; title: string; subtitle: string }>;
       };
       config: {
         getLocalConfig: () => Promise<{
@@ -663,10 +735,22 @@ declare global {
           // Cached store operating mode. null = never activated, which means "unrestricted".
           mode: "OFFLINE_ONLY" | "ONLINE" | null;
           posAdminLocked: boolean;
+          // This terminal's role on the shop's LAN. True for every terminal in the field today,
+          // and for any new one until satellite pairing exists — see
+          // tasks/LAN_MAIN_TERMINAL_PLAN.md. Read-only here on purpose: changing the role hands
+          // the shop's source of truth to another machine, so it needs the super-admin gate rather
+          // than riding along on updateLocalConfig.
+          isMain: boolean;
+          // Where the main terminal is, on a satellite; null on a main.
+          mainTerminalUrl: string | null;
         } | null>;
         getWebAdminQr: () => Promise<{
           url: string;
           qrDataUrl: string | null;
+          /** True when the dashboard is served by this terminal on the LAN, not by a VPS. */
+          local: boolean;
+          /** Why the local dashboard service is not running, when it is not. */
+          error: string | null;
         } | null>;
         updateLocalConfig: (data: {
           storeId?: string;
@@ -680,6 +764,12 @@ declare global {
             posAdminLocked?: boolean;
           }) => void,
         ) => () => void;
+      };
+      subscription: {
+        get: () => Promise<
+          import("../shared/types/store.types").StoreSubscription
+        >;
+        openPaymentLink: (url: string) => Promise<boolean>;
       };
       smena: {
         getCurrent: () => Promise<unknown | null>;
@@ -703,6 +793,7 @@ declare global {
           phone: string;
           password: string;
           storeId: string;
+          serverUrl?: string;
         }) => Promise<{
           success: boolean;
           token: string;
@@ -718,6 +809,7 @@ declare global {
           taxRate: string;
           syncInterval: string;
           token: string;
+          serverUrl?: string;
           mode?: string;
           posAdminLocked?: boolean;
         }) => Promise<{ success: boolean }>;

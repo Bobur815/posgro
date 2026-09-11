@@ -5,6 +5,9 @@ export type {
   StoreCreateInput,
   StoreUpdateInput,
   StoreWithStats,
+  StoreSubscription,
+  SubscriptionPaymentInfo,
+  SubscriptionFailureReason,
 } from './store.types';
 
 export type {
@@ -94,4 +97,7 @@ export type {
   FiscalZReport,
   FiscalZReportStatus,
   FiscalActionResult,
+  FiscalPhaseStats,
+  FiscalSaleTiming,
+  FiscalTimings,
 } from './fiscal.types';

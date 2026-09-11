@@ -1,0 +1,197 @@
+name: SSH Deploy
+description: >
+  Ship secrets by scp and run an in-repo deploy script over stdin, so nothing
+  sensitive reaches the remote command line. Retries SSH transport failures.
+
+inputs:
+  host:
+    description: "SSH host"
+    required: true
+  username:
+    description: "SSH user"
+    required: true
+  key:
+    description: "SSH private key"
+    required: true
+  known_hosts:
+    description: "Pinned host key. When empty, falls back to accept-new (TOFU)."
+    required: false
+    default: ""
+  env_file:
+    description: "Full .env contents"
+    required: true
+  gh_pat:
+    description: "PAT used for the git clone"
+    required: true
+  repo_owner:
+    description: "GitHub owner"
+    required: true
+  repo_name:
+    description: "GitHub repo"
+    required: true
+  branch:
+    description: "Branch to deploy"
+    required: true
+  project_dir:
+    description: "Directory under HOME on the VPS"
+    required: true
+  deploy_script:
+    description: "Repo-relative script to exec"
+    required: true
+  max_attempts:
+    description: "Tries on SSH transport failure"
+    required: false
+    default: "3"
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        SSH_HOST:      ${{ inputs.host }}
+        SSH_USER:      ${{ inputs.username }}
+        SSH_KEY:       ${{ inputs.key }}
+        SSH_KNOWN:     ${{ inputs.known_hosts }}
+        ENV_FILE:      ${{ inputs.env_file }}
+        GH_PAT:        ${{ inputs.gh_pat }}
+        REPO_OWNER:    ${{ inputs.repo_owner }}
+        REPO_NAME:     ${{ inputs.repo_name }}
+        BRANCH:        ${{ inputs.branch }}
+        PROJECT_DIR:   ${{ inputs.project_dir }}
+        DEPLOY_SCRIPT: ${{ inputs.deploy_script }}
+        MAX_ATTEMPTS:  ${{ inputs.max_attempts }}
+      run: |
+        set -euo pipefail
+
+        work="$(mktemp -d)"
+        chmod 700 "$work"
+        trap 'rm -rf "$work"' EXIT
+
+        # Secrets routinely arrive with a stray trailing newline; ssh would then
+        # try to resolve "host\n" and exit 255 before any auth. appleboy trimmed
+        # these for us.
+        SSH_HOST="$(printf '%s' "$SSH_HOST" | tr -d '[:space:]')"
+        SSH_USER="$(printf '%s' "$SSH_USER" | tr -d '[:space:]')"
+
+        # appleboy/ssh-action repaired key formatting silently; `ssh -i` will not.
+        # Strip CRs and guarantee exactly one trailing newline, or OpenSSH rejects
+        # the file with "invalid format" and every attempt exits 255.
+        printf '%s' "$SSH_KEY" | tr -d '\r' > "$work/id"
+        [ -n "$(tail -c1 "$work/id")" ] && printf '\n' >> "$work/id"
+        # The payload never becomes a command-line argument, here or on the VPS.
+        printf '%s'   "$ENV_FILE" > "$work/env"
+        printf 'https://%s:%s@github.com\n' "$REPO_OWNER" "$GH_PAT" > "$work/git-credentials"
+        chmod 600 "$work/id" "$work/env" "$work/git-credentials"
+
+        if [ -n "$SSH_KNOWN" ]; then
+          printf '%s\n' "$SSH_KNOWN" > "$work/known_hosts"
+          strict=yes
+        else
+          : > "$work/known_hosts"
+          strict=accept-new
+          echo "::warning::SSH_KNOWN_HOSTS not set — host key accepted on trust (TOFU)."
+        fi
+
+        # IdentitiesOnly + publickey-only are load-bearing, not tidiness: sshd on
+        # the VPS sets MaxAuthTries 3, and plain ssh offers agent/default
+        # identities before -i. Any two of those exhaust the budget and the server
+        # disconnects before our key is ever tried — exit 255, no auth log entry.
+        # appleboy/ssh-action never hit this because its Go client offers only the
+        # key it was given.
+        OPTS=(-i "$work/id"
+              -o IdentitiesOnly=yes
+              -o PreferredAuthentications=publickey
+              -o "StrictHostKeyChecking=$strict"
+              -o "UserKnownHostsFile=$work/known_hosts"
+              -o ConnectTimeout=15
+              -o ServerAliveInterval=30
+              -o ServerAliveCountMax=10
+              -o BatchMode=yes)
+
+        # Fingerprints are not secret, and this turns "exit 255" into an actual
+        # diagnosis: wrong key stored, or a key OpenSSH cannot parse at all.
+        if ssh-keygen -l -f "$work/id"; then
+          echo "key parsed OK ($(wc -l < "$work/id") lines)"
+        else
+          echo "::error::SSH_KEY is not a key OpenSSH can read. Re-add the secret" \
+               "with its BEGIN/END lines and real newlines intact."
+          exit 1
+        fi
+
+        SECRET_DIR=".posgro-secrets-$BRANCH"
+
+        # Piped to `bash -s` over stdin: `ps` on the VPS shows only "bash -s".
+        bootstrap=$(cat <<EOF
+        set -euo pipefail
+        SEC="\$HOME/$SECRET_DIR"
+        # The 0700 dir is what actually keeps other users out; this makes the
+        # files themselves right too even if scp -p carried a foreign umask.
+        chmod 600 "\$SEC"/* 2>/dev/null || true
+        install -m 600 "\$SEC/git-credentials" "\$HOME/.git-credentials"
+        git config --global credential.helper store
+        DIR="\$HOME/$PROJECT_DIR"
+        mkdir -p "\$DIR"; cd "\$DIR"
+        git config --global --add safe.directory "\$DIR" || true
+        if [ ! -d .git ]; then
+          echo "🚀 Fresh clone ($BRANCH)"
+          git clone --depth=1 --branch "$BRANCH" "https://github.com/$REPO_OWNER/$REPO_NAME.git" .
+        else
+          echo "📦 Pull latest $BRANCH"
+          # Plain URL: never persist the PAT into .git/config.
+          git remote set-url origin "https://github.com/$REPO_OWNER/$REPO_NAME.git"
+          git fetch --depth=1 origin "$BRANCH"
+          git reset --hard "origin/$BRANCH"
+          git clean -fd
+        fi
+        install -m 600 "\$SEC/env" "\$DIR/.env"
+        rm -rf "\$SEC"
+        exec bash "$DEPLOY_SCRIPT"
+        EOF
+        )
+
+        attempt=1
+        while :; do
+          echo "::group::Deploy attempt $attempt/$MAX_ATTEMPTS"
+          rc=0
+          # Last attempt talks loudly, so a persistent failure lands in the log
+          # with the reason rather than a bare exit code.
+          VOPT=(); [ "$attempt" -ge "$MAX_ATTEMPTS" ] && VOPT=(-v)
+          {
+            ssh "${VOPT[@]}" "${OPTS[@]}" "$SSH_USER@$SSH_HOST" \
+                "mkdir -p ~/$SECRET_DIR && chmod 700 ~/$SECRET_DIR" &&
+            # -p preserves the local 0600 mode; without it scp applies the remote
+            # umask and the payload lands 0644 inside the 0700 dir.
+            scp -p "${OPTS[@]}" "$work/env" "$work/git-credentials" \
+                "$SSH_USER@$SSH_HOST:~/$SECRET_DIR/" &&
+            ssh "${OPTS[@]}" "$SSH_USER@$SSH_HOST" bash -s <<< "$bootstrap"
+          } || rc=$?
+          echo "::endgroup::"
+
+          if [ "$rc" -eq 0 ]; then
+            echo "✅ Deploy succeeded on attempt $attempt"
+            break
+          fi
+
+          # 255 is ssh/scp's own transport failure. The VPS sshd drops new
+          # unauthenticated connections at random under brute-force load
+          # (MaxStartups 10:30:100), which surfaces as "connection reset by peer".
+          # Any other code came from the deploy script — fail fast, don't rebuild.
+          if [ "$rc" -ne 255 ] || [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then
+            echo "❌ Deploy failed (exit $rc)"
+            # Run-log access needs sign-in, but annotations are public — put the
+            # diagnosis where it can actually be read. Values are described, not
+            # printed: GitHub masks secrets, so echoing them yields only "***".
+            echo "::error::deploy failed rc=$rc; host len=${#SSH_HOST}" \
+                 "dns=$(getent hosts "$SSH_HOST" >/dev/null 2>&1 && echo ok || echo FAIL)" \
+                 "port22=$( (exec 3<>/dev/tcp/"$SSH_HOST"/22) >/dev/null 2>&1 && echo open || echo BLOCKED)" \
+                 "user len=${#SSH_USER}; keyfp=$(ssh-keygen -lf "$work/id" 2>&1 | awk '{print $2}')"
+            ssh -v "${OPTS[@]}" "$SSH_USER@$SSH_HOST" true >"$work/probe.log" 2>&1 || true
+            echo "::error::ssh -v tail: $(tr '\n' '~' < "$work/probe.log" | tail -c 700)"
+            exit "$rc"
+          fi
+
+          backoff=$((attempt * 20))
+          echo "🔁 SSH transport error — retrying in ${backoff}s"
+          sleep "$backoff"
+          attempt=$((attempt + 1))
+        done

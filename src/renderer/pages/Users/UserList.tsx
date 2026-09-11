@@ -6,14 +6,17 @@ import { Table } from "../../components/common/Table";
 import { Button } from "../../components/common/Button";
 import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 import { formatDate } from "../../utils/formatters";
+import { UserFormModal } from "./UserFormModal";
 import type { UserListItem } from "@shared/types";
-import { Edit, Plus, UserCheck, UserX } from "lucide-react";
+import { ArrowLeft, Edit, Plus, UserCheck, UserX } from "lucide-react";
 
 const Container = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${({ theme }) => theme.spacing.md};
 `;
+
+const BackButton = styled(Button)``;
 
 const Header = styled.div`
   display: flex;
@@ -53,6 +56,13 @@ export function UserList() {
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userToToggle, setUserToToggle] = useState<UserListItem | null>(null);
+  // Add and edit both happen in a modal over this list, the way supplier management does — an
+  // admin renaming a cashier keeps the table they were reading behind the dialog. `user`
+  // undefined means "create".
+  const [formState, setFormState] = useState<{
+    open: boolean;
+    user?: UserListItem;
+  }>({ open: false });
   useEffect(() => {
     loadUsers();
   }, []);
@@ -67,7 +77,7 @@ export function UserList() {
       setIsLoading(false);
     }
   };
-  
+
   const handleToggleActive = async (user: UserListItem) => {
     try {
       await window.electronAPI.users.update(user.id, { active: !user.active });
@@ -117,7 +127,7 @@ export function UserList() {
             size="small"
             variant="secondary"
             tooltip={t("common.edit")}
-            onClick={() => navigate(`/users/${user.id}/edit`)}
+            onClick={() => setFormState({ open: true, user })}
           >
             <Edit size={16} />
           </Button>
@@ -137,8 +147,15 @@ export function UserList() {
   return (
     <Container>
       <Header>
+        <BackButton
+          variant="secondary"
+          size="small"
+          onClick={() => navigate("/settings")}
+        >
+          <ArrowLeft size={20} />
+        </BackButton>
         <Title>{t("users.title")}</Title>
-        <Button onClick={() => navigate("/users/new")}>
+        <Button onClick={() => setFormState({ open: true })}>
           <Plus size={16} />
           {t("users.addUser")}
         </Button>
@@ -150,6 +167,17 @@ export function UserList() {
         loading={isLoading}
         emptyMessage={t("users.noUsers")}
       />
+
+      {formState.open && (
+        <UserFormModal
+          // Remount on target change so the form state is rebuilt from the user being edited
+          // rather than carried over from whoever was open before.
+          key={formState.user?.id ?? "new"}
+          user={formState.user}
+          onClose={() => setFormState({ open: false })}
+          onSaved={loadUsers}
+        />
+      )}
 
       {userToToggle && (
         <ConfirmDialog

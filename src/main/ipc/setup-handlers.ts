@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { getAppConfig, updateConfig } from '../config/app-config';
+import { probeApiUrl } from '../config/api-url-probe';
 import { getPrismaClient, writeStoreBootstrap, closeDatabase, initializeDatabase } from '../database/sqlite-client';
 import { setServerToken } from '../sync/queue-manager';
 import { seedLocalDatabase } from '../database/seed';
@@ -14,20 +15,81 @@ interface SetupCompleteData {
   taxRate: string;
   syncInterval: string;
   token: string;
+  serverUrl?: string;
   mode?: string;
   posAdminLocked?: boolean;
 }
 
+/**
+ * The server this terminal will talk to.
+ *
+ * Falls back to the URL compiled in from `.env.pos` when the wizard sends nothing, so an older
+ * renderer keeps working. Trailing slashes are stripped because every caller appends its own.
+ */
+function resolveServerUrl(candidate: string | undefined): string {
+  const trimmed = (candidate ?? '').trim().replace(/\/+$/, '');
+  return /^https?:\/\/.+/i.test(trimmed) ? trimmed : getAppConfig().vpsApiUrl;
+}
+
+/**
+ * Cache this store's manager-override password hash, if it has one.
+ *
+ * Silent and best-effort: nothing here is worth failing a setup over. A store with no override
+ * configured, or a terminal that cannot reach the server at this moment, simply ends up with a
+ * null column — and the POS then gates nothing, exactly as it does today.
+ */
+async function fetchSuperAdminPassword(
+  serverUrl: string,
+  token: string,
+  prisma: ReturnType<typeof getPrismaClient>,
+): Promise<void> {
+  try {
+    const response = await fetch(`${serverUrl}/store-config`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return;
+
+    const body = (await response.json()) as { super_admin_password_hash?: string | null };
+    // Only write when the server actually sent the field, so an older server that does not know
+    // about it cannot silently clear an override this terminal already holds.
+    if (!('super_admin_password_hash' in body)) return;
+
+    await prisma.localConfig.update({
+      where: { id: 'config' },
+      data: { superAdminPassword: body.super_admin_password_hash ?? null },
+    });
+  } catch {
+    // Offline, or an older server without the field — leave the column as it is.
+  }
+}
+
 export function setupSetupHandlers(getSetupWindow: () => BrowserWindow | null, openMainWindow: () => Promise<void>): void {
-  ipcMain.handle('setup:authenticate', async (_event, data: { phone: string; password: string; storeId: string }) => {
-    const config = getAppConfig();
-    const vpsApiUrl = config.vpsApiUrl;
+  ipcMain.handle('setup:authenticate', async (_event, data: { phone: string; password: string; storeId: string; serverUrl?: string }) => {
+    // The wizard chooses the server, not the build: a terminal being set up against staging must
+    // authenticate there, and it is the only chance to say so before anything is written.
+    const vpsApiUrl = resolveServerUrl(data.serverUrl);
+
+    // The same guard `config:updateLocalConfig` applies, because setup is the other place a server
+    // URL is chosen — and the more likely one. A terminal's LAN dashboard answers both `/auth/login`
+    // and `/stores/:id`, so the whole wizard would succeed against another till and leave a
+    // terminal that never uploads a sale.
+    if ((await probeApiUrl(vpsApiUrl)) === 'not-pos-server') {
+      throw new Error('setup.errors.not_pos_server');
+    }
 
     try {
       const response = await fetch(`${vpsApiUrl}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: data.phone, password: data.password, storeId: data.storeId }),
+        body: JSON.stringify({
+          phone: data.phone,
+          password: data.password,
+          storeId: data.storeId,
+          // Marks this as a terminal, not the web dashboard: an OFFLINE_ONLY store is refused
+          // a dashboard session but must still be able to activate a till.
+          client: 'pos',
+        }),
       });
 
       if (!response.ok) {
@@ -92,21 +154,26 @@ export function setupSetupHandlers(getSetupWindow: () => BrowserWindow | null, o
 
     // 5. Update LocalConfig with user-provided values.
     //
-    // apiUrl is pinned to the URL setup actually authenticated against. seed.ts derives the same
-    // value from VPS_API_URL, so today these agree — but the row was previously left to the seed
-    // by implication rather than by intent, which breaks the moment anything moves AppConfig
-    // before setup finishes. Writing it here makes "the terminal talks to the server it was set
-    // up against" an invariant instead of a coincidence.
+    // apiUrl is pinned to the URL setup actually authenticated against — now the one the operator
+    // typed in the wizard, not whatever was compiled into this build. "The terminal talks to the
+    // server it was set up against" stays the invariant.
+    //
+    // It is kept for an OFFLINE_ONLY store too. That store never syncs, but apiUrl means "where
+    // the vendor's server is", not "where my dashboard is": the subscription check still uses it
+    // when the shop happens to have internet, and a VPS login is the only way back in if the
+    // local users table is ever lost. The LAN dashboard does not read it at all — the page is
+    // served same-origin, so its API base is relative.
     //
     // mode/posAdminLocked are the one-time activation: the wizard pulled them from
     // GET /stores/{id}, and an OFFLINE_ONLY terminal never needs the network again after this.
+    const serverUrl = resolveServerUrl(data.serverUrl);
     await prisma.localConfig.update({
       where: { id: 'config' },
       data: {
         storeId: data.storeId,
         storeName: data.storeName,
         terminalId: data.terminalId,
-        apiUrl: getAppConfig().vpsApiUrl,
+        apiUrl: serverUrl,
         mode: data.mode === 'OFFLINE_ONLY' ? 'OFFLINE_ONLY' : 'ONLINE',
         posAdminLocked: data.posAdminLocked === true,
       },
@@ -138,8 +205,19 @@ export function setupSetupHandlers(getSetupWindow: () => BrowserWindow | null, o
       create: { key: 'server_token', value: data.token },
     });
 
-    // 8. Update AppConfig to reflect new storeId/terminalId
-    updateConfig({ storeId: data.storeId, terminalId: data.terminalId });
+    // 8. Update AppConfig to reflect new storeId/terminalId/server
+    updateConfig({ storeId: data.storeId, terminalId: data.terminalId, vpsApiUrl: serverUrl });
+
+    // 9. Pull the manager-override password hash.
+    //
+    // Fetched here in the main process rather than by the wizard's renderer, so the hash never
+    // enters a browser context. It comes from /store-config, which is scoped to this token's own
+    // store — /stores/{id} deliberately does not return it.
+    //
+    // Best-effort by design: an OFFLINE_ONLY store may already be off the network by now, and a
+    // terminal with no override configured simply gates nothing. Failing setup over it would be
+    // the wrong trade.
+    await fetchSuperAdminPassword(serverUrl, data.token, prisma);
 
     return { success: true };
   });

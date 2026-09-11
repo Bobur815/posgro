@@ -1,6 +1,13 @@
-import { ipcMain } from "electron";
+import { app, ipcMain } from "electron";
+import fs from "fs";
+import path from "path";
 import { ScaleSyncService } from "../scale/scale-sync.service";
 import { getPrismaClient } from "../database/sqlite-client";
+import { buildRongtaTxp, type TxpExportResult } from "../../shared/utils/rongta-txp";
+
+/** Where the RLS1000 software installs itself; its PLU manager opens files from here. */
+const RLS_DIR = "C:\\RLS";
+const TXP_FILE = "posgro-plu.TXP";
 
 // Shared service instance (one TCP connection pool for the whole app)
 let scaleSyncService: ScaleSyncService | null = null;
@@ -49,6 +56,42 @@ export function setupScaleHandlers(): void {
       return { success: true };
     },
   );
+
+  /**
+   * Write every active per-kg product to a .TXP file for the RLS1000 PLU manager
+   * (Import from TXP file → Download). See rongta-txp.ts for the format.
+   */
+  ipcMain.handle("scale:exportTxp", async (): Promise<TxpExportResult> => {
+    const prisma = getPrismaClient();
+    const [products, coded] = await Promise.all([
+      prisma.product.findMany({
+        where: { active: true, unit: { in: ["кг", "kg"] } },
+        select: { id: true, storeProductCode: true, internalCode: true, nameUz: true, price: true },
+      }),
+      prisma.product.findMany({
+        where: { active: true, storeProductCode: { not: null } },
+        select: { storeProductCode: true },
+      }),
+    ]);
+    type Row = {
+      id: number;
+      storeProductCode: number | null;
+      internalCode: string | null;
+      nameUz: string;
+      price: { toNumber(): number };
+    };
+    const built = buildRongtaTxp(
+      products.map((p: Row) => ({ ...p, price: p.price.toNumber() })),
+      new Set(coded.map((c: { storeProductCode: number }) => c.storeProductCode)),
+    );
+
+    // Always the same file, so the PLU manager's "Import from TXP file" can just re-open it.
+    // writeFile creates it on the first export and overwrites it after that.
+    const filePath = path.join(fs.existsSync(RLS_DIR) ? RLS_DIR : app.getPath("documents"), TXP_FILE);
+    // The builder guarantees ASCII, so this is byte-identical in GBK, cp1251 or UTF-8.
+    await fs.promises.writeFile(filePath, built.text, "latin1");
+    return { path: filePath, exported: built.exported, skipped: built.skipped };
+  });
 
   /** Load persisted scale config from DB on startup */
   ipcMain.handle("scale:getConfig", async () => {
