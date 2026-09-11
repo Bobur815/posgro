@@ -182,17 +182,28 @@ export function AppBar() {
   // one, so the button could only ever report success for work it never did, and then reload the
   // page for nothing. Gate on the explicit mode: null (not yet hydrated, or a terminal that was
   // never activated) keeps the button, matching mode-store's "default to permissive" rule.
-  const offlineOnly = useModeStore((s) => s.mode) === 'OFFLINE_ONLY';
+  // A satellite is the exception: it syncs with its main over the shop's LAN, in either mode.
+  const isSatellite = useModeStore((s) => s.isSatellite);
+  const offlineOnly = useModeStore((s) => s.mode) === 'OFFLINE_ONLY' && !isSatellite;
 
   const handleSync = async () => {
-    const online = await window.electronAPI.app.isOnline();
-    if (!online) {
-      toast.error(t('errors.noInternet'));
-      return;
+    // The internet is irrelevant to a satellite — its server is the main terminal on the LAN.
+    if (!isSatellite) {
+      const online = await window.electronAPI.app.isOnline();
+      if (!online) {
+        toast.error(t('errors.noInternet'));
+        return;
+      }
     }
     try {
       await window.electronAPI.sync.trigger();
       await refreshStatus();
+      // A satellite's cycle does not throw when the main is away (the banner already says so),
+      // so ask the link rather than reporting a success that did not happen.
+      if (isSatellite && (await window.electronAPI.lan.getStatus())?.reachable === false) {
+        toast.error(t('errors.mainUnreachableBanner'));
+        return;
+      }
       toast.success(t('sync.syncSuccess'));
       setTimeout(() => window.location.reload(), 800);
     } catch (err) {

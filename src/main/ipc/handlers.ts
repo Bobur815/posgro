@@ -29,7 +29,7 @@ import { findBarcodeMatch } from "../../shared/utils/mxik-lookup";
 import { assertNotSatellite } from "../lan/satellite-guard";
 import { getMainLinkStatus, onMainLinkStatus } from "../lan/main-link";
 import { isSatellite } from "../lan/role";
-import { LOCAL_ONLY_SETTINGS } from "../sync/local-only-settings";
+import { isSatelliteOwnSetting } from "../sync/local-only-settings";
 
 /** Host probed by `app:isOnline` when the caller names none. */
 const DEFAULT_ONLINE_PROBE_URL = "https://pos.bobur-dev.uz";
@@ -821,8 +821,9 @@ function setupSettingsHandlers(): void {
 
   ipcMain.handle("settings:set", async (_event, key: string, value: string) => {
     // A store setting on a satellite is its main's, overwritten by the next pull; only what
-    // belongs to this machine (printer names, label size) is this till's to change.
-    if (!LOCAL_ONLY_SETTINGS.has(key)) await assertNotSatellite();
+    // belongs to this till — printer names, label size, whether a drawer or scale is attached —
+    // is its own to change (see SATELLITE_MACHINE_SETTINGS).
+    if (!isSatelliteOwnSetting(key)) await assertNotSatellite();
     const prisma = getPrismaClient();
     await prisma.systemSetting.upsert({
       where: { key },
@@ -928,6 +929,11 @@ function setupAppHandlers(): void {
   ipcMain.handle("config:getWebAdminQr", async () => {
     const prisma = getPrismaClient();
     const localConfig = await prisma.localConfig.findUnique({ where: { id: "config" } });
+
+    // A satellite is a cashier station, not an admin one (LAN plan §1, §4): it serves no
+    // dashboard, and the shop's dashboard is reached from its main. Null is "no address to hand
+    // out" — the same answer the dialog already handles — should anything still ask.
+    if (localConfig?.isMain === false) return null;
 
     let url: string;
     let error: string | null = null;

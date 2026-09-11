@@ -1,9 +1,10 @@
 # LAN multi-terminal ("main terminal") mode — design
 
-**Status:** Phases 0–3 and the §11 pairing dialog implemented on `dev` (2026-09-10 → 2026-09-11) —
+**Status:** Phases 0–4 and the §11 pairing dialog implemented on `dev` (2026-09-10 → 2026-09-11) —
 see §12 for what shipped, what changed from the design while building it, and what is still open.
-A shop can now pair a satellite from the login-screen gear. Phase 4 (trim) and §11.3–11.4 are not
-started. §8 records what is deliberately deferred and what must not be deferred.
+A shop can pair a satellite from the login-screen gear, and the satellite shows only what it can
+do. §11.3–11.4 (generation counter, planned handoff) are not started. §8 records what is
+deliberately deferred and what must not be deferred.
 
 ---
 
@@ -627,7 +628,8 @@ generation — the counter already makes that safe. Not worth building until ask
 | 3.2 | `9b64786` | The main answers satellites: login, PIN (§6.10), user session, sales, shifts, catalog |
 | 3.3 | `b2a674e` | The satellite side: `lan/main-link.ts`, IPC routing, local cache and printing, sync to the main |
 | 3.4 | `359b22d` | Degraded mode (banner, login message) and the satellite write guard |
-| §11 | (this commit) | The pairing dialog in the login-screen gear: pair, remove, re-pair, leave — every act behind the super-admin password; a role change restarts the app |
+| §11 | `82ba622` | The pairing dialog in the login-screen gear: pair, remove, re-pair, leave — every act behind the super-admin password; a role change restarts the app |
+| 4 | (this commit) | Trim: a satellite is "admin-locked" like a cashier-only store, plus hidden login-bar buttons, settings tiles, shop reports and VCR receipt actions; its drawer/scale toggles work |
 
 Proven end to end in `src/main/lan/satellite.e2e.test.ts`: a real main (LAN server + database)
 and a satellite with its own database, in one process, over HTTP — catalog pull, login, shift,
@@ -663,8 +665,21 @@ Needed before a shop can use this:
   on one machine. The sign-out-after-joining concern is met by restarting the app on any role
   change. §11.5's emergency promotion ships as "stop being a satellite" with its warning,
   acknowledgement and a logged record; the generation bump waits for §11.3.
-- **Phase 4 trim** — hide what a satellite refuses (product/supplier/user editing, fiscal actions,
-  the two login-screen buttons in §4). The main-process guard already makes these harmless.
+- ~~**Phase 4 trim**~~ — done. Verified on two real instances: the satellite shows POS, shift,
+  products (read-only), receipts, marking check, and its own printer/scale/labels/update settings;
+  the main still shows everything.
+
+Decisions still open, found while trimming:
+
+- **Machine settings, fleet-wide or satellites only.** `cash_drawer_enabled`,
+  `bulk_weigh_enabled` and `price_tag_templates` are each till's own on a satellite
+  (`SATELLITE_MACHINE_SETTINGS`), but still sync through the VPS between mains, so one main's
+  drawer toggle reaches the others. Making them local-only everywhere would fix that and change what
+  a freshly set-up terminal inherits.
+- **`receipt_width` per till.** A satellite prints with its main's paper width; a till whose printer
+  differs gets a broken layout. It belongs with the question above.
+- **A satellite's cached fiscal status goes stale.** A sale that fiscalized after the main's 10s
+  wait still reads "not fiscalized" at the satellite that rang it up.
 
 Deferred, each a known gap rather than a bug:
 

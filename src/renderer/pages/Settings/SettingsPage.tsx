@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { useModeStore } from "../../store/mode-store";
+import { useAdminLocked, useModeStore } from "../../store/mode-store";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import {
@@ -73,6 +73,12 @@ export function SettingsPage() {
   // reaches a sync service that returns early for such a store. Hiding the tile is what actually
   // removes it from the terminal — the toolbar buttons are gated the same way in AppBar/Sidebar.
   const offlineOnly = useModeStore((s) => s.mode) === "OFFLINE_ONLY";
+  // A satellite's store settings, users and fiscal device are its main's (LAN plan §4); what
+  // stays is this machine's own — its printer, scale, labels — and the person's own account.
+  const isSatellite = useModeStore((s) => s.isSatellite);
+  // Users are edited on the web for a cashier-only store and on the main for a satellite; the
+  // route is ModeGuard-ed, so a tile here would only bounce back home.
+  const adminLocked = useAdminLocked();
 
   const settingsSections = [
     {
@@ -80,6 +86,7 @@ export function SettingsPage() {
       title: t("nav.users"),
       description: t("settings.usersDescription"),
       path: "/users",
+      hidden: adminLocked,
     },
     {
       icon: <UserCog size={32} />,
@@ -92,6 +99,7 @@ export function SettingsPage() {
       title: t("settings.systemSettings"),
       description: t("settings.systemSettingsDescription"),
       path: "/settings/system",
+      hidden: isSatellite,
     },
     {
       icon: <Printer size={32} />,
@@ -104,17 +112,17 @@ export function SettingsPage() {
       title: t("receipt.title"),
       description: t("receipt.description"),
       path: "/settings/receipt",
+      hidden: isSatellite,
     },
-    ...(offlineOnly
-      ? []
-      : [
-          {
-            icon: <RefreshCw size={32} />,
-            title: t("settings.syncSettings"),
-            description: t("settings.syncSettingsDescription"),
-            path: "/settings/sync",
-          },
-        ]),
+    {
+      icon: <RefreshCw size={32} />,
+      title: t("settings.syncSettings"),
+      description: t("settings.syncSettingsDescription"),
+      path: "/settings/sync",
+      // The page is the VPS sync's diagnostics. A satellite never talks to the VPS; the sync
+      // button still refreshes its catalog from the main.
+      hidden: offlineOnly || isSatellite,
+    },
     {
       icon: <Tag size={32} />,
       title: t("priceTags.title"),
@@ -138,12 +146,14 @@ export function SettingsPage() {
       title: t("fiscalSettings.title", "Фискализация (REGOS:VCR)"),
       description: t("fiscalSettings.description", "Фискальный модуль и виртуальная касса"),
       path: "/settings/fiscal",
+      hidden: isSatellite,
     },
     {
       icon: <Monitor size={32} />,
       title: t("settings.terminalStatus"),
       description: t("settings.terminalStatusDescription"),
       path: "/settings/terminals",
+      hidden: isSatellite,
     },
     {
       icon: <Download size={32} />,
@@ -151,7 +161,7 @@ export function SettingsPage() {
       description: t("settings.appUpdateDescription"),
       path: "/settings/app-update",
     },
-  ];
+  ].filter((section) => !section.hidden);
 
   return (
     <Container>

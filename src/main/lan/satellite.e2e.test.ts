@@ -177,6 +177,29 @@ describe('a satellite and its main', () => {
     expect(row.lastSeenAt).not.toBeNull();
   });
 
+  /**
+   * The main's store settings arrive; its hardware toggles do not. Whether a cash drawer or scale
+   * is attached is a fact about each till — before this, a satellite could not even switch its own
+   * drawer on, and the next pull would have switched it back to the main's.
+   */
+  it("takes the main's store settings but keeps its own drawer and scale", async () => {
+    const put = (db: any, key: string, value: string) =>
+      db.systemSetting.upsert({ where: { key }, update: { value }, create: { key, value } });
+    await put(mainDb(), 'receipt_header', 'Main shop header');
+    await put(mainDb(), 'cash_drawer_enabled', 'false');
+    await put(mainDb(), 'bulk_weigh_enabled', 'false');
+    await put(satDb(), 'cash_drawer_enabled', 'true');
+    await put(satDb(), 'bulk_weigh_enabled', 'true');
+
+    await sat.sync.syncWithMain();
+
+    const read = async (key: string) =>
+      (await satDb().systemSetting.findUnique({ where: { key } }))?.value;
+    expect(await read('receipt_header')).toBe('Main shop header');
+    expect(await read('cash_drawer_enabled')).toBe('true');
+    expect(await read('bulk_weigh_enabled')).toBe('true');
+  });
+
   it('signs a cashier in against the main', async () => {
     const { user, token } = await sat.ops.login('+998901112233', 'pass1234');
     expect(user).toMatchObject({ id: 'user-1', role: 'USER' });

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import styled from "styled-components";
 import { useTranslation } from "react-i18next";
 import {
@@ -42,7 +42,8 @@ import { TerminalRolePanel } from "./TerminalRolePanel";
  * store: such a store still has a subscription with the vendor, and its dashboard is served by
  * this terminal on the shop's own network. What changes offline is only what the terminal can
  * reach — so the subscription button checks for a connection first and says plainly when there
- * is none, rather than the button disappearing.
+ * is none, rather than the button disappearing. Both are hidden on a satellite, which is a cashier
+ * station for its main (LAN plan §4).
  */
 
 const Bar = styled.div`
@@ -193,6 +194,24 @@ export function TerminalAccessBar() {
   const [loadingSubscription, setLoadingSubscription] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // A satellite is a cashier station (LAN plan §1, §4): no phone dashboard — the shop's is reached
+  // from its main — and no subscription button, which is the shop's business and the main's to
+  // show. Read here rather than from the mode store, which is only hydrated behind the login.
+  // Shown until known, the permissive default everywhere else in the app.
+  const [isSatellite, setIsSatellite] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    window.electronAPI.config
+      .getLocalConfig()
+      .then((cfg) => {
+        if (alive) setIsSatellite(cfg?.isMain === false);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const close = () => {
     setDialog("none");
@@ -307,23 +326,27 @@ export function TerminalAccessBar() {
           <Settings size={19} />
         </IconButton>
 
-        <IconButton
-          type="button"
-          onClick={openQr}
-          title={t("settings.webAdminOnPhone")}
-          aria-label={t("settings.webAdminOnPhone")}
-        >
-          <Smartphone size={19} />
-        </IconButton>
+        {!isSatellite && (
+          <>
+            <IconButton
+              type="button"
+              onClick={openQr}
+              title={t("settings.webAdminOnPhone")}
+              aria-label={t("settings.webAdminOnPhone")}
+            >
+              <Smartphone size={19} />
+            </IconButton>
 
-        <IconButton
-          type="button"
-          onClick={openSubscription}
-          title={t("subscription.statusTitle")}
-          aria-label={t("subscription.statusTitle")}
-        >
-          <CreditCard size={19} />
-        </IconButton>
+            <IconButton
+              type="button"
+              onClick={openSubscription}
+              title={t("subscription.statusTitle")}
+              aria-label={t("subscription.statusTitle")}
+            >
+              <CreditCard size={19} />
+            </IconButton>
+          </>
+        )}
       </Bar>
 
       {dialog === "unlock" && (

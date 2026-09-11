@@ -3,6 +3,7 @@ import { regosVcrService } from "../fiscal/regos-vcr-service";
 import { stats, recentSales, reset } from "../fiscal/fiscal-timing";
 import type { RegosVcrConfigInput } from "../../shared/types/fiscal.types";
 import { assertNotSatellite } from "../lan/satellite-guard";
+import { isSatellite } from "../lan/role";
 
 /**
  * Actions that drive the VCR. On a satellite there is none — it is a local service on the main (LAN
@@ -81,8 +82,14 @@ export function setupFiscalHandlers(): void {
     mainOnly(async (_event, saleId: string) => regosVcrService.printDuplicate(saleId)),
   );
 
-  // Z-report (fiscal shift) — status + manual open/close for the Smena page.
-  ipcMain.handle("fiscal:zInfo", async () => regosVcrService.getZReportInfo());
+  // Z-report (fiscal shift) — status + manual open/close for the Smena page. On a satellite there
+  // is no VCR to ask (its main fiscalizes for it), so it reports fiscalization as off here and the
+  // shift page shows no fiscal panel — rather than an error from a device that is not there.
+  ipcMain.handle("fiscal:zInfo", async () =>
+    (await isSatellite())
+      ? { enabled: false, open: false }
+      : regosVcrService.getZReportInfo(),
+  );
   ipcMain.handle(
     "fiscal:zOpen",
     mainOnly(async () => regosVcrService.openZReportManual()),

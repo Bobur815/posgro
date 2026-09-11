@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { SyncButton } from "../common/SyncButton";
 import { useAuthStore } from "../../store/auth-store";
-import { useModeStore } from "../../store/mode-store";
+import { useAdminLocked, useModeStore } from "../../store/mode-store";
 import { useSidebar } from "../../context/SidebarContext";
 import { useSync } from "../../hooks/useSync";
 import { APP_BAR_HEIGHT } from "./AppBar";
@@ -213,11 +213,13 @@ export function Sidebar() {
   const { isCollapsed, collapseSidebar, openSmenaModal } = useSidebar();
   const { status, refreshStatus } = useSync();
   const isAdmin = user?.role === "ADMIN";
-  const posAdminLocked = useModeStore((s) => s.posAdminLocked);
+  const adminLocked = useAdminLocked();
+  const isSatellite = useModeStore((s) => s.isSatellite);
   // See AppBar: an OFFLINE_ONLY store has no server to sync with. The whole status line goes with
   // the button — a permanent "not synced" is worse than saying nothing, because it reads as a
-  // fault on a terminal that is working exactly as intended.
-  const offlineOnly = useModeStore((s) => s.mode) === 'OFFLINE_ONLY';
+  // fault on a terminal that is working exactly as intended. A satellite is the exception: it
+  // syncs with its main in either mode.
+  const offlineOnly = useModeStore((s) => s.mode) === 'OFFLINE_ONLY' && !isSatellite;
   const [currentVersion, setCurrentVersion] = useState("");
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDownloaded, setUpdateDownloaded] = useState(false);
@@ -285,7 +287,9 @@ export function Sidebar() {
           <NavSection>
             <SectionTitle>{t("nav.reports")}</SectionTitle>
             {renderNavItem("/reports/daily", ReceiptText, t("nav.receipts"))}
-            {isAdmin && (
+            {/* Not on a satellite: it holds a copy of its own sales only, so these would show one
+                till's slice as if it were the shop. The shop's reports live on the main. */}
+            {isAdmin && !isSatellite && (
               <>
                 {renderNavItem("/reports/monthly", TrendingUp, t("nav.monthlyReport"))}
                 {renderNavItem("/reports/analytics", LineChart, t("nav.analytics"))}
@@ -296,11 +300,12 @@ export function Sidebar() {
           {isAdmin && (
             <NavSection>
               <SectionTitle>{t("nav.management")}</SectionTitle>
-              {/* Stock and suppliers move to the web dashboard once the store is cashier-only.
-                  Settings stays: printer, scale, fiscal and sync are this machine's own config. */}
-              {!posAdminLocked &&
+              {/* Stock and suppliers move to the web dashboard once the store is cashier-only, and to
+                  the main terminal on a satellite. Settings stays: printer and scale are this
+                  machine's own config. */}
+              {!adminLocked &&
                 renderNavItem("/products/stock", ClipboardList, t("nav.inventory"))}
-              {!posAdminLocked && renderNavItem("/suppliers", Truck, t("suppliers.title"))}
+              {!adminLocked && renderNavItem("/suppliers", Truck, t("suppliers.title"))}
               <StyledNavLink to="/settings" onClick={collapseSidebar}>
                 <IconWrapper><Settings size={17} /></IconWrapper>
                 <NavText>{t("nav.settings")}</NavText>

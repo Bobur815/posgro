@@ -1,3 +1,48 @@
+# Phase 4 — trim what a satellite cannot do (started 2026-09-11)
+
+From `tasks/LAN_MAIN_TERMINAL_PLAN.md` §7 Phase 4 (§4, §5.10).
+
+- [x] Main: machine settings writable on a satellite and kept out of its pull (the cash drawer and
+      scale toggles were refused there); `fiscal:zInfo` and the web-admin QR off on a satellite
+- [x] `mode-store.isSatellite` + `useAdminLocked()`; existing `posAdminLocked` gates switch to it
+- [x] Satellite-only hides: login bar buttons, settings tiles, monthly/analytics, VCR receipt actions
+- [x] Tests, and the two-instance run
+
+## Review
+
+A satellite now shows what a satellite does. For master data it is treated like a cashier-only
+store: `useAdminLocked()` = `posAdminLocked || isSatellite`, and the four places that already hid
+editing for cashier-only (ModeGuard, Sidebar, ProductList, ProductDetails) switched to it — stock,
+suppliers, users and product/category/arrival editing disappear with no new gating logic. On top:
+the login bar loses the phone-dashboard and subscription buttons (§4), Settings loses store,
+receipt, sync, fiscal and terminal-status tiles, the sidebar loses monthly report and analytics (a
+satellite's copy is one till's slice), and receipts lose fiscalize/refund/duplicate and the delete
+of a fiscalized receipt (all need the VCR at the main). A `MainOnlyGuard` covers those routes by URL.
+The sync button stays on a satellite — it refreshes from the main, over the LAN, so it no longer
+demands internet and reports a failure honestly when the main is away.
+
+**Bug fixed:** Phase 3.4's write guard allowed only `LOCAL_ONLY_SETTINGS` on a satellite, so it
+refused `cash_drawer_enabled`, `bulk_weigh_enabled` and `price_tag_templates` — a satellite could not
+switch on its own drawer or scale, and the next pull would have reset them to the main's. A
+satellite-scoped `SATELLITE_MACHINE_SETTINGS` fixes both the guard and the pull; the fleet's VPS sync
+is untouched (tested). Shown red without the pull exclusion.
+
+**Main process:** `fiscal:zInfo` reports fiscal off on a satellite (no VCR to ask) and
+`config:getWebAdminQr` returns null there.
+
+**Verified in the real app, two instances** (a main T1 and a satellite T3 paired over the LAN):
+satellite login bar has only the gear; password login and PIN setup went to the main (the PIN
+landed in the main's DB, not the satellite's); sidebar and settings trimmed as above; the drawer
+toggle saves, a store setting is refused `SATELLITE_READ_ONLY`, zInfo is off, the web QR is null,
+and typing a guarded URL lands on the POS. The main still shows all three login buttons, the full
+sidebar and all 12 settings tiles. 622 tests (was 607). **Not seen rendered:** the hidden fiscal
+receipt buttons — the demo shop had fiscalization off, so no sale had a fiscal status to show them.
+
+**Still open:** `receipt_width` per till, whether these machine settings should be local-only
+fleet-wide, a satellite's cached fiscal status going stale, and §11.3–11.4.
+
+---
+
 # §11 — the pairing dialog (started 2026-09-11)
 
 From `tasks/LAN_MAIN_TERMINAL_PLAN.md` §11.1–11.2: the role controls in the login-screen gear, so a

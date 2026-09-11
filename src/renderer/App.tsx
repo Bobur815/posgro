@@ -5,6 +5,7 @@ import { Layout } from "./components/layout/Layout";
 import { ProtectedRoute } from "./components/protected/ProtectedRoute";
 import { RoleGuard } from "./components/protected/RoleGuard";
 import { ModeGuard } from "./components/protected/ModeGuard";
+import { MainOnlyGuard } from "./components/protected/MainOnlyGuard";
 import { useAuthStore } from "./store/auth-store";
 import { ConfirmDialog } from "./components/common/ConfirmDialog";
 
@@ -122,7 +123,9 @@ function App() {
           path="reports/monthly"
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
-              <MonthlyReport />
+              <MainOnlyGuard>
+                <MonthlyReport />
+              </MainOnlyGuard>
             </RoleGuard>
           }
         />
@@ -130,7 +133,9 @@ function App() {
           path="reports/analytics"
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
-              <Analytics />
+              <MainOnlyGuard>
+                <Analytics />
+              </MainOnlyGuard>
             </RoleGuard>
           }
         />
@@ -149,7 +154,9 @@ function App() {
           path="settings/system"
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
-              <SystemSettings />
+              <MainOnlyGuard>
+                <SystemSettings />
+              </MainOnlyGuard>
             </RoleGuard>
           }
         />
@@ -173,7 +180,9 @@ function App() {
           path="settings/receipt"
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
-              <ReceiptSettings />
+              <MainOnlyGuard>
+                <ReceiptSettings />
+              </MainOnlyGuard>
             </RoleGuard>
           }
         />
@@ -189,7 +198,9 @@ function App() {
           path="settings/fiscal"
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
-              <FiscalSettings />
+              <MainOnlyGuard>
+                <FiscalSettings />
+              </MainOnlyGuard>
             </RoleGuard>
           }
         />
@@ -197,7 +208,9 @@ function App() {
           path="settings/sync"
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
-              <SyncSettings />
+              <MainOnlyGuard>
+                <SyncSettings />
+              </MainOnlyGuard>
             </RoleGuard>
           }
         />
@@ -205,7 +218,9 @@ function App() {
           path="settings/terminals"
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
-              <TerminalStatus />
+              <MainOnlyGuard>
+                <TerminalStatus />
+              </MainOnlyGuard>
             </RoleGuard>
           }
         />

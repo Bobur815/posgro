@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { useProducts } from "../../hooks/useProducts";
 import { useAuthStore } from "../../store/auth-store";
-import { useModeStore } from "../../store/mode-store";
+import { useAdminLocked } from "../../store/mode-store";
 import { Table } from "../../components/common/Table";
 import { Pagination } from "../../components/common/Pagination";
 import { usePagination } from "../../hooks/usePagination";
@@ -99,10 +99,10 @@ export function ProductList() {
     product?: Product;
   }>({ open: false });
   const isAdmin = user?.role === "ADMIN";
-  // Product master data is server-owned once the store is cashier-only, so the terminal browses
-  // it read-only. The list itself, search and details all stay available.
-  const posAdminLocked = useModeStore((s) => s.posAdminLocked);
-  const canManageProducts = isAdmin && !posAdminLocked;
+  // Product master data is edited elsewhere for a cashier-only store (the web) and for a satellite
+  // (its main), so such a terminal browses it read-only. The list, search and details all stay.
+  const adminLocked = useAdminLocked();
+  const canManageProducts = isAdmin && !adminLocked;
 
   useEffect(() => {
     loadProducts();
