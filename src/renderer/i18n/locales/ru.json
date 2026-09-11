@@ -560,7 +560,17 @@
     "labelPrinterName": "Принтер ярлыков",
     "labelWidthMm": "Ширина ярлыка (мм)",
     "testPrint": "Тестовая печать",
-    "saved": "Настройки сохранены"
+    "saved": "Настройки сохранены",
+    "pluExportTitle": "Товары для весов Rongta (PLU)",
+    "pluExportHint": "Обновляет файл C:\\RLS\\posgro-plu.TXP (создаёт, если его нет): все активные товары в кг для PLU-менеджера RLS1000. LF-код = внутренний код товара, код в штрихкоде = код товара в магазине (у старых товаров — ID), цена за кг, узбекское название латиницей (кириллица переводится автоматически). В PLU-менеджере: «Import from TXP file» → проверьте список → «Download». Загрузка заменяет все товары на весах.",
+    "pluExportButton": "Обновить файл PLU (.TXP)",
+    "pluExportDone": "Сохранено {{count}} товаров: {{path}}",
+    "pluExportSkipped": "Не попали в файл ({{count}}):",
+    "pluSkip_no_name": "нет названия на узбекском",
+    "pluSkip_no_internal_code": "нет внутреннего кода (нужен для LF-кода)",
+    "pluSkip_code_too_long": "код длиннее 6 цифр",
+    "pluSkip_duplicate_code": "код повторяется",
+    "pluSkip_code_taken": "ID совпадает с кодом другого товара — присвойте товару код"
   },
   "fiscalSettings": {
     "title": "Фискализация (REGOS:VCR)",

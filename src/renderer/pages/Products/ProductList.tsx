@@ -21,6 +21,7 @@ import {
   Edit,
   Keyboard,
   ListIndentIncrease,
+  Scale,
   Trash,
   X,
 } from "lucide-react";
@@ -36,6 +37,7 @@ import {
 } from "../../components/common/SearchControls";
 import { ProductForm } from "./ProductForm";
 import { ConfirmDialog } from "../../components/common/ConfirmDialog";
+import { PluExportModal } from "./PluExportModal";
 
 const Container = styled.div`
   display: flex;
@@ -54,6 +56,12 @@ const Header = styled.div`
 const Title = styled.h1`
   margin: 0;
   color: ${({ theme }) => theme.colors.text};
+`;
+
+const HeaderActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.sm};
 `;
 
 const Filters = styled.div`
@@ -81,6 +89,7 @@ export function ProductList() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [missingMxikOnly, setMissingMxikOnly] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [pluExportOpen, setPluExportOpen] = useState(false);
   const [formModal, setFormModal] = useState<{
     open: boolean;
     productId?: string;
@@ -299,14 +308,22 @@ export function ProductList() {
     <Container>
       <Header>
         <Title>{t("products.title")}</Title>
-        {canManageProducts && (
-          <Button
-            style={{ fontSize: "26px" }}
-            onClick={() => setFormModal({ open: true })}
-          >
-            <CirclePlus size={24} /> {t("products.add")}
-          </Button>
-        )}
+        <HeaderActions>
+          {/* Exporting only reads local products, so a cashier-only store's admin still gets it. */}
+          {isAdmin && (
+            <Button variant="secondary" onClick={() => setPluExportOpen(true)}>
+              <Scale size={20} /> {t("scaleSettings.pluExportButton")}
+            </Button>
+          )}
+          {canManageProducts && (
+            <Button
+              style={{ fontSize: "26px" }}
+              onClick={() => setFormModal({ open: true })}
+            >
+              <CirclePlus size={24} /> {t("products.add")}
+            </Button>
+          )}
+        </HeaderActions>
       </Header>
 
       <Filters>
@@ -410,6 +427,10 @@ export function ProductList() {
             reloadWithFilters();
           }}
         />
+      )}
+
+      {pluExportOpen && (
+        <PluExportModal onClose={() => setPluExportOpen(false)} />
       )}
 
       {deleteModal.open && deleteModal.product && (

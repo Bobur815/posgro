@@ -548,7 +548,17 @@
     "labelPrinterName": "Yorliq printeri",
     "labelWidthMm": "Yorliq kengligi (mm)",
     "testPrint": "Test chop etish",
-    "saved": "Sozlamalar saqlandi"
+    "saved": "Sozlamalar saqlandi",
+    "pluExportTitle": "Rongta tarozisi uchun mahsulotlar (PLU)",
+    "pluExportHint": "C:\\RLS\\posgro-plu.TXP faylini yangilaydi (yo'q bo'lsa, yaratadi): RLS1000 PLU-menejeri uchun barcha faol kg mahsulotlari. LF-kod = mahsulotning ichki kodi, shtrixkoddagi kod = do'kondagi mahsulot kodi (eski mahsulotlarda — ID), 1 kg narxi, o'zbekcha nomi lotinda (kirill avtomatik o'giriladi). PLU-menejerda: «Import from TXP file» → ro'yxatni tekshiring → «Download». Yuklash tarozidagi barcha mahsulotlarni almashtiradi.",
+    "pluExportButton": "PLU faylni yangilash (.TXP)",
+    "pluExportDone": "{{count}} ta mahsulot saqlandi: {{path}}",
+    "pluExportSkipped": "Faylga kirmadi ({{count}}):",
+    "pluSkip_no_name": "o'zbekcha nomi yo'q",
+    "pluSkip_no_internal_code": "ichki kodi yo'q (LF-kod uchun kerak)",
+    "pluSkip_code_too_long": "kod 6 raqamdan uzun",
+    "pluSkip_duplicate_code": "kod takrorlanadi",
+    "pluSkip_code_taken": "ID boshqa mahsulot kodi bilan bir xil — mahsulotga kod bering"
   },
   "fiscalSettings": {
     "title": "Fiskallashtirish (REGOS:VCR)",

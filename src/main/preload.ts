@@ -233,6 +233,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     updateConfig: (ip: string, port: number) =>
       ipcRenderer.invoke("scale:updateConfig", ip, port),
     getConfig: () => ipcRenderer.invoke("scale:getConfig"),
+    exportTxp: () => ipcRenderer.invoke("scale:exportTxp"),
   },
 
   // Settings
@@ -661,6 +662,9 @@ declare global {
         getAvailable: (productId: number) => Promise<unknown[]>;
         getAll: (filters?: unknown) => Promise<unknown>;
         delete: (id: string) => Promise<boolean>;
+      };
+      scale: {
+        exportTxp: () => Promise<import("../shared/utils/rongta-txp").TxpExportResult>;
       };
       settings: {
         get: (key: string) => Promise<string | null>;
