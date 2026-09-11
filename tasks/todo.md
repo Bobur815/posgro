@@ -5,7 +5,7 @@ move to the main; a satellite commits through it and keeps a read cache. One com
 
 - [x] 3.0 LAN tokens signed with a per-main secret, not the installer-baked `JWT_SECRET`;
       diagnose the ECONNRESET failures in the full test run
-- [ ] 3.1 `commitSale()` — one serialized, transactional, idempotent commit path; IPC unchanged
+- [x] 3.1 `commitSale()` — one serialized, transactional, idempotent commit path; IPC unchanged
 - [ ] 3.2 The main answers satellites: login, PIN (throttled per terminal), user session,
       sale commit, shifts, catalog pull; sync uploads each row under its own terminal id
 - [ ] 3.3 The satellite talks only to its main: `main-link`, IPC routing, local sale cache,
