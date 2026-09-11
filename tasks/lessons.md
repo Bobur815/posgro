@@ -130,3 +130,47 @@ An import into the PLU manager showed both at once: "Barcode 2" and 23000 displa
 else's software, separate "position confirmed" from "meaning guessed" in the code and in the
 report, and say which columns to check on screen after the first import. Treat a sample value
 like `90` as the unit's first clue: a price that small usually has implied decimals.
+
+## Reproduce a flake in the topology it fails in, not a tidier one
+
+The full test run failed now and then with `fetch failed … ECONNRESET` in the LAN server suite,
+only when the machine was saturated (a cold run: 7 ts-jest workers on 8 threads, ~190s instead of
+~20s). The first experiment put the server in a child process and stalled the client — 0 failures
+in 60 tries — and it would have been easy to call the keep-alive theory disproved. The tests run
+server and client on **one** event loop; reproduced that way it failed 2 in 20 at Node's 5s
+`keepAliveTimeout` and 0 in 20 at 65s.
+
+**Rule:** a negative result only counts if the experiment shares the failing setup's topology —
+same process boundaries, same event loop, same load. And when the same race can happen in
+production (a satellite reusing a socket the main just closed), fix it in the code, not the test.
+
+## An async function cannot hand back a promise
+
+`settleSale()` was written to return the in-flight fiscalization so each caller could choose how
+long to wait. Declared `async (): Promise<Promise<void> | null>` that is impossible: promises
+flatten, so `await settleSale()` would have silently waited out the whole OFD round-trip on every
+sale at the till's own counter. The typechecker caught it only because the result was then passed
+where a promise was expected.
+
+**Rule:** to return work still in progress from an async function, wrap it —
+`{ fiscalizing: Promise<void> | null }`.
+
+## Classify errors by name, not instanceof, when they may come from another realm
+
+`isNetworkError` tested `err instanceof TypeError` to recognise fetch's `TypeError('fetch failed')`.
+Node's fetch throws its own realm's TypeError; in a Jest context that is not the test's
+`TypeError`, so "main unreachable" surfaced as an unexplained crash. The two-till e2e test found it.
+
+**Rule:** for errors crossing a boundary you do not own (native fetch, another window, a worker),
+match on `err.name` or `err.cause?.code`.
+
+## Scripted edits on CRLF files: `.` does not match `\r`
+
+A script inserted an import after the last `^import .*;\r?$` match. In JavaScript `.` excludes
+`\r`, so the insertion point landed between `\r` and `\n` — one line ended `\r\r\n`, the new one in
+a bare `\n`. With mixed endings git stops normalising the file, and three files showed as
+~4,000-line diffs for a 60-line change.
+
+**Rule:** after scripting edits in this repo (CRLF working copies), count line endings before
+staging — a file with both CRLF and bare LF, or any `\r\r\n`, is broken. Prefer the Edit tool,
+which preserves them; and never pass code containing backticks through a shell string.

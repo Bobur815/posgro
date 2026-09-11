@@ -1,7 +1,9 @@
 # LAN multi-terminal ("main terminal") mode — design
 
-**Status:** design agreed and complete, 2026-09-10 (§1). Not started. Nothing is blocking
-implementation — §8 records what is deliberately deferred and what must not be deferred.
+**Status:** Phases 0–3 implemented on `dev` (2026-09-10 → 2026-09-11) — see §12 for what shipped,
+what changed from the design while building it, and what is still open. Not yet reachable from
+the UI: pairing a satellite needs the §11 gear dialog, and Phase 4 (trim) is not started. §8 records
+what is deliberately deferred and what must not be deferred.
 
 ---
 
@@ -610,3 +612,79 @@ to let a satellite hold several candidate addresses and use whichever answers wi
 generation — the counter already makes that safe. Not worth building until asked for.
 
 ---
+
+## 12. Implementation status
+
+### 12.1 What shipped
+
+| Phase | Commits | What |
+|---|---|---|
+| 0 | `cc0bf20` | A server URL the terminal could log into but never sync to is refused (`/health` probe) |
+| 1 | `92eacd0` | `isMain` + `mainTerminalUrl` in all three places §10.2 requires; unique `terminalId` at setup |
+| 2 | `eb54de9` `b6b2579` `7815200` `3c26f57` `4c30577` | LAN server on a main with satellites; pairing codes and device secrets; the terminal audience; heartbeat/status; the satellite side of joining |
+| 3.0 | `b8693a9` | LAN tokens signed with a per-main key; the dashboard can no longer read local-only settings |
+| 3.1 | `956d50c` | `sales/commit-sale.ts` — one serialized, transactional, idempotent commit path |
+| 3.2 | `9b64786` | The main answers satellites: login, PIN (§6.10), user session, sales, shifts, catalog |
+| 3.3 | `b2a674e` | The satellite side: `lan/main-link.ts`, IPC routing, local cache and printing, sync to the main |
+| 3.4 | `359b22d` | Degraded mode (banner, login message) and the satellite write guard |
+
+Proven end to end in `src/main/lan/satellite.e2e.test.ts`: a real main (LAN server + database)
+and a satellite with its own database, in one process, over HTTP — catalog pull, login, shift,
+sale, return, a lost response that must not sell twice, a deactivated cashier, and the main
+switched off.
+
+### 12.2 Where the build departed from the design
+
+- **§5.2's gate** is paired satellites (or an open pairing code), not `isMain` — `isMain` defaults
+  to true fleet-wide, so gating on it would have opened a port in every shop.
+- **§5.4 needed a fourth credential.** The device token says which till; a *user session* token
+  (`posgro-lan-session`, bound to that till, re-checked against `users` on every request) says who
+  is at it. Without it the main would accept whatever cashier id a satellite asserted.
+- **LAN tokens could be forged with the installer's `JWT_SECRET`**, which is baked into every
+  build. Now a per-main random key, local-only. Found while building §6.10's device-token guard,
+  which it would otherwise have made meaningless.
+- **Products cross the wire by barcode, not id.** A till that sold independently before pairing
+  keeps its own ids, so the same number can name different products on each side.
+- **A commit carries a satellite-generated id** — the idempotency key that makes a retry after a
+  lost response return the same sale instead of selling twice.
+- **§6.5's cursor trap was real on the main itself**: products-sync copied the VPS's `updatedAt`,
+  so the column mixed two clocks. The main now stamps its own.
+- **No users table travels to a satellite** (`/terminal/sync/users` was dropped) — login is on the
+  main, so no satellite needs anyone's password hash.
+- **§5.3's `/sales/sync` shape was never built.** A satellite's sale is committed on the main, not
+  recorded after the fact; the VPS-shaped route would have recorded sales without touching stock.
+
+### 12.3 Still open
+
+Needed before a shop can use this:
+
+- **§11 gear dialog** — the only way to pair from the UI. The IPC exists (`pairing:*`). Pairing
+  while someone is signed in leaves a local session the main never issued; the dialog should sign
+  out after joining.
+- **Phase 4 trim** — hide what a satellite refuses (product/supplier/user editing, fiscal actions,
+  the two login-screen buttons in §4). The main-process guard already makes these harmless.
+
+Deferred, each a known gap rather than a bug:
+
+- **Pre-weighed labels** (`weighedItems:*`) are per-till. A label printed at one till and scanned at
+  another is not found; its SOLD mark is not recorded on the main.
+- **`markingCodes:check`** consults the till's own SoldMarkingCode table and the VPS; a satellite has
+  no VPS token, so a marked item sold at one till is not caught as already-sold at another.
+- **`/logs/upload`** from satellites needs a forwarding queue on the main (§5.3).
+- **The VPS dashboard's terminal list** does not see satellites; their heartbeat goes to the main.
+- **Satellite sync interval** is the same 5 minutes as VPS sync; a price change on the main reaches
+  a satellite's display within that. Commits always use the main's figures, so this is cosmetic.
+- **§11.3 `mainGeneration`**, promotion and handoff (§11.4–11.5).
+
+Noticed along the way, outside this work:
+
+- `local-server/routes/sales.ts` (dashboard sale delete) restores `quantity`, not
+  `quantity × piecesPerUnit` — box lines under-restore stock.
+- `config:getLocalConfig` returns the whole `local_config` row to the renderer, including the
+  super-admin password hash that `sync-service.ts` is careful to keep in the main process.
+
+### 12.4 Before promising 5+ tills
+
+§6.4 still stands: every satellite sale is a write on the main's SQLite. `commitSale` serializes
+them in one queue, which is correct but means throughput is one sale at a time — tested at 10
+concurrent commits, not measured on shop hardware under a real lunchtime queue.

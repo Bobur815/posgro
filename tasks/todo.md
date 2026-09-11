@@ -23,6 +23,37 @@ move to the main; a satellite commits through it and keeps a read cache. One com
 - **The main stamps its own clock on pulled products** (products-sync no longer copies the VPS
   `updatedAt`), so the column a satellite pages through runs on one clock (§6.5).
 
+## Review
+
+Phase 3 is done: a satellite sells, logs in and keeps shifts through its main, and the main is the
+only place stock, receipt numbers, shifts and fiscalization happen. Five commits, `b8693a9` →
+`359b22d`; the plan's new §12 lists what shipped, what departed from the design, and what is open.
+
+**Found on the way, and fixed because the design depended on it:**
+
+- LAN tokens were signed with `JWT_SECRET`, baked into every installer — anyone with a copy could
+  forge a dashboard login for any shop or pose as any satellite. And `GET /settings` handed every
+  dashboard user (cashiers too) the stored VPS token and the fiscal password blob.
+- `sales:create` checked stock and decremented it in separate awaits — the §3 double-sell, inside
+  one process. Also fixed with it: a refused edit left the old lines' stock restored for good, and
+  a box line plus a loose line of one product could together overdraw the shelf.
+- The main would have uploaded satellite sales and shifts under its own terminal id.
+- The flaky full test runs were the keep-alive race: Node closes an idle socket at 5s just as fetch
+  reuses it. Reproduced in-process (2/20 vs 0/20 at 65s) — and the same race exists between a real
+  main and satellite, so the fix is in the server, not the tests.
+
+**Verified:** 588 tests (was 514), including a two-till end-to-end test — a real main server and
+database plus a satellite with its own database, over HTTP. Regression tests were shown red before
+their fixes: the forged-token and settings cases, the concurrency test (the transaction alone
+times out without the queue), the upload terminal id, and the lost-response retry (sells twice
+without the idempotency key). `tsc` clean; `electron-vite build` clean, bundles grepped.
+
+**Not verified:** two physical tills on a shop LAN, and a REGOS VCR returning a fiscal QR to a
+satellite. Nothing in the UI can pair a satellite yet (§11 gear dialog), so none of this is
+reachable by a shop until that lands — which also means it is inert in the field today.
+
+No version bump — bumped at deploy, per convention.
+
 ---
 
 # Phase 2 (slice 2) — pairing (done 2026-09-10)
