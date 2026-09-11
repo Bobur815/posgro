@@ -124,6 +124,19 @@ found weeks later.
    ```
 3. **Terminal-sync routes on the LAN server** — the 404 list in §2, with the *same contracts the
    VPS uses*, so one client implementation serves both hops.
+
+   They do **not** all belong in Phase 2, which became clear building them. `/terminals/heartbeat`
+   and `/terminals/status` mean the same thing on a main as on the VPS and are done. `/sales/sync`
+   does not: on the VPS it is `syncFromTerminal`, *record a sale that already happened*, whereas on
+   a main the sale has not happened yet and must be **committed** — stock checked and decremented,
+   receipt number issued, fiscalized (items 5, 6, 11). Building the VPS shape here first would
+   leave a route that records sales without touching stock, which is precisely the bug §3 exists to
+   prevent. It lands with Phase 3, and so do `/smena/sync-bulk` and `/users/sync`, which depend on
+   the same commit path.
+
+   `/logs/upload` is deferred for a different reason: a terminal keeps no queryable log copy
+   (`logRoutes` in `routes/misc.ts` returns empty), so a satellite's logs reaching the vendor needs
+   a forwarding queue on the main, not an endpoint.
 4. **A third token audience.** `posgro-local-web` guards the browser. A satellite is neither a
    browser nor a VPS client, so it needs its own (e.g. `posgro-lan-terminal`) with its own TTL.
    Reusing the dashboard audience would hand any phone on the Wi-Fi a terminal's privileges.

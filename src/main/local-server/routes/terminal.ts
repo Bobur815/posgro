@@ -166,4 +166,59 @@ export const terminalRoutes: Route[] = [
     audience: 'terminal',
     handler: async ({ terminal }) => ({ terminal_id: terminal?.terminalId ?? null }),
   },
+
+  /**
+   * A satellite reporting in, mirroring `POST /terminals/heartbeat` on the VPS so one client
+   * implementation serves both hops (§5.3).
+   *
+   * One deliberate difference: **the terminal id comes from the token, not the body.** The VPS
+   * takes it from the payload and leans on its store guard; here the caller is a machine on a shop
+   * network, and nothing should let one till file a heartbeat as another — which would make a
+   * stalled terminal look healthy, the exact failure this is meant to reveal.
+   */
+  {
+    method: 'POST',
+    path: '/terminals/heartbeat',
+    audience: 'terminal',
+    handler: async ({ body, terminal }) => {
+      const terminalId = terminal!.terminalId;
+
+      const raw = Number(body?.unsyncedCount);
+      const unsyncedCount = Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : 0;
+
+      // A satellite unpaired between getting its token and using it has no row to update; say so
+      // rather than recreating one and letting a removed till quietly re-register itself.
+      const existing = await db().pairedTerminal.findUnique({ where: { terminalId } });
+      if (!existing) throw unauthorized('This terminal is no longer paired');
+
+      await db().pairedTerminal.update({
+        where: { terminalId },
+        data: { lastSeenAt: new Date(), unsyncedCount },
+      });
+
+      return { ok: true };
+    },
+  },
+
+  /**
+   * Terminal health for the dashboard, in the same shape the VPS returns.
+   *
+   * The **dashboard** audience, not the terminal one: this is for a person looking at the shop,
+   * and a satellite has no business enumerating its siblings.
+   */
+  {
+    method: 'GET',
+    path: '/terminals/status',
+    handler: async () => {
+      const rows = await db().pairedTerminal.findMany({ orderBy: { terminalId: 'asc' } });
+      return rows.map((r) => ({
+        terminalId: r.terminalId,
+        name: r.name,
+        // Null until the satellite has reported once — distinct from "reported zero", which is a
+        // till that is up to date.
+        lastSyncAt: r.lastSeenAt ? r.lastSeenAt.toISOString() : null,
+        unsyncedCount: r.unsyncedCount,
+      }));
+    },
+  },
 ];

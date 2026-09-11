@@ -278,6 +278,95 @@ describe('pairing a satellite', () => {
       expect((await whoami()).status).toBe(401);
     });
 
+    describe('heartbeat', () => {
+      const heartbeat = (auth: string, body: unknown) =>
+        fetch(`http://127.0.0.1:${PORT}/api/terminals/heartbeat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth}` },
+          body: JSON.stringify(body),
+        });
+
+      it('records what the satellite reports', async () => {
+        const { token: tt } = await (await getToken({ terminalId: 'T9', secret })).json();
+
+        expect((await heartbeat(tt, { unsyncedCount: 4 })).status).toBe(201);
+
+        const row = await getPrismaClient().pairedTerminal.findUnique({
+          where: { terminalId: 'T9' },
+        });
+        expect(row.unsyncedCount).toBe(4);
+        expect(row.lastSeenAt).not.toBeNull();
+      });
+
+      /**
+       * The VPS takes the terminal id from the body and leans on its store guard. Here the caller
+       * is a machine on a shop network, so it comes from the token — one till filing a heartbeat
+       * as another would make a stalled terminal look healthy, which is the exact failure this is
+       * supposed to reveal.
+       */
+      it('ignores a terminal id in the body', async () => {
+        const { token: tt } = await (await getToken({ terminalId: 'T9', secret })).json();
+        await heartbeat(tt, { terminalId: 'T1', unsyncedCount: 99 });
+
+        const impersonated = await getPrismaClient().pairedTerminal.findUnique({
+          where: { terminalId: 'T1' },
+        });
+        expect(impersonated).toBeNull();
+
+        const own = await getPrismaClient().pairedTerminal.findUnique({ where: { terminalId: 'T9' } });
+        expect(own.unsyncedCount).toBe(99);
+      });
+
+      it.each([
+        ['a negative count', -5],
+        ['nonsense', 'lots'],
+        ['nothing at all', undefined],
+      ])('treats %s as zero rather than erroring', async (_label, value) => {
+        const { token: tt } = await (await getToken({ terminalId: 'T9', secret })).json();
+        expect((await heartbeat(tt, { unsyncedCount: value })).status).toBe(201);
+
+        const row = await getPrismaClient().pairedTerminal.findUnique({ where: { terminalId: 'T9' } });
+        expect(row.unsyncedCount).toBe(0);
+      });
+
+      it('is closed to a dashboard token', async () => {
+        const login = await fetch(`http://127.0.0.1:${PORT}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: '+998900000001', password: 'secret123' }),
+        });
+        const { token: webToken } = await login.json();
+        expect((await heartbeat(webToken, { unsyncedCount: 1 })).status).toBe(401);
+      });
+    });
+
+    /**
+     * The dashboard audience, not the terminal one: this is for a person looking at the shop, and
+     * a satellite has no business enumerating its siblings.
+     */
+    it('lists terminal health for the dashboard, and not for a satellite', async () => {
+      const login = await fetch(`http://127.0.0.1:${PORT}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: '+998900000001', password: 'secret123' }),
+      });
+      const { token: webToken } = await login.json();
+
+      const res = await fetch(`http://127.0.0.1:${PORT}/api/terminals/status`, {
+        headers: { Authorization: `Bearer ${webToken}` },
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ terminalId: 'T9' })]),
+      );
+
+      const { token: terminalToken } = await (await getToken({ terminalId: 'T9', secret })).json();
+      const asSatellite = await fetch(`http://127.0.0.1:${PORT}/api/terminals/status`, {
+        headers: { Authorization: `Bearer ${terminalToken}` },
+      });
+      expect(asSatellite.status).toBe(401);
+    });
+
     it('stops working once the satellite is unpaired', async () => {
       const { token: live } = await (await getToken({ terminalId: 'T9', secret })).json();
       expect((await whoami(live)).status).toBe(200);

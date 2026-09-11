@@ -71,6 +71,13 @@ model PairedTerminal {
   pairedAt   DateTime  @default(now()) @map("paired_at")
   lastSeenAt DateTime? @map("last_seen_at")
 
+  /// How many sales the satellite still had queued at its last heartbeat.
+  ///
+  /// Not authoritative — it is whatever that till last claimed — but it is the number that tells a
+  /// shopkeeper one of their tills has stopped getting through, which is the failure this whole
+  /// design makes loud instead of silent.
+  unsyncedCount Int @default(0) @map("unsynced_count")
+
   @@map("paired_terminals")
 }
 

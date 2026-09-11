@@ -805,13 +805,22 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   // tills claiming the same id.
   await prisma.$executeRaw`
     CREATE TABLE IF NOT EXISTS paired_terminals (
-      terminal_id  TEXT PRIMARY KEY,
-      name         TEXT,
-      secret_hash  TEXT NOT NULL,
-      paired_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-      last_seen_at DATETIME
+      terminal_id    TEXT PRIMARY KEY,
+      name           TEXT,
+      secret_hash    TEXT NOT NULL,
+      paired_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_seen_at   DATETIME,
+      unsynced_count INTEGER NOT NULL DEFAULT 0
     )
   `;
+
+  // Migration 33: what a satellite reports at each heartbeat. Separate from the CREATE above
+  // because a main paired during Phase 2 already has the table without this column.
+  if (!(await columnExists(prisma, 'paired_terminals', 'unsynced_count'))) {
+    await prisma.$executeRaw`
+      ALTER TABLE paired_terminals ADD COLUMN unsynced_count INTEGER NOT NULL DEFAULT 0
+    `;
+  }
 }
 
 /** True if `column` exists on `table` — silent (no thrown query, no prisma:error log). */
