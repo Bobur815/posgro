@@ -1,3 +1,48 @@
+# §11 — the pairing dialog (started 2026-09-11)
+
+From `tasks/LAN_MAIN_TERMINAL_PLAN.md` §11.1–11.2: the role controls in the login-screen gear, so a
+shop can actually make a satellite. §11.3–11.5 (generation counter, handoff, emergency promotion
+with a recorded reason) stay open.
+
+- [x] Main process: super-admin gate on `pairing:remove`, one shared password check, join errors as
+      `settings.*` keys, a logged record when a satellite leaves
+- [x] Dialog primitives out of TerminalAccessBar; `settings.serverUrl*` → `settings.apiUrl*`
+- [x] Role panel: pair/remove satellites on a main; join, re-pair, leave on a satellite
+- [x] Role change relaunches the app; ru + uz strings; pure helpers tested
+
+## Review
+
+A shop can now make a satellite. The login-screen gear opens "Terminal settings": the API URL (on a
+main only — a satellite never talks to the VPS) and a new role panel. On a main it lists paired
+tills with last-seen times, issues a pairing code (big digits, the address to type, a live
+countdown, noticing when it is used), and removes a till. On a satellite it re-pairs with another
+main (§11.6) or leaves, behind a red disaster-recovery warning and a tick box (§11.5). Every role act
+asks for the super-admin password and the main process checks it each time; without one configured
+the panel says so and offers nothing (§11.2). A role change restarts the app.
+
+**Main process:** `pairing:remove` was ungated — anyone who opened the gear with a PIN could cut a
+till off. The four role acts now share one `requireSuperAdmin` and one throttle (leave had none).
+Join failures come back as `settings.*` keys via a tested `pairingErrorKey` — the main's refusals
+were English sentences on a Russian/Uzbek screen. `pairing:getCode` now returns the address with
+the code, so a reopened dialog can show both. Leaving logs which main, when, and how old the cache
+was — §11.5's record, until the generation counter exists.
+
+**Verified by running two real instances on this machine** (throwaway user-data dirs, demo stores,
+driven over CDP): unlock → panel → wrong super-admin password (translated error) → code with
+address and countdown → on the second instance a wrong code (translated) then the real one →
+"Подключено к «Demo Shop». Перезапуск…" → it came back as satellite T3, the main listed T3 with a
+last-seen time → login on the satellite went to the main (session token audience
+`posgro-lan-session`, bound to T3) → satellite panel and leave form → leave (logged record) →
+remove T3 on the main with the password. 607 tests (was 588): `pairingErrorKey` and the dialog
+helpers. `tsc` and `electron-vite build` clean. One full run failed two unrelated DB suites while the
+machine was loaded from the builds and instances; the rerun was 607/607 in 21s — failure text not
+captured.
+
+**Not done:** §11.3 generation counter, §11.4 planned handoff, and Phase 4 (hiding what a
+satellite refuses). The two login-screen buttons §4 hides on a satellite are still shown.
+
+---
+
 # Phase 3 — truth moves to the main (started 2026-09-11)
 
 From `tasks/LAN_MAIN_TERMINAL_PLAN.md` §7. Stock, receipt numbers, shifts, login and fiscalization

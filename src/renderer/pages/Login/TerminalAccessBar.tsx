@@ -11,13 +11,31 @@ import {
 import { formatCurrency } from "../../../shared/utils/transformers";
 import { useToast } from "../../context/ToastContext";
 import type { StoreSubscription } from "../../../shared/types/store.types";
+import {
+  ActionButton,
+  Actions,
+  CloseButton,
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  ErrorText,
+  Hint,
+  Label,
+  Overlay,
+  TextInput,
+  WideDialog,
+} from "./terminalDialog.styles";
+import { settingsErrorKey } from "./terminalDialog.helpers";
+import { TerminalRolePanel } from "./TerminalRolePanel";
 
 /**
  * The terminal-level controls at the bottom of the login screen.
  *
- * Settings edits the server URL this terminal talks to. Because the login screen is
- * unauthenticated, that would otherwise let anyone repoint the terminal at a server of their
- * choosing, so it is gated on the store PIN (or an admin password on a terminal with no PIN).
+ * Settings edits the API URL this terminal talks to, and its role on the shop's LAN (main or
+ * satellite — `TerminalRolePanel`). Because the login screen is unauthenticated, the URL would
+ * otherwise let anyone repoint the terminal at a server of their choosing, so the dialog is gated
+ * on the store PIN (or an admin password on a terminal with no PIN). Changing the role asks for
+ * the super-admin password on top of that, act by act (§11.2).
  *
  * The phone button shows the web admin dashboard address as a QR, and the card button shows the
  * store's subscription status with a way to pay for it. Neither is hidden for an OFFLINE_ONLY
@@ -50,112 +68,6 @@ const IconButton = styled.button`
   &:hover {
     color: ${({ theme }) => theme.colors.text};
     border-color: ${({ theme }) => theme.colors.primary};
-  }
-`;
-
-const Overlay = styled.div`
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-`;
-
-const Dialog = styled.div`
-  background: ${({ theme }) => theme.colors.surface};
-  border-radius: 12px;
-  padding: 24px;
-  width: 100%;
-  max-width: 420px;
-`;
-
-const DialogHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 18px;
-`;
-
-const DialogTitle = styled.h3`
-  margin: 0;
-  font-size: 18px;
-  color: ${({ theme }) => theme.colors.text};
-`;
-
-const CloseButton = styled.button`
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: ${({ theme }) => theme.colors.textSecondary};
-  display: flex;
-
-  &:hover {
-    color: ${({ theme }) => theme.colors.text};
-  }
-`;
-
-const Label = styled.label`
-  display: block;
-  font-size: 13px;
-  font-weight: 500;
-  color: ${({ theme }) => theme.colors.textSecondary};
-  margin-bottom: 6px;
-`;
-
-const TextInput = styled.input`
-  width: 100%;
-  padding: 11px 12px;
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  background: ${({ theme }) => theme.colors.background};
-  color: ${({ theme }) => theme.colors.text};
-  font-size: 15px;
-  box-sizing: border-box;
-
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme.colors.primary};
-  }
-`;
-
-const Hint = styled.p`
-  font-size: 12px;
-  line-height: 1.5;
-  color: ${({ theme }) => theme.colors.textSecondary};
-  margin: 8px 0 0;
-`;
-
-const ErrorText = styled.p`
-  font-size: 13px;
-  color: ${({ theme }) => theme.colors.error};
-  margin: 10px 0 0;
-`;
-
-const Actions = styled.div`
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
-`;
-
-const ActionButton = styled.button<{ $primary?: boolean }>`
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  border: 1px solid
-    ${({ $primary, theme }) =>
-      $primary ? theme.colors.primary : theme.colors.border};
-  background: ${({ $primary, theme }) =>
-    $primary ? theme.colors.primary : "transparent"};
-  color: ${({ $primary, theme }) => ($primary ? "#fff" : theme.colors.text)};
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: default;
   }
 `;
 
@@ -212,13 +124,6 @@ const InfoValue = styled.span<{ $muted?: boolean; $warn?: boolean }>`
         : theme.colors.text};
 `;
 
-/* The pay dialog leads with the QR, so it needs more room than the plain 420px dialogs. */
-const WideDialog = styled(Dialog)`
-  max-width: 460px;
-  max-height: 90vh;
-  overflow-y: auto;
-`;
-
 const LinkButton = styled.button`
   display: flex;
   align-items: center;
@@ -248,7 +153,7 @@ const SupportPhone = styled.p`
   margin: 12px 0 0;
 `;
 
-type Dialog = "none" | "unlock" | "server" | "qr" | "subscription" | "pay";
+type DialogKind = "none" | "unlock" | "server" | "qr" | "subscription" | "pay";
 
 /** Renders an ISO timestamp as a plain date, or a dash when the plan has no expiry. */
 function formatExpiry(iso: string | null, locale: string): string | null {
@@ -265,10 +170,16 @@ function formatExpiry(iso: string | null, locale: string): string | null {
 export function TerminalAccessBar() {
   const { t, i18n } = useTranslation();
   const toast = useToast();
-  const [dialog, setDialog] = useState<Dialog>("none");
+  const [dialog, setDialog] = useState<DialogKind>("none");
 
   const [secret, setSecret] = useState("");
   const [apiUrl, setApiUrl] = useState("");
+  // Who this terminal is on the shop's LAN, read when the settings dialog is unlocked.
+  const [terminal, setTerminal] = useState<{
+    terminalId: string;
+    isMain: boolean;
+    mainTerminalUrl: string | null;
+  } | null>(null);
   const [qr, setQr] = useState<{
     url: string;
     qrDataUrl: string | null;
@@ -300,6 +211,15 @@ export function TerminalAccessBar() {
       }
       const cfg = await window.electronAPI.config.getLocalConfig();
       setApiUrl(cfg?.apiUrl ?? "");
+      setTerminal(
+        cfg
+          ? {
+              terminalId: cfg.terminalId,
+              isMain: cfg.isMain !== false,
+              mainTerminalUrl: cfg.mainTerminalUrl ?? null,
+            }
+          : null,
+      );
       setSecret("");
       setDialog("server");
     } catch {
@@ -312,7 +232,7 @@ export function TerminalAccessBar() {
   const handleSaveUrl = async () => {
     const trimmed = apiUrl.trim().replace(/\/+$/, "");
     if (!/^https?:\/\/.+/i.test(trimmed)) {
-      setError(t("settings.serverUrlInvalid"));
+      setError(t("settings.apiUrlInvalid"));
       return;
     }
     setBusy(true);
@@ -321,12 +241,9 @@ export function TerminalAccessBar() {
       await window.electronAPI.config.updateLocalConfig({ apiUrl: trimmed });
       close();
     } catch (e) {
-      // The main process throws a translation key; Electron wraps it as
-      // `Error invoking remote method '...': Error: settings.foo`, so dig the key back out.
-      // Without this the dialog showed that whole string to whoever is standing at the terminal.
-      const raw = e instanceof Error ? e.message : "";
-      const key = raw.match(/(settings\.[A-Za-z0-9_.]+)/)?.[1];
-      setError(key ? t(key) : t("settings.serverUrlInvalid"));
+      // The main process throws a translation key, wrapped by Electron (see settingsErrorKey).
+      const key = settingsErrorKey(e);
+      setError(key ? t(key) : t("settings.apiUrlInvalid"));
     } finally {
       setBusy(false);
     }
@@ -384,8 +301,8 @@ export function TerminalAccessBar() {
         <IconButton
           type="button"
           onClick={() => setDialog("unlock")}
-          title={t("settings.serverUrl")}
-          aria-label={t("settings.serverUrl")}
+          title={t("settings.terminalAccessTitle")}
+          aria-label={t("settings.terminalAccessTitle")}
         >
           <Settings size={19} />
         </IconButton>
@@ -447,38 +364,47 @@ export function TerminalAccessBar() {
 
       {dialog === "server" && (
         <Overlay onClick={(e) => e.target === e.currentTarget && close()}>
-          <Dialog>
+          <WideDialog>
             <DialogHeader>
-              <DialogTitle>{t("settings.serverUrl")}</DialogTitle>
+              <DialogTitle>{t("settings.terminalAccessTitle")}</DialogTitle>
               <CloseButton onClick={close}>
                 <X size={18} />
               </CloseButton>
             </DialogHeader>
-            <Label>{t("settings.serverUrl")}</Label>
-            <TextInput
-              value={apiUrl}
-              autoFocus
-              spellCheck={false}
-              placeholder="https://pos.bobur-dev.uz/api"
-              onChange={(e) => setApiUrl(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSaveUrl()}
-            />
-            <Hint>{t("settings.serverUrlHint")}</Hint>
-            {error && <ErrorText>{error}</ErrorText>}
-            <Actions>
-              <ActionButton type="button" onClick={close}>
-                {t("common.cancel")}
-              </ActionButton>
-              <ActionButton
-                type="button"
-                $primary
-                disabled={busy}
-                onClick={handleSaveUrl}
-              >
-                {t("common.save")}
-              </ActionButton>
-            </Actions>
-          </Dialog>
+            {/* A satellite never talks to the VPS (LAN plan §1), so an API URL field there would be
+                a setting that does nothing. Its server is its main, shown in the role panel. */}
+            {terminal?.isMain === false ? (
+              <Hint>{t("settings.lanRole.noApiUrlOnSatellite")}</Hint>
+            ) : (
+              <>
+                <Label>{t("settings.apiUrl")}</Label>
+                <TextInput
+                  value={apiUrl}
+                  autoFocus
+                  spellCheck={false}
+                  placeholder="https://pos.bobur-dev.uz/api"
+                  onChange={(e) => setApiUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSaveUrl()}
+                />
+                <Hint>{t("settings.apiUrlHint")}</Hint>
+                {error && <ErrorText>{error}</ErrorText>}
+                <Actions>
+                  <ActionButton type="button" onClick={close}>
+                    {t("common.cancel")}
+                  </ActionButton>
+                  <ActionButton
+                    type="button"
+                    $primary
+                    disabled={busy}
+                    onClick={handleSaveUrl}
+                  >
+                    {t("common.save")}
+                  </ActionButton>
+                </Actions>
+              </>
+            )}
+            {terminal && <TerminalRolePanel config={terminal} />}
+          </WideDialog>
         </Overlay>
       )}
 

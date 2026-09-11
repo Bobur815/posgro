@@ -73,6 +73,42 @@ export async function probeMainTerminal(
   }
 }
 
+/** The main answered a pairing attempt, and said no. */
+export class PairingRefused extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'PairingRefused';
+  }
+}
+
+/**
+ * What to tell the person at the satellite when pairing fails, as a `settings.*` key.
+ *
+ * The main's refusals are English sentences written for a log; the person typing a code into a
+ * till reads Russian or Uzbek. Each refusal this maps has a different fix — retype the code, wait
+ * out the lockout, give this till a different id — so they are kept apart rather than collapsed into
+ * one "failed". The main's messages are matched by fragment: both ends are this codebase, and an
+ * unmatched one still lands on the generic key rather than leaking English onto the screen.
+ */
+export function pairingErrorKey(err: unknown): string {
+  const name = (err as { name?: string } | null)?.name;
+  // By name, not instanceof — fetch's errors come from Node's own realm (see main-link.ts).
+  if (name === 'TypeError' || name === 'AbortError' || name === 'TimeoutError') {
+    return 'settings.mainTerminal_unreachable';
+  }
+  if (err instanceof PairingRefused || name === 'PairingRefused') {
+    const { status, message } = err as PairingRefused;
+    if (status === 403 && /too many attempts/i.test(message)) return 'settings.pairingThrottled';
+    if (status === 403 && /not a main/i.test(message)) return 'settings.mainTerminal_not_a_main';
+    if (status === 403) return 'settings.pairingCodeWrong';
+    if (status === 400 && /belongs to the main/i.test(message)) return 'settings.pairingIdIsMain';
+  }
+  return 'settings.pairingFailed';
+}
+
 export interface PairResult {
   secret: string;
   storeId: string;
@@ -98,8 +134,9 @@ export async function pairWithMain(
 
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
     if (!response.ok) {
-      // The main's own words, which say whether the code was wrong, expired, or the id clashed.
-      throw new Error(String(body?.message ?? `HTTP ${response.status}`));
+      // The main's own words, which say whether the code was wrong, expired, or the id clashed —
+      // kept with the status so `pairingErrorKey` can say it in the operator's language.
+      throw new PairingRefused(response.status, String(body?.message ?? `HTTP ${response.status}`));
     }
 
     return {

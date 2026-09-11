@@ -1,4 +1,9 @@
-import { normaliseMainUrl, probeMainTerminal } from './main-terminal-client';
+import {
+  PairingRefused,
+  normaliseMainUrl,
+  pairingErrorKey,
+  probeMainTerminal,
+} from './main-terminal-client';
 
 /**
  * The mirror of `api-url-probe.test.ts`, and it has the same shape of risk in both directions:
@@ -108,5 +113,25 @@ describe('normaliseMainUrl', () => {
     ['http://x:5173/api///', 'http://x:5173/api'],
   ])('%s -> %s', (input, expected) => {
     expect(normaliseMainUrl(input)).toBe(expected);
+  });
+});
+
+/**
+ * The person at the satellite reads Russian or Uzbek, and each refusal has a different fix, so
+ * they must not all collapse into "failed". The fragments below are the main's real messages
+ * (local-server/routes/terminal.ts) — if one is reworded there, its case here stops matching.
+ */
+describe('pairingErrorKey', () => {
+  it.each([
+    ['an unreachable main', Object.assign(new Error('fetch failed'), { name: 'TypeError' }), 'settings.mainTerminal_unreachable'],
+    ['a timeout', Object.assign(new Error('aborted'), { name: 'AbortError' }), 'settings.mainTerminal_unreachable'],
+    ['a wrong or expired code', new PairingRefused(403, 'Pairing code is wrong or has expired'), 'settings.pairingCodeWrong'],
+    ['a locked-out main', new PairingRefused(403, 'Too many attempts. Wait a minute and try again.'), 'settings.pairingThrottled'],
+    ['a satellite at that address', new PairingRefused(403, 'This terminal is not a main terminal'), 'settings.mainTerminal_not_a_main'],
+    ['this till using the main’s id', new PairingRefused(400, 'That terminal id belongs to the main terminal'), 'settings.pairingIdIsMain'],
+    ['anything else', new PairingRefused(500, 'Internal error'), 'settings.pairingFailed'],
+    ['a plain error', new Error('no secret in the answer'), 'settings.pairingFailed'],
+  ])('names %s', (_label, err, key) => {
+    expect(pairingErrorKey(err)).toBe(key);
   });
 });

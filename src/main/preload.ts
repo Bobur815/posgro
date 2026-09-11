@@ -300,7 +300,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getCode: () => ipcRenderer.invoke("pairing:getCode"),
     cancelCode: () => ipcRenderer.invoke("pairing:cancelCode"),
     list: () => ipcRenderer.invoke("pairing:list"),
-    remove: (terminalId: string) => ipcRenderer.invoke("pairing:remove", terminalId),
+    remove: (superAdminPassword: string, terminalId: string) =>
+      ipcRenderer.invoke("pairing:remove", superAdminPassword, terminalId),
     joinAsSatellite: (
       superAdminPassword: string,
       input: { mainTerminalUrl: string; code: string; name?: string },
@@ -728,12 +729,17 @@ declare global {
           mainTerminalUrl: string | null;
           serverError: string | null;
         }>;
-        getCode: () => Promise<{ code: string; expiresAt: number } | null>;
+        getCode: () => Promise<{
+          code: string;
+          expiresAt: number;
+          mainTerminalUrl: string | null;
+          serverError: string | null;
+        } | null>;
         cancelCode: () => Promise<boolean>;
         list: () => Promise<
           Array<{ terminalId: string; name: string | null; pairedAt: string; lastSeenAt: string | null }>
         >;
-        remove: (terminalId: string) => Promise<boolean>;
+        remove: (superAdminPassword: string, terminalId: string) => Promise<boolean>;
         joinAsSatellite: (
           superAdminPassword: string,
           input: { mainTerminalUrl: string; code: string; name?: string },

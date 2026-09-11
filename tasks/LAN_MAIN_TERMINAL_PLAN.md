@@ -1,9 +1,9 @@
 # LAN multi-terminal ("main terminal") mode — design
 
-**Status:** Phases 0–3 implemented on `dev` (2026-09-10 → 2026-09-11) — see §12 for what shipped,
-what changed from the design while building it, and what is still open. Not yet reachable from
-the UI: pairing a satellite needs the §11 gear dialog, and Phase 4 (trim) is not started. §8 records
-what is deliberately deferred and what must not be deferred.
+**Status:** Phases 0–3 and the §11 pairing dialog implemented on `dev` (2026-09-10 → 2026-09-11) —
+see §12 for what shipped, what changed from the design while building it, and what is still open.
+A shop can now pair a satellite from the login-screen gear. Phase 4 (trim) and §11.3–11.4 are not
+started. §8 records what is deliberately deferred and what must not be deferred.
 
 ---
 
@@ -627,6 +627,7 @@ generation — the counter already makes that safe. Not worth building until ask
 | 3.2 | `9b64786` | The main answers satellites: login, PIN (§6.10), user session, sales, shifts, catalog |
 | 3.3 | `b2a674e` | The satellite side: `lan/main-link.ts`, IPC routing, local cache and printing, sync to the main |
 | 3.4 | `359b22d` | Degraded mode (banner, login message) and the satellite write guard |
+| §11 | (this commit) | The pairing dialog in the login-screen gear: pair, remove, re-pair, leave — every act behind the super-admin password; a role change restarts the app |
 
 Proven end to end in `src/main/lan/satellite.e2e.test.ts`: a real main (LAN server + database)
 and a satellite with its own database, in one process, over HTTP — catalog pull, login, shift,
@@ -658,9 +659,10 @@ switched off.
 
 Needed before a shop can use this:
 
-- **§11 gear dialog** — the only way to pair from the UI. The IPC exists (`pairing:*`). Pairing
-  while someone is signed in leaves a local session the main never issued; the dialog should sign
-  out after joining.
+- ~~**§11 gear dialog**~~ — done (`TerminalRolePanel.tsx`). Verified by pairing two real instances
+  on one machine. The sign-out-after-joining concern is met by restarting the app on any role
+  change. §11.5's emergency promotion ships as "stop being a satellite" with its warning,
+  acknowledgement and a logged record; the generation bump waits for §11.3.
 - **Phase 4 trim** — hide what a satellite refuses (product/supplier/user editing, fiscal actions,
   the two login-screen buttons in §4). The main-process guard already makes these harmless.
 
