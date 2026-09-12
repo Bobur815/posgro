@@ -221,7 +221,6 @@ const EyeButton = styled.button`
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-const ENV_STORE_ID = import.meta.env.VITE_STORE_ID as string | undefined;
 const SAVED_KEY = "login_saved";
 
 export function LoginPage() {
@@ -234,12 +233,6 @@ export function LoginPage() {
   const [phoneDigits, setPhoneDigits] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [storeId, setStoreId] = useState(
-    ENV_STORE_ID ?? localStorage.getItem("last_store_id") ?? "",
-  );
-  const [showStoreId, setShowStoreId] = useState(
-    !ENV_STORE_ID && !localStorage.getItem("last_store_id"),
-  );
   const [rememberMe, setRememberMe] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
   const [latestRelease, setLatestRelease] = useState<{
@@ -253,17 +246,9 @@ export function LoginPage() {
     const raw = localStorage.getItem(SAVED_KEY);
     if (raw) {
       try {
-        const saved = JSON.parse(raw) as {
-          phone?: string;
-          password?: string;
-          storeId?: string;
-        };
+        const saved = JSON.parse(raw) as { phone?: string; password?: string };
         if (saved.phone) setPhoneDigits(saved.phone);
         if (saved.password) setPassword(saved.password);
-        if (saved.storeId && !ENV_STORE_ID) {
-          setStoreId(saved.storeId);
-          setShowStoreId(false);
-        }
         setRememberMe(true);
       } catch {
         /* ignore */
@@ -299,7 +284,9 @@ export function LoginPage() {
     if (!isUzPhoneComplete(phoneDigits)) return;
 
     const fullPhone = "998" + phoneDigits;
-    const success = await login(fullPhone, password, storeId || undefined);
+    // No store ID: the server opens every store this password opens, and the top bar switches
+    // between them.
+    const success = await login(fullPhone, password);
 
     if (!success) {
       const reason = useAuthStore.getState().error;
@@ -314,16 +301,11 @@ export function LoginPage() {
     if (rememberMe) {
       localStorage.setItem(
         SAVED_KEY,
-        JSON.stringify({
-          phone: phoneDigits,
-          password,
-          storeId: storeId || undefined,
-        }),
+        JSON.stringify({ phone: phoneDigits, password }),
       );
     } else {
       localStorage.removeItem(SAVED_KEY);
     }
-    if (storeId) localStorage.setItem("last_store_id", storeId);
     navigate("/");
   };
 
@@ -376,38 +358,6 @@ export function LoginPage() {
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </EyeButton>
             </PasswordWrapper>
-
-            {!ENV_STORE_ID && (
-              <>
-                {!showStoreId ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowStoreId(true)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "inherit",
-                      opacity: 0.5,
-                      fontSize: 13,
-                      cursor: "pointer",
-                      textAlign: "left",
-                      padding: 0,
-                    }}
-                  >
-                    {storeId
-                      ? `${t("common.store")}: ${storeId}`
-                      : t("auth.enterStoreId") || "+ Enter store ID"}
-                  </button>
-                ) : (
-                  <Input
-                    label={t("common.storeId")}
-                    value={storeId}
-                    onChange={(e) => setStoreId(e.target.value)}
-                    placeholder="XXXX"
-                  />
-                )}
-              </>
-            )}
 
             <RememberRow>
               <input

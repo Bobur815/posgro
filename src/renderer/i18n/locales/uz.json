@@ -945,6 +945,16 @@
       "pendingDiscarded": "Topshirish bekor qilindi. Qayta ishga tushirilmoqda…"
     }
   },
+  "topBar": {
+    "organizations": "Tashkilotlar",
+    "refresh": "Yangilash",
+    "news": "Yangiliklar",
+    "comingSoon": "tez orada",
+    "language": "Til",
+    "profile": "Profil",
+    "theme": "Mavzu",
+    "switchFailed": "Do'konni almashtirib bo'lmadi. Qayta urinib ko'ring."
+  },
   "updater": {
     "currentVersion": "Joriy versiya",
     "checkForUpdates": "Yangilanishlarni tekshirish",

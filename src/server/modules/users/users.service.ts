@@ -122,6 +122,20 @@ export class UsersService {
     return null;
   }
 
+  /**
+   * Every store account a phone number has — one row per store, since users are per store — with
+   * the state of its store. For a login that names no store (the web dashboard), which keeps the
+   * accounts the password opens. Capped: each one costs a bcrypt compare.
+   */
+  async findStoreAccountsByPhone(phone: string) {
+    return this.prisma.user.findMany({
+      where: { phone, storeId: { not: null }, role: { not: UserRole.SUPER_ADMIN } },
+      include: { store: { select: { id: true, name: true, active: true, mode: true } } },
+      orderBy: { createdAt: 'asc' },
+      take: 20,
+    });
+  }
+
   async create(createUserDto: CreateUserDto, storeId: string) {
     // Check if user already exists in this store
     const existing = await this.prisma.user.findUnique({

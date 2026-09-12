@@ -3,12 +3,9 @@ import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { Button } from "@components/common/Button";
 import { Input } from "@components/common/Input";
-import { useTheme } from "@theme/ThemeProvider";
 import { auth as authApi } from "../../api/client";
 import { TopBar } from "./DevicesPage";
-import { ConfirmDialog } from "@components/common/ConfirmDialog";
-import { useAuthStore } from "../../store/auth-store";
-import { ArrowLeft, LogOut } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const Container = styled.div`
@@ -33,30 +30,6 @@ const SectionTitle = styled.h2`
   color: ${({ theme }) => theme.colors.text};
 `;
 
-const OptionRow = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: ${({ theme }) => theme.spacing.sm} 0;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
-
-  &:last-child {
-    border-bottom: none;
-  }
-`;
-
-const OptionLabel = styled.span`
-  color: ${({ theme }) => theme.colors.text};
-`;
-
-const Select = styled.select`
-  padding: ${({ theme }) => theme.spacing.sm};
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  border-radius: ${({ theme }) => theme.borderRadius};
-  background-color: ${({ theme }) => theme.colors.surface};
-  color: ${({ theme }) => theme.colors.text};
-`;
-
 const Form = styled.form`
   display: flex;
   flex-direction: column;
@@ -71,10 +44,9 @@ const FeedbackText = styled.p<{ $error?: boolean }>`
 `;
 
 export function UserSettings() {
-  const { t, i18n } = useTranslation();
-  const { mode, toggleTheme } = useTheme();
+  // Language, theme and signing out live in the top bar now (TopBar.tsx), on every screen size.
+  const { t } = useTranslation();
   const navigate = useNavigate();
-  const [language, setLanguageState] = useState(i18n.language || "ru");
 
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
@@ -85,12 +57,6 @@ export function UserSettings() {
     message: string;
     error: boolean;
   } | null>(null);
-
-  const handleLanguageChange = (lang: string) => {
-    setLanguageState(lang);
-    i18n.changeLanguage(lang);
-    localStorage.setItem("language", lang);
-  };
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,9 +96,6 @@ export function UserSettings() {
     }
   };
 
-  const { logout } = useAuthStore();
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-
   return (
     <Container>
       <TopBar>
@@ -145,29 +108,6 @@ export function UserSettings() {
         </Button>
         <Title>{t("settings.userSettings")}</Title>
       </TopBar>
-      <Section>
-        <SectionTitle>{t("settings.appearance")}</SectionTitle>
-
-        <OptionRow>
-          <OptionLabel>{t("settings.language")}</OptionLabel>
-          <Select
-            value={language}
-            onChange={(e) => handleLanguageChange(e.target.value)}
-          >
-            <option value="ru">Русский</option>
-            <option value="uz">O'zbekcha</option>
-          </Select>
-        </OptionRow>
-
-        <OptionRow>
-          <OptionLabel>{t("settings.theme")}</OptionLabel>
-          <Select value={mode} onChange={toggleTheme}>
-            <option value="light">{t("settings.lightTheme")}</option>
-            <option value="dark">{t("settings.darkTheme")}</option>
-          </Select>
-        </OptionRow>
-      </Section>
-
       <Section>
         <SectionTitle>{t("settings.changePassword")}</SectionTitle>
 
@@ -220,26 +160,6 @@ export function UserSettings() {
           <Button type="submit">{t("settings.updatePassword")}</Button>
         </Form>
       </Section>
-      <Section>
-        <SectionTitle>{t("auth.logout")}</SectionTitle>
-        {/* Signing out lives here rather than in the mobile bar: five section tabs is the limit,
-            and a destructive action does not belong one thumb-slip from the Reports tab. */}
-        <Button variant="danger" onClick={() => setShowLogoutConfirm(true)}>
-          <LogOut size={16} /> {t("auth.logout")}
-        </Button>
-      </Section>
-
-      {showLogoutConfirm && (
-        <ConfirmDialog
-          title={t("auth.logout")}
-          message={t("auth.logoutConfirm")}
-          confirmLabel={t("auth.logout")}
-          cancelLabel={t("common.cancel")}
-          variant="danger"
-          onConfirm={logout}
-          onCancel={() => setShowLogoutConfirm(false)}
-        />
-      )}
     </Container>
   );
 }

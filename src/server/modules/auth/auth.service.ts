@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
-import { JwtPayload, LoginResponse } from './types/auth.types';
+import { JwtPayload, LoginResponse, StoreChoice } from './types/auth.types';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { dashboardLoginBlockReason, type LoginClient } from './dashboard-access';
@@ -20,6 +20,11 @@ export class AuthService {
     const { storeId, phone, password } = loginDto;
 
     const user = await this.usersService.findByPhoneAndStore(phone, storeId);
+    // No store named and not a super admin: the web dashboard's login, which finds the stores
+    // itself. A terminal always names its store, and takes the path below unchanged.
+    if (!user && !storeId) {
+      return this.loginAcrossStores(loginDto, userAgent, ipAddress);
+    }
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -39,6 +44,140 @@ export class AuthService {
 
     await this.assertStoreCanUseDashboard(user.role, user.storeId, loginDto.client);
 
+    return this.issue(user, loginDto.client, undefined, userAgent, ipAddress);
+  }
+
+  /**
+   * Sign in by phone and password alone. One person with several stores has one account in each
+   * (users are per store), so this keeps the accounts the password opens, drops those whose store
+   * cannot be managed from here, and signs in to one of them — `preferredStoreId` when allowed, the
+   * first by name otherwise. The token lists them all, for switching (`switchStore`).
+   *
+   * An account with the same phone but another password is never offered: it may be someone
+   * else's, and it is not this password's to open.
+   */
+  private async loginAcrossStores(
+    dto: LoginDto,
+    userAgent?: string,
+    ipAddress?: string,
+  ): Promise<LoginResponse> {
+    const client = dto.client ?? 'dashboard';
+    const accounts = await this.usersService.findStoreAccountsByPhone(dto.phone);
+
+    const opened: typeof accounts = [];
+    for (const account of accounts) {
+      if (await bcrypt.compare(dto.password, account.password)) opened.push(account);
+    }
+    if (opened.length === 0) throw new UnauthorizedException('Invalid credentials');
+
+    const active = opened.filter((a) => a.active);
+    if (active.length === 0) throw new UnauthorizedException('Account is deactivated');
+
+    const allowed = active.filter(
+      (a) => !dashboardLoginBlockReason(a.role, a.storeId, a.store, client),
+    );
+    if (allowed.length === 0) {
+      // After the password, as for a single store: a wrong password reveals nothing about stores.
+      const first = active[0];
+      throw new ForbiddenException(
+        dashboardLoginBlockReason(first.role, first.storeId, first.store, client) as string,
+      );
+    }
+
+    allowed.sort((a, b) => (a.store?.name ?? '').localeCompare(b.store?.name ?? ''));
+    const chosen = allowed.find((a) => a.storeId === dto.preferredStoreId) ?? allowed[0];
+    return this.issue(
+      chosen,
+      dto.client,
+      allowed.map((a) => a.storeId as string),
+      userAgent,
+      ipAddress,
+    );
+  }
+
+  /**
+   * Move this sign-in to another of its stores: a new session for that store's account, and the
+   * current one ended. Only a store the token lists — the password opened its account at login.
+   */
+  async switchStore(
+    current: { phone: string; sessionId?: string; storeIds?: string[]; client?: LoginClient },
+    storeId: string,
+    userAgent?: string,
+    ipAddress?: string,
+  ): Promise<LoginResponse> {
+    const storeIds = current.storeIds ?? [];
+    if (!storeIds.includes(storeId)) {
+      throw new ForbiddenException('auth.errors.store_not_allowed');
+    }
+
+    const target = await this.prisma.user.findUnique({
+      where: { storeId_phone: { storeId, phone: current.phone } },
+      include: { store: { select: { active: true, mode: true } } },
+    });
+    if (!target || !target.active) {
+      throw new ForbiddenException('auth.errors.store_not_allowed');
+    }
+    const reason = dashboardLoginBlockReason(target.role, target.storeId, target.store, current.client);
+    if (reason) throw new ForbiddenException(reason);
+
+    if (current.sessionId) {
+      await this.prisma.userSession.updateMany({
+        where: { id: current.sessionId },
+        data: { isRevoked: true },
+      });
+    }
+    return this.issue(target, current.client, storeIds, userAgent, ipAddress);
+  }
+
+  /**
+   * The stores this sign-in can switch between, as they are now. A token that lists none — a
+   * terminal's, or one from before — lists its own store.
+   */
+  listStores(current: {
+    phone: string;
+    storeId: string | null;
+    storeIds?: string[];
+    client?: LoginClient;
+  }): Promise<StoreChoice[]> {
+    const ids = current.storeIds?.length
+      ? current.storeIds
+      : current.storeId
+        ? [current.storeId]
+        : [];
+    return this.storeChoices(current.phone, ids, current.client);
+  }
+
+  private async storeChoices(
+    phone: string,
+    storeIds: string[],
+    client?: LoginClient,
+  ): Promise<StoreChoice[]> {
+    if (storeIds.length === 0) return [];
+    const accounts = await this.prisma.user.findMany({
+      where: { phone, storeId: { in: storeIds }, active: true },
+      include: { store: { select: { id: true, name: true, active: true, mode: true } } },
+    });
+    return accounts
+      .filter((a) => a.store && !dashboardLoginBlockReason(a.role, a.storeId, a.store, client))
+      .map((a) => ({ id: a.storeId as string, name: a.store!.name, role: a.role }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /** A session and a token for `user`. `storeIds`, when given, are the stores it may switch to. */
+  private async issue(
+    user: {
+      id: string;
+      storeId: string | null;
+      phone: string;
+      role: UserRole;
+      nameUz: string;
+      nameRu: string;
+    },
+    client: LoginClient | undefined,
+    storeIds: string[] | undefined,
+    userAgent?: string,
+    ipAddress?: string,
+  ): Promise<LoginResponse> {
     const deviceName = await this.resolveDeviceName(user.id, ipAddress);
     const session = await this.prisma.userSession.create({
       data: { userId: user.id, userAgent, ipAddress, deviceName },
@@ -52,7 +191,8 @@ export class AuthService {
       sessionId: session.id,
       // Carried so `validateUser()` can re-apply the store gate the same way this login did.
       // A POS token for an OFFLINE_ONLY store is legitimate; a dashboard one is not.
-      client: loginDto.client,
+      client,
+      ...(storeIds ? { storeIds } : {}),
     };
 
     const token = this.jwtService.sign(payload);
@@ -67,6 +207,7 @@ export class AuthService {
         nameUz: user.nameUz,
         nameRu: user.nameRu,
       },
+      ...(storeIds ? { stores: await this.storeChoices(user.phone, storeIds, client) } : {}),
     };
   }
 
@@ -146,7 +287,14 @@ export class AuthService {
       }
     }
 
-    return { ...user, storeId: payload.storeId, sessionId: payload.sessionId };
+    return {
+      ...user,
+      storeId: payload.storeId,
+      sessionId: payload.sessionId,
+      // For switching stores and listing them (`switchStore`, `listStores`).
+      storeIds: payload.storeIds ?? [],
+      client: payload.client,
+    };
   }
 
   async getSessions(userId: string) {

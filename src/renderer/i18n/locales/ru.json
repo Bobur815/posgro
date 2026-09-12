@@ -957,6 +957,16 @@
       "pendingDiscarded": "Передача отменена. Перезапуск…"
     }
   },
+  "topBar": {
+    "organizations": "Организации",
+    "refresh": "Обновить",
+    "news": "Новости",
+    "comingSoon": "скоро",
+    "language": "Язык",
+    "profile": "Профиль",
+    "theme": "Тема",
+    "switchFailed": "Не удалось переключить магазин. Попробуйте ещё раз."
+  },
   "updater": {
     "currentVersion": "Текущая версия",
     "checkForUpdates": "Проверить обновления",

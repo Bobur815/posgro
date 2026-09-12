@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import React from "react";
+import { NavLink } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import {
@@ -11,7 +11,6 @@ import {
   ClipboardCheck,
   Settings,
   User,
-  LogOut,
   ChevronLeft,
   ChevronRight,
   Truck,
@@ -24,7 +23,6 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../../store/auth-store";
 import { useSidebar } from "@context/SidebarContext";
-import { ConfirmDialog } from "@components/common/ConfirmDialog";
 
 const SIDEBAR_WIDTH = 220;
 const MINI_SIDEBAR_WIDTH = 70;
@@ -226,92 +224,12 @@ const NavItemWrapper = styled.div`
   }
 `;
 
-const BottomSection = styled.div<{ $collapsed: boolean }>`
-  padding: ${({ theme }) => theme.spacing.md};
-  border-top: 1px solid ${({ theme }) => theme.colors.border};
-  display: flex;
-  flex-direction: column;
-  gap: ${({ theme }) => theme.spacing.sm};
-`;
-
-const UserSection = styled.div<{ $collapsed: boolean }>`
-  display: flex;
-  align-items: center;
-  gap: ${({ theme }) => theme.spacing.sm};
-  padding: ${({ theme }) => theme.spacing.sm};
-  justify-content: ${({ $collapsed }) =>
-    $collapsed ? "center" : "flex-start"};
-`;
-
-const UserName = styled.span`
-  font-weight: 500;
-  font-size: 13px;
-  color: ${({ theme }) => theme.colors.text};
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-`;
-
-const UserRole = styled.span`
-  font-size: 11px;
-  color: ${({ theme }) => theme.colors.textSecondary};
-  background-color: ${({ theme }) => theme.colors.primary}20;
-  padding: 1px 6px;
-  border-radius: 10px;
-  white-space: nowrap;
-`;
-
-const UserDetails = styled.div<{ $collapsed: boolean }>`
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  overflow: hidden;
-  opacity: ${({ $collapsed }) => ($collapsed ? 0 : 1)};
-  max-width: ${({ $collapsed }) => ($collapsed ? "0" : "180px")};
-  transition:
-    opacity 0.2s ease,
-    max-width 0.3s ease;
-`;
-
-const LogoutButton = styled.button<{ $collapsed: boolean }>`
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: ${({ theme }) => theme.spacing.sm};
-  padding: ${({ theme }) => theme.spacing.sm};
-  border-radius: ${({ theme }) => theme.borderRadius};
-  background: none;
-  border: none;
-  color: ${({ theme }) => theme.colors.error};
-  cursor: pointer;
-  transition: all 0.2s;
-  justify-content: ${({ $collapsed }) =>
-    $collapsed ? "center" : "flex-start"};
-
-  &:hover {
-    background-color: ${({ theme }) => theme.colors.error}10;
-  }
-`;
-
 export function Sidebar() {
-  const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
+  const { t } = useTranslation();
+  const { user } = useAuthStore();
   const { isCollapsed, toggleSidebar } = useSidebar();
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
-
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-
-  const handleLogout = async () => {
-    await logout();
-    navigate("/login");
-  };
-
-  const getUserName = () => {
-    if (!user) return "";
-    return i18n.language === "uz" ? user.nameUz : user.nameRu;
-  };
 
   const renderNavItem = (
     to: string,
@@ -335,8 +253,8 @@ export function Sidebar() {
    * tappable, and the app has ten destinations. Each section's sub-pages are tabs at the top of
    * its own pages (see SubNav), so nothing is hidden behind a drawer and everything is two taps.
    *
-   * Logout is not here either: it lives in Settings, where a destructive action belongs rather
-   * than one thumb-slip away from the Reports tab.
+   * Signing out is not here either: it is in the top bar's profile menu (TopBar.tsx), behind a
+   * deliberate tap rather than one thumb-slip away from the Reports tab.
    */
   const mobileNavItems = isSuperAdmin
     ? [
@@ -480,43 +398,6 @@ export function Sidebar() {
             </NavSection>
           )}
         </Nav>
-
-        <BottomSection $collapsed={isCollapsed}>
-          {user && (
-            <NavItemWrapper>
-              <UserSection $collapsed={isCollapsed}>
-                <IconWrapper>
-                  <User size={18} />
-                </IconWrapper>
-                <UserDetails $collapsed={isCollapsed}>
-                  <UserName>{getUserName()}</UserName>
-                  <UserRole>
-                    {user.role === "SUPER_ADMIN"
-                      ? "Super Admin"
-                      : user.role === "ADMIN"
-                        ? t("users.admin")
-                        : t("users.cashier")}
-                  </UserRole>
-                </UserDetails>
-              </UserSection>
-              {isCollapsed && <Tooltip>{getUserName()}</Tooltip>}
-            </NavItemWrapper>
-          )}
-          <NavItemWrapper>
-            <LogoutButton
-              $collapsed={isCollapsed}
-              // Confirm here too. The dialog existed only for the mobile button, which has moved to
-              // the account page — and signing out of a till mid-shift is worth one tap to confirm.
-              onClick={() => setShowLogoutConfirm(true)}
-            >
-              <IconWrapper>
-                <LogOut size={18} />
-              </IconWrapper>
-              <NavText $collapsed={isCollapsed}>{t("auth.logout")}</NavText>
-            </LogoutButton>
-            {isCollapsed && <Tooltip>{t("auth.logout")}</Tooltip>}
-          </NavItemWrapper>
-        </BottomSection>
       </Container>
 
       {/* Mobile bottom nav — five sections; sub-pages are tabs within each. */}
@@ -528,18 +409,6 @@ export function Sidebar() {
           </MobileNavItem>
         ))}
       </MobileBottomNav>
-
-      {showLogoutConfirm && (
-        <ConfirmDialog
-          title={t("auth.logout")}
-          message={t("auth.logoutConfirm")}
-          confirmLabel={t("auth.logout")}
-          cancelLabel={t("common.cancel")}
-          variant="danger"
-          onConfirm={handleLogout}
-          onCancel={() => setShowLogoutConfirm(false)}
-        />
-      )}
     </>
   );
 }

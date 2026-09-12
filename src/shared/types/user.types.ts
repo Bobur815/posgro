@@ -57,6 +57,8 @@ export interface AuthUser {
   role: UserRole;
   nameUz: string;
   nameRu: string;
+  /** The store this sign-in is in — sent by the VPS; the web dashboard's store switcher reads it. */
+  storeId?: string | null;
 }
 
 /** User object returned by users:getAll IPC (matches DB select) */

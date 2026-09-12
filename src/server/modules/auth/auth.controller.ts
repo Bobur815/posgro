@@ -19,6 +19,16 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CurrentUser as CurrentUserType } from './types/auth.types';
 import { User } from '@prisma/client';
+import { SwitchStoreDto } from './dto/switch-store.dto';
+import type { LoginClient } from './dashboard-access';
+
+/** What `validateUser` puts on the request. */
+type SignedInUser = User & {
+  storeId: string | null;
+  sessionId?: string;
+  storeIds?: string[];
+  client?: LoginClient;
+};
 
 @ApiTags('auth')
 @Controller('auth')
@@ -32,6 +42,27 @@ export class AuthController {
     const userAgent = req.headers['user-agent'];
     const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip;
     return this.authService.login(loginDto, userAgent, ipAddress);
+  }
+
+  /** Open another of the stores this sign-in may open, without the password again. */
+  @Post('switch-store')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Switch to another store this sign-in may open' })
+  async switchStore(@CurrentUser() user: SignedInUser, @Body() dto: SwitchStoreDto, @Req() req: Request) {
+    const userAgent = req.headers['user-agent'];
+    const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip;
+    return this.authService.switchStore(user, dto.storeId, userAgent, ipAddress);
+  }
+
+  /** The stores this sign-in can switch between, for the dashboard's store switcher. */
+  @Get('stores')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'List the stores this sign-in can switch between' })
+  async stores(@CurrentUser() user: SignedInUser) {
+    return this.authService.listStores(user);
   }
 
   @Post('logout')

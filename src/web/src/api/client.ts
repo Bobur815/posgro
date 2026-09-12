@@ -64,12 +64,31 @@ axiosInstance.interceptors.response.use(
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
+/** One store this sign-in can open — the store switcher's entries. */
+export interface StoreChoice {
+  id: string;
+  name: string;
+  role: string;
+}
+
 export const auth = {
-  login: async (phone: string, password: string, storeId?: string) => {
+  /**
+   * Phone and password only: the server opens every store the password opens and signs in to
+   * `preferredStoreId` (the one this browser last used) when it may.
+   */
+  login: async (phone: string, password: string, preferredStoreId?: string) => {
     const body: Record<string, string> = { phone, password };
-    if (storeId) body.storeId = storeId;
+    if (preferredStoreId) body.preferredStoreId = preferredStoreId;
     const { data } = await axiosInstance.post("/auth/login", body);
-    return data as { token: string; user: unknown };
+    return data as { token: string; user: unknown; stores?: StoreChoice[] };
+  },
+  switchStore: async (storeId: string) => {
+    const { data } = await axiosInstance.post("/auth/switch-store", { storeId });
+    return data as { token: string; user: unknown; stores?: StoreChoice[] };
+  },
+  getStores: async (): Promise<StoreChoice[]> => {
+    const { data } = await axiosInstance.get("/auth/stores");
+    return data;
   },
   logout: async () => {
     try {
