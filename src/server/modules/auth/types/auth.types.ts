@@ -33,6 +33,8 @@ export interface StoreChoice {
   name: string;
   /** The role of this person's account in that store. */
   role: UserRole;
+  /** At least one of the store's terminals has reported in lately — the store is open. */
+  online: boolean;
 }
 
 export interface LoginResponse {

@@ -69,6 +69,8 @@ export interface StoreChoice {
   id: string;
   name: string;
   role: string;
+  /** At least one of the store's terminals has reported in lately — the store is open. */
+  online: boolean;
 }
 
 export const auth = {

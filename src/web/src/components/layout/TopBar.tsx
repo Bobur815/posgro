@@ -2,7 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
-import { Check, ChevronDown, LogOut, Moon, Newspaper, RefreshCw, Sun } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  LogOut,
+  Moon,
+  Newspaper,
+  RefreshCw,
+  Sun,
+} from "lucide-react";
 import { useTheme } from "@theme/ThemeProvider";
 import { ConfirmDialog } from "@components/common/ConfirmDialog";
 import { useToast } from "@context/ToastContext";
@@ -94,12 +102,17 @@ const StoreName = styled.span`
   white-space: nowrap;
 `;
 
-const Dot = styled.span`
+/**
+ * Whether the store is open: green while at least one of its terminals reports in (the main, in a
+ * LAN shop), red when none has lately — see TERMINAL_ONLINE_WINDOW_MS on the server.
+ */
+const Dot = styled.span<{ $online: boolean }>`
   width: 8px;
   height: 8px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: ${({ theme }) => theme.colors.success ?? "#16a34a"};
+  background: ${({ theme, $online }) =>
+    $online ? (theme.colors.success ?? "#16a34a") : (theme.colors.error ?? "#dc2626")};
 `;
 
 const RoundButton = styled.button`
@@ -180,7 +193,8 @@ const Menu = styled.div<{ $align: "left" | "right" }>`
   border: 1px solid ${({ theme }) => theme.colors.border};
   border-radius: 10px;
   background: ${({ theme }) => theme.colors.surface};
-  box-shadow: ${({ theme }) => theme.shadows?.md ?? "0 8px 24px rgba(0, 0, 0, 0.12)"};
+  box-shadow: ${({ theme }) =>
+    theme.shadows?.md ?? "0 8px 24px rgba(0, 0, 0, 0.12)"};
 `;
 
 const MenuHeader = styled.div`
@@ -209,7 +223,8 @@ const MenuItem = styled.button<{ $danger?: boolean }>`
   border: none;
   border-radius: 6px;
   background: none;
-  color: ${({ theme, $danger }) => ($danger ? theme.colors.error : theme.colors.text)};
+  color: ${({ theme, $danger }) =>
+    $danger ? theme.colors.error : theme.colors.text};
   font-size: 14px;
   text-align: left;
   cursor: pointer;
@@ -231,7 +246,8 @@ function usePopover() {
   useEffect(() => {
     if (!open) return;
     const onPointer = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -275,9 +291,13 @@ export function TopBar() {
   const [switching, setSwitching] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
 
-  // The list as it is now — a store deactivated since login drops out of it.
+  // The list as it is now — a store deactivated since login drops out of it — and each store's dot
+  // kept current. A terminal reports in every few minutes, so once a minute is plenty.
   useEffect(() => {
-    if (user?.storeId) void loadStores();
+    if (!user?.storeId) return;
+    void loadStores();
+    const timer = setInterval(() => void loadStores(), 60_000);
+    return () => clearInterval(timer);
   }, [user?.storeId, loadStores]);
 
   if (!user) return null;
@@ -291,7 +311,10 @@ export function TopBar() {
         : t("users.cashier");
   const current = stores.find((s) => s.id === user.storeId);
   const canSwitch = stores.length > 1 && !switching;
-  const language = LANGUAGES.find((l) => i18n.language?.startsWith(l.code)) ?? LANGUAGES[0];
+  const openLabel = (online: boolean) =>
+    online ? t("topBar.storeOnline") : t("topBar.storeOffline");
+  const language =
+    LANGUAGES.find((l) => i18n.language?.startsWith(l.code)) ?? LANGUAGES[0];
 
   const pickStore = async (storeId: string) => {
     storeMenu.setOpen(false);
@@ -322,41 +345,50 @@ export function TopBar() {
         {user.storeId && (
           <StoreBlock>
             <StoreLabel>{t("topBar.organizations")}</StoreLabel>
-            <Anchor ref={storeMenu.ref}>
-              <StoreButton
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <Anchor ref={storeMenu.ref}>
+                <StoreButton
+                  type="button"
+                  disabled={!canSwitch}
+                  onClick={() => storeMenu.setOpen((o) => !o)}
+                  aria-haspopup="menu"
+                  aria-expanded={storeMenu.open}
+                >
+                  <Dot
+                    $online={Boolean(current?.online)}
+                    title={openLabel(Boolean(current?.online))}
+                  />
+                  <StoreName>{current?.name ?? "…"}</StoreName>
+                  {stores.length > 1 && <ChevronDown size={16} />}
+                </StoreButton>
+                {storeMenu.open && (
+                  <Menu $align="left" role="menu">
+                    {stores.map((store) => (
+                      <MenuItem
+                        key={store.id}
+                        type="button"
+                        onClick={() => pickStore(store.id)}
+                      >
+                        <Dot $online={store.online} title={openLabel(store.online)} />
+                        <span>{store.name}</span>
+                        <MenuSpacer />
+                        {store.id === user.storeId && <Check size={16} />}
+                      </MenuItem>
+                    ))}
+                  </Menu>
+                )}
+              </Anchor>
+              <RoundButton
                 type="button"
-                disabled={!canSwitch}
-                onClick={() => storeMenu.setOpen((o) => !o)}
-                aria-haspopup="menu"
-                aria-expanded={storeMenu.open}
+                title={t("topBar.refresh")}
+                aria-label={t("topBar.refresh")}
+                onClick={() => window.location.reload()}
               >
-                <Dot />
-                <StoreName>{current?.name ?? "…"}</StoreName>
-                {stores.length > 1 && <ChevronDown size={16} />}
-              </StoreButton>
-              {storeMenu.open && (
-                <Menu $align="left" role="menu">
-                  {stores.map((store) => (
-                    <MenuItem key={store.id} type="button" onClick={() => pickStore(store.id)}>
-                      <Dot />
-                      <span>{store.name}</span>
-                      <MenuSpacer />
-                      {store.id === user.storeId && <Check size={16} />}
-                    </MenuItem>
-                  ))}
-                </Menu>
-              )}
-            </Anchor>
+                <RefreshCw size={17} />
+              </RoundButton>
+            </div>
           </StoreBlock>
         )}
-        <RoundButton
-          type="button"
-          title={t("topBar.refresh")}
-          aria-label={t("topBar.refresh")}
-          onClick={() => window.location.reload()}
-        >
-          <RefreshCw size={17} />
-        </RoundButton>
       </Side>
 
       <Side>
@@ -384,7 +416,11 @@ export function TopBar() {
           {langMenu.open && (
             <Menu $align="right" role="menu">
               {LANGUAGES.map((l) => (
-                <MenuItem key={l.code} type="button" onClick={() => pickLanguage(l.code)}>
+                <MenuItem
+                  key={l.code}
+                  type="button"
+                  onClick={() => pickLanguage(l.code)}
+                >
                   <span>{l.label}</span>
                   <MenuSpacer />
                   {l.code === language.code && <Check size={16} />}
@@ -415,7 +451,11 @@ export function TopBar() {
                 {mode === "dark" ? <Sun size={16} /> : <Moon size={16} />}
                 <span>{t("topBar.theme")}</span>
                 <MenuSpacer />
-                <span>{mode === "dark" ? t("settings.darkTheme") : t("settings.lightTheme")}</span>
+                <span>
+                  {mode === "dark"
+                    ? t("settings.darkTheme")
+                    : t("settings.lightTheme")}
+                </span>
               </MenuItem>
               <MenuItem
                 type="button"

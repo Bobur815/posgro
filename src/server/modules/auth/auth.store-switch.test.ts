@@ -39,7 +39,11 @@ function account(storeId: string, storeName: string, extra: Record<string, unkno
   };
 }
 
-function build(accounts: Account[], superAdmin: unknown = null) {
+function build(
+  accounts: Account[],
+  superAdmin: unknown = null,
+  heartbeats: Array<{ storeId: string; updatedAt: Date }> = [],
+) {
   const sessions: Array<{ id: string; userId: string }> = [];
   const revoked: string[] = [];
 
@@ -67,6 +71,11 @@ function build(accounts: Account[], superAdmin: unknown = null) {
         return { count: 1 };
       }),
     },
+    terminalHeartbeat: {
+      findMany: jest.fn(async ({ where }: any) =>
+        heartbeats.filter((h) => where.storeId.in.includes(h.storeId) && h.updatedAt >= where.updatedAt.gte),
+      ),
+    },
     user: {
       findUnique: jest.fn(
         async ({ where }: any) =>
@@ -93,7 +102,7 @@ describe('login without a store ID', () => {
     const res = await service.login(login());
     expect(res.user.storeId).toBe('A');
     expect(claims(res.token).storeIds).toEqual(['A']);
-    expect(res.stores).toEqual([{ id: 'A', name: 'Alpha', role: 'ADMIN' }]);
+    expect(res.stores).toEqual([{ id: 'A', name: 'Alpha', role: 'ADMIN', online: false }]);
   });
 
   it('opens the store this browser used last when it may, else the first by name', async () => {
@@ -190,7 +199,22 @@ describe('listing stores', () => {
   it('a token without a list lists its own store', async () => {
     const { service } = build([account('A', 'Alpha'), account('B', 'Bravo')]);
     expect(await service.listStores({ phone: PHONE, storeId: 'A', storeIds: [] })).toEqual([
-      { id: 'A', name: 'Alpha', role: 'ADMIN' },
+      { id: 'A', name: 'Alpha', role: 'ADMIN', online: false },
+    ]);
+  });
+
+  // The switcher's dot: green while a terminal of the store reports in, red when none has lately.
+  it('marks a store open while one of its terminals has reported in lately', async () => {
+    const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000);
+    const { service } = build([account('A', 'Alpha'), account('B', 'Bravo'), account('C', 'Charlie')], null, [
+      { storeId: 'A', updatedAt: minutesAgo(3) },
+      { storeId: 'B', updatedAt: minutesAgo(45) },
+    ]);
+    const stores = await service.listStores({ phone: PHONE, storeId: 'A', storeIds: ['A', 'B', 'C'] });
+    expect(stores.map((s) => [s.id, s.online])).toEqual([
+      ['A', true],
+      ['B', false],
+      ['C', false],
     ]);
   });
 });

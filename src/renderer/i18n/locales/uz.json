@@ -953,7 +953,9 @@
     "language": "Til",
     "profile": "Profil",
     "theme": "Mavzu",
-    "switchFailed": "Do'konni almashtirib bo'lmadi. Qayta urinib ko'ring."
+    "switchFailed": "Do'konni almashtirib bo'lmadi. Qayta urinib ko'ring.",
+    "storeOnline": "Do'kon ishlayapti: kassa aloqada",
+    "storeOffline": "Do'konning hech bir kassasi hozir aloqada emas"
   },
   "updater": {
     "currentVersion": "Joriy versiya",

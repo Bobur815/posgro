@@ -8,6 +8,14 @@ import { UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { dashboardLoginBlockReason, type LoginClient } from './dashboard-access';
 
+/**
+ * How recently one of a store's terminals must have reported in (`POST /terminals/heartbeat`) for
+ * the store to count as open. A terminal reports once per sync cycle — every 5 minutes by default,
+ * for as long as the app is running — so this allows two missed cycles before the store reads as
+ * closed. Judged by the server's clock (the row's `updatedAt`), never the till's.
+ */
+const TERMINAL_ONLINE_WINDOW_MS = 12 * 60_000;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -157,9 +165,27 @@ export class AuthService {
       where: { phone, storeId: { in: storeIds }, active: true },
       include: { store: { select: { id: true, name: true, active: true, mode: true } } },
     });
+
+    // Open = at least one of its terminals (the main, in a LAN shop — satellites report to it) has
+    // sent a heartbeat within the window.
+    const live = await this.prisma.terminalHeartbeat.findMany({
+      where: {
+        storeId: { in: storeIds },
+        updatedAt: { gte: new Date(Date.now() - TERMINAL_ONLINE_WINDOW_MS) },
+      },
+      select: { storeId: true },
+      distinct: ['storeId'],
+    });
+    const open = new Set(live.map((h) => h.storeId));
+
     return accounts
       .filter((a) => a.store && !dashboardLoginBlockReason(a.role, a.storeId, a.store, client))
-      .map((a) => ({ id: a.storeId as string, name: a.store!.name, role: a.role }))
+      .map((a) => ({
+        id: a.storeId as string,
+        name: a.store!.name,
+        role: a.role,
+        online: open.has(a.storeId as string),
+      }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
