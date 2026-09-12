@@ -250,33 +250,46 @@ export class ProductsService {
   async hardDelete(id: number, storeId: string) {
     await this.findById(id, storeId);
 
-    // Collect sale IDs that have items for this product
-    const affectedItems = await this.prisma.saleItem.findMany({
-      where: { productId: id },
-      select: { saleId: true },
-    });
-    const affectedSaleIds = [...new Set(affectedItems.map((i) => i.saleId))];
+    // One transaction: every row that references the product goes with it, or none does. It used
+    // to be a run of separate deletes, so a delete refused at the last step — a foreign key nobody
+    // had cleared — had already removed the product's sale lines, emptied sales and arrivals, and
+    // left the product standing. Generous timeout: a long-sold product has many lines.
+    await this.prisma.$transaction(
+      async (tx) => {
+        // Collect sale IDs that have items for this product
+        const affectedItems = await tx.saleItem.findMany({
+          where: { productId: id },
+          select: { saleId: true },
+        });
+        const affectedSaleIds = [...new Set(affectedItems.map((i) => i.saleId))];
 
-    // Remove sale items for this product
-    await this.prisma.saleItem.deleteMany({ where: { productId: id } });
+        // Remove sale items for this product
+        await tx.saleItem.deleteMany({ where: { productId: id } });
 
-    // Delete sales that are now empty (no remaining items)
-    if (affectedSaleIds.length > 0) {
-      await this.prisma.sale.deleteMany({
-        where: { id: { in: affectedSaleIds }, items: { none: {} } },
-      });
-    }
+        // Delete sales that are now empty (no remaining items)
+        if (affectedSaleIds.length > 0) {
+          await tx.sale.deleteMany({
+            where: { id: { in: affectedSaleIds }, items: { none: {} } },
+          });
+        }
 
-    // Delete inventory arrivals
-    await this.prisma.inventoryArrival.deleteMany({ where: { productId: id } });
+        // Delete inventory arrivals
+        await tx.inventoryArrival.deleteMany({ where: { productId: id } });
 
-    // Drop the product's lines from any stocktake document — the FK is RESTRICT, so the
-    // delete below would fail otherwise. Each document's stored summary totals are
-    // unaffected; only the per-product line disappears.
-    await this.prisma.inventoryCountItem.deleteMany({ where: { productId: id } });
+        // Drop the product's lines from any stocktake document — the FK is RESTRICT, so the
+        // delete below would fail otherwise. Each document's stored summary totals are
+        // unaffected; only the per-product line disappears.
+        await tx.inventoryCountItem.deleteMany({ where: { productId: id } });
 
-    // Hard delete the product
-    await this.prisma.product.delete({ where: { id } });
+        // Its stock-ledger rows (stock_movements.product_id is RESTRICT too). They describe a
+        // product, and sales, that no longer exist.
+        await tx.stockMovement.deleteMany({ where: { productId: id } });
+
+        // Hard delete the product
+        await tx.product.delete({ where: { id } });
+      },
+      { timeout: 30_000 },
+    );
 
     return { success: true };
   }
