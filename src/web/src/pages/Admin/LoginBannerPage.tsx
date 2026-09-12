@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import { siteConfig, type LoginBanner } from "../../api/client";
+import { BannerBrand } from "../../branding";
 
 // ─── Styled Components ────────────────────────────────────────────────────────
 
@@ -321,7 +322,11 @@ export function LoginBannerPage() {
                 </UploadFileName>
               </UploadActions>
             </UploadArea>
-            <Hint>JPEG, PNG, GIF or WebP · max 5 MB. Leave empty to use the default gradient.</Hint>
+            <Hint>
+              JPEG, PNG, GIF or WebP · max 5 MB (under 3 MB so terminals can keep it offline).
+              Leave empty to use the default gradient. The POSGRO logo is added in the top-left
+              corner automatically — the image itself should not include it.
+            </Hint>
           </Field>
 
           <Field>
@@ -355,6 +360,7 @@ export function LoginBannerPage() {
         <PreviewCard>
           <PreviewLabel>Preview</PreviewLabel>
           <PreviewPanel $imageUrl={previewUrl || undefined}>
+            <BannerBrand compact />
             {!hasOverlay && !previewUrl && (
               <PreviewEmpty>Default gradient</PreviewEmpty>
             )}

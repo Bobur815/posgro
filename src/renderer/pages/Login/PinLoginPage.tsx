@@ -86,6 +86,34 @@ const RightSubtitle = styled.p`
 `;
 
 /**
+ * The POSGRO mark in the banner's top-left corner, drawn over whatever image is uploaded on the
+ * web dashboard's Login Banner page — so no image has to carry the logo, and every future one gets
+ * it without editing. Always the light-theme mark with white lettering, since it sits on a photo;
+ * the scrim keeps the lettering readable over a pale sky. The web login draws the same mark
+ * (`web/src/branding/BannerBrand.tsx`).
+ */
+const BannerBrand = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 32px 32px 64px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.35) 0%, transparent 100%);
+  pointer-events: none;
+`;
+
+const BannerBrandName = styled.span`
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+`;
+
+/**
  * The PIN pad scales with the screen, not with this card — the card is width-capped at 400px, so
  * it measures the same on a 1024×768 monoblock as on a 1080p desktop and can tell you nothing
  * about either. Height is the scarce axis here (the card is nearly as tall as a 768px screen),
@@ -727,6 +755,10 @@ export function PinLoginPage() {
       </LeftPanel>
 
       <RightPanel $imageUrl={banner?.imageUrl || undefined}>
+        <BannerBrand aria-hidden="true">
+          <POSGROIcon theme="light" size={56} />
+          <BannerBrandName>POSGRO</BannerBrandName>
+        </BannerBrand>
         {(banner?.title || banner?.subtitle) && (
           <RightOverlay>
             {banner.title && <RightTitle>{banner.title}</RightTitle>}
