@@ -24,14 +24,21 @@ const Container = styled.div`
   background-color: ${({ theme }) => theme.colors.background};
 `;
 
+/* 40% of the window, the banner 60%. Percentage bases that add up to the whole leave nothing to
+   grow into, so the split is exact — as grow ratios over a zero basis it was not, because this
+   panel's padding sat outside its share. border-box keeps the padding inside the 40%; min-width: 0
+   stops the card's own width pushing the panel past it. Where the banner is hidden (narrow
+   screens), this panel grows into the whole width. */
 const LeftPanel = styled.div`
-  flex: 1;
+  flex: 1 1 40%;
+  box-sizing: border-box;
+  min-width: 0;
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   /* 32px (theme.spacing.xl) at 768px of height and above; a shorter screen spends it on the pad
-     instead. Horizontally it never matters — the card is capped at 400px inside a half-window. */
+     instead. Horizontally the card is capped at 400px, and narrows with the panel below that. */
   padding: clamp(16px, 4.17vmin, ${({ theme }) => theme.spacing.xl});
   background-color: ${({ theme }) => theme.colors.surface};
 
@@ -44,7 +51,7 @@ const LeftPanel = styled.div`
 `;
 
 const RightPanel = styled.div<{ $imageUrl?: string }>`
-  flex: 1;
+  flex: 1 1 60%;
   position: relative;
   overflow: hidden;
   background: ${({ $imageUrl }) =>
