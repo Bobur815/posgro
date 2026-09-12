@@ -745,6 +745,11 @@ Deferred, each a known gap rather than a bug:
   database — kept only in `pos-{store}.pre-handoff.db`.
 - **The VCR stays with its machine** (§11.4): a new main without REGOS VCR configured queues its
   receipts as not fiscalized. The takeover dialog says so; nothing moves the device config.
+- **Dashboard deletions reach a satellite only through its main.** A main learns of a product
+  deleted on the web dashboard from `GET /products/deleted` (`syncDeletedProducts`, VPS only). If
+  local history references it, the main deactivates it and the satellite pulls that as an update.
+  If not, the main deletes it outright, and the satellite keeps a cached copy it cannot sell (the
+  main refuses an unknown barcode).
 - **An intermittent full-suite failure** in `satellite.e2e`'s "older generation" case, seen once
   in ~7 full runs and never alone. Most likely the 8 s client timeout on a token fetch whose
   bcrypt check ran on a saturated machine — which reads as unreachable, not superseded.

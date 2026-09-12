@@ -165,6 +165,12 @@ export class ProductsService {
       );
     }
 
+    // Re-adding a barcode that was deleted: its deletion record goes, so terminals stop treating it
+    // as deleted (the deletion feed also skips barcodes that are live again, as a backstop).
+    await this.prisma.deletedProduct.deleteMany({
+      where: { storeId, barcode: createProductDto.barcode },
+    });
+
     const nextCode = await this.getNextStoreProductCode(storeId);
 
     return this.prisma.product.create({
@@ -248,7 +254,9 @@ export class ProductsService {
   }
 
   async hardDelete(id: number, storeId: string) {
-    await this.findById(id, storeId);
+    // The dashboard's delete button sends the real DB id: resolve by it, not by the store code the
+    // default lookup tries first — that could name a different product than the one deleted below.
+    await this.findById(id, storeId, true);
 
     // One transaction: every row that references the product goes with it, or none does. It used
     // to be a run of separate deletes, so a delete refused at the last step — a foreign key nobody
@@ -285,13 +293,39 @@ export class ProductsService {
         // product, and sales, that no longer exist.
         await tx.stockMovement.deleteMany({ where: { productId: id } });
 
-        // Hard delete the product
-        await tx.product.delete({ where: { id } });
+        // Hard delete the product, and remember it: terminals drop their copy on the next sync and
+        // cannot upload it back (see findDeletedSince, syncBulk).
+        const removed = await tx.product.delete({ where: { id } });
+        await tx.deletedProduct.create({
+          data: { storeId: removed.storeId, barcode: removed.barcode, productId: removed.id },
+        });
       },
       { timeout: 30_000 },
     );
 
     return { success: true };
+  }
+
+  /**
+   * Products deleted since `since`, oldest first, for terminals to drop their copy.
+   *
+   * A barcode that is live again — re-added, or given to another product — is left out: a terminal
+   * applying an old deletion after pulling the new product would otherwise remove a live one.
+   */
+  async findDeletedSince(storeId: string, since?: Date) {
+    const rows = await this.prisma.deletedProduct.findMany({
+      where: { storeId, ...(since ? { deletedAt: { gt: since } } : {}) },
+      orderBy: { deletedAt: "asc" },
+      select: { barcode: true, productId: true, deletedAt: true },
+    });
+    if (rows.length === 0) return rows;
+
+    const live = await this.prisma.product.findMany({
+      where: { storeId, barcode: { in: rows.map((r) => r.barcode) } },
+      select: { barcode: true },
+    });
+    const liveBarcodes = new Set(live.map((p) => p.barcode));
+    return rows.filter((r) => !liveBarcodes.has(r.barcode));
   }
 
   async updateStock(id: number, storeId: string, quantity: number) {
@@ -403,10 +437,15 @@ export class ProductsService {
       piecesPerBox?: number | null;
       boxPrice?: number | null;
       boxBarcode?: string | null;
+      mxik?: string | null;
+      packageCode?: string | null;
+      vatRate?: number | null;
+      isMarked?: boolean | null;
     }>,
   ) {
     let created = 0,
       skipped = 0,
+      deleted = 0,
       errors = 0;
     for (const p of products) {
       try {
@@ -422,6 +461,17 @@ export class ProductsService {
           // products-sync.ts) and CREATE brand-new offline products (the else branch below).
           // Stock itself flows only via sale sync (decrements) and inventory arrivals (increments).
           skipped++;
+        } else if (
+          await this.prisma.deletedProduct.findFirst({
+            where: { storeId, barcode: p.barcode },
+            select: { id: true },
+          })
+        ) {
+          // Deleted on the dashboard. A terminal that still holds it — one that has not synced the
+          // deletion yet, or an older build that never will — must not bring it back: it came back
+          // as a new product, with the next store code and without its MXIK. Re-adding it is done
+          // on the dashboard, which clears this record (see create).
+          deleted++;
         } else {
           await this.prisma.product.create({
             data: {
@@ -444,6 +494,11 @@ export class ProductsService {
               piecesPerBox: p.piecesPerBox ?? null,
               boxPrice: p.boxPrice ?? null,
               boxBarcode: p.boxBarcode || null,
+              // A product created offline keeps its fiscal identity on the way up.
+              mxik: p.mxik || null,
+              packageCode: p.packageCode || null,
+              vatRate: p.vatRate ?? null,
+              isMarked: p.isMarked ?? null,
               storeProductCode: await this.getNextStoreProductCode(storeId),
             },
           });
@@ -453,6 +508,6 @@ export class ProductsService {
         errors++;
       }
     }
-    return { created, skipped, errors };
+    return { created, skipped, deleted, errors };
   }
 }

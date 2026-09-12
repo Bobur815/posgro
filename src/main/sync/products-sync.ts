@@ -317,6 +317,76 @@ export async function syncSuppliers(): Promise<void> {
   }
 }
 
+const DELETE_CURSOR_KEY = "last_product_delete_sync";
+
+/**
+ * Products deleted on the web dashboard. A hard delete leaves nothing in the `updatedAfter` pull
+ * above, so without this a till kept a product the shop had removed — and, with an admin signed
+ * in, uploaded it back (the server refuses that now; see products.service.ts syncBulk).
+ *
+ * A product nothing here references is deleted. One that local sales, arrivals, pre-weighed labels
+ * or stocktake lines point at is deactivated instead: it leaves the till's list and its barcode
+ * stops selling, while its history — possibly sales not yet uploaded — stays whole.
+ *
+ * VPS only: a satellite's catalog comes from its main. The cursor is the newest server `deletedAt`
+ * seen, never this machine's clock (the same rule as `last_product_sync`). A server that predates
+ * the deletion feed answers 404, which is not an error. Returns how many local products it changed.
+ */
+export async function syncDeletedProducts(source: PullSource = vpsSource): Promise<number> {
+  if (!source.isVps) return 0;
+  const prisma = getPrismaClient();
+
+  const cursorRow = await prisma.systemSetting.findUnique({ where: { key: DELETE_CURSOR_KEY } });
+  const since = cursorRow?.value || new Date(0).toISOString();
+
+  const response = await source.get("products/deleted", `?since=${encodeURIComponent(since)}`);
+  if (!response?.ok) return 0;
+  const rows = (await response.json()) as Array<{ barcode: string; deletedAt: string }>;
+  if (!Array.isArray(rows) || rows.length === 0) return 0;
+
+  let changed = 0;
+  let newest = since;
+  for (const row of rows) {
+    const deletedAt = new Date(row.deletedAt).toISOString();
+    if (deletedAt > newest) newest = deletedAt;
+
+    const local = await prisma.product.findUnique({
+      where: { barcode: String(row.barcode) },
+      select: {
+        id: true,
+        _count: {
+          select: { sales: true, inventoryMovements: true, preWeighedItems: true, inventoryCountItems: true },
+        },
+      },
+    });
+    if (!local) continue;
+
+    const referenced = Object.values(local._count as Record<string, number>).some((n) => n > 0);
+    try {
+      if (referenced) {
+        await prisma.product.update({ where: { id: local.id }, data: { active: false } });
+      } else {
+        await prisma.product.delete({ where: { id: local.id } });
+      }
+    } catch (err) {
+      // Something references it that the count above does not know about: hide it instead.
+      console.warn(
+        `[sync] could not delete product ${row.barcode}, deactivating it:`,
+        err instanceof Error ? err.message : err,
+      );
+      await prisma.product.update({ where: { id: local.id }, data: { active: false } });
+    }
+    changed++;
+  }
+
+  await prisma.systemSetting.upsert({
+    where: { key: DELETE_CURSOR_KEY },
+    update: { value: newest },
+    create: { key: DELETE_CURSOR_KEY, value: newest },
+  });
+  return changed;
+}
+
 export async function syncUsers(): Promise<void> {
   const prisma = getPrismaClient();
   const config = getAppConfig();

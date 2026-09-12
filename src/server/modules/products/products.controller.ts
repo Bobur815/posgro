@@ -10,6 +10,7 @@ import {
   UseGuards,
   ParseIntPipe,
   HttpCode,
+  BadRequestException,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -55,6 +56,24 @@ export class ProductsController {
     if (updatedAfter) filters.updatedAfter = new Date(updatedAfter);
 
     return this.productsService.findAll(storeId, filters);
+  }
+
+  /**
+   * Products deleted since `since`, for terminals to drop their copy — a hard delete leaves nothing
+   * in the `updatedAfter` pull above. Declared before `:id` so "deleted" is not read as an id.
+   */
+  @Get("deleted")
+  @ApiOperation({ summary: "Products deleted since a time, for terminal sync" })
+  @ApiQuery({ name: "since", required: false, type: String })
+  async findDeleted(
+    @CurrentStore() storeId: string,
+    @Query("since") since?: string,
+  ) {
+    const from = since ? new Date(since) : undefined;
+    if (from && Number.isNaN(from.getTime())) {
+      throw new BadRequestException("Invalid since");
+    }
+    return this.productsService.findDeletedSince(storeId, from);
   }
 
   @Get("search")

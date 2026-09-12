@@ -1,7 +1,14 @@
 import { BrowserWindow } from 'electron';
 import { syncSales, SalesSyncResult } from './sales-sync';
 import { syncSmenas } from './smena-sync';
-import { syncProducts, syncCategories, syncSuppliers, syncUsers, syncSettings } from './products-sync';
+import {
+  syncProducts,
+  syncCategories,
+  syncSuppliers,
+  syncUsers,
+  syncSettings,
+  syncDeletedProducts,
+} from './products-sync';
 import { getCurrentUser } from '../ipc/auth-handlers';
 import { uploadLocalData } from './upload-sync';
 import { getAppConfig } from '../config/app-config';
@@ -186,6 +193,18 @@ export class SyncService {
 
       // Sync products (download updated products from VPS)
       const stockConflicts = await syncProducts();
+
+      // Products deleted on the dashboard since the last cycle: drop (or hide) this till's copy.
+      // After the pull, so a barcode re-added on the dashboard is already back here — and the
+      // server leaves a live barcode out of the deletion feed anyway.
+      try {
+        await syncDeletedProducts();
+      } catch (deleteError) {
+        console.error(
+          'Deleted-products sync failed (non-fatal):',
+          deleteError instanceof Error ? deleteError.message : deleteError,
+        );
+      }
 
       // Pull store config (AI token limit, etc.) from VPS
       await this.syncStoreConfig();

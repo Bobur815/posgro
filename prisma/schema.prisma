@@ -596,6 +596,22 @@ enum StockMovementType {
   REVALUATION // price change only, quantity unchanged
 }
 
+/// A product deleted on the dashboard, remembered so terminals can drop their copy on the next
+/// sync (a hard delete leaves nothing in their `updatedAfter` pull) and cannot bring it back
+/// (their product upload creates any barcode the server does not have). Cleared when the barcode
+/// is added again.
+model DeletedProduct {
+  id        Int      @id @default(autoincrement())
+  storeId   String   @map("store_id")
+  barcode   String
+  productId Int      @map("product_id")
+  deletedAt DateTime @default(now()) @map("deleted_at")
+
+  @@index([storeId, deletedAt])
+  @@index([storeId, barcode])
+  @@map("deleted_products")
+}
+
 model StockMovement {
   id        String            @id @default(cuid())
   storeId   String            @map("store_id")

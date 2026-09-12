@@ -194,6 +194,11 @@ async function uploadProducts(
     piecesPerBox: p.piecesPerBox ?? undefined,
     boxPrice: p.boxPrice != null ? Number(p.boxPrice) : undefined,
     boxBarcode: p.boxBarcode ?? undefined,
+    // Only used for a product the server does not have yet: one created here, offline.
+    mxik: p.mxik ?? undefined,
+    packageCode: p.packageCode ?? undefined,
+    vatRate: p.vatRate ?? undefined,
+    isMarked: p.isMarked ?? undefined,
   }));
 
   const res = await apiPost("/products/sync-bulk", token, {
