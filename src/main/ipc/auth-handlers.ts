@@ -11,6 +11,7 @@ import { refreshSubscriptionCache } from './subscription-handlers';
 import { getAppConfig } from '../config/app-config';
 import type { AuthUser } from '../../shared/types/user.types';
 import { assertNotSatellite } from '../lan/satellite-guard';
+import { requireSuperAdmin } from '../auth/super-admin';
 
 interface JwtPayload {
   sub: string;
@@ -645,13 +646,29 @@ export function setupAuthHandlers(): void {
     return true;
   });
 
-  // Side-effect-free credential check, used to gate terminal-level settings on the login screen
-  // (changing the server URL from an unauthenticated screen would otherwise let anyone repoint
-  // this terminal at a server of their choosing). Deliberately NOT auth:loginWithPin — that
-  // starts a session. Accepts any staff PIN, or an active admin's password.
+  // Side-effect-free credential check, used to gate terminal-level settings on the login screen:
+  // the server URL and this terminal's role on the shop's LAN (changing either from an
+  // unauthenticated screen would otherwise let anyone repoint the terminal, or hand the shop's
+  // stock to another machine). Deliberately NOT auth:loginWithPin — that starts a session.
+  //
+  // The super-admin password, where the store has one (LAN plan §11.2): the same credential, and
+  // the same throttle, as every role act inside the dialog — a store admin's password or a staff
+  // PIN no longer opens it. A store with no super-admin password configured keeps the older gate
+  // (any staff PIN, or an active admin's password), so it is not locked out of fixing its own
+  // server URL; the role acts inside stay closed to it either way.
   ipcMain.handle('auth:verifyTerminalAccess', async (_event, secret: string) => {
     if (!secret) return false;
     const prisma = getPrismaClient();
+
+    const config = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+    if (config?.superAdminPassword) {
+      try {
+        await requireSuperAdmin(secret);
+        return true;
+      } catch {
+        return false;
+      }
+    }
 
     if (PIN_PATTERN.test(secret) && (await findUserIdByPin(prisma, secret))) {
       return true;

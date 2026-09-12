@@ -841,6 +841,7 @@
     "terminalAccessTitle": "Terminal sozlamalari",
     "terminalAccessSecret": "PIN yoki administrator paroli",
     "terminalAccessHint": "Do'kon PIN kodini kiriting. PIN belgilanmagan bo'lsa, administrator parolini kiriting.",
+    "terminalAccessSuperAdminHint": "Super-administrator parolini kiriting: u server manzili va bu terminal rolini himoya qiladi.",
     "terminalAccessDenied": "PIN yoki parol noto'g'ri",
     "webAdminOnPhone": "Panelni telefonda ochish",
     "webAdminHint": "Boshqaruv panelini brauzerda ochish uchun kodni telefoningiz bilan skanerlang.",

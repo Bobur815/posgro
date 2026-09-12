@@ -34,8 +34,9 @@ import { TerminalRolePanel } from "./TerminalRolePanel";
  * Settings edits the API URL this terminal talks to, and its role on the shop's LAN (main or
  * satellite — `TerminalRolePanel`). Because the login screen is unauthenticated, the URL would
  * otherwise let anyone repoint the terminal at a server of their choosing, so the dialog is gated
- * on the store PIN (or an admin password on a terminal with no PIN). Changing the role asks for
- * the super-admin password on top of that, act by act (§11.2).
+ * on the super-admin password (§11.2) — not a store admin's password or a staff PIN, which is only
+ * the fallback for a store that has no super-admin password configured. Each role act inside asks
+ * for it again.
  *
  * The phone button shows the web admin dashboard address as a QR, and the card button shows the
  * store's subscription status with a way to pay for it. Neither is hidden for an OFFLINE_ONLY
@@ -174,6 +175,9 @@ export function TerminalAccessBar() {
   const [dialog, setDialog] = useState<DialogKind>("none");
 
   const [secret, setSecret] = useState("");
+  // Whether the unlock asks for the super-admin password (the store has one) or falls back to a
+  // PIN / admin password. Assumed until the answer arrives — the case for nearly every store.
+  const [superAdminGate, setSuperAdminGate] = useState(true);
   const [apiUrl, setApiUrl] = useState("");
   // Who this terminal is on the shop's LAN, read when the settings dialog is unlocked.
   const [terminal, setTerminal] = useState<{
@@ -219,13 +223,24 @@ export function TerminalAccessBar() {
     setError(null);
   };
 
+  const openUnlock = () => {
+    setDialog("unlock");
+    void window.electronAPI.auth
+      .hasSuperAdminPassword()
+      .then(setSuperAdminGate)
+      .catch(() => setSuperAdminGate(true));
+  };
+
+  const deniedMessage = () =>
+    superAdminGate ? t("settings.superAdminPasswordWrong") : t("settings.terminalAccessDenied");
+
   const handleUnlock = async () => {
     setBusy(true);
     setError(null);
     try {
       const ok = await window.electronAPI.auth.verifyTerminalAccess(secret);
       if (!ok) {
-        setError(t("settings.terminalAccessDenied"));
+        setError(deniedMessage());
         return;
       }
       const cfg = await window.electronAPI.config.getLocalConfig();
@@ -242,7 +257,7 @@ export function TerminalAccessBar() {
       setSecret("");
       setDialog("server");
     } catch {
-      setError(t("settings.terminalAccessDenied"));
+      setError(deniedMessage());
     } finally {
       setBusy(false);
     }
@@ -319,7 +334,7 @@ export function TerminalAccessBar() {
       <Bar>
         <IconButton
           type="button"
-          onClick={() => setDialog("unlock")}
+          onClick={openUnlock}
           title={t("settings.terminalAccessTitle")}
           aria-label={t("settings.terminalAccessTitle")}
         >
@@ -358,7 +373,11 @@ export function TerminalAccessBar() {
                 <X size={18} />
               </CloseButton>
             </DialogHeader>
-            <Label>{t("settings.terminalAccessSecret")}</Label>
+            <Label>
+              {superAdminGate
+                ? t("settings.lanRole.superAdminPassword")
+                : t("settings.terminalAccessSecret")}
+            </Label>
             <TextInput
               type="password"
               value={secret}
@@ -366,7 +385,11 @@ export function TerminalAccessBar() {
               onChange={(e) => setSecret(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
             />
-            <Hint>{t("settings.terminalAccessHint")}</Hint>
+            <Hint>
+              {superAdminGate
+                ? t("settings.terminalAccessSuperAdminHint")
+                : t("settings.terminalAccessHint")}
+            </Hint>
             {error && <ErrorText>{error}</ErrorText>}
             <Actions>
               <ActionButton type="button" onClick={close}>

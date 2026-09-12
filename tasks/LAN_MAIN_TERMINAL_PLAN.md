@@ -668,6 +668,11 @@ switched off.
 - **The guard sits at token fetch**, not on every request: a token is fetched at start, hourly, and
   after any 401 — and a different machine at the address means a different signing key, hence a
   401. Nothing reaches a superseded main without passing it.
+- **The whole gear dialog is behind the super-admin password**, not only the role acts — the
+  "separate decision" §11.2 left open, taken 2026-09-12. A staff PIN or a store admin's password no
+  longer opens it; the unlock shares the role acts' throttle. A store with no super-admin password
+  configured keeps the old PIN / admin gate, so it can still fix its own server URL (it cannot
+  change roles either way).
 - **§11.4's consent is a handoff code, not the super-admin password over the wire.** The old main
   issues it on its own screen (behind the password there), like a pairing code; the satellite
   types it in. The password never crosses the LAN, and the machine being demoted has agreed.

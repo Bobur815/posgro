@@ -7,10 +7,10 @@ import { AttemptThrottle } from '../ipc/override-throttle';
  * (tasks/LAN_MAIN_TERMINAL_PLAN.md §11.2): pairing and removing tills, joining and leaving a main,
  * handing the main role over, repointing a satellite.
  *
- * Deliberately not the terminal PIN or a store admin's password — `auth:verifyTerminalAccess`, which
- * unlocks the gear dialog, accepts either, and neither is strong enough to hand the shop's stock to
- * another machine. The password is checked on every act rather than trusting an earlier "yes", so
- * a caller cannot verify once and then act forever.
+ * Deliberately not the terminal PIN or a store admin's password — neither is strong enough to hand
+ * the shop's stock to another machine. The gear dialog these acts live in is unlocked with this same
+ * password (`auth:verifyTerminalAccess`), and it is still checked again on every act rather than
+ * trusting that earlier "yes", so a caller cannot verify once and then act forever.
  */
 
 /**
