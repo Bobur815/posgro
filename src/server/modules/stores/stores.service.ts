@@ -10,6 +10,8 @@ import { UpdateStoreDto } from "./dto/update-store.dto";
 import * as bcrypt from "bcryptjs";
 import { UserRole } from "@prisma/client";
 import { normalizeUzPhone } from "../../../shared/utils/phone";
+import { DAY_MS, TRIAL_PLAN } from "../../../shared/utils/subscription";
+import { SiteConfigService } from "../site-config/site-config.service";
 
 /**
  * Exactly the columns a store may be read back as.
@@ -30,6 +32,8 @@ const STORE_FIELDS = {
   balance: true,
   subscriptionPlan: true,
   subscriptionExpiresAt: true,
+  subscriptionRequired: true,
+  subscriptionGraceFrom: true,
   settings: true,
   scheduledDeleteAt: true,
   mode: true,
@@ -73,7 +77,10 @@ function withPasswordFlag<T extends StoreRow>(store: T) {
 
 @Injectable()
 export class StoresService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private siteConfig: SiteConfigService,
+  ) {}
 
   async findAll() {
     const stores = await this.prisma.store.findMany({
@@ -158,6 +165,8 @@ export class StoresService {
       ? await this.startingPassword(await this.accountsForPhone(phone))
       : null;
 
+    const rules = await this.siteConfig.getSubscriptionRules();
+
     // Wrap both creates in a transaction so no orphaned store is left if user creation fails
     const store = await this.prisma.$transaction(async (tx) => {
       const s = await tx.store.create({
@@ -170,6 +179,13 @@ export class StoresService {
             ? JSON.stringify(createStoreDto.settings)
             : null,
           active: true,
+          // Held to its subscription from day one: with no plan it is blocked, so while trials are
+          // switched on it opens on one (shared/utils/subscription.ts).
+          subscriptionRequired: true,
+          ...(rules.trialEnabled && {
+            subscriptionPlan: TRIAL_PLAN,
+            subscriptionExpiresAt: new Date(Date.now() + rules.trialDays * DAY_MS),
+          }),
           // Both fall back to the schema defaults (ONLINE / false) when the caller omits them.
           ...(createStoreDto.mode !== undefined && { mode: createStoreDto.mode }),
           ...(createStoreDto.posAdminLocked !== undefined && {
@@ -251,7 +267,7 @@ export class StoresService {
   }
 
   async update(id: string, updateStoreDto: UpdateStoreDto) {
-    await this.findById(id);
+    const current = await this.findById(id);
 
     const data: Record<string, unknown> = {};
 
@@ -264,9 +280,16 @@ export class StoresService {
     if (updateStoreDto.aiPlan !== undefined) data.aiPlan = updateStoreDto.aiPlan;
     if (updateStoreDto.subscriptionPlan !== undefined) data.subscriptionPlan = updateStoreDto.subscriptionPlan;
     if (updateStoreDto.subscriptionExpiresAt !== undefined) {
-      data.subscriptionExpiresAt = updateStoreDto.subscriptionExpiresAt
+      const expiresAt = updateStoreDto.subscriptionExpiresAt
         ? new Date(updateStoreDto.subscriptionExpiresAt)
         : null;
+      data.subscriptionExpiresAt = expiresAt;
+      // A new date is a fresh start, so grace left over from the day enforcement shipped goes.
+      // Only a new one: the store screen sends the date with every save, and re-saving an unpaid
+      // store unchanged must not cut its grace short.
+      if ((expiresAt?.getTime() ?? null) !== (current.subscriptionExpiresAt?.getTime() ?? null)) {
+        data.subscriptionGraceFrom = null;
+      }
     }
     if (updateStoreDto.mode !== undefined) data.mode = updateStoreDto.mode;
     if (updateStoreDto.posAdminLocked !== undefined)

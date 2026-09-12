@@ -37,6 +37,8 @@ export interface StoreChoice {
   online: boolean;
   /** Managed on its terminal, not from the dashboard: listed, but it cannot be switched to. */
   offlineOnly: boolean;
+  /** Blocked for an unpaid subscription: listed, but it cannot be switched to until it is paid. */
+  subscriptionBlocked: boolean;
 }
 
 export interface LoginResponse {

@@ -233,7 +233,7 @@ const MenuItem = styled.button<{ $danger?: boolean }>`
     background: ${({ theme }) => theme.colors.background};
   }
 
-  /* An offline-only store: listed so the owner sees it is theirs, but managed on its terminal. */
+  /* An offline-only or unpaid store: listed so the owner sees it is theirs, but not opened here. */
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
@@ -380,23 +380,31 @@ export function TopBar() {
                 </StoreButton>
                 {storeMenu.open && (
                   <Menu $align="left" role="menu">
-                    {stores.map((store) => (
-                      <MenuItem
-                        key={store.id}
-                        type="button"
-                        disabled={store.offlineOnly}
-                        title={store.offlineOnly ? t("topBar.offlineOnly") : undefined}
-                        onClick={() => pickStore(store.id)}
-                      >
-                        <Dot $online={store.online} title={openLabel(store.online)} />
-                        <ChoiceText>
-                          <span>{store.name}</span>
-                          {store.offlineOnly && <small>{t("topBar.offlineOnly")}</small>}
-                        </ChoiceText>
-                        <MenuSpacer />
-                        {store.id === user.storeId && <Check size={16} />}
-                      </MenuItem>
-                    ))}
+                    {stores.map((store) => {
+                      // Listed so the owner sees it is theirs, but not opened from here.
+                      const note = store.subscriptionBlocked
+                        ? t("topBar.subscriptionBlocked")
+                        : store.offlineOnly
+                          ? t("topBar.offlineOnly")
+                          : undefined;
+                      return (
+                        <MenuItem
+                          key={store.id}
+                          type="button"
+                          disabled={Boolean(note)}
+                          title={note}
+                          onClick={() => pickStore(store.id)}
+                        >
+                          <Dot $online={store.online} title={openLabel(store.online)} />
+                          <ChoiceText>
+                            <span>{store.name}</span>
+                            {note && <small>{note}</small>}
+                          </ChoiceText>
+                          <MenuSpacer />
+                          {store.id === user.storeId && <Check size={16} />}
+                        </MenuItem>
+                      );
+                    })}
                   </Menu>
                 )}
               </Anchor>

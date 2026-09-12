@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import styled from 'styled-components';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
+import { SubscriptionBanner } from './SubscriptionBanner';
 import { SidebarProvider } from '@context/SidebarContext';
 
 const Container = styled.div`
@@ -38,6 +39,7 @@ export function Layout() {
         <Sidebar />
         <Main>
           <TopBar />
+          <SubscriptionBanner />
           <Content>
             <Outlet />
           </Content>

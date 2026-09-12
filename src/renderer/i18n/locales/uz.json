@@ -66,7 +66,8 @@
       "device_unpaired": "Asosiy kassa bu terminalni endi tanimaydi — uni qayta ulash kerak.",
       "main_superseded": "Asosiy kassa manzilida eski, almashtirilgan kassa javob beryapti. Joriy asosiy kassa manzilini kiriting.",
       "store_inactive": "Do'kon o'chirilgan, shuning uchun boshqaruv paneliga kirib bo'lmaydi. Ishni tiklash uchun qo'llab-quvvatlash xizmatiga murojaat qiling.",
-      "store_offline_only": "Bu do'kon oflayn rejimda ishlaydi: barcha ma'lumotlar serverda emas, terminalning o'zida saqlanadi. Boshqaruv panelini terminalning o'zidan oching — telefoningizni xuddi shu Wi-Fi tarmog'iga ulab, uning kirish ekranidagi QR-kodni skanerlang."
+      "store_offline_only": "Bu do'kon oflayn rejimda ishlaydi: barcha ma'lumotlar serverda emas, terminalning o'zida saqlanadi. Boshqaruv panelini terminalning o'zidan oching — telefoningizni xuddi shu Wi-Fi tarmog'iga ulab, uning kirish ekranidagi QR-kodni skanerlang.",
+      "subscription_blocked": "Do'kon obunasi to'lanmagan, shuning uchun do'kon ishi to'xtatilgan. Obunani to'lang — u uzaytirilishi bilanoq kirish ochiladi."
     },
     "serverSettings": "Server sozlamalari",
     "storeId": "Store ID",
@@ -956,7 +957,8 @@
     "switchFailed": "Do'konni almashtirib bo'lmadi. Qayta urinib ko'ring.",
     "storeOnline": "Do'kon ishlayapti: kassa aloqada",
     "storeOffline": "Do'konning hech bir kassasi hozir aloqada emas",
-    "offlineOnly": "Avtonom do'kon — kassada boshqariladi"
+    "offlineOnly": "Avtonom do'kon — kassada boshqariladi",
+    "subscriptionBlocked": "Obuna to'lanmagan — do'kon bloklangan"
   },
   "updater": {
     "currentVersion": "Joriy versiya",
@@ -1324,7 +1326,12 @@
     "noCredentialHint": "Serverga kirish ma'lumotlari yo'q. Obuna ma'lumotlarini yangilash uchun parol bilan kiring (PIN-kod bilan emas).",
     "serverErrorHint": "Server xatolik qaytardi — sessiya muddati tugagan bo'lishi mumkin. Parol bilan qayta kiring yoki qo'llab-quvvatlashga murojaat qiling.",
     "offlineOnlyStoreHint": "Do'kon avtonom rejimda ishlaydi, shuning uchun terminal serverdan obuna ma'lumotlarini ololmaydi. Yetkazib beruvchiga murojaat qiling: {{phone}}",
-    "supportUnknown": "qo'llab-quvvatlash telefoni ko'rsatilmagan"
+    "supportUnknown": "qo'llab-quvvatlash telefoni ko'rsatilmagan",
+    "bannerWarning": "Do'kon obunasi {{date}} kuni tugaydi — {{count}} kun qoldi. Ish to'xtab qolmasligi uchun oldindan to'lang.",
+    "bannerTrialWarning": "Bepul sinov muddati {{date}} kuni tugaydi — {{count}} kun qoldi. Ishni davom ettirish uchun tarifni tanlang va uni to'lang.",
+    "bannerGrace": "Do'kon obunasi {{date}} kuni tugagan. {{blockDate}} gacha to'lang — shundan so'ng do'kon boshqaruv panelida va kassalarda bloklanadi.",
+    "blockedTitle": "Do'kon bloklangan",
+    "callSupport": "Qo'llab-quvvatlash telefoni: {{phone}}"
   },
   "smena": {
     "viewDetails": "Batafsil",

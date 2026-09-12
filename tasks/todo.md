@@ -1,3 +1,47 @@
+# Subscription warnings and blocking (started 2026-09-12)
+
+Plan: `~/.claude/plans/foamy-weaving-hamster.md`.
+
+- [x] Phase 1, server and dashboard: shared rule, migration, rules settings, trial on create,
+      status endpoint, dashboard login and session blocking, web banner and super-admin screens
+- [ ] Phase 2, license: Ed25519 key script, signing, `/licenses/renew`, the license in
+      `store-config`, `SubscriptionGuard`
+- [ ] Phase 3, POS: license storage and verification, trusted clock, enforcement, block screen,
+      banners (POS release)
+
+## Review
+
+**Phase 1**:
+- **Rule and data:** one rule (`src/shared/utils/subscription.ts`) judges active, warning, grace,
+  blocked or unlimited. The migration adds `subscription_required`, which is false for every
+  existing store. It also adds `subscription_grace_from`, set to ship day for stores already past
+  their date.
+- **Super admin:** the rules live in site config and are edited on the Subscription Plans page.
+- **Stores:**
+  - a new store starts on TRIAL (or blocked, with trials off);
+  - a new date clears the ship-day grace start, and re-saving the same date keeps it.
+- **Blocking:** dashboard sign-in, running sessions and store switching all refuse a blocked store
+  with `auth.errors.subscription_blocked`. The switcher lists it greyed out. The POS client is
+  exempt: the till enforces its own block in Phase 3.
+- **Web:** `/store-config/subscription` reports state, warn and block dates and days left. The web
+  shows a warning or grace banner, and the login page shows a blocked panel with the pay link and
+  support phone.
+
+Verified:
+- 749 tests pass. The new ones were shown red with the checks switched off (13 failed), and with
+  the grace start always cleared (3 failed).
+- Server and web tsc pass.
+- Staging preview, read-only: one store gets ship-day grace ("Mock store", STARTER, expired
+  2026-06-29).
+- Every web screen was driven over CDP with stand-in API answers.
+
+Not here:
+- The web login cannot fill a `{storeId}` pay link before sign-in, so it shows the link only
+  without one.
+- The POS side is Phases 2–3.
+
+---
+
 # §11.3 generation guard + §11.4 planned handoff (started 2026-09-11)
 
 - [x] A: `lan_lineage` + `main_generation` (schema ×3, migration 34); info/token carry them;

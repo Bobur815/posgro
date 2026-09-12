@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentStore } from '../../common/decorators/current-store.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SiteConfigService } from '../site-config/site-config.service';
+import { storeSubscriptionFacts, subscriptionStatus } from '../../../shared/utils/subscription';
 
 const AI_TOKEN_LIMIT_FREE = 5;
 const AI_TOKEN_LIMIT_PAID = 100;
@@ -59,7 +60,7 @@ export class StoreConfigController {
   @Get('subscription')
   @ApiOperation({ summary: 'Get subscription status and payment details for the current store' })
   async getSubscription(@CurrentStore() storeId: string) {
-    const [store, payment] = await Promise.all([
+    const [store, payment, rules] = await Promise.all([
       storeId
         ? this.prisma.store.findUnique({
             where: { id: storeId },
@@ -69,17 +70,27 @@ export class StoreConfigController {
               balance: true,
               subscriptionPlan: true,
               subscriptionExpiresAt: true,
+              subscriptionGraceFrom: true,
+              subscriptionRequired: true,
             },
           })
         : null,
       this.siteConfig.getSubscriptionPayment(),
+      this.siteConfig.getSubscriptionRules(),
     ]);
+    const status = store ? subscriptionStatus(storeSubscriptionFacts(store), rules) : null;
 
     return {
       store_id: storeId ?? null,
       store_name: store?.name ?? null,
       subscription_plan: store?.subscriptionPlan ?? null,
       subscription_expires_at: store?.subscriptionExpiresAt?.toISOString() ?? null,
+      // Where it stands, judged by this server's clock (shared/utils/subscription.ts). A caller
+      // with no store — a super admin — has nothing to pay for.
+      subscription_state: status?.state ?? 'unlimited',
+      warn_from: status?.warnFrom ?? null,
+      block_at: status?.blockAt ?? null,
+      days_left: status?.daysLeft ?? null,
       ai_plan: store?.aiPlan ?? 'free',
       balance_uzs: store ? Number(store.balance) : null,
       payment: {

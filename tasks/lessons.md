@@ -2,6 +2,31 @@
 
 Patterns worth not repeating, recorded as they come up.
 
+## Git Bash rewrites a `/route` argument into a Windows path
+
+`node subs-web.mjs banner /web/settings/user` reached node as
+`C:/Program Files/Git/web/settings/user`: MSYS converts any argument that looks like a POSIX path
+before handing it to a native program. The CDP script built `http://localhost:5173C:/Program…`,
+`Page.navigate` failed with "Cannot navigate to invalid URL", and every scenario ran on the page
+already open — the login page — which looked like an auth bug and cost several rounds.
+
+**Rule:** from Git Bash, set `MSYS_NO_PATHCONV=1` when passing a URL path (anything starting with
+`/`) to node or another native tool, and print a CDP reply whole — `error` included — not `.result`.
+
+**Also:** seeding `localStorage` on a page where the app is running does not stick — the app writes
+its own state over it before the next page reads it. Seed from a same-origin page that runs no app
+code (an intercepted `/api/__seed` URL), then navigate.
+
+## A red proof that does not compile proves nothing
+
+To show new tests fail without the code, I switched checks off with `false && …` and
+`...(false && {…})`. ts-jest refused both (spreading `false` is a type error), so every suite failed
+to *load* — "Tests: 0 total" — and a grep for `error TS` found nothing because jest colours it.
+
+**Rule:** switch code off with something the compiler cannot see through (`!process.env.RED && …`),
+run with `FORCE_COLOR=0`, and read the count: a proof is "N failed" with N > 0 among tests that ran,
+never "0 total". Restore from a backup copy and `cmp` it.
+
 ## An "already exists" guard around schema creation hides every table added later
 
 `createSchemaIfNeeded` in `src/main/database/sqlite-client.ts` returned early when `local_config`

@@ -6,6 +6,7 @@ import {
   findBarcodeMatch,
   type MxikPackage,
 } from "@shared/utils";
+import type { SubscriptionRules, SubscriptionState } from "@shared/utils/subscription";
 
 export interface DeviceSession {
   id: string;
@@ -73,6 +74,8 @@ export interface StoreChoice {
   online: boolean;
   /** Managed on its terminal, not here: shown greyed out, and cannot be switched to. */
   offlineOnly: boolean;
+  /** Blocked for an unpaid subscription: shown greyed out, and cannot be switched to. */
+  subscriptionBlocked: boolean;
 }
 
 export const auth = {
@@ -552,6 +555,10 @@ export interface StoreRecord {
   balance: number;
   subscriptionPlan: string | null;
   subscriptionExpiresAt: string | null;
+  /** Created once subscriptions were enforced: with no plan it is blocked. */
+  subscriptionRequired: boolean;
+  /** For a store already expired the day enforcement shipped: its grace counts from here. */
+  subscriptionGraceFrom: string | null;
   scheduledDeleteAt: string | null;
   mode: StoreMode;
   posAdminLocked: boolean;
@@ -747,6 +754,45 @@ export const siteConfig = {
   setSubscriptionPayment: async (payment: SubscriptionPayment): Promise<SubscriptionPayment> => {
     const { data } = await axiosInstance.put('/site-config/subscription-payment', payment);
     return data;
+  },
+  /** Trial, warning, grace and check-in days — super admin only. */
+  getSubscriptionRules: async (): Promise<SubscriptionRules> => {
+    const { data } = await axiosInstance.get('/site-config/subscription-rules');
+    return data;
+  },
+  setSubscriptionRules: async (rules: SubscriptionRules): Promise<SubscriptionRules> => {
+    const { data } = await axiosInstance.put('/site-config/subscription-rules', rules);
+    return data;
+  },
+};
+
+/** The signed-in store's subscription, as `GET /store-config/subscription` reports it. */
+export interface StoreSubscription {
+  plan: string | null;
+  expiresAt: string | null;
+  state: SubscriptionState;
+  warnFrom: string | null;
+  blockAt: string | null;
+  daysLeft: number | null;
+  /** Self-service pay link with this store's ID filled in, or "" when none is configured. */
+  paymentUrl: string;
+  supportPhone: string;
+}
+
+export const storeConfig = {
+  getSubscription: async (): Promise<StoreSubscription> => {
+    const { data } = await axiosInstance.get('/store-config/subscription');
+    return {
+      plan: data.subscription_plan ?? null,
+      expiresAt: data.subscription_expires_at ?? null,
+      // A server from before enforcement sends no state: nothing to warn about.
+      state: data.subscription_state ?? 'unlimited',
+      warnFrom: data.warn_from ?? null,
+      blockAt: data.block_at ?? null,
+      daysLeft: data.days_left ?? null,
+      paymentUrl: data.payment?.payment_url ?? '',
+      supportPhone: data.payment?.support_phone ?? '',
+    };
   },
 };
 

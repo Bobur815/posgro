@@ -1,6 +1,11 @@
 import * as bcrypt from 'bcryptjs';
 import { ConflictException } from '@nestjs/common';
 import { StoresService } from './stores.service';
+import {
+  DAY_MS,
+  DEFAULT_SUBSCRIPTION_RULES,
+  type SubscriptionRules,
+} from '../../../shared/utils/subscription';
 
 /**
  * One owner, several stores. Users are per store, so the owner has one admin account in each under
@@ -11,7 +16,7 @@ import { StoresService } from './stores.service';
 
 type Account = { id: string; storeId: string | null; role: string; active: boolean; password: string };
 
-function build(accounts: Account[]) {
+function build(accounts: Account[], rules: SubscriptionRules = DEFAULT_SUBSCRIPTION_RULES) {
   const created: Array<Record<string, any>> = [];
   const updated: Array<Record<string, any>> = [];
   const tx = {
@@ -43,7 +48,14 @@ function build(accounts: Account[]) {
     },
     $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
   };
-  return { service: new StoresService(prisma as never), created, updated, tx, prisma };
+  const siteConfig = { getSubscriptionRules: jest.fn(async () => rules) };
+  return {
+    service: new StoresService(prisma as never, siteConfig as never),
+    created,
+    updated,
+    tx,
+    prisma,
+  };
 }
 
 let OWNER_HASH = '';
@@ -122,6 +134,69 @@ describe('store phones', () => {
     const { service, created } = build([owner('1000')]);
     await service.resetAdminUser('2000', '+998 (93) 214-47-74');
     expect(created[0]).toMatchObject({ phone: '998932144774', password: OWNER_HASH });
+  });
+});
+
+/**
+ * A new store is held to its subscription from the day it is made: with no plan it is blocked
+ * (shared/utils/subscription.ts), so while trials are on it opens on one.
+ */
+describe("a new store's subscription", () => {
+  const storeData = (tx: ReturnType<typeof build>['tx']) => tx.store.create.mock.calls[0][0].data;
+
+  it('starts on a trial of the configured length', async () => {
+    const { service, tx } = build([], { ...DEFAULT_SUBSCRIPTION_RULES, trialDays: 10 });
+    const before = Date.now();
+    await service.create({ name: 'Shop' } as never);
+    const data = storeData(tx);
+    expect(data).toMatchObject({ subscriptionRequired: true, subscriptionPlan: 'TRIAL' });
+    const expires = (data.subscriptionExpiresAt as Date).getTime();
+    expect(expires).toBeGreaterThanOrEqual(before + 10 * DAY_MS);
+    expect(expires).toBeLessThanOrEqual(Date.now() + 10 * DAY_MS);
+  });
+
+  it('starts with no plan, and so blocked, when trials are switched off', async () => {
+    const { service, tx } = build([], { ...DEFAULT_SUBSCRIPTION_RULES, trialEnabled: false });
+    await service.create({ name: 'Shop' } as never);
+    const data = storeData(tx);
+    expect(data.subscriptionRequired).toBe(true);
+    expect(data.subscriptionPlan).toBeUndefined();
+    expect(data.subscriptionExpiresAt).toBeUndefined();
+  });
+});
+
+/** Grace left over from the day enforcement shipped ends when a new date is set, and only then. */
+describe("setting a store's subscription date", () => {
+  const OLD = new Date('2026-08-01T00:00:00.000Z');
+  const withDate = (prisma: ReturnType<typeof build>['prisma']) =>
+    prisma.store.findUnique.mockResolvedValueOnce({
+      id: '1000',
+      name: 'Shop',
+      superAdminPassword: null,
+      _count: {},
+      subscriptionExpiresAt: OLD,
+    } as never);
+  const sent = (prisma: ReturnType<typeof build>['prisma']) => prisma.store.update.mock.calls[0][0].data;
+
+  it('clears the grace start when the date changes', async () => {
+    const { service, prisma } = build([]);
+    withDate(prisma);
+    await service.update('1000', { subscriptionPlan: 'PRO', subscriptionExpiresAt: '2026-10-12T00:00:00.000Z' } as never);
+    expect(sent(prisma)).toMatchObject({ subscriptionGraceFrom: null });
+  });
+
+  // The store screen sends the date with every save.
+  it('keeps it when the same date is saved again', async () => {
+    const { service, prisma } = build([]);
+    withDate(prisma);
+    await service.update('1000', { subscriptionPlan: 'PRO', subscriptionExpiresAt: OLD.toISOString() } as never);
+    expect(sent(prisma)).not.toHaveProperty('subscriptionGraceFrom');
+  });
+
+  it('accepts the trial plan', async () => {
+    const { service, prisma } = build([]);
+    await service.update('1000', { subscriptionPlan: 'TRIAL' } as never);
+    expect(sent(prisma).subscriptionPlan).toBe('TRIAL');
   });
 });
 

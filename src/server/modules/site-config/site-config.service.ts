@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  normalizeSubscriptionRules,
+  type SubscriptionRules,
+} from '../../../shared/utils/subscription';
 
 export interface LoginBanner {
   imageUrl: string;
@@ -31,6 +35,13 @@ const BANNER_KEY = 'login_banner';
 /** The web dashboard login page's banner, kept apart from the terminals'. */
 const WEB_BANNER_KEY = 'web_login_banner';
 const PAYMENT_KEY = 'subscription_payment';
+const RULES_KEY = 'subscription_rules';
+/**
+ * The rules are read on every authenticated request (whether the store is blocked), so they are
+ * kept in memory for this long. A change made here takes effect at once; one made by another
+ * server process within a minute.
+ */
+const RULES_CACHE_MS = 60_000;
 const DEFAULT: LoginBanner = { imageUrl: '', title: '', subtitle: '' };
 const DEFAULT_PRICES: SubscriptionPlanPrices = { starter: 0, pro: 0, vip: 0 };
 const DEFAULT_PAYMENT: SubscriptionPayment = { qrPayload: '', paymentUrl: '', supportPhone: '' };
@@ -129,5 +140,38 @@ export class SiteConfigService {
       create: { key: PAYMENT_KEY, value },
     });
     return payment;
+  }
+
+  private rulesCache: { rules: SubscriptionRules; at: number } | null = null;
+
+  /** Trial, warning, grace and check-in days (shared/utils/subscription.ts), defaults until saved. */
+  async getSubscriptionRules(): Promise<SubscriptionRules> {
+    if (this.rulesCache && Date.now() - this.rulesCache.at < RULES_CACHE_MS) {
+      return this.rulesCache.rules;
+    }
+    const row = await this.prisma.siteConfig.findUnique({ where: { key: RULES_KEY } });
+    let saved: Record<string, unknown> = {};
+    if (row) {
+      try {
+        saved = JSON.parse(row.value) as Record<string, unknown>;
+      } catch {
+        /* unreadable: the defaults */
+      }
+    }
+    const rules = normalizeSubscriptionRules(saved);
+    this.rulesCache = { rules, at: Date.now() };
+    return rules;
+  }
+
+  async setSubscriptionRules(input: SubscriptionRules): Promise<SubscriptionRules> {
+    const rules = normalizeSubscriptionRules(input);
+    const value = JSON.stringify(rules);
+    await this.prisma.siteConfig.upsert({
+      where: { key: RULES_KEY },
+      update: { value },
+      create: { key: RULES_KEY, value },
+    });
+    this.rulesCache = { rules, at: Date.now() };
+    return rules;
   }
 }

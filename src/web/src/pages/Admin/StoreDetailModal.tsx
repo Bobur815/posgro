@@ -1,8 +1,15 @@
 import React, { useEffect, useState } from "react";
 import styled from "styled-components";
 import { X, RefreshCw } from "lucide-react";
-import { stores, StoreRecord, StoreStats } from "../../api/client";
+import { stores, siteConfig, StoreRecord, StoreStats } from "../../api/client";
 import { formatPhone } from "@shared/utils/phone";
+import {
+  DEFAULT_SUBSCRIPTION_RULES,
+  storeSubscriptionFacts,
+  subscriptionStatus,
+  type SubscriptionRules,
+  type SubscriptionState,
+} from "@shared/utils/subscription";
 
 const Overlay = styled.div`
   position: fixed;
@@ -146,6 +153,26 @@ const PlanBtn = styled.button<{ $active?: boolean }>`
   }
 `;
 
+const STATE_LOOK: Record<SubscriptionState, { label: string; color: string }> = {
+  unlimited: { label: "Unlimited", color: "#6b7280" },
+  active: { label: "Active", color: "#16a34a" },
+  warning: { label: "Expiring soon", color: "#d97706" },
+  grace: { label: "Expired — in grace", color: "#ef4444" },
+  blocked: { label: "Blocked", color: "#ef4444" },
+};
+
+const StateBadge = styled.span<{ $color: string }>`
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: ${({ $color }) => $color};
+`;
+
+const moment = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "";
+
 const ErrorMsg = styled.div`
   color: ${({ theme }) => theme.colors.error};
   font-size: 13px;
@@ -174,6 +201,17 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
   );
   const [savingSub, setSavingSub] = useState(false);
   const [subError, setSubError] = useState<string | null>(null);
+  const [rules, setRules] = useState<SubscriptionRules>(DEFAULT_SUBSCRIPTION_RULES);
+
+  useEffect(() => {
+    siteConfig
+      .getSubscriptionRules()
+      .then(setRules)
+      .catch(() => {});
+  }, []);
+
+  // Where the saved plan and date stand today — the same rule the server blocks by.
+  const subStatus = subscriptionStatus(storeSubscriptionFacts(store), rules);
 
   // Credit top-up
   const [creditAmount, setCreditAmount] = useState("");
@@ -344,8 +382,26 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
               {currentSubPlan ?? "No Plan"}
             </PlanBadge>
           </PlanRow>
+          <PlanRow>
+            <PlanLabel>Status</PlanLabel>
+            <StateBadge $color={STATE_LOOK[subStatus.state].color}>
+              {STATE_LOOK[subStatus.state].label}
+            </StateBadge>
+          </PlanRow>
+          {subStatus.warnFrom && (
+            <PlanNote>
+              Warns from {moment(subStatus.warnFrom)} · blocks on {moment(subStatus.blockAt)}
+              {store.subscriptionGraceFrom &&
+                " — its grace days count from the day enforcement shipped, since it had already expired then."}
+            </PlanNote>
+          )}
+          {subStatus.state === "blocked" && !subStatus.blockAt && (
+            <PlanNote>
+              A new store with no plan: blocked on the dashboard and the POS until you set one.
+            </PlanNote>
+          )}
           <PlanToggleRow style={{ marginBottom: 10 }}>
-            {(["STARTER", "PRO", "VIP"] as const).map((p) => (
+            {(["TRIAL", "STARTER", "PRO", "VIP"] as const).map((p) => (
               <PlanBtn
                 key={p}
                 $active={currentSubPlan === p}

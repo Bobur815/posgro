@@ -6,7 +6,12 @@ import { LoginDto } from './dto/login.dto';
 import { JwtPayload, LoginResponse, StoreChoice } from './types/auth.types';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { dashboardLoginBlockReason, type LoginClient } from './dashboard-access';
+import { SiteConfigService } from '../site-config/site-config.service';
+import {
+  DASHBOARD_STORE_SELECT,
+  dashboardLoginBlockReason,
+  type LoginClient,
+} from './dashboard-access';
 
 /**
  * How recently one of a store's terminals must have reported in (`POST /terminals/heartbeat`) for
@@ -23,6 +28,11 @@ const TERMINAL_ONLINE_WINDOW_MS = 12 * 60_000;
  */
 const OFFLINE_ONLY_REASON = 'auth.errors.store_offline_only';
 
+/** Likewise a store blocked for an unpaid subscription: listed, greyed out, not opened. */
+const SUBSCRIPTION_BLOCKED_REASON = 'auth.errors.subscription_blocked';
+
+const GREYED_OUT: ReadonlySet<string> = new Set([OFFLINE_ONLY_REASON, SUBSCRIPTION_BLOCKED_REASON]);
+
 /** The signed-in user as `validateUser` puts it on the request — `password` is the account's hash. */
 type SignedIn = {
   phone: string;
@@ -38,6 +48,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
+    private readonly siteConfig: SiteConfigService,
   ) {}
 
   async login(loginDto: LoginDto, userAgent?: string, ipAddress?: string): Promise<LoginResponse> {
@@ -97,21 +108,19 @@ export class AuthService {
     const active = opened.filter((a) => a.active);
     if (active.length === 0) throw new UnauthorizedException('Account is deactivated');
 
-    // Listed: every active store the password opens, an OFFLINE_ONLY one included (greyed out in
-    // the switcher). Signed in to: only one the dashboard can actually open.
+    // Listed: every active store the password opens, an OFFLINE_ONLY or unpaid one included (greyed
+    // out in the switcher). Signed in to: only one the dashboard can actually open.
+    const rules = await this.siteConfig.getSubscriptionRules();
     const reasonOf = (a: (typeof active)[number]) =>
-      dashboardLoginBlockReason(a.role, a.storeId, a.store, client);
+      dashboardLoginBlockReason(a.role, a.storeId, a.store, client, rules);
     const listable = active.filter((a) => {
       const reason = reasonOf(a);
-      return !reason || reason === OFFLINE_ONLY_REASON;
+      return !reason || GREYED_OUT.has(reason);
     });
     const allowed = listable.filter((a) => !reasonOf(a));
     if (allowed.length === 0) {
       // After the password, as for a single store: a wrong password reveals nothing about stores.
-      const first = active[0];
-      throw new ForbiddenException(
-        dashboardLoginBlockReason(first.role, first.storeId, first.store, client) as string,
-      );
+      throw new ForbiddenException(reasonOf(active[0]) as string);
     }
 
     allowed.sort((a, b) => (a.store?.name ?? '').localeCompare(b.store?.name ?? ''));
@@ -142,12 +151,18 @@ export class AuthService {
 
     const target = await this.prisma.user.findUnique({
       where: { storeId_phone: { storeId, phone: current.phone } },
-      include: { store: { select: { active: true, mode: true } } },
+      include: { store: { select: DASHBOARD_STORE_SELECT } },
     });
     if (!target || !target.active) {
       throw new ForbiddenException('auth.errors.store_not_allowed');
     }
-    const reason = dashboardLoginBlockReason(target.role, target.storeId, target.store, current.client);
+    const reason = dashboardLoginBlockReason(
+      target.role,
+      target.storeId,
+      target.store,
+      current.client,
+      await this.siteConfig.getSubscriptionRules(),
+    );
     if (reason) throw new ForbiddenException(reason);
 
     if (current.sessionId) {
@@ -195,8 +210,9 @@ export class AuthService {
     if (storeIds.length === 0) return [];
     const accounts = await this.prisma.user.findMany({
       where: { phone, storeId: { in: storeIds }, active: true },
-      include: { store: { select: { id: true, name: true, active: true, mode: true } } },
+      include: { store: { select: { id: true, name: true, ...DASHBOARD_STORE_SELECT } } },
     });
+    const rules = await this.siteConfig.getSubscriptionRules();
 
     // Open = at least one of its terminals (the main, in a LAN shop — satellites report to it) has
     // sent a heartbeat within the window.
@@ -213,9 +229,9 @@ export class AuthService {
     return accounts
       .flatMap((a) => {
         if (!a.store) return [];
-        const reason = dashboardLoginBlockReason(a.role, a.storeId, a.store, client);
-        // A deactivated store is not listed at all; an OFFLINE_ONLY one is, greyed out.
-        if (reason && reason !== OFFLINE_ONLY_REASON) return [];
+        const reason = dashboardLoginBlockReason(a.role, a.storeId, a.store, client, rules);
+        // A deactivated store is not listed at all; an OFFLINE_ONLY or unpaid one is, greyed out.
+        if (reason && !GREYED_OUT.has(reason)) return [];
         return [
           {
             id: a.storeId as string,
@@ -223,6 +239,7 @@ export class AuthService {
             role: a.role,
             online: open.has(a.storeId as string),
             offlineOnly: reason === OFFLINE_ONLY_REASON,
+            subscriptionBlocked: reason === SUBSCRIPTION_BLOCKED_REASON,
           },
         ];
       })
@@ -296,10 +313,16 @@ export class AuthService {
 
     const store = await this.prisma.store.findUnique({
       where: { id: storeId },
-      select: { active: true, mode: true },
+      select: DASHBOARD_STORE_SELECT,
     });
 
-    const reason = dashboardLoginBlockReason(role, storeId, store, client);
+    const reason = dashboardLoginBlockReason(
+      role,
+      storeId,
+      store,
+      client,
+      await this.siteConfig.getSubscriptionRules(),
+    );
     if (!reason) return;
 
     // 403, not 401: the browser's axios interceptor turns a 401 into a logout and a redirect,
@@ -328,10 +351,12 @@ export class AuthService {
     }
 
     // Re-check the store on every request, not just at login. Otherwise deactivating a store — or
-    // switching it to OFFLINE_ONLY — leaves everyone already signed in working normally until
-    // their token expires, which for an eight-hour token is most of a working day.
+    // switching it to OFFLINE_ONLY, or its grace days running out — leaves everyone already signed
+    // in working normally until their token expires, which for an eight-hour token is most of a
+    // working day.
     //
-    // `user.store` rides along on the query above, so this costs no extra round trip.
+    // `user.store` rides along on the query above, and the rules are cached, so this costs no
+    // extra round trip.
     //
     // Returning null yields a 401, which is what we want: the browser's interceptor clears the
     // session and sends them to the login page, where the next attempt explains why in a toast.
@@ -340,7 +365,8 @@ export class AuthService {
     // Judged as the client the token was minted for. Omitting it defaults to 'dashboard' and 401s
     // every request from an OFFLINE_ONLY terminal — including the login screen's subscription
     // panel, which exists precisely for those stores.
-    if (dashboardLoginBlockReason(user.role, user.storeId, user.store, payload.client)) {
+    const rules = await this.siteConfig.getSubscriptionRules();
+    if (dashboardLoginBlockReason(user.role, user.storeId, user.store, payload.client, rules)) {
       return null;
     }
 

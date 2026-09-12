@@ -1,6 +1,11 @@
 import * as bcrypt from 'bcryptjs';
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import {
+  DAY_MS,
+  DEFAULT_SUBSCRIPTION_RULES,
+  type SubscriptionRules,
+} from '../../../shared/utils/subscription';
 
 /**
  * Signing in to the web dashboard without a store ID, and switching between stores.
@@ -43,6 +48,7 @@ function build(
   accounts: Account[],
   superAdmin: unknown = null,
   heartbeats: Array<{ storeId: string; updatedAt: Date }> = [],
+  rules: SubscriptionRules = DEFAULT_SUBSCRIPTION_RULES,
 ) {
   const sessions: Array<{ id: string; userId: string }> = [];
   const revoked: string[] = [];
@@ -94,11 +100,28 @@ function build(
     },
   };
 
-  const service = new AuthService(usersService as never, jwtService as never, prisma as never);
+  const siteConfig = { getSubscriptionRules: jest.fn(async () => rules) };
+  const service = new AuthService(
+    usersService as never,
+    jwtService as never,
+    prisma as never,
+    siteConfig as never,
+  );
   return { service, usersService, sessions, revoked };
 }
 
 const claims = (token: string) => JSON.parse(token);
+/** A store whose PRO plan expired a month ago — far past its grace days. */
+const unpaid = (id: string, name: string) => ({
+  store: {
+    id,
+    name,
+    active: true,
+    mode: 'ONLINE',
+    subscriptionPlan: 'PRO',
+    subscriptionExpiresAt: new Date(Date.now() - 30 * DAY_MS),
+  },
+});
 const login = (extra: Record<string, unknown> = {}) => ({ phone: PHONE, password: PASSWORD, ...extra }) as any;
 
 describe('login without a store ID', () => {
@@ -107,7 +130,9 @@ describe('login without a store ID', () => {
     const res = await service.login(login());
     expect(res.user.storeId).toBe('A');
     expect(claims(res.token).storeIds).toEqual(['A']);
-    expect(res.stores).toEqual([{ id: 'A', name: 'Alpha', role: 'ADMIN', online: false, offlineOnly: false }]);
+    expect(res.stores).toEqual([
+      { id: 'A', name: 'Alpha', role: 'ADMIN', online: false, offlineOnly: false, subscriptionBlocked: false },
+    ]);
   });
 
   it('opens the store this browser used last when it may, else the first by name', async () => {
@@ -158,6 +183,34 @@ describe('login without a store ID', () => {
       account('A', 'Alpha', { store: { id: 'A', name: 'Alpha', active: false, mode: 'ONLINE' } }),
     ]);
     await expect(service.login(login())).rejects.toThrow(new ForbiddenException('auth.errors.store_inactive'));
+  });
+
+  it('lists a store blocked for its subscription greyed out, and signs in to another', async () => {
+    const { service } = build([account('A', 'Alpha'), account('B', 'Bravo', unpaid('B', 'Bravo'))]);
+    const res = await service.login(login({ preferredStoreId: 'B' }));
+    expect(res.user.storeId).toBe('A');
+    expect(claims(res.token).storeIds).toEqual(['A', 'B']);
+    expect(res.stores?.map((s) => [s.id, s.subscriptionBlocked])).toEqual([
+      ['A', false],
+      ['B', true],
+    ]);
+  });
+
+  it('says so when the only store it opens is blocked for its subscription', async () => {
+    const { service, sessions } = build([account('A', 'Alpha', unpaid('A', 'Alpha'))]);
+    await expect(service.login(login())).rejects.toThrow(
+      new ForbiddenException('auth.errors.subscription_blocked'),
+    );
+    expect(sessions).toEqual([]);
+  });
+
+  // The grace the super admin set is the one applied, not the default.
+  it('judges by the rules the super admin saved', async () => {
+    const { service } = build([account('A', 'Alpha', unpaid('A', 'Alpha'))], null, [], {
+      ...DEFAULT_SUBSCRIPTION_RULES,
+      graceDays: 60,
+    });
+    await expect(service.login(login())).resolves.toMatchObject({ user: { storeId: 'A' } });
   });
 
   it('says the account is deactivated when that is the only thing wrong', async () => {
@@ -222,6 +275,14 @@ describe('switching store', () => {
     );
   });
 
+  it('refuses a store blocked for its subscription', async () => {
+    const { service, sessions } = build([account('A', 'Alpha'), account('B', 'Bravo', unpaid('B', 'Bravo'))]);
+    await expect(service.switchStore(current, 'B')).rejects.toThrow(
+      new ForbiddenException('auth.errors.subscription_blocked'),
+    );
+    expect(sessions).toEqual([]);
+  });
+
   it('opens a store created after sign-in whose account carries this password', async () => {
     const { service } = build([account('A', 'Alpha'), account('B', 'Bravo')]);
     const res = await service.switchStore(
@@ -237,7 +298,7 @@ describe('listing stores', () => {
   it('a token without a list lists its own store', async () => {
     const { service } = build([account('A', 'Alpha'), account('B', 'Bravo')]);
     expect(await service.listStores({ phone: PHONE, storeId: 'A', storeIds: [] })).toEqual([
-      { id: 'A', name: 'Alpha', role: 'ADMIN', online: false, offlineOnly: false },
+      { id: 'A', name: 'Alpha', role: 'ADMIN', online: false, offlineOnly: false, subscriptionBlocked: false },
     ]);
   });
 

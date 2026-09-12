@@ -10,8 +10,14 @@ import {
   BarChart2,
   Undo2,
 } from "lucide-react";
-import { stores, StoreRecord } from "../../api/client";
+import { stores, siteConfig, StoreRecord } from "../../api/client";
 import { formatPhone } from "@shared/utils/phone";
+import {
+  DEFAULT_SUBSCRIPTION_RULES,
+  storeSubscriptionFacts,
+  subscriptionStatus,
+  type SubscriptionRules,
+} from "@shared/utils/subscription";
 import { StoreFormModal } from "./StoreFormModal";
 import { StoreDetailModal } from "./StoreDetailModal";
 
@@ -116,13 +122,14 @@ const Badge = styled.span<{
   $gray?: boolean;
   $red?: boolean;
   $purple?: boolean;
+  $amber?: boolean;
 }>`
   display: inline-block;
   padding: 3px 10px;
   border-radius: 12px;
   font-size: 13px;
   font-weight: 600;
-  background: ${({ $green, $blue, $gray, $red, $purple, theme }) =>
+  background: ${({ $green, $blue, $red, $purple, $amber, theme }) =>
     $purple
       ? "#f3e8ff"
       : $green
@@ -131,8 +138,10 @@ const Badge = styled.span<{
           ? "#dbeafe"
           : $red
             ? "#fef2f2"
-            : theme.colors.border};
-  color: ${({ $green, $blue, $gray, $red, $purple, theme }) =>
+            : $amber
+              ? "#fef3c7"
+              : theme.colors.border};
+  color: ${({ $green, $blue, $red, $purple, $amber, theme }) =>
     $purple
       ? "#7c3aed"
       : $green
@@ -141,8 +150,39 @@ const Badge = styled.span<{
           ? "#2563eb"
           : $red
             ? "#ef4444"
-            : theme.colors.textSecondary};
+            : $amber
+              ? "#b45309"
+              : theme.colors.textSecondary};
 `;
+
+const SubscriptionNote = styled.div<{ $color: string }>`
+  font-size: 12px;
+  color: ${({ $color }) => $color};
+  margin-top: 4px;
+  white-space: nowrap;
+`;
+
+const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : "");
+
+/** Where a store's subscription stands, under its plan badge (shared/utils/subscription.ts). */
+function subscriptionLine(store: StoreRecord, rules: SubscriptionRules) {
+  const s = subscriptionStatus(storeSubscriptionFacts(store), rules);
+  switch (s.state) {
+    case "active":
+      return { text: `Until ${day(s.expiresAt)}`, color: "#6b7280" };
+    case "warning":
+      return { text: `Expires ${day(s.expiresAt)}`, color: "#b45309" };
+    case "grace":
+      return { text: `Expired · blocks ${day(s.blockAt)}`, color: "#ef4444" };
+    case "blocked":
+      return {
+        text: s.blockAt ? `Blocked since ${day(s.blockAt)}` : "Blocked — no plan",
+        color: "#ef4444",
+      };
+    default:
+      return null;
+  }
+}
 
 const RowActions = styled.div`
   display: flex;
@@ -178,6 +218,14 @@ export function StoreList() {
   const [error, setError] = useState<string | null>(null);
   const [formStore, setFormStore] = useState<StoreRecord | null | "new">(null);
   const [detailStore, setDetailStore] = useState<StoreRecord | null>(null);
+  const [rules, setRules] = useState<SubscriptionRules>(DEFAULT_SUBSCRIPTION_RULES);
+
+  useEffect(() => {
+    siteConfig
+      .getSubscriptionRules()
+      .then(setRules)
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -185,6 +233,8 @@ export function StoreList() {
     try {
       const data = await stores.getAll();
       setList(data);
+      // An open details screen shows the store as just saved, not as it was when opened.
+      setDetailStore((open) => (open && data.find((s) => s.id === open.id)) || open);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -306,9 +356,15 @@ export function StoreList() {
                     <Badge $blue>PRO</Badge>
                   ) : store.subscriptionPlan === "STARTER" ? (
                     <Badge $green>STARTER</Badge>
+                  ) : store.subscriptionPlan === "TRIAL" ? (
+                    <Badge $amber>TRIAL</Badge>
                   ) : (
                     <Badge $gray>No Plan</Badge>
                   )}
+                  {(() => {
+                    const line = subscriptionLine(store, rules);
+                    return line && <SubscriptionNote $color={line.color}>{line.text}</SubscriptionNote>;
+                  })()}
                 </Td>
                 <Td>{store._count?.users ?? "—"}</Td>
                 <Td>{store._count?.products ?? "—"}</Td>

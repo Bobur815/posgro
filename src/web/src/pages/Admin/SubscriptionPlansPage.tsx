@@ -2,6 +2,12 @@ import React, { useEffect, useState } from "react";
 import styled from "styled-components";
 import { RefreshCw, Save } from "lucide-react";
 import { siteConfig, SubscriptionPlanPrices, SubscriptionPayment } from "../../api/client";
+import {
+  DEFAULT_SUBSCRIPTION_RULES,
+  SUBSCRIPTION_RULE_LIMITS,
+  normalizeSubscriptionRules,
+  type SubscriptionRules,
+} from "@shared/utils/subscription";
 
 const Page = styled.div`
   padding: 32px;
@@ -131,6 +137,56 @@ const FieldHint = styled.div`
   line-height: 1.5;
 `;
 
+const RulesGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0 20px;
+
+  @media (max-width: 700px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const CheckRow = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: ${({ theme }) => theme.colors.text};
+  cursor: pointer;
+
+  input {
+    width: 18px;
+    height: 18px;
+  }
+`;
+
+type RuleDays = keyof typeof SUBSCRIPTION_RULE_LIMITS;
+
+const RULE_FIELDS: Array<{ key: RuleDays; label: string; hint: string }> = [
+  {
+    key: "trialDays",
+    label: "Trial length (days)",
+    hint: "How long a new store's free trial lasts.",
+  },
+  {
+    key: "warnDays",
+    label: "Warn before expiry (days)",
+    hint: "The dashboard and the POS start warning this many days before the expiry date.",
+  },
+  {
+    key: "graceDays",
+    label: "Days to pay after expiry",
+    hint: "After the expiry date the store keeps working this many days, then it is blocked on the dashboard and the POS.",
+  },
+  {
+    key: "offlineCheckinDays",
+    label: "Offline check-in (days)",
+    hint: "A till must reach the server at least this often to renew its license, even in an offline-only store.",
+  },
+];
+
 const PLANS = [
   {
     key: "starter" as keyof SubscriptionPlanPrices,
@@ -162,6 +218,7 @@ export function SubscriptionPlansPage() {
     paymentUrl: "",
     supportPhone: "",
   });
+  const [rules, setRules] = useState<SubscriptionRules>(DEFAULT_SUBSCRIPTION_RULES);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -171,13 +228,14 @@ export function SubscriptionPlansPage() {
     Promise.all([
       siteConfig.getSubscriptionPlans().then(setPrices),
       siteConfig.getSubscriptionPayment().then(setPayment),
+      siteConfig.getSubscriptionRules().then(setRules),
     ])
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  // Prices and payment details are saved together — they are one page to the super admin, and
-  // splitting the button would leave the POS dialog half-configured after a partial save.
+  // Prices, payment details and rules are saved together — they are one page to the super admin,
+  // and splitting the button would leave the POS dialog half-configured after a partial save.
   const handleSave = async () => {
     setSaving(true);
     setSuccess(false);
@@ -185,6 +243,7 @@ export function SubscriptionPlansPage() {
     try {
       await siteConfig.setSubscriptionPlans(prices);
       await siteConfig.setSubscriptionPayment(payment);
+      setRules(await siteConfig.setSubscriptionRules(normalizeSubscriptionRules(rules)));
       setSuccess(true);
     } catch (e) {
       setError((e as Error).message);
@@ -276,6 +335,52 @@ export function SubscriptionPlansPage() {
                   renewed by hand.
                 </FieldHint>
               </Field>
+            </Card>
+          </Section>
+
+          <Section>
+            <SectionTitle>Subscription Rules</SectionTitle>
+            <Subtitle style={{ marginBottom: 24 }}>
+              When stores are warned and blocked. These apply to every store; each store's own plan
+              and expiry date are set on its Stats / AI plan screen.
+            </Subtitle>
+
+            <Card>
+              <Field>
+                <CheckRow>
+                  <input
+                    type="checkbox"
+                    checked={rules.trialEnabled}
+                    onChange={(e) => setRules((r) => ({ ...r, trialEnabled: e.target.checked }))}
+                  />
+                  Free trial for new stores
+                </CheckRow>
+                <FieldHint>
+                  On: a new store starts on the TRIAL plan for the days below. Off: a new store is
+                  blocked until you give it a plan. Stores that already exist are not affected.
+                </FieldHint>
+              </Field>
+
+              <RulesGrid>
+                {RULE_FIELDS.map(({ key, label, hint }) => (
+                  <Field key={key}>
+                    <Label>{label}</Label>
+                    <Input
+                      type="number"
+                      step="1"
+                      min={SUBSCRIPTION_RULE_LIMITS[key].min}
+                      max={SUBSCRIPTION_RULE_LIMITS[key].max}
+                      value={rules[key]}
+                      disabled={key === "trialDays" && !rules.trialEnabled}
+                      onChange={(e) =>
+                        setRules((r) => ({ ...r, [key]: Number(e.target.value) }))
+                      }
+                      onFocus={(e) => e.target.select()}
+                    />
+                    <FieldHint>{hint}</FieldHint>
+                  </Field>
+                ))}
+              </RulesGrid>
             </Card>
           </Section>
 

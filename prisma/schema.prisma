@@ -27,8 +27,14 @@ model Store {
   aiPlan  String  @default("free") @map("ai_plan") // "free" | "paid" — AI invoice scanning tier
   balance Decimal @default(0) @map("balance") @db.Decimal(12, 4) // Store balance in UZS (so'm)
 
-  subscriptionPlan      String?   @map("subscription_plan") // "STARTER" | "PRO" | "VIP"
+  subscriptionPlan      String?   @map("subscription_plan") // "TRIAL" | "STARTER" | "PRO" | "VIP"
   subscriptionExpiresAt DateTime? @map("subscription_expires_at") // null = perpetual (VIP)
+  /// Created once subscriptions were enforced: with no plan it is blocked, not unlimited. Stores
+  /// from before were left false. See src/shared/utils/subscription.ts.
+  subscriptionRequired  Boolean   @default(false) @map("subscription_required")
+  /// For a store already expired the day enforcement shipped: its grace days count from here.
+  /// Cleared whenever the plan or date is set again.
+  subscriptionGraceFrom DateTime? @map("subscription_grace_from")
 
   /// Manager-override password for this store's terminals, bcrypt hashed — never plaintext.
   /// Set by a super admin, delivered to a terminal through GET /store-config, and compared there

@@ -1,6 +1,10 @@
 import { Controller, Get, Put, Post, Body, UseGuards, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { IsString, IsNumber, Min } from 'class-validator';
+import { IsString, IsNumber, IsBoolean, IsInt, Min, Max } from 'class-validator';
+import {
+  SUBSCRIPTION_RULE_LIMITS as LIMITS,
+  type SubscriptionRules,
+} from '../../../shared/utils/subscription';
 import { FileInterceptor } from '@nestjs/platform-express';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { diskStorage } = require('multer') as { diskStorage: (opts: any) => any };
@@ -41,6 +45,17 @@ class SubscriptionPaymentDto {
   @IsString() qrPayload!: string;
   @IsString() paymentUrl!: string;
   @IsString() supportPhone!: string;
+}
+
+class SubscriptionRulesDto implements SubscriptionRules {
+  @IsBoolean() trialEnabled!: boolean;
+  @IsInt() @Min(LIMITS.trialDays.min) @Max(LIMITS.trialDays.max) trialDays!: number;
+  @IsInt() @Min(LIMITS.warnDays.min) @Max(LIMITS.warnDays.max) warnDays!: number;
+  @IsInt() @Min(LIMITS.graceDays.min) @Max(LIMITS.graceDays.max) graceDays!: number;
+  @IsInt()
+  @Min(LIMITS.offlineCheckinDays.min)
+  @Max(LIMITS.offlineCheckinDays.max)
+  offlineCheckinDays!: number;
 }
 
 @ApiTags('site-config')
@@ -106,6 +121,24 @@ export class SiteConfigController {
   @ApiOperation({ summary: 'Set subscription payment details (super admin only)' })
   setSubscriptionPayment(@Body() dto: SubscriptionPaymentDto): Promise<SubscriptionPayment> {
     return this.siteConfigService.setSubscriptionPayment(dto);
+  }
+
+  @Get('subscription-rules')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Get trial, warning, grace and check-in days (super admin only)' })
+  getSubscriptionRules(): Promise<SubscriptionRules> {
+    return this.siteConfigService.getSubscriptionRules();
+  }
+
+  @Put('subscription-rules')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Set trial, warning, grace and check-in days (super admin only)' })
+  setSubscriptionRules(@Body() dto: SubscriptionRulesDto): Promise<SubscriptionRules> {
+    return this.siteConfigService.setSubscriptionRules(dto);
   }
 
   @Post('upload-image')

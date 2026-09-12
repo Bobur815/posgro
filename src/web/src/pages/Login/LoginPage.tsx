@@ -11,7 +11,11 @@ import { UzbekPhoneInput } from "@components/common/UzbekPhoneInput";
 import { isUzPhoneComplete } from "@shared/utils/phone";
 import { Eye, EyeOff, Download } from "lucide-react";
 import { useToast } from "@context/ToastContext";
-import { siteConfig, type LoginBanner } from "../../api/client";
+import {
+  siteConfig,
+  type LoginBanner,
+  type SubscriptionPayment,
+} from "../../api/client";
 
 /**
  * Refusals that are about the store, not the credentials.
@@ -24,6 +28,12 @@ const STORE_BLOCKED_ERRORS = [
   "auth.errors.store_inactive",
   "auth.errors.store_offline_only",
 ];
+
+/**
+ * The store's grace days have run out. Shown in place, with how to pay, rather than as a toast that
+ * disappears — paying is the next thing to do.
+ */
+const SUBSCRIPTION_BLOCKED = "auth.errors.subscription_blocked";
 
 const RELEASES_BASE = "/releases";
 
@@ -197,6 +207,39 @@ const DownloadBanner = styled.a`
   }
 `;
 
+const BlockedPanel = styled.div`
+  margin-top: ${({ theme }) => theme.spacing.md};
+  padding: ${({ theme }) => theme.spacing.md};
+  border: 1px solid ${({ theme }) => theme.colors.error};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  background-color: ${({ theme }) => theme.colors.error}10;
+  color: ${({ theme }) => theme.colors.text};
+  font-size: 14px;
+  line-height: 1.5;
+
+  strong {
+    display: block;
+    margin-bottom: 4px;
+    color: ${({ theme }) => theme.colors.error};
+    font-size: 15px;
+  }
+
+  p {
+    margin: 0 0 8px;
+  }
+
+  a {
+    display: inline-block;
+    margin-bottom: 8px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    background: ${({ theme }) => theme.colors.primary};
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+  }
+`;
+
 const PasswordWrapper = styled.div`
   position: relative;
 `;
@@ -240,6 +283,8 @@ export function LoginPage() {
     url: string;
   } | null>(null);
   const [banner, setBanner] = useState<LoginBanner | null>(null);
+  const [subscriptionBlocked, setSubscriptionBlocked] = useState(false);
+  const [payment, setPayment] = useState<SubscriptionPayment | null>(null);
 
   useEffect(() => {
     clearError();
@@ -284,13 +329,21 @@ export function LoginPage() {
     if (!isUzPhoneComplete(phoneDigits)) return;
 
     const fullPhone = "998" + phoneDigits;
+    setSubscriptionBlocked(false);
     // No store ID: the server opens every store this password opens, and the top bar switches
     // between them.
     const success = await login(fullPhone, password);
 
     if (!success) {
       const reason = useAuthStore.getState().error;
-      if (reason && STORE_BLOCKED_ERRORS.includes(reason)) {
+      if (reason === SUBSCRIPTION_BLOCKED) {
+        setSubscriptionBlocked(true);
+        clearError();
+        siteConfig
+          .getSubscriptionPayment()
+          .then(setPayment)
+          .catch(() => {});
+      } else if (reason && STORE_BLOCKED_ERRORS.includes(reason)) {
         // Long enough to actually read — it explains where to go instead.
         toast.error(t(reason), 12000);
         clearError();
@@ -382,6 +435,22 @@ export function LoginPage() {
               {isLoading ? t("common.loading") : t("auth.login")}
             </Button>
           </Form>
+
+          {subscriptionBlocked && (
+            <BlockedPanel role="alert">
+              <strong>{t("subscription.blockedTitle")}</strong>
+              <p>{t(SUBSCRIPTION_BLOCKED)}</p>
+              {/* A link naming its store ({storeId}) cannot be filled in before sign-in. */}
+              {payment?.paymentUrl && !payment.paymentUrl.includes("{storeId}") && (
+                <a href={payment.paymentUrl} target="_blank" rel="noopener noreferrer">
+                  {t("subscription.payOnline")}
+                </a>
+              )}
+              {payment?.supportPhone && (
+                <p>{t("subscription.callSupport", { phone: payment.supportPhone })}</p>
+              )}
+            </BlockedPanel>
+          )}
 
           <LangRow>
             <LangButton

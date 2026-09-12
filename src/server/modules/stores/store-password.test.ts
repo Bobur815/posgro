@@ -45,7 +45,7 @@ function build(superAdminPassword: string | null) {
       update: jest.fn(async (_args: { data: Record<string, unknown> }) => row),
     },
   };
-  return { service: new StoresService(prisma as never), prisma, selects };
+  return { service: new StoresService(prisma as never, {} as never), prisma, selects };
 }
 
 /** The `data` payload the service handed to prisma.store.update(). */
