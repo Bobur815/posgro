@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { StoreGuard } from '../../common/guards/store.guard';
 import { CurrentStore } from '../../common/decorators/current-store.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { AllowWhenBlocked } from '../../common/decorators/allow-when-blocked.decorator';
 
 @ApiTags('logs')
 @Controller('logs')
@@ -15,6 +16,8 @@ export class LogsController {
 
   @Post('upload')
   @UseGuards(JwtAuthGuard, StoreGuard)
+  // Support can still see what a blocked till is doing.
+  @AllowWhenBlocked()
   @ApiOperation({ summary: 'Terminal uploads a batch of log entries' })
   async upload(
     @CurrentStore() storeId: string,

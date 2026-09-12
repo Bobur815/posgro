@@ -5,6 +5,7 @@ import { HeartbeatDto } from './dto/heartbeat.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { StoreGuard } from '../../common/guards/store.guard';
 import { CurrentStore } from '../../common/decorators/current-store.decorator';
+import { AllowWhenBlocked } from '../../common/decorators/allow-when-blocked.decorator';
 
 @ApiTags('terminals')
 @Controller('terminals')
@@ -14,6 +15,8 @@ export class TerminalsController {
   constructor(private readonly terminalsService: TerminalsService) {}
 
   @Post('heartbeat')
+  // A blocked store's tills still show up (the store switcher's dot, the super admin's list).
+  @AllowWhenBlocked()
   @ApiOperation({ summary: 'Record a terminal heartbeat after sync' })
   @ApiResponse({ status: 200, description: 'Heartbeat recorded' })
   async heartbeat(

@@ -5,6 +5,15 @@ import { CurrentStore } from '../../common/decorators/current-store.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SiteConfigService } from '../site-config/site-config.service';
 import { storeSubscriptionFacts, subscriptionStatus } from '../../../shared/utils/subscription';
+import { LicensesService } from '../licenses/licenses.service';
+import { AllowWhenBlocked } from '../../common/decorators/allow-when-blocked.decorator';
+
+const SUBSCRIPTION_FIELDS = {
+  subscriptionPlan: true,
+  subscriptionExpiresAt: true,
+  subscriptionGraceFrom: true,
+  subscriptionRequired: true,
+} as const;
 
 const AI_TOKEN_LIMIT_FREE = 5;
 const AI_TOKEN_LIMIT_PAID = 100;
@@ -13,28 +22,39 @@ const AI_TOKEN_LIMIT_PAID = 100;
 @Controller('store-config')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
+// A blocked till still reads these: they carry the license that says it is blocked, and the one
+// that says it has been paid for.
+@AllowWhenBlocked()
 export class StoreConfigController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly siteConfig: SiteConfigService,
+    private readonly licenses: LicensesService,
   ) {}
 
   @Get()
   @ApiOperation({ summary: 'Get server-controlled config for the current store' })
   async getConfig(@CurrentStore() storeId: string) {
-    const store = storeId
-      ? await this.prisma.store.findUnique({
-          where: { id: storeId },
-          select: {
-            aiPlan: true,
-            mode: true,
-            posAdminLocked: true,
-            superAdminPassword: true,
-          },
-        })
-      : null;
+    const [store, rules] = await Promise.all([
+      storeId
+        ? this.prisma.store.findUnique({
+            where: { id: storeId },
+            select: {
+              aiPlan: true,
+              mode: true,
+              posAdminLocked: true,
+              superAdminPassword: true,
+              ...SUBSCRIPTION_FIELDS,
+            },
+          })
+        : null,
+      this.siteConfig.getSubscriptionRules(),
+    ]);
 
     return {
+      // The store's signed license (shared/utils/license.ts), refreshed on every sync. Null when
+      // the server has no signing key, or for a caller with no store.
+      license: store ? this.licenses.sign(storeId, storeSubscriptionFacts(store), rules) : null,
       ai_token_limit_daily: store?.aiPlan === 'paid' ? AI_TOKEN_LIMIT_PAID : AI_TOKEN_LIMIT_FREE,
       // Terminal operating mode. A terminal that can't resolve its store must keep behaving as it
       // does today, so an unknown store yields ONLINE + unlocked rather than a restricted terminal.
@@ -68,10 +88,7 @@ export class StoreConfigController {
               name: true,
               aiPlan: true,
               balance: true,
-              subscriptionPlan: true,
-              subscriptionExpiresAt: true,
-              subscriptionGraceFrom: true,
-              subscriptionRequired: true,
+              ...SUBSCRIPTION_FIELDS,
             },
           })
         : null,
@@ -91,6 +108,8 @@ export class StoreConfigController {
       warn_from: status?.warnFrom ?? null,
       block_at: status?.blockAt ?? null,
       days_left: status?.daysLeft ?? null,
+      // The same license GET /store-config carries — "Check payment" on the till reads it here.
+      license: store ? this.licenses.sign(storeId, storeSubscriptionFacts(store), rules) : null,
       ai_plan: store?.aiPlan ?? 'free',
       balance_uzs: store ? Number(store.balance) : null,
       payment: {

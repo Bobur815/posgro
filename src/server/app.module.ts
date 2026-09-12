@@ -24,6 +24,7 @@ import { MarkingCodesModule } from './modules/marking-codes/marking-codes.module
 import { StockMovementModule } from './modules/stock-movement/stock-movement.module';
 import { ReconciliationModule } from './modules/reconciliation/reconciliation.module';
 import { SmenaModule } from './modules/smena/smena.module';
+import { LicensesModule } from './modules/licenses/licenses.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { SmenaModule } from './modules/smena/smena.module';
     SiteConfigModule,
     AslBelgisiModule,
     MarkingCodesModule,
+    LicensesModule,
   ],
 })
 export class AppModule {}

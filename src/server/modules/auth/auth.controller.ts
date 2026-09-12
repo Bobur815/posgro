@@ -21,6 +21,7 @@ import { CurrentUser as CurrentUserType } from './types/auth.types';
 import { User } from '@prisma/client';
 import { SwitchStoreDto } from './dto/switch-store.dto';
 import type { LoginClient } from './dashboard-access';
+import { AllowWhenBlocked } from '../../common/decorators/allow-when-blocked.decorator';
 
 /** What `validateUser` puts on the request. */
 type SignedInUser = User & {
@@ -32,6 +33,8 @@ type SignedInUser = User & {
 
 @ApiTags('auth')
 @Controller('auth')
+// Signing in stays open to a blocked till: it is how it gets the token that fetches its license.
+@AllowWhenBlocked()
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
