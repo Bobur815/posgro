@@ -692,6 +692,15 @@ export const siteConfig = {
     const { data } = await axiosInstance.put('/site-config/login-banner', banner);
     return data;
   },
+  /** This dashboard's own login banner — `getLoginBanner` is the POS terminals'. */
+  getWebLoginBanner: async (): Promise<LoginBanner> => {
+    const { data } = await axiosInstance.get('/site-config/web-login-banner');
+    return data;
+  },
+  updateWebLoginBanner: async (banner: LoginBanner): Promise<LoginBanner> => {
+    const { data } = await axiosInstance.put('/site-config/web-login-banner', banner);
+    return data;
+  },
   uploadImage: async (file: File): Promise<{ url: string }> => {
     const form = new FormData();
     form.append('file', file);

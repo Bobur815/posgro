@@ -49,7 +49,7 @@ export class SiteConfigController {
   constructor(private readonly siteConfigService: SiteConfigService) {}
 
   @Get('login-banner')
-  @ApiOperation({ summary: 'Get login page right-panel banner (public)' })
+  @ApiOperation({ summary: 'Get the POS terminal login screen banner (public)' })
   getLoginBanner(): Promise<LoginBanner> {
     return this.siteConfigService.getLoginBanner();
   }
@@ -58,9 +58,24 @@ export class SiteConfigController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN')
   @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ summary: 'Update login page banner (super admin only)' })
+  @ApiOperation({ summary: 'Update the POS terminal login screen banner (super admin only)' })
   setLoginBanner(@Body() dto: LoginBannerDto): Promise<LoginBanner> {
     return this.siteConfigService.setLoginBanner(dto);
+  }
+
+  @Get('web-login-banner')
+  @ApiOperation({ summary: 'Get the web dashboard login page banner (public)' })
+  getWebLoginBanner(): Promise<LoginBanner> {
+    return this.siteConfigService.getWebLoginBanner();
+  }
+
+  @Put('web-login-banner')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Update the web dashboard login page banner (super admin only)' })
+  setWebLoginBanner(@Body() dto: LoginBannerDto): Promise<LoginBanner> {
+    return this.siteConfigService.setWebLoginBanner(dto);
   }
 
   @Get('subscription-plans')

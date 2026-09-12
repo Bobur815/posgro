@@ -289,7 +289,7 @@ export function LoginPage() {
 
   useEffect(() => {
     siteConfig
-      .getLoginBanner()
+      .getWebLoginBanner()
       .then(setBanner)
       .catch(() => {});
   }, []);

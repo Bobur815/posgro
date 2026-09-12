@@ -26,31 +26,57 @@ export interface SubscriptionPayment {
   supportPhone: string;
 }
 
+/** The POS terminal login screen's banner — the key every till in the field already reads. */
 const BANNER_KEY = 'login_banner';
+/** The web dashboard login page's banner, kept apart from the terminals'. */
+const WEB_BANNER_KEY = 'web_login_banner';
 const PAYMENT_KEY = 'subscription_payment';
 const DEFAULT: LoginBanner = { imageUrl: '', title: '', subtitle: '' };
 const DEFAULT_PRICES: SubscriptionPlanPrices = { starter: 0, pro: 0, vip: 0 };
 const DEFAULT_PAYMENT: SubscriptionPayment = { qrPayload: '', paymentUrl: '', supportPhone: '' };
 
+function parseBanner(value: string): LoginBanner {
+  try {
+    return { ...DEFAULT, ...(JSON.parse(value) as Partial<LoginBanner>) };
+  } catch {
+    return DEFAULT;
+  }
+}
+
 @Injectable()
 export class SiteConfigService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** The POS terminal login screen's banner. */
   async getLoginBanner(): Promise<LoginBanner> {
     const row = await this.prisma.siteConfig.findUnique({ where: { key: BANNER_KEY } });
-    if (!row) return DEFAULT;
-    try {
-      return JSON.parse(row.value) as LoginBanner;
-    } catch {
-      return DEFAULT;
-    }
+    return row ? parseBanner(row.value) : DEFAULT;
   }
 
-  async setLoginBanner(banner: LoginBanner): Promise<LoginBanner> {
+  setLoginBanner(banner: LoginBanner): Promise<LoginBanner> {
+    return this.writeBanner(BANNER_KEY, banner);
+  }
+
+  /**
+   * The web dashboard login page's banner — separate from the terminals', so a photo framed for a
+   * till's screen and one for a laptop's can differ. Until one has been saved it is the POS
+   * banner, so the dashboard does not lose its image the day the two were split.
+   */
+  async getWebLoginBanner(): Promise<LoginBanner> {
+    const row = await this.prisma.siteConfig.findUnique({ where: { key: WEB_BANNER_KEY } });
+    return row ? parseBanner(row.value) : this.getLoginBanner();
+  }
+
+  setWebLoginBanner(banner: LoginBanner): Promise<LoginBanner> {
+    return this.writeBanner(WEB_BANNER_KEY, banner);
+  }
+
+  private async writeBanner(key: string, banner: LoginBanner): Promise<LoginBanner> {
+    const value = JSON.stringify(banner);
     await this.prisma.siteConfig.upsert({
-      where: { key: BANNER_KEY },
-      update: { value: JSON.stringify(banner) },
-      create: { key: BANNER_KEY, value: JSON.stringify(banner) },
+      where: { key },
+      update: { value },
+      create: { key, value },
     });
     return banner;
   }

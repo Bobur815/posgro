@@ -101,6 +101,7 @@ export const storeRoutes: Route[] = [
  */
 const SITE_KEYS = {
   banner: 'site_login_banner',
+  webBanner: 'site_web_login_banner',
   plans: 'site_subscription_plans',
   payment: 'site_subscription_payment',
 } as const;
@@ -124,24 +125,50 @@ async function writeJsonSetting(key: string, value: unknown): Promise<void> {
   });
 }
 
+const EMPTY_BANNER = { imageUrl: '', title: '', subtitle: '' };
+
+function bannerFrom(body: any) {
+  return {
+    imageUrl: String(body?.imageUrl ?? ''),
+    title: String(body?.title ?? ''),
+    subtitle: String(body?.subtitle ?? ''),
+  };
+}
+
 export const siteConfigRoutes: Route[] = [
+  // The POS terminal login screen's banner.
   {
     method: 'GET',
     path: '/site-config/login-banner',
     public: true,
-    handler: () => readJsonSetting(SITE_KEYS.banner, { imageUrl: '', title: '', subtitle: '' }),
+    handler: () => readJsonSetting(SITE_KEYS.banner, EMPTY_BANNER),
   },
   {
     method: 'PUT',
     path: '/site-config/login-banner',
     roles: ADMIN_ONLY,
     handler: async ({ body }) => {
-      const banner = {
-        imageUrl: String(body?.imageUrl ?? ''),
-        title: String(body?.title ?? ''),
-        subtitle: String(body?.subtitle ?? ''),
-      };
+      const banner = bannerFrom(body);
       await writeJsonSetting(SITE_KEYS.banner, banner);
+      return banner;
+    },
+  },
+  // The web dashboard login page's own banner. Until one is saved it is the terminal's, as on the
+  // VPS, so splitting the two costs the dashboard nothing.
+  {
+    method: 'GET',
+    path: '/site-config/web-login-banner',
+    public: true,
+    handler: async () =>
+      readJsonSetting(SITE_KEYS.webBanner, await readJsonSetting(SITE_KEYS.banner, EMPTY_BANNER)),
+  },
+  {
+    method: 'PUT',
+    path: '/site-config/web-login-banner',
+    roles: ADMIN_ONLY,
+    handler: async ({ body }) => {
+      const banner = bannerFrom(body);
+      await writeJsonSetting(SITE_KEYS.webBanner, banner);
       return banner;
     },
   },

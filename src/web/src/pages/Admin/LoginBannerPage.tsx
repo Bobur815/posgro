@@ -226,9 +226,36 @@ const PreviewEmpty = styled.div`
   font-size: 14px;
 `;
 
+const Section = styled.section`
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+`;
+
+const SectionHeader = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+`;
+
+const SectionTitle = styled.h2`
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function LoginBannerPage() {
+interface BannerEditorProps {
+  heading: string;
+  description: string;
+  load: () => Promise<LoginBanner>;
+  save: (banner: LoginBanner) => Promise<LoginBanner>;
+}
+
+/** One login screen's banner: image, title, subtitle, and a preview of the panel. */
+function BannerEditor({ heading, description, load, save }: BannerEditorProps) {
   const [form, setForm] = useState<LoginBanner>({ imageUrl: "", title: "", subtitle: "" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -238,11 +265,11 @@ export function LoginBannerPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    siteConfig.getLoginBanner()
+    load()
       .then((b) => { setForm(b); setPreviewUrl(b.imageUrl); })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [load]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -269,7 +296,7 @@ export function LoginBannerPage() {
         setPendingFile(null);
       }
       const updated = { ...form, imageUrl };
-      await siteConfig.updateLoginBanner(updated);
+      await save(updated);
       setForm(updated);
       setStatus({ ok: true, msg: "Saved successfully" });
     } catch {
@@ -285,10 +312,11 @@ export function LoginBannerPage() {
   const hasOverlay = form.title || form.subtitle;
 
   return (
-    <Page>
-      <Header>
-        <Title>Login Page Banner</Title>
-      </Header>
+    <Section>
+      <SectionHeader>
+        <SectionTitle>{heading}</SectionTitle>
+        <Hint>{description}</Hint>
+      </SectionHeader>
 
       <Body>
         <FormCard>
@@ -370,6 +398,34 @@ export function LoginBannerPage() {
           </PreviewPanel>
         </PreviewCard>
       </Body>
+    </Section>
+  );
+}
+
+/**
+ * Two banners, one per login screen: the POS terminals' and this dashboard's. Each is its own
+ * site-config row, so each can have a photo framed for the screen it is shown on.
+ */
+export function LoginBannerPage() {
+  return (
+    <Page>
+      <Header>
+        <Title>Login Page Banners</Title>
+      </Header>
+
+      <BannerEditor
+        heading="POS terminal login"
+        description="Shown on every till's login screen. Terminals keep a copy to show while offline."
+        load={siteConfig.getLoginBanner}
+        save={siteConfig.updateLoginBanner}
+      />
+
+      <BannerEditor
+        heading="Web dashboard login"
+        description="Shown on this dashboard's login page. Until one is saved here, it uses the POS banner."
+        load={siteConfig.getWebLoginBanner}
+        save={siteConfig.updateWebLoginBanner}
+      />
     </Page>
   );
 }

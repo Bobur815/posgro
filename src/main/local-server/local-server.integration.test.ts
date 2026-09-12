@@ -848,3 +848,29 @@ describe('endpoints that need the online server', () => {
     expect(json).toMatchObject({ mode: 'OFFLINE_ONLY', pos_admin_locked: false });
   });
 });
+
+/**
+ * The dashboard served by a terminal has the same two banners as the VPS: the POS one and its own,
+ * which shows the POS one until it is saved.
+ */
+describe('login banners', () => {
+  const POS = { imageUrl: 'https://example.test/till.jpg', title: 'Till', subtitle: 'Cashiers' };
+  const WEB = { imageUrl: 'https://example.test/laptop.jpg', title: 'Dashboard', subtitle: 'Owners' };
+
+  it('shows the POS banner on the web login until a web one is saved', async () => {
+    expect((await api('PUT', '/site-config/login-banner', POS)).status).toBe(200);
+    const { status, json } = await api('GET', '/site-config/web-login-banner', undefined, false);
+    expect(status).toBe(200);
+    expect(json).toEqual(POS);
+  });
+
+  it('keeps the two apart once the web banner is saved', async () => {
+    expect((await api('PUT', '/site-config/web-login-banner', WEB)).status).toBe(200);
+    expect((await api('GET', '/site-config/web-login-banner', undefined, false)).json).toEqual(WEB);
+    expect((await api('GET', '/site-config/login-banner', undefined, false)).json).toEqual(POS);
+  });
+
+  it('lets only an admin change the web banner', async () => {
+    expect((await api('PUT', '/site-config/web-login-banner', POS, false)).status).toBe(401);
+  });
+});
