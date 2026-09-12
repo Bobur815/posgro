@@ -2,12 +2,14 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateStoreDto } from "./dto/create-store.dto";
 import { UpdateStoreDto } from "./dto/update-store.dto";
 import * as bcrypt from "bcryptjs";
 import { UserRole } from "@prisma/client";
+import { normalizeUzPhone } from "../../../shared/utils/phone";
 
 /**
  * Exactly the columns a store may be read back as.
@@ -49,6 +51,18 @@ const STORE_COUNTS = {
 
 /** A new store admin's password when the phone has no account yet. */
 const DEFAULT_ADMIN_PASSWORD = "123456";
+
+/**
+ * A phone as the rest of the system stores it — 998XXXXXXXXX (shared/utils/phone.ts), which is also
+ * what the dashboard's login sends. Store contact phones used to be saved as typed
+ * ("+998 932144774"), so one number showed two ways. Undefined stays undefined (not being
+ * changed); empty means none.
+ */
+function cleanPhone(phone: string | null | undefined): string | null | undefined {
+  if (phone === undefined) return undefined;
+  const digits = (phone ?? "").replace(/\D/g, "");
+  return digits ? normalizeUzPhone(digits) : null;
+}
 
 /** What the dashboard needs to know about the override password: whether there is one. */
 type StoreRow = { superAdminPassword?: string | null };
@@ -136,10 +150,12 @@ export class StoresService {
   async create(createStoreDto: CreateStoreDto) {
     const id = await this.generateStoreId();
 
+    const phone = cleanPhone(createStoreDto.phone);
+
     // No uniqueness on the phone: one owner's stores share it, and the admin account made below is
     // one more account of the same person (see startingPassword).
-    const hashedPassword = createStoreDto.phone
-      ? await this.startingPassword(await this.accountsForPhone(createStoreDto.phone))
+    const hashedPassword = phone
+      ? await this.startingPassword(await this.accountsForPhone(phone))
       : null;
 
     // Wrap both creates in a transaction so no orphaned store is left if user creation fails
@@ -149,7 +165,7 @@ export class StoresService {
           id,
           name: createStoreDto.name,
           address: createStoreDto.address,
-          phone: createStoreDto.phone,
+          phone,
           settings: createStoreDto.settings
             ? JSON.stringify(createStoreDto.settings)
             : null,
@@ -171,11 +187,11 @@ export class StoresService {
         },
       });
 
-      if (createStoreDto.phone && hashedPassword) {
+      if (phone && hashedPassword) {
         await tx.user.create({
           data: {
             storeId: s.id,
-            phone: createStoreDto.phone,
+            phone,
             password: hashedPassword,
             role: UserRole.ADMIN,
             nameUz: "Administrator",
@@ -200,8 +216,10 @@ export class StoresService {
    * forgotten password. A phone with accounts only in other stores gets one here with their
    * password (see startingPassword), so the owner's one sign-in covers this store too.
    */
-  async resetAdminUser(storeId: string, phone: string) {
+  async resetAdminUser(storeId: string, rawPhone: string) {
     await this.findById(storeId);
+    const phone = cleanPhone(rawPhone);
+    if (!phone) throw new BadRequestException("Phone is required");
 
     const accounts = await this.accountsForPhone(phone);
     const here = accounts.find((a) => a.storeId === storeId);
@@ -240,7 +258,7 @@ export class StoresService {
     if (updateStoreDto.name !== undefined) data.name = updateStoreDto.name;
     if (updateStoreDto.address !== undefined)
       data.address = updateStoreDto.address;
-    if (updateStoreDto.phone !== undefined) data.phone = updateStoreDto.phone;
+    if (updateStoreDto.phone !== undefined) data.phone = cleanPhone(updateStoreDto.phone);
     if (updateStoreDto.active !== undefined)
       data.active = updateStoreDto.active;
     if (updateStoreDto.aiPlan !== undefined) data.aiPlan = updateStoreDto.aiPlan;

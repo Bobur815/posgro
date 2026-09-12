@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import styled from "styled-components";
 import { X, RefreshCw } from "lucide-react";
 import { stores, StoreRecord, StoreStats } from "../../api/client";
+import { formatPhone } from "@shared/utils/phone";
 
 const Overlay = styled.div`
   position: fixed;
@@ -482,7 +483,7 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
             <strong>ID:</strong> {store.id}
           </div>
           <div>
-            <strong>Phone:</strong> {store.phone ?? "—"}
+            <strong>Phone:</strong> {store.phone ? formatPhone(store.phone) : "—"}
           </div>
           <div>
             <strong>Status:</strong> {store.active ? "Active" : "Inactive"}

@@ -16,6 +16,22 @@ import { dashboardLoginBlockReason, type LoginClient } from './dashboard-access'
  */
 const TERMINAL_ONLINE_WINDOW_MS = 12 * 60_000;
 
+/**
+ * An OFFLINE_ONLY store cannot be managed from the dashboard (its data lives on its terminal), so a
+ * sign-in never opens one — but the store switcher still lists it, greyed out, so an owner can see
+ * it is theirs.
+ */
+const OFFLINE_ONLY_REASON = 'auth.errors.store_offline_only';
+
+/** The signed-in user as `validateUser` puts it on the request — `password` is the account's hash. */
+type SignedIn = {
+  phone: string;
+  storeId?: string | null;
+  storeIds?: string[];
+  client?: LoginClient;
+  password?: string;
+};
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -81,9 +97,15 @@ export class AuthService {
     const active = opened.filter((a) => a.active);
     if (active.length === 0) throw new UnauthorizedException('Account is deactivated');
 
-    const allowed = active.filter(
-      (a) => !dashboardLoginBlockReason(a.role, a.storeId, a.store, client),
-    );
+    // Listed: every active store the password opens, an OFFLINE_ONLY one included (greyed out in
+    // the switcher). Signed in to: only one the dashboard can actually open.
+    const reasonOf = (a: (typeof active)[number]) =>
+      dashboardLoginBlockReason(a.role, a.storeId, a.store, client);
+    const listable = active.filter((a) => {
+      const reason = reasonOf(a);
+      return !reason || reason === OFFLINE_ONLY_REASON;
+    });
+    const allowed = listable.filter((a) => !reasonOf(a));
     if (allowed.length === 0) {
       // After the password, as for a single store: a wrong password reveals nothing about stores.
       const first = active[0];
@@ -97,7 +119,7 @@ export class AuthService {
     return this.issue(
       chosen,
       dto.client,
-      allowed.map((a) => a.storeId as string),
+      listable.map((a) => a.storeId as string),
       userAgent,
       ipAddress,
     );
@@ -108,12 +130,12 @@ export class AuthService {
    * current one ended. Only a store the token lists — the password opened its account at login.
    */
   async switchStore(
-    current: { phone: string; sessionId?: string; storeIds?: string[]; client?: LoginClient },
+    current: SignedIn & { sessionId?: string },
     storeId: string,
     userAgent?: string,
     ipAddress?: string,
   ): Promise<LoginResponse> {
-    const storeIds = current.storeIds ?? [];
+    const storeIds = await this.allowedStoreIds(current);
     if (!storeIds.includes(storeId)) {
       throw new ForbiddenException('auth.errors.store_not_allowed');
     }
@@ -137,22 +159,32 @@ export class AuthService {
     return this.issue(target, current.client, storeIds, userAgent, ipAddress);
   }
 
+  /** The stores this sign-in can switch between, as they are now (see allowedStoreIds). */
+  async listStores(current: SignedIn): Promise<StoreChoice[]> {
+    return this.storeChoices(current.phone, await this.allowedStoreIds(current), current.client);
+  }
+
   /**
-   * The stores this sign-in can switch between, as they are now. A token that lists none — a
-   * terminal's, or one from before — lists its own store.
+   * The stores this sign-in may open: those its token listed at sign-in (or its own store, for a
+   * token that lists none — a terminal's, or one from before), plus any whose account carries this
+   * account's exact password hash. That hash is only ever a copy made when the store was created
+   * for this owner (stores.service.ts startingPassword) — two passwords set separately never hash
+   * alike — so a store created after sign-in shows up without signing in again, and nothing the
+   * password would not open does.
    */
-  listStores(current: {
-    phone: string;
-    storeId: string | null;
-    storeIds?: string[];
-    client?: LoginClient;
-  }): Promise<StoreChoice[]> {
-    const ids = current.storeIds?.length
+  private async allowedStoreIds(current: SignedIn): Promise<string[]> {
+    const listed = current.storeIds?.length
       ? current.storeIds
       : current.storeId
         ? [current.storeId]
         : [];
-    return this.storeChoices(current.phone, ids, current.client);
+    if (!current.password) return listed;
+
+    const twins = await this.prisma.user.findMany({
+      where: { phone: current.phone, password: current.password, active: true, storeId: { not: null } },
+      select: { storeId: true },
+    });
+    return [...new Set([...listed, ...twins.map((t) => t.storeId as string)])];
   }
 
   private async storeChoices(
@@ -179,13 +211,21 @@ export class AuthService {
     const open = new Set(live.map((h) => h.storeId));
 
     return accounts
-      .filter((a) => a.store && !dashboardLoginBlockReason(a.role, a.storeId, a.store, client))
-      .map((a) => ({
-        id: a.storeId as string,
-        name: a.store!.name,
-        role: a.role,
-        online: open.has(a.storeId as string),
-      }))
+      .flatMap((a) => {
+        if (!a.store) return [];
+        const reason = dashboardLoginBlockReason(a.role, a.storeId, a.store, client);
+        // A deactivated store is not listed at all; an OFFLINE_ONLY one is, greyed out.
+        if (reason && reason !== OFFLINE_ONLY_REASON) return [];
+        return [
+          {
+            id: a.storeId as string,
+            name: a.store.name,
+            role: a.role,
+            online: open.has(a.storeId as string),
+            offlineOnly: reason === OFFLINE_ONLY_REASON,
+          },
+        ];
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 

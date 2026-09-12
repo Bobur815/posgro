@@ -229,8 +229,25 @@ const MenuItem = styled.button<{ $danger?: boolean }>`
   text-align: left;
   cursor: pointer;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: ${({ theme }) => theme.colors.background};
+  }
+
+  /* An offline-only store: listed so the owner sees it is theirs, but managed on its terminal. */
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const ChoiceText = styled.span`
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+
+  small {
+    font-size: 11px;
+    color: ${({ theme }) => theme.colors.textSecondary};
   }
 `;
 
@@ -367,10 +384,15 @@ export function TopBar() {
                       <MenuItem
                         key={store.id}
                         type="button"
+                        disabled={store.offlineOnly}
+                        title={store.offlineOnly ? t("topBar.offlineOnly") : undefined}
                         onClick={() => pickStore(store.id)}
                       >
                         <Dot $online={store.online} title={openLabel(store.online)} />
-                        <span>{store.name}</span>
+                        <ChoiceText>
+                          <span>{store.name}</span>
+                          {store.offlineOnly && <small>{t("topBar.offlineOnly")}</small>}
+                        </ChoiceText>
                         <MenuSpacer />
                         {store.id === user.storeId && <Check size={16} />}
                       </MenuItem>

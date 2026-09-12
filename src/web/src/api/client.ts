@@ -71,6 +71,8 @@ export interface StoreChoice {
   role: string;
   /** At least one of the store's terminals has reported in lately — the store is open. */
   online: boolean;
+  /** Managed on its terminal, not here: shown greyed out, and cannot be switched to. */
+  offlineOnly: boolean;
 }
 
 export const auth = {

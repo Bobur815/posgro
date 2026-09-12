@@ -35,6 +35,8 @@ export interface StoreChoice {
   role: UserRole;
   /** At least one of the store's terminals has reported in lately — the store is open. */
   online: boolean;
+  /** Managed on its terminal, not from the dashboard: listed, but it cannot be switched to. */
+  offlineOnly: boolean;
 }
 
 export interface LoginResponse {

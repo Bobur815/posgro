@@ -84,7 +84,12 @@ function build(
           ) ?? null,
       ),
       findMany: jest.fn(async ({ where }: any) =>
-        accounts.filter((a) => a.phone === where.phone && where.storeId.in.includes(a.storeId) && a.active),
+        accounts.filter((a) =>
+          'password' in where
+            ? // The twin-account lookup: same phone, the very same password hash.
+              a.phone === where.phone && a.password === where.password && a.active && a.storeId !== null
+            : a.phone === where.phone && where.storeId.in.includes(a.storeId) && a.active,
+        ),
       ),
     },
   };
@@ -102,7 +107,7 @@ describe('login without a store ID', () => {
     const res = await service.login(login());
     expect(res.user.storeId).toBe('A');
     expect(claims(res.token).storeIds).toEqual(['A']);
-    expect(res.stores).toEqual([{ id: 'A', name: 'Alpha', role: 'ADMIN', online: false }]);
+    expect(res.stores).toEqual([{ id: 'A', name: 'Alpha', role: 'ADMIN', online: false, offlineOnly: false }]);
   });
 
   it('opens the store this browser used last when it may, else the first by name', async () => {
@@ -125,14 +130,27 @@ describe('login without a store ID', () => {
     expect(sessions).toEqual([]);
   });
 
-  it('leaves out a store that cannot be managed from the dashboard', async () => {
+  it('lists an offline-only store greyed out, but signs in to one the dashboard can open', async () => {
     const { service } = build([
       account('A', 'Alpha'),
       account('B', 'Bravo', { store: { id: 'B', name: 'Bravo', active: true, mode: 'OFFLINE_ONLY' } }),
     ]);
     const res = await service.login(login({ preferredStoreId: 'B' }));
     expect(res.user.storeId).toBe('A');
-    expect(claims(res.token).storeIds).toEqual(['A']);
+    expect(claims(res.token).storeIds).toEqual(['A', 'B']);
+    expect(res.stores?.map((s) => [s.id, s.offlineOnly])).toEqual([
+      ['A', false],
+      ['B', true],
+    ]);
+  });
+
+  it('leaves a deactivated store out of the list altogether', async () => {
+    const { service } = build([
+      account('A', 'Alpha'),
+      account('B', 'Bravo', { store: { id: 'B', name: 'Bravo', active: false, mode: 'ONLINE' } }),
+    ]);
+    const res = await service.login(login());
+    expect(res.stores?.map((s) => s.id)).toEqual(['A']);
   });
 
   it('says why when every store it opens is blocked', async () => {
@@ -193,14 +211,46 @@ describe('switching store', () => {
     const { service } = build([account('A', 'Alpha'), account('B', 'Bravo', { active: false })]);
     await expect(service.switchStore(current, 'B')).rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  it('refuses an offline-only store, which is managed on its terminal', async () => {
+    const { service } = build([
+      account('A', 'Alpha'),
+      account('B', 'Bravo', { store: { id: 'B', name: 'Bravo', active: true, mode: 'OFFLINE_ONLY' } }),
+    ]);
+    await expect(service.switchStore(current, 'B')).rejects.toThrow(
+      new ForbiddenException('auth.errors.store_offline_only'),
+    );
+  });
+
+  it('opens a store created after sign-in whose account carries this password', async () => {
+    const { service } = build([account('A', 'Alpha'), account('B', 'Bravo')]);
+    const res = await service.switchStore(
+      { phone: PHONE, storeId: 'A', sessionId: 'old-session', storeIds: ['A'], password: HASH },
+      'B',
+    );
+    expect(res.user.storeId).toBe('B');
+    expect(claims(res.token).storeIds).toEqual(['A', 'B']);
+  });
 });
 
 describe('listing stores', () => {
   it('a token without a list lists its own store', async () => {
     const { service } = build([account('A', 'Alpha'), account('B', 'Bravo')]);
     expect(await service.listStores({ phone: PHONE, storeId: 'A', storeIds: [] })).toEqual([
-      { id: 'A', name: 'Alpha', role: 'ADMIN', online: false },
+      { id: 'A', name: 'Alpha', role: 'ADMIN', online: false, offlineOnly: false },
     ]);
+  });
+
+  // A store created for this owner after they signed in: its account got a copy of their password
+  // hash, so it shows up without signing in again. One set up with another password does not.
+  it('lists a store created after sign-in whose account carries this password, and no other', async () => {
+    const { service } = build([
+      account('A', 'Alpha'),
+      account('B', 'Bravo'),
+      account('C', 'Charlie', { password: OTHER_HASH }),
+    ]);
+    const stores = await service.listStores({ phone: PHONE, storeId: 'A', storeIds: ['A'], password: HASH });
+    expect(stores.map((s) => s.id)).toEqual(['A', 'B']);
   });
 
   // The switcher's dot: green while a terminal of the store reports in, red when none has lately.

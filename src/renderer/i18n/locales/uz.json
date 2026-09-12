@@ -955,7 +955,8 @@
     "theme": "Mavzu",
     "switchFailed": "Do'konni almashtirib bo'lmadi. Qayta urinib ko'ring.",
     "storeOnline": "Do'kon ishlayapti: kassa aloqada",
-    "storeOffline": "Do'konning hech bir kassasi hozir aloqada emas"
+    "storeOffline": "Do'konning hech bir kassasi hozir aloqada emas",
+    "offlineOnly": "Avtonom do'kon — kassada boshqariladi"
   },
   "updater": {
     "currentVersion": "Joriy versiya",

@@ -11,6 +11,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { stores, StoreRecord } from "../../api/client";
+import { formatPhone } from "@shared/utils/phone";
 import { StoreFormModal } from "./StoreFormModal";
 import { StoreDetailModal } from "./StoreDetailModal";
 
@@ -297,7 +298,7 @@ export function StoreList() {
                     </DeletedNote>
                   )}
                 </Td>
-                <Td>{store.phone ?? "—"}</Td>
+                <Td>{store.phone ? formatPhone(store.phone) : "—"}</Td>
                 <Td>
                   {store.subscriptionPlan === "VIP" ? (
                     <Badge $purple>VIP</Badge>

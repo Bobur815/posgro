@@ -27,6 +27,7 @@ function build(accounts: Account[]) {
     store: {
       findMany: jest.fn(async () => []),
       findUnique: jest.fn(async () => ({ id: '1000', name: 'Shop', superAdminPassword: null, _count: {} })),
+      update: jest.fn(async ({ data }: any) => ({ id: '1000', name: 'Shop', superAdminPassword: null, _count: {}, ...data })),
     },
     user: {
       // Every account here is under PHONE — the only phone these tests use.
@@ -42,7 +43,7 @@ function build(accounts: Account[]) {
     },
     $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
   };
-  return { service: new StoresService(prisma as never), created, updated, tx };
+  return { service: new StoresService(prisma as never), created, updated, tx, prisma };
 }
 
 let OWNER_HASH = '';
@@ -89,6 +90,38 @@ describe('creating a store', () => {
     await expect(service.create({ name: 'Nope', phone: PHONE } as never)).rejects.toBeInstanceOf(ConflictException);
     expect(tx.store.create).not.toHaveBeenCalled();
     expect(created).toEqual([]);
+  });
+});
+
+/**
+ * A phone is stored one way, 998XXXXXXXXX — the way the dashboard's login sends it. Store contact
+ * phones used to be saved as typed, so "+998 932144774" and "998932144774" were the same number
+ * shown two ways on the super admin dashboard.
+ */
+describe('store phones', () => {
+  it('saves a store and its admin under the phone the way accounts store it', async () => {
+    const { service, created, tx } = build([]);
+    await service.create({ name: 'Shop', phone: '+998 93 214 47 74' } as never);
+    expect(tx.store.create.mock.calls[0][0].data.phone).toBe('998932144774');
+    expect(created[0].phone).toBe('998932144774');
+  });
+
+  it('cleans the phone up when a store is edited', async () => {
+    const { service, prisma } = build([]);
+    await service.update('1000', { phone: '+998 932144774' } as never);
+    expect(prisma.store.update.mock.calls[0][0].data.phone).toBe('998932144774');
+  });
+
+  it('clears the phone when an edit empties it', async () => {
+    const { service, prisma } = build([]);
+    await service.update('1000', { phone: '' } as never);
+    expect(prisma.store.update.mock.calls[0][0].data.phone).toBeNull();
+  });
+
+  it("links an admin phone typed another way to the owner's account", async () => {
+    const { service, created } = build([owner('1000')]);
+    await service.resetAdminUser('2000', '+998 (93) 214-47-74');
+    expect(created[0]).toMatchObject({ phone: '998932144774', password: OWNER_HASH });
   });
 });
 
