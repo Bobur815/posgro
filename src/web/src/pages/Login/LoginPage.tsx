@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { useAuthStore } from "../../store/auth-store";
 import { useSettingsStore } from "../../store/settings-store";
-import { BannerBrand, POSGROIcon } from "../../branding";
+import { POSGROIcon } from "../../branding";
 import { Button } from "@components/common/Button";
 import { Input } from "@components/common/Input";
 import { UzbekPhoneInput } from "@components/common/UzbekPhoneInput";
@@ -463,7 +463,6 @@ export function LoginPage() {
       </LeftPanel>
 
       <RightPanel $imageUrl={banner?.imageUrl || undefined}>
-        <BannerBrand />
         {showOverlay && (
           <RightOverlay>
             {banner!.title && <RightTitle>{banner!.title}</RightTitle>}
