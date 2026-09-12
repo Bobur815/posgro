@@ -371,6 +371,24 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("subscription:openPaymentLink", url),
   },
 
+  // This till's license: whether it may sign in and sell, and why not (src/main/license/)
+  license: {
+    getStatus: () => ipcRenderer.invoke("license:getStatus"),
+    refresh: () => ipcRenderer.invoke("license:refresh"),
+    onChanged: (
+      callback: (
+        status: import("../shared/types/store.types").TillLicenseStatus,
+      ) => void,
+    ) => {
+      const handler = (
+        _event: IpcRendererEvent,
+        status: import("../shared/types/store.types").TillLicenseStatus,
+      ) => callback(status);
+      ipcRenderer.on("license:changed", handler);
+      return () => ipcRenderer.removeListener("license:changed", handler);
+    },
+  },
+
   // Smena (shift) management
   smena: {
     getCurrent: () => ipcRenderer.invoke("smena:getCurrent"),
@@ -827,6 +845,19 @@ declare global {
           import("../shared/types/store.types").StoreSubscription
         >;
         openPaymentLink: (url: string) => Promise<boolean>;
+      };
+      license: {
+        getStatus: () => Promise<
+          import("../shared/types/store.types").TillLicenseStatus
+        >;
+        refresh: () => Promise<
+          import("../shared/types/store.types").TillLicenseStatus
+        >;
+        onChanged: (
+          callback: (
+            status: import("../shared/types/store.types").TillLicenseStatus,
+          ) => void,
+        ) => () => void;
       };
       smena: {
         getCurrent: () => Promise<unknown | null>;

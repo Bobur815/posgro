@@ -63,6 +63,17 @@ export function parseSaleError(
     if (parsed.code === "SATELLITE_READ_ONLY") {
       return t("errors.satelliteReadOnly");
     }
+    // The till's license (src/main/license/): the store is past its days to pay, the till is overdue
+    // to check in, or its clock is set back and every receipt would carry the wrong date.
+    if (parsed.code === "SUBSCRIPTION_BLOCKED") {
+      return t("auth.errors.subscription_blocked");
+    }
+    if (parsed.code === "LICENSE_CHECKIN_REQUIRED") {
+      return t("auth.errors.license_checkin_required");
+    }
+    if (parsed.code === "CLOCK_BEHIND") {
+      return t("license.clockBehind");
+    }
   } catch {
     // not JSON, fall through
   }

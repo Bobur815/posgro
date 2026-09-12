@@ -20,6 +20,7 @@ import { MainLinkError } from '../lan/main-link';
 import { syncLocalServerWithMode } from '../local-server';
 import { flushLogs } from '../logger';
 import { isWriteFrozen } from '../sales/write-freeze';
+import { acceptLicense } from '../license/license';
 
 function decodeTokenStoreId(token: string): string | null | undefined {
   try {
@@ -307,6 +308,10 @@ export class SyncService {
 
       const data = await response.json() as Record<string, unknown>;
       const prisma = getPrismaClient();
+
+      // The store's signed license, renewed every cycle (src/main/license/). Taken only when it is
+      // genuine, this store's and newer than the one held.
+      if (typeof data.license === 'string') await acceptLicense(data.license);
 
       if (typeof data.ai_token_limit_daily === 'number') {
         await prisma.systemSetting.upsert({

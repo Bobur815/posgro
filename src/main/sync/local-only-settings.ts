@@ -41,6 +41,12 @@ export const LOCAL_ONLY_SETTINGS = new Set([
   'lan_device_secret',
   // Who is signed in at a satellite, kept so an open session survives a restart read-only (§6.9).
   'lan_session_user',
+
+  // ── Subscription license (src/main/license/) ──
+  // This till's signed license and its trusted-clock mark. The server hands the license out over
+  // /store-config itself; a settings sync must neither upload it nor overwrite it with another's.
+  'store_license',
+  'license_clock',
 ]);
 
 /**

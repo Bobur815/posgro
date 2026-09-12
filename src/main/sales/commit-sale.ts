@@ -4,6 +4,7 @@ import { getPrismaClient } from '../database/sqlite-client';
 import { toPieces } from '../../shared/utils/pack';
 import type { Prisma, PrismaClient, Sale, SaleItem } from '../../generated/prisma-sqlite';
 import { HANDING_OFF, isWriteFrozen } from './write-freeze';
+import { sellingRefusal } from '../license/license';
 
 /**
  * The one place a sale changes stock.
@@ -158,8 +159,19 @@ export async function drainSaleWrites(settleWithinMs = 10_000): Promise<void> {
   }
 }
 
+/**
+ * The license, checked in the queue's turn like the write freeze — so a sale queued the moment the
+ * store is blocked is refused too. Here rather than in each caller: this till's IPC and every
+ * satellite's LAN route come through, so a satellite is held to its main's license.
+ */
+async function refuseUnlicensedSale(): Promise<void> {
+  const refusal = await sellingRefusal();
+  if (refusal) throw new SaleRefusedError(refusal);
+}
+
 export function commitSale(input: SaleInput, actor: SaleActor): Promise<CommitResult> {
   return serially(async () => {
+    await refuseUnlicensedSale();
     const result = await db().$transaction((tx) => commitInTx(tx, input, actor), TX_OPTIONS);
     // Recorded inside the queue's turn, so a drain that comes after this commit sees it. A replay
     // wrote nothing, and its caller does not settle it again.
@@ -174,6 +186,7 @@ export function updateSale(
   requester: SaleRequester,
 ): Promise<{ sale: SaleWithItems; stock: StockAfter[] }> {
   return serially(async () => {
+    await refuseUnlicensedSale();
     const result = await db().$transaction(
       (tx) => updateInTx(tx, saleId, input, requester),
       TX_OPTIONS,

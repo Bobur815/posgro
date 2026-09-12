@@ -2,6 +2,16 @@
 
 Patterns worth not repeating, recorded as they come up.
 
+## The app logger starts electron-log on import — keep it off the sale path
+
+`src/main/logger.ts` calls `log.initialize()` when imported. `license.ts` imported it for one
+`log.info`, and `license.ts` sits under `commitSale` and `openShift`, so every suite that commits a
+sale failed to load under the usual `electron` mock: `this.electron.app?.isReady is not a function`.
+
+**Rule:** modules on the sale and shift path log with `console.*` — the logger hooks console in the
+app, so nothing is lost — and `../logger` is imported only where no test reaches through
+`commitSale`.
+
 ## Git Bash rewrites a `/route` argument into a Windows path
 
 `node subs-web.mjs banner /web/settings/user` reached node as

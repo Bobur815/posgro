@@ -12,6 +12,9 @@ import { UzbekPhoneInput } from "@renderer/components/common/UzbekPhoneInput";
 import { VirtualKeyboard } from "@renderer/components/common/VirtualKeyboard";
 import { isUzPhoneComplete } from "@shared/utils/phone";
 import { TerminalAccessBar } from "./TerminalAccessBar";
+import { LicenseBlockPanel } from "./LicenseBlockPanel";
+import { LicenseBanner } from "../../components/layout/LicenseBanner";
+import type { TillLicenseStatus } from "../../../shared/types/store.types";
 import { useToast } from "../../context/ToastContext";
 
 type LoginMode = "pin" | "phone";
@@ -379,6 +382,17 @@ export function PinLoginPage() {
       .catch(() => {});
   }, []);
 
+  // The till's license. When it lets nobody in, the block panel takes the place of both forms.
+  const [license, setLicense] = useState<TillLicenseStatus | null>(null);
+  useEffect(() => {
+    window.electronAPI.license
+      .getStatus()
+      .then(setLicense)
+      .catch(() => {});
+    return window.electronAPI.license.onChanged(setLicense);
+  }, []);
+  const signInBlocked = license ? !license.canSignIn : false;
+
   const [saved] = useState(loadSaved);
   // Remembered credentials normally open the phone form, but a caller can ask for a mode — the
   // app bar's switch-user button hands the terminal over on the PIN pad, not on someone else's
@@ -456,7 +470,7 @@ export function PinLoginPage() {
   }, [pin, handlePinSubmit]);
 
   useEffect(() => {
-    if (mode !== "pin") return;
+    if (mode !== "pin" || signInBlocked) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isLoading) return;
@@ -480,7 +494,7 @@ export function PinLoginPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [pin, isLoading, mode, handlePinSubmit]);
+  }, [pin, isLoading, mode, handlePinSubmit, signInBlocked]);
 
   const handleNumberClick = (num: string) => {
     if (pin.length < 4 && !isLoading) {
@@ -587,7 +601,10 @@ export function PinLoginPage() {
             <BrandName>POSGRO</BrandName>
           </LogoBrand>
 
-          {mode === "pin" ? (
+          {!signInBlocked && <LicenseBanner compact />}
+          {signInBlocked && license ? (
+            <LicenseBlockPanel status={license} onStatus={setLicense} />
+          ) : mode === "pin" ? (
             <ContentWrapper key="pin">
               <Subtitle>{t("auth.enterPin")}</Subtitle>
 

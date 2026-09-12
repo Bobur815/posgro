@@ -12,6 +12,7 @@ import { getAppConfig } from '../config/app-config';
 import type { AuthUser } from '../../shared/types/user.types';
 import { assertNotSatellite } from '../lan/satellite-guard';
 import { requireSuperAdmin } from '../auth/super-admin';
+import { assertCanSignIn } from '../license/license';
 
 interface JwtPayload {
   sub: string;
@@ -83,6 +84,10 @@ export function setupAuthHandlers(): void {
       currentUser = user;
       return { token, user };
     }
+
+    // A blocked store's till lets nobody in (its license, by the trusted clock). A satellite is
+    // checked by its main, above.
+    await assertCanSignIn();
 
     const prisma = getPrismaClient();
     const config = getAppConfig();
@@ -319,6 +324,8 @@ export function setupAuthHandlers(): void {
       currentUser = user;
       return { token, user };
     }
+
+    await assertCanSignIn();
 
     const prisma = getPrismaClient();
     const config = getAppConfig();

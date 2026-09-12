@@ -6,6 +6,7 @@ import { setupAutoUpdater } from "./updater/auto-updater";
 import { autoUpdater } from "electron-updater";
 import { SyncService } from "./sync/sync-service";
 import { regosVcrService } from "./fiscal/regos-vcr-service";
+import { startLicenseRefresh, stopLicenseRefresh } from "./license/license";
 import {
   initializeDatabase,
   readStoreBootstrap,
@@ -182,7 +183,13 @@ async function launchMainApp(): Promise<void> {
   //
   // Not on a satellite: the VCR is a local service on the main terminal, so a satellite has nothing
   // to talk to — the main fiscalizes its sales for it (LAN plan §5.11).
-  if (!(await isSatellite())) regosVcrService.start();
+  if (!(await isSatellite())) {
+    regosVcrService.start();
+    // The store's license renews itself here too, not only on sync: an OFFLINE_ONLY till never
+    // syncs, and still has to learn of a payment and check in by its deadline. A satellite holds
+    // none — its main's is the one that counts.
+    startLicenseRefresh();
+  }
 }
 
 async function bootstrap() {
@@ -274,6 +281,7 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     syncService?.stop();
     regosVcrService.stop();
+    stopLicenseRefresh();
     void stopLocalServer();
     app.quit();
   }
@@ -288,6 +296,7 @@ app.on("activate", () => {
 app.on("before-quit", () => {
   syncService?.stop();
   regosVcrService.stop();
+  stopLicenseRefresh();
   // Closing the listener stops the shop network being served by a terminal that is shutting down.
   void stopLocalServer();
 });

@@ -67,7 +67,8 @@
       "main_superseded": "Asosiy kassa manzilida eski, almashtirilgan kassa javob beryapti. Joriy asosiy kassa manzilini kiriting.",
       "store_inactive": "Do'kon o'chirilgan, shuning uchun boshqaruv paneliga kirib bo'lmaydi. Ishni tiklash uchun qo'llab-quvvatlash xizmatiga murojaat qiling.",
       "store_offline_only": "Bu do'kon oflayn rejimda ishlaydi: barcha ma'lumotlar serverda emas, terminalning o'zida saqlanadi. Boshqaruv panelini terminalning o'zidan oching — telefoningizni xuddi shu Wi-Fi tarmog'iga ulab, uning kirish ekranidagi QR-kodni skanerlang.",
-      "subscription_blocked": "Do'kon obunasi to'lanmagan, shuning uchun do'kon ishi to'xtatilgan. Obunani to'lang — u uzaytirilishi bilanoq kirish ochiladi."
+      "subscription_blocked": "Do'kon obunasi to'lanmagan, shuning uchun do'kon ishi to'xtatilgan. Obunani to'lang — u uzaytirilishi bilanoq kirish ochiladi.",
+      "license_checkin_required": "Kassa server bilan juda uzoq vaqt bog'lanmadi, shuning uchun ish to'xtatildi. Uni internetga ulang va «Tekshirish» tugmasini bosing — litsenziya tekshirilgach, ish davom etadi."
     },
     "serverSettings": "Server sozlamalari",
     "storeId": "Store ID",
@@ -1332,6 +1333,16 @@
     "bannerGrace": "Do'kon obunasi {{date}} kuni tugagan. {{blockDate}} gacha to'lang — shundan so'ng do'kon boshqaruv panelida va kassalarda bloklanadi.",
     "blockedTitle": "Do'kon bloklangan",
     "callSupport": "Qo'llab-quvvatlash telefoni: {{phone}}"
+  },
+  "license": {
+    "clockBehind": "Bu kompyuterdagi sana va vaqt orqada qolgan. Windows'da to'g'ri sana va vaqtni o'rnating — ungacha savdo qilib bo'lmaydi, aks holda cheklarga noto'g'ri sana yoziladi.",
+    "unlicensed": "Kassa hali do'kon litsenziyasini olmagan. Uni internetga ulang — {{count}} kun qoldi.",
+    "checkinTitle": "Litsenziyani tekshirish kerak",
+    "checkPayment": "To'lovni tekshirish",
+    "checkNow": "Tekshirish",
+    "checking": "Tekshirilmoqda…",
+    "notYet": "Server hali to'lovni tasdiqlamadi. Agar to'lagan bo'lsangiz, qo'llab-quvvatlash xizmatiga qo'ng'iroq qiling yoki keyinroq urinib ko'ring.",
+    "notYetCheckin": "Server bilan bog'lanib bo'lmadi. Internet aloqasini tekshiring va qayta urinib ko'ring."
   },
   "smena": {
     "viewDetails": "Batafsil",

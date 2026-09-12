@@ -4,9 +4,9 @@ Plan: `~/.claude/plans/foamy-weaving-hamster.md`.
 
 - [x] Phase 1, server and dashboard: shared rule, migration, rules settings, trial on create,
       status endpoint, dashboard login and session blocking, web banner and super-admin screens
-- [ ] Phase 2, license: Ed25519 key script, signing, `/licenses/renew`, the license in
-      `store-config`, `SubscriptionGuard`
-- [ ] Phase 3, POS: license storage and verification, trusted clock, enforcement, block screen,
+- [x] Phase 2, license: Ed25519 key script, signing, `/licenses/renew`, the license in
+      `store-config`, `SubscriptionGuard` (built as an interceptor — see review)
+- [x] Phase 3, POS: license storage and verification, trusted clock, enforcement, block screen,
       banners (POS release)
 
 ## Review
@@ -39,6 +39,47 @@ Not here:
 - The web login cannot fill a `{storeId}` pay link before sign-in, so it shows the link only
   without one.
 - The POS side is Phases 2–3.
+
+**Phase 2**:
+- **License:** `shared/utils/license.ts` signs a store's plan and dates with Ed25519. Only the server
+  holds `LICENSE_SIGNING_KEY`; the POS carries the public key. `GET /store-config` and
+  `/store-config/subscription` return it.
+- **Renewal:** `POST /licenses/renew` swaps any genuine license for a fresh one, with no sign-in.
+- **Server-side block:** `SubscriptionInterceptor` refuses a blocked store's POS requests. It is an
+  interceptor rather than the planned guard, because global guards run before the JWT guard and so
+  can't see the user. Auth, store-config, heartbeat and log upload stay open (`@AllowWhenBlocked`).
+
+**Phase 3**:
+- **License on the POS:** `src/main/license/` keeps it. It only takes a newer one, genuine and for
+  this store.
+- **Trusted clock:** `max(system clock, mark + run time)`, with the mark in SQLite plus a
+  safeStorage file. With both gone it falls back to the newest sale or shift, and a newer license
+  resets it to server time.
+- **Sign-in:** refused while blocked, checked in the IPC login, the PIN login, the satellite routes
+  and the LAN dashboard login.
+- **Selling:** sales and new shifts are refused while blocked, or while the clock is set back.
+- **Tills with no license yet:** 14 days of allowance, then they must check in.
+- **Renewal:** on every sync, at setup, on the subscription read, and every 6 hours.
+- **Screens:** the login screen shows a block panel with "Check payment", and the app shows a
+  warning banner.
+
+Verified:
+- 793 tests pass.
+- Red proofs, one switch per guard:
+  - signature check: 4 failed;
+  - interceptor: 1 failed;
+  - sale and shift gate: 1 failed;
+  - clock: 6 failed;
+  - older-license rule: 1 failed.
+- tsc passes for the server, POS and web.
+- A real demo POS was driven over CDP:
+  - with a blocked license, the panel replaces the forms, "Check payment" says it is not paid, and
+    the IPC login is refused;
+  - with a license expiring in 2 days, the login and main screens show the warning.
+
+Before the POS release:
+- Add `LICENSE_SIGNING_KEY` to the `ENV_FILE` secret, so both servers issue licenses.
+- Until then every till runs on the 14-day allowance.
 
 ---
 

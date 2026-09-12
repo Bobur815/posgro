@@ -1,7 +1,8 @@
 import { getPrismaClient } from '../database/sqlite-client';
 import { isCashTender } from '../../shared/constants';
 import type { SmenaStats, SmenaFiscalStats } from '../../shared/types/smena.types';
-import { serially } from './commit-sale';
+import { SaleRefusedError, serially } from './commit-sale';
+import { sellingRefusal } from '../license/license';
 
 /**
  * Shifts (smena), per terminal.
@@ -154,6 +155,10 @@ export function openShift(
 ) {
   return serially(async () => {
     const prisma = getPrismaClient();
+
+    // No new shift on a blocked till — shared with the satellite route, so theirs too.
+    const refusal = await sellingRefusal();
+    if (refusal) throw new SaleRefusedError(refusal);
 
     const existing = await prisma.smena.findFirst({ where: { terminalId, status: 'OPEN' } });
     if (existing) throw new Error('SMENA_ALREADY_OPEN');

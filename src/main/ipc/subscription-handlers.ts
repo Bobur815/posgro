@@ -4,6 +4,7 @@ import { getAppConfig } from '../config/app-config';
 import { getServerToken } from '../sync/queue-manager';
 import { getPrismaClient } from '../database/sqlite-client';
 import { log } from '../logger';
+import { acceptLicense } from '../license/license';
 import type {
   StoreSubscription,
   SubscriptionFailureReason,
@@ -29,6 +30,8 @@ interface SubscriptionResponse {
   subscription_expires_at: string | null;
   ai_plan: string;
   balance_uzs: number | null;
+  /** The store's signed license — the same one GET /store-config carries. */
+  license?: string | null;
   payment: {
     qr_payload: string;
     payment_url: string;
@@ -162,6 +165,8 @@ export async function refreshSubscriptionCache(): Promise<StoreSubscription> {
     }
 
     const data = (await response.json()) as SubscriptionResponse;
+    // A live read is also a chance to renew the license — an OFFLINE_ONLY till has few others.
+    await acceptLicense(data.license).catch(() => false);
     const fresh: CachedSubscription = {
       storeId: data.store_id ?? null,
       storeName: data.store_name ?? null,

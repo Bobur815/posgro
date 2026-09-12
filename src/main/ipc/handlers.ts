@@ -11,6 +11,7 @@ import { setupMarkingCheckHandlers } from "./marking-check-handlers";
 import { setupFiscalHandlers } from "./fiscal-handlers";
 import { setupUzQrHandlers } from "./uzqr-handlers";
 import { setupSubscriptionHandlers } from "./subscription-handlers";
+import { setupLicenseHandlers } from "./license-handlers";
 import { getAppConfig, updateConfig } from "../config/app-config";
 import { probeApiUrl } from "../config/api-url-probe";
 import { setupPairingHandlers } from "./pairing-handlers";
@@ -69,6 +70,7 @@ export function setupIpcHandlers(): void {
   setupFiscalHandlers();
   setupUzQrHandlers();
   setupSubscriptionHandlers();
+  setupLicenseHandlers();
   setupPairingHandlers();
   setupBannerHandlers();
 }

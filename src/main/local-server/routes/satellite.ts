@@ -11,6 +11,7 @@ import {
 } from '../router';
 import { AttemptThrottle } from '../../ipc/override-throttle';
 import { findUserIdByPin, hashNewPin, usersWithPin } from '../../auth/pin';
+import { assertCanSignIn } from '../../license/license';
 import { commitSale, deleteSale, SaleRefusedError, updateSale } from '../../sales/commit-sale';
 import { settleSale } from '../../sales/settle-sale';
 import {
@@ -143,6 +144,15 @@ function person(ctx: RequestContext) {
   return ctx.session!;
 }
 
+/** A blocked store's main lets nobody in at its satellites either — it holds the store's license. */
+async function refuseBlockedStore(): Promise<void> {
+  try {
+    await assertCanSignIn();
+  } catch (e) {
+    throw forbidden(e instanceof Error ? e.message : 'auth.errors.subscription_blocked');
+  }
+}
+
 export const satelliteRoutes: Route[] = [
   // ── Login (§5.13, §6.9, §6.10) ────────────────────────────────────────────────────────────────
 
@@ -160,6 +170,7 @@ export const satelliteRoutes: Route[] = [
     handler: async ({ body, terminal }) => {
       const phone = String(required(body?.phone, 'phone'));
       const password = String(required(body?.password, 'password'));
+      await refuseBlockedStore();
       try {
         const user = await authenticate(phone, password);
         return sessionFor(user, terminal!.terminalId);
@@ -204,6 +215,7 @@ export const satelliteRoutes: Route[] = [
       }
 
       const pin = String(body?.pin ?? '');
+      await refuseBlockedStore();
       // Nobody having a PIN is a different answer from a wrong one: the satellite's login screen
       // uses it to fall back to phone + password instead of showing an error.
       if ((await usersWithPin(db())).length === 0) {

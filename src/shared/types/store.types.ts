@@ -93,3 +93,29 @@ export interface SubscriptionPaymentInfo {
   paymentUrl: string;
   supportPhone: string;
 }
+
+/**
+ * Where a till stands by its signed license (src/main/license/license.ts): the subscription states,
+ * overdue for a check-in with the server, or not licensed yet.
+ */
+export type TillLicenseState =
+  | 'unlimited'
+  | 'active'
+  | 'warning'
+  | 'grace'
+  | 'blocked'
+  | 'checkin-required'
+  | 'unlicensed';
+
+export interface TillLicenseStatus {
+  state: TillLicenseState;
+  /** Days until the next cut-off: expiry, the block, or the end of the unlicensed allowance. */
+  daysLeft: number | null;
+  plan: string | null;
+  expiresAt: string | null;
+  blockAt: string | null;
+  /** The system clock is more than a day behind the trusted one: receipts would be misdated. */
+  clockBehind: boolean;
+  canSignIn: boolean;
+  canSell: boolean;
+}
