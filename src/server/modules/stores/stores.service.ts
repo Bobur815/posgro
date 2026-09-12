@@ -47,6 +47,9 @@ const STORE_COUNTS = {
   },
 } as const;
 
+/** A new store admin's password when the phone has no account yet. */
+const DEFAULT_ADMIN_PASSWORD = "123456";
+
 /** What the dashboard needs to know about the override password: whether there is one. */
 type StoreRow = { superAdminPassword?: string | null };
 function withPasswordFlag<T extends StoreRow>(store: T) {
@@ -99,31 +102,44 @@ export class StoresService {
     }
   }
 
+  /**
+   * The accounts a phone number already has, newest first — one per store, since users are per
+   * store. Refuses a super admin's phone: at login the super admin account wins by phone
+   * (users.service.ts findByPhoneAndStore), so a store account under it could never be signed in to.
+   */
+  private async accountsForPhone(phone: string) {
+    const accounts = await this.prisma.user.findMany({
+      where: { phone },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, storeId: true, role: true, active: true, password: true },
+    });
+    if (accounts.some((a) => a.role === UserRole.SUPER_ADMIN)) {
+      throw new ConflictException("This phone number belongs to a super admin");
+    }
+    return accounts;
+  }
+
+  /**
+   * The password hash a new admin account starts with. One owner with several stores has one
+   * account in each, under one phone: a new account takes the hash of the one that phone already
+   * has, so the owner's own password opens every store at the dashboard's single login
+   * (auth.service.ts loginAcrossStores). A phone new to the system gets the default.
+   */
+  private async startingPassword(accounts: Array<{ role: UserRole; active: boolean; password: string }>) {
+    const source =
+      accounts.find((a) => a.active && a.role === UserRole.ADMIN) ??
+      accounts.find((a) => a.active) ??
+      accounts[0];
+    return source ? source.password : bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 10);
+  }
+
   async create(createStoreDto: CreateStoreDto) {
     const id = await this.generateStoreId();
 
-    if (createStoreDto.phone) {
-      const existingStore = await this.prisma.store.findFirst({
-        where: { phone: createStoreDto.phone },
-      });
-      if (existingStore) {
-        throw new ConflictException(
-          "Store with this phone number already exists",
-        );
-      }
-
-      const existingUser = await this.prisma.user.findFirst({
-        where: { phone: createStoreDto.phone },
-      });
-      if (existingUser) {
-        throw new ConflictException(
-          "A user with this phone number already exists",
-        );
-      }
-    }
-
+    // No uniqueness on the phone: one owner's stores share it, and the admin account made below is
+    // one more account of the same person (see startingPassword).
     const hashedPassword = createStoreDto.phone
-      ? await bcrypt.hash("123456", 10)
+      ? await this.startingPassword(await this.accountsForPhone(createStoreDto.phone))
       : null;
 
     // Wrap both creates in a transaction so no orphaned store is left if user creation fails
@@ -177,28 +193,25 @@ export class StoresService {
     return this.findById(store.id);
   }
 
+  /**
+   * Make `phone` this store's admin.
+   *
+   * An account it already has here is reset to the default password — that is what this is for, a
+   * forgotten password. A phone with accounts only in other stores gets one here with their
+   * password (see startingPassword), so the owner's one sign-in covers this store too.
+   */
   async resetAdminUser(storeId: string, phone: string) {
     await this.findById(storeId);
 
-    const existingUser = await this.prisma.user.findFirst({
-      where: { phone },
-    });
-    if (existingUser && existingUser.storeId !== storeId) {
-      throw new ConflictException(
-        "A user with this phone already exists in another store",
-      );
-    }
+    const accounts = await this.accountsForPhone(phone);
+    const here = accounts.find((a) => a.storeId === storeId);
 
-    const hashedPassword = await bcrypt.hash("123456", 10);
-
-    if (existingUser) {
-      // Update the existing user to ADMIN and reset password
+    if (here) {
       return this.prisma.user.update({
-        where: { id: existingUser.id },
+        where: { id: here.id },
         data: {
           role: UserRole.ADMIN,
-          password: hashedPassword,
-          storeId,
+          password: await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 10),
           active: true,
         },
         select: { id: true, phone: true, role: true, nameRu: true },
@@ -209,7 +222,7 @@ export class StoresService {
       data: {
         storeId,
         phone,
-        password: hashedPassword,
+        password: await this.startingPassword(accounts),
         role: UserRole.ADMIN,
         nameUz: "Administrator",
         nameRu: "Администратор",

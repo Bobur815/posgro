@@ -245,6 +245,10 @@ export function StoreFormModal({ store, onClose, onSaved }: Props) {
               valueDigits={phoneDigits}
               onDigitsChange={setPhoneDigits}
             />
+            <Hint>
+              The store admin's phone. One already admin of another store keeps its password here,
+              so the owner's one sign-in opens both stores; a new phone starts with 123456.
+            </Hint>
           </Field>
 
           <Field>
