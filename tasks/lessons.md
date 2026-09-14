@@ -251,3 +251,26 @@ a third that both include) rather than overriding inline. Before pushing an ngin
 locations that both `include` a snippet and set a directive it contains — a duplicate is a
 server-wide outage on the next restart, not a local mistake. And read a duplicate-directive
 file:line as "the second occurrence", not "the culprit".
+
+## A bind mount whose host directory appears later is dead for the container's lifetime
+
+Uploading a driver on staging failed with `ENOENT ... open '/app/downloads/<file>'`, which reads
+like a permissions or path bug. It was neither. Inside the container:
+
+```
+drwxr-xr-x  0 root root  0  /app/downloads      <- link count 0, size 0
+touch: /app/downloads/.probe: No such file or directory   (as root)
+```
+
+The container was started when `./downloads-staging` did not yet exist on the host — the
+`mkdir -p` that creates it was added to the deploy script one commit *after* the compose file
+gained the mount. The container held an inode that no longer corresponded to anything, so every
+write failed with ENOENT, and `mkdirSync` in the app could not fix it either: you cannot create a
+directory inside a dead inode. Only recreating the container re-establishes the mount.
+
+**Rule:** when adding a bind mount, create the host directory in the deploy script *in the same
+commit*, and ordered before `docker compose up`. Both deploy scripts now do
+(`mkdir -p downloads` / `downloads-staging` precedes the compose step). When a containerised
+write fails with ENOENT on a path that plainly exists, check the mount's link count before
+suspecting the code — `0` means stale, and the fix is
+`docker compose up -d --force-recreate --no-deps <svc>`, not a chmod.
