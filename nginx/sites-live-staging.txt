@@ -10,3 +10,6 @@
 # See nginx/README.md for why this is a manifest rather than a filesystem probe.
 
 dev.pos.bobur-dev.uz
+dev.api.posgro.uz
+dev.web.posgro.uz
+dev.panel.posgro.uz
