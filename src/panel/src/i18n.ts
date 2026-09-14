@@ -21,7 +21,7 @@ const STRINGS = {
 
     'hero.title': 'POSGRO kassa dasturi',
     'hero.subtitle':
-      "Internetsiz ham ishlaydi, aloqa tiklanganda o'zi sinxronlaydi. Fiskal chek, marking va tarozi qo'llab-quvvatlanadi.",
+      "Internetsiz ham ishlaydi, aloqa tiklanganda o'zi sinxronlaydi. Fiskal chek, markirovkali mahsulotlar va tarozi qo'llab-quvvatlanadi.",
     'hero.download': 'Yuklab olish',
     'hero.windows': 'Windows uchun',
     'hero.updated': 'Yangilangan',
