@@ -435,8 +435,8 @@ on the new host.
 | | Piece | State |
 |---|---|---|
 | ☑ | Landing content in site-config + admin page (§9.1) | **done, verified on staging 2026-09-14** |
-| ☐ | `panel.posgro.uz` download portal (§8) | next |
-| ☐ | Super-admin "Tools & Downloads" management page (§8.3) | with the portal |
+| ☑ | `panel.posgro.uz` download portal (§8) | **done, verified on staging 2026-09-14** |
+| ☑ | Super-admin "Tools & Downloads" management page (§8.3) | done |
 | ☐ | Landing page itself, consuming §9.1 | after content is entered |
 | ☐ | Move the dashboard to the root of its host (§7.3.2) | vite `base` **and** `App.tsx` basename together |
 | ☐ | Fix `handlers.ts:959` (§7.3.1) | needs a POS release |
@@ -454,7 +454,32 @@ PUT  /api/site-config/landing-contact   401  without a SUPER_ADMIN token
 20/20 site-config tests pass (16 new). Enter content at
 `https://dev.pos.bobur-dev.uz/web/admin/landing`.
 
-**This is application code and lives on `dev` only.** It reaches production with the full
+#### Download portal — verified on staging, 2026-09-14
+
+```
+GET  /api/downloads               200  []
+GET  /api/downloads/latest-app    200  {"version":"1.28.0","size":153859304,
+                                        "url":"/releases/POSGRO-Setup-1.28.0.exe", ...}
+        ^ the REAL feed, through the read-only ../releases bind mount — byte-for-byte the
+          same release the terminals' updater is serving
+GET  /api/downloads/admin/all     401  without a SUPER_ADMIN token
+POST /api/downloads               401
+DEL  /api/downloads/:id           401
+:3002/panel/                      200  <title>POSGRO — Yuklab olish</title>, asset 200
+/web/admin/downloads                   route + sidebar present in the deployed bundle
+
+MIGRATION  20260914000001_add_download_items | finished 10:03:40 | rolled_back=no
+           download_items: 18 columns, matching the model exactly
+```
+
+225/225 server tests pass (18 new). Manage files at
+`https://dev.pos.bobur-dev.uz/web/admin/downloads`.
+
+⚠️ The portal is not reachable over `dev.pos.bobur-dev.uz` — staging still runs the old
+single-file nginx with no `/panel` route, so it was verified against the origin on `:3002`.
+Staging's nginx moves to the per-host layout in Phase 5.
+
+**All of this is application code and lives on `dev` only.** It reaches production with the full
 `dev` → `main` merge, which is still gated on `LICENSE_SIGNING_KEY`. `main` carries the four infra
 commits and nothing else.
 
