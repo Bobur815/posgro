@@ -8,12 +8,16 @@ HTTPS, serving the same backend and the same releases directory as `pos.bobur-de
 byte-identical. The old host now redirects its two human-facing paths to the new dashboard and
 keeps serving `/api/`, `/releases/` and `/uploads/` unchanged for the fleet.
 
-**Still no application code has changed, and no terminal points at the new hosts.** Everything so
-far is nginx and DNS; `main` carries only the four infra commits.
+**`dev` merged to `main` and deployed to production 2026-09-14 11:42 UTC.** `LICENSE_SIGNING_KEY`
+is in the production `.env` and the signing key parsed cleanly. All four pending migrations
+applied, none rolled back; phone normalisation touched the one row predicted and left none
+unnormalised; the VIP store was untouched and the expired test store got its 3 grace days rather
+than blocking on landing. `panel.posgro.uz` now serves the real portal.
 
-Outstanding for you: the `CORS_ORIGINS` secret, the apex TTL, and — separately and more urgently
-than this migration — `LICENSE_SIGNING_KEY` in the `ENV_FILE` secret, which blocks the 28 app
-commits sitting on `dev`.
+**No terminal points at the new hosts yet.** The domain move for tills is Phase 4 and needs its
+own release — see §7.4.1.
+
+Outstanding for you: the apex TTL (`CORS_ORIGINS` is done, and is live).
 
 Next: Phase 3 — the panel app, the landing page, the dashboard's move to the root of its host
 (vite `base` **and** `App.tsx` basename together), and the `handlers.ts:959` fix.
