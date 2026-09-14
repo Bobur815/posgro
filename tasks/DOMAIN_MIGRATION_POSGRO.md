@@ -431,11 +431,32 @@ dashboard session in `localStorage` does not travel with the redirect. Everyone 
 on the new host.
 
 ### Phase 3 — Build the new surfaces
-- `panel.posgro.uz` (§8).
-- Landing page (§9).
-- Super-admin "Tools & Downloads" management page (§8.3).
-- Move the dashboard to the root of its host (§7.3.2).
-- Fix `handlers.ts:959` (§7.3.1).
+
+| | Piece | State |
+|---|---|---|
+| ☑ | Landing content in site-config + admin page (§9.1) | **done, verified on staging 2026-09-14** |
+| ☐ | `panel.posgro.uz` download portal (§8) | next |
+| ☐ | Super-admin "Tools & Downloads" management page (§8.3) | with the portal |
+| ☐ | Landing page itself, consuming §9.1 | after content is entered |
+| ☐ | Move the dashboard to the root of its host (§7.3.2) | vite `base` **and** `App.tsx` basename together |
+| ☐ | Fix `handlers.ts:959` (§7.3.1) | needs a POS release |
+
+#### Landing content — verified on staging, 2026-09-14
+
+```
+GET  /api/site-config/landing-plans     200  three well-formed tiers, ids starter/pro/vip, order 0/1/2
+GET  /api/site-config/landing-contact   200  empty but well-formed
+PUT  /api/site-config/landing-plans     401  without a SUPER_ADMIN token
+PUT  /api/site-config/landing-contact   401  without a SUPER_ADMIN token
+/web/admin/landing                      200  route and UI present in the deployed bundle
+```
+
+20/20 site-config tests pass (16 new). Enter content at
+`https://dev.pos.bobur-dev.uz/web/admin/landing`.
+
+**This is application code and lives on `dev` only.** It reaches production with the full
+`dev` → `main` merge, which is still gated on `LICENSE_SIGNING_KEY`. `main` carries the four infra
+commits and nothing else.
 
 #### 7.3.1 The till's dashboard QR must stop guessing
 
