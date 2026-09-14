@@ -86,6 +86,18 @@ src/generated/
 !/uploads/.gitkeep
 /uploads-staging/
 
+# Drivers, tools and manuals served on panel.posgro.uz.
+#
+# These MUST be ignored, not merely untracked. The deploy action runs `git clean -fd`, which
+# deletes an untracked directory and leaves an ignored one alone. Without these rules the
+# directory is removed on every deploy and recreated by the deploy script — which orphans the
+# running container's bind mount, and every upload then fails with ENOENT on a path that plainly
+# exists on both the host and inside the container. `.gitkeep` keeps /downloads in the checkout
+# for the same reason /uploads has one. See tasks/lessons.md.
+/downloads/*
+!/downloads/.gitkeep
+/downloads-staging/
+
 # MXIK audit artifacts (generated locally, not source)
 /products.json
 /mxik-check-report.csv
