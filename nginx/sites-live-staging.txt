@@ -1,0 +1,12 @@
+# Staging counterpart of nginx/sites-live.txt — hosts whose certificate has been issued and which
+# therefore get their REAL config from nginx/sites-staging/<host>.conf. Anything not listed gets
+# an HTTP-only ACME bootstrap stub.
+#
+# TO ADD A HOST:
+#   1. deploy — the host gets a stub that can answer the ACME challenge
+#   2. sudo certbot certonly --webroot -w /var/www/certbot --cert-name <host> -d <host>
+#   3. add it below, commit, deploy again
+#
+# See nginx/README.md for why this is a manifest rather than a filesystem probe.
+
+dev.pos.bobur-dev.uz

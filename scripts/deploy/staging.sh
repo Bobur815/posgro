@@ -10,7 +10,6 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."   # repo root
 
 COMPOSE="docker-compose.staging.yml"
-NGINX_SITE="dev.pos.bobur-dev.uz"
 
 echo "🔎 Validate .env"
 test -s .env                 || { echo "❌ .env is empty";       exit 1; }
@@ -20,28 +19,79 @@ grep -q '^DB_PASSWORD=' .env || { echo "❌ DB_PASSWORD missing"; exit 1; }
 # Telegram bot runs on the UZ VPS only — strip the token so NestJS keeps it disabled.
 sed -i '/^TELEGRAM_BOT_TOKEN=/d' .env
 
-echo "🌐 Deploy nginx config"
-sudo cp nginx.staging.conf "/etc/nginx/sites-available/${NGINX_SITE}"
-sudo ln -sf "/etc/nginx/sites-available/${NGINX_SITE}" "/etc/nginx/sites-enabled/${NGINX_SITE}"
+echo "🌐 Deploy nginx configs"
 
-if [ -f "/etc/letsencrypt/live/${NGINX_SITE}/fullchain.pem" ]; then
-  sudo nginx -t || exit 1
-  if sudo nginx -T 2>/dev/null | grep -q "ssl_certificate.*${NGINX_SITE}"; then
-    sudo systemctl reload nginx
+mkdir -p downloads-staging   # tools served at dev.panel.posgro.uz/downloads/
+
+# One file per host, gated on nginx/sites-live-staging.txt — the same arrangement as production
+# (scripts/deploy/production.sh), for the same reasons: the deploy runs as `bobur`, whose sudo is
+# NOPASSWD for only nginx, `systemctl reload nginx`, cp and ln, and who cannot read
+# /etc/letsencrypt/live at all. Probing the filesystem for a certificate reports "missing" for
+# every host including live ones, so the gate is an explicit list.
+sudo cp nginx/snippets/*.conf /etc/nginx/snippets/
+
+for conf in nginx/sites-staging/*.conf; do
+  host="$(basename "$conf" .conf)"
+  installed="/etc/nginx/sites-available/${host}"
+  names="$(awk '/^[[:space:]]*server_name[[:space:]]/{sub(/^[[:space:]]*server_name[[:space:]]+/,"");sub(/;.*$/,"");print;exit}' "$conf")"
+  names="${names:-$host}"
+
+  if grep -qxF "$host" nginx/sites-live-staging.txt 2>/dev/null; then
+    sudo cp "$conf" "$installed"
+    echo "  ✅ ${host}"
+  elif grep -q 'ssl_certificate' "$installed" 2>/dev/null; then
+    echo "  ⚠️  ${host} — already serving TLS but not in nginx/sites-live-staging.txt; LEFT UNTOUCHED."
   else
-    # First deploy of a new HTTPS server block. `systemctl restart nginx` is NOT in
-    # the NOPASSWD sudoers allowlist (only `reload` is), so ask non-interactively and
-    # fall back to reload rather than hang forever on a password prompt.
-    sudo -n systemctl restart nginx 2>/dev/null || {
-      echo "⚠️  restart not permitted by sudoers — falling back to reload"
-      echo "   To allow it: add '/bin/systemctl restart nginx' to the NOPASSWD line"
-      sudo systemctl reload nginx
+    stub="$(mktemp)"
+    cat > "$stub" <<STUB
+# AUTO-GENERATED BOOTSTRAP STUB — no TLS certificate for ${host} yet.
+# Issue one, then add "${host}" to nginx/sites-live-staging.txt and deploy again:
+#   sudo certbot certonly --webroot -w /var/www/certbot --cert-name ${host} -d ${names// / -d }
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${names};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
     }
+
+    location / {
+        return 503;
+    }
+}
+STUB
+    chmod 644 "$stub"
+    sudo cp "$stub" "$installed"
+    rm -f "$stub"
+    echo "  ⏳ ${host} — not in sites-live-staging.txt, ACME stub installed"
   fi
-else
-  echo "⚠️  SSL cert not found for ${NGINX_SITE} — skipping nginx reload"
-  echo "   Run once on the VPS: sudo certbot --nginx -d ${NGINX_SITE}"
+
+  sudo ln -sf "$installed" "/etc/nginx/sites-enabled/${host}"
+done
+
+if ! sudo nginx -t; then
+  echo "❌ nginx config test failed — NOT reloading; the running config is untouched."
+  echo "   Most likely: a host in nginx/sites-live-staging.txt has no certificate yet."
+  exit 1
 fi
+sudo systemctl reload nginx
+
+# A reload normally picks up a brand-new HTTPS server block, but this has been seen not to take
+# on the first deploy after a promotion — hence the original restart fallback, kept here. Only
+# `reload` is in the NOPASSWD allowlist, so the restart is attempted non-interactively and falls
+# back rather than hanging on a password prompt.
+while read -r host; do
+  case "$host" in ''|\#*) continue ;; esac
+  if ! sudo nginx -T 2>/dev/null | grep -q "ssl_certificate.*${host}/"; then
+    echo "⚠️  ${host} is promoted but not being served — trying a restart"
+    sudo -n systemctl restart nginx 2>/dev/null || {
+      echo "   restart not permitted by sudoers; add '/bin/systemctl restart nginx' to the"
+      echo "   NOPASSWD line, or restart nginx by hand."
+    }
+    break
+  fi
+done < nginx/sites-live-staging.txt
 
 echo "🐘 Ensure staging postgres is running"
 docker compose -f "$COMPOSE" up -d postgres
