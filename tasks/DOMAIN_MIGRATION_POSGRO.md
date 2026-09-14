@@ -595,8 +595,27 @@ of this.
 |---|---|---|
 | ☑ | `nginx/sites-staging/*.conf` + `nginx/sites-live-staging.txt`, `staging.sh` loops like production | done |
 | ☑ | Certs for `dev.api` / `dev.web` / `dev.panel.posgro.uz`, promoted | done |
+| ☑ | Portal verified end to end at `https://dev.panel.posgro.uz` | done |
 | ☐ | `src/web/vite.config.ts` dev-proxy targets → `dev.api.posgro.uz` | pending |
 | ☐ | Phases 1–4 end to end on staging: a real Electron build against `VPS_API_URL=https://dev.api.posgro.uz/api`, a real sync, and the one-shot `api_url` migration firing against a SQLite seeded with the legacy URL | pending |
+
+#### Staging portal — verified 2026-09-14
+
+```
+https://dev.panel.posgro.uz/                        200  <title>POSGRO — Yuklab olish</title>
+  /assets/index-CmIsnetV.js                         200
+  /api/downloads/latest-app                         200  v1.28.0, 153859304 bytes (the real feed)
+  /api/downloads                                    200  []
+  /releases/POSGRO-Setup-1.28.0.exe                  200  the download button target resolves
+Bundle carries both languages: "POSGRO kassa dasturi" and "Кассовая программа POSGRO"
+https://dev.web.posgro.uz/web/   200     https://dev.api.posgro.uz/api/health  200
+dev.pos.bobur-dev.uz and all four production hosts: 200, untouched
+```
+
+⚠️ **A duplicate-directive bug in the upload routes broke `nginx -t` server-wide** before this
+landed — see `tasks/lessons.md`. nginx kept running on its old config, but any restart would have
+left it down and the nightly production deploy would have aborted. Fixed by splitting the proxy
+snippet into headers / normal-timeout / long-timeout variants.
 
 Staging differences that are deliberate: its own `uploads-staging/` and `downloads-staging/` so
 nothing added there can surface on a real till or the live portal, but the **same**

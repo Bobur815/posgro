@@ -230,3 +230,24 @@ suite failed, which looked like load flakiness until the ports were compared.
 
 **Rule:** before choosing a port in a test, grep `*.test.ts` for `PORT =` and `listen(`; when a
 suite fails only in the full run, check shared ports before blaming load.
+
+## nginx rejects a repeated directive; it does not treat the nearer one as an override
+
+The `/api/downloads` upload routes set `proxy_read_timeout`/`proxy_send_timeout` and then included
+`posgro-proxy.conf`, which sets them too. That is not an override — nginx fails the whole config
+with `"proxy_send_timeout" directive is duplicate`. The reported file:line is the *snippet*,
+because that is where nginx meets the second occurrence, so the error points at the file that was
+correct. Following it would have broken every host that includes the snippet.
+
+Worse than a failed deploy: the deploy script copies configs and *then* runs `nginx -t`. The
+broken files were already installed and symlinked, so nginx kept serving its old in-memory config
+while `nginx -t` failed from then on — a reboot would have left nginx down, and the nightly
+production deploy would have aborted at its own guard. The failure was silent until someone ran a
+deploy.
+
+**Rule:** a location includes exactly one proxy snippet, and sets no directive that snippet
+already sets. When a route needs different timeouts, make a second snippet (headers factored into
+a third that both include) rather than overriding inline. Before pushing an nginx change, grep for
+locations that both `include` a snippet and set a directive it contains — a duplicate is a
+server-wide outage on the next restart, not a local mistake. And read a duplicate-directive
+file:line as "the second occurrence", not "the culprit".
