@@ -660,8 +660,9 @@ You are designing this in Claude Design; these are the constraints that matter f
   arriving at the site are usually logging in, not installing.
 - UZ/RU toggle and the same dark/light treatment as the panel, so the three sites feel like one
   product.
-- Static output only — no API calls. It must stay up even if the API is down, which is exactly
-  when people will visit looking for support contact details.
+- Static build, with live config fetched on top of baked-in fallbacks — see §9.1. The page must
+  render complete with the API down, which is exactly when people visit looking for a support
+  number.
 
 **Content recommendations (Uzbek grocery-retail market):**
 1. Hero — one sentence on what it is, in Uzbek first. Screenshot of the till screen, not an
@@ -671,11 +672,86 @@ You are designing this in Claude Design; these are the constraints that matter f
 3. Compliance block — fiscal receipts (REGOS/OFD), marking codes (Asl-Belgisi), MXIK/tasnif. Shop
    owners buy POS software to stay legal first and to count money second.
 4. Hardware — scales (Rongta), thermal and label printers, scanners.
-5. Pricing — Starter / Pro / VIP. The prices already live in `site-config`
-   (`SubscriptionPlanPrices`); for a static page, hardcode them and accept a manual edit when they
-   change, or fetch from the site-config endpoint with a hardcoded fallback.
-6. Contact — Telegram (`@Bobur_AbuAbdulaziz`) and a phone number. Telegram converts far better than
-   a contact form here.
+5. Pricing — Starter / Pro / VIP, edited from the dashboard (§9.1).
+6. Contact — phone and socials, edited from the dashboard (§9.1). Telegram converts far better
+   than a contact form here, so give it the prominent slot.
+
+### 9.1 Dashboard-managed content (added 2026-09-14 at your request)
+
+Tariff plans and contact details are edited in the super-admin dashboard, not in the landing
+page's source.
+
+**This does not make the landing dynamic.** It stays a static build with every value baked in as a
+fallback, and fetches the live config on load to replace them. If `api.posgro.uz` is unreachable —
+exactly when people come looking for a support number — the page still renders complete and
+correct, just possibly with slightly stale prices. No spinner, no empty state, no blank section.
+
+```
+render baked-in defaults immediately
+   → fetch https://api.posgro.uz/api/site-config/{subscription-plans,landing-plans,landing-contact}
+   → on success, swap the values in
+   → on failure, keep what is on screen and say nothing
+```
+
+Cross-origin, so `https://posgro.uz` must be in `CORS_ORIGINS` — it is (added 2026-09-14).
+
+#### Prices stay single-source
+
+`subscription_plan_prices` (starter/pro/vip) already exists, is already **public**
+(`@Get('subscription-plans')` has no guard), and already drives the subscription system and
+`SubscriptionPlansPage`. The landing reads those same numbers. A separate set of "marketing"
+prices would drift from what the system actually charges, and the first person to notice would be
+a customer.
+
+What is missing is presentation, so that is all the new key holds:
+
+```ts
+// site-config key: 'landing_plans'
+interface LandingPlan {
+  id: 'starter' | 'pro' | 'vip';   // price comes from subscription_plan_prices[id]
+  nameRu: string;  nameUz: string;
+  taglineRu: string;  taglineUz: string;
+  featuresRu: string[];  featuresUz: string[];
+  highlighted: boolean;            // the "most popular" card
+  order: number;
+  ctaUrl?: string;                 // defaults to the Telegram contact
+}
+```
+
+```ts
+// site-config key: 'landing_contact'
+interface LandingContact {
+  phones: { label: string; number: string }[];   // "Sotuv" / "+998 90 166 27 14"
+  socials: { platform: string; url: string; order: number }[];
+  email?: string;
+  addressRu?: string;  addressUz?: string;
+  workingHoursRu?: string;  workingHoursUz?: string;
+}
+```
+
+`platform` is a free string rendered against a known icon set — `telegram`, `instagram`,
+`youtube`, `facebook`, `tiktok`, `whatsapp`, `linkedin`, `x` — with a generic link icon for
+anything else. That way a new network is added from the dashboard without a release.
+
+Note `subscription_payment.supportPhone` already exists and is public. `landing_contact.phones`
+supersedes it for display purposes; leave the payment one alone, it is what the till's
+subscription dialog shows.
+
+#### Endpoints — same pattern as every other site-config key
+
+```
+GET /api/site-config/landing-plans      public       → LandingPlan[]
+PUT /api/site-config/landing-plans      SUPER_ADMIN
+GET /api/site-config/landing-contact    public       → LandingContact
+PUT /api/site-config/landing-contact    SUPER_ADMIN
+```
+
+#### Admin UI
+
+One new page, `src/web/src/pages/Admin/LandingPage.tsx`, sitting beside `LoginBannerPage.tsx` and
+`SubscriptionPlansPage.tsx`, with two panels: **Plans** and **Contact**. The Plans panel shows the
+price for each tier inline — read from `subscription_plan_prices`, saved back to that same key —
+so the operator edits price and copy in one place without two sources of truth existing.
 
 **Hosting:** static files on the POS VPS under nginx (`/var/www/posgro-landing`), deployed by the
 same pipeline. Do not put it behind NestJS — it has no reason to share a runtime with the API.
