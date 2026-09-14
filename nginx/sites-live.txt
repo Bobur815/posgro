@@ -1,0 +1,17 @@
+# Hosts whose TLS certificate has been issued and which should therefore get their REAL config
+# from nginx/sites/<host>.conf. Anything not listed here gets an HTTP-only ACME bootstrap stub.
+#
+# This list is explicit rather than detected because the deploy runs as `bobur`, and
+# /etc/letsencrypt/live is `drwx------ root:root` — a filesystem probe for a certificate returns
+# "missing" for EVERY host, including ones that are live. Detecting it that way would replace a
+# working config with a stub and take the host down.
+#
+# TO ADD A HOST:
+#   1. deploy — the host gets a stub that can answer the ACME challenge
+#   2. sudo certbot certonly --webroot -w /var/www/certbot -d <host>
+#   3. add it below, commit, deploy again
+#
+# Order does not matter. Blank lines and #-comments are ignored. One hostname per line, matching
+# the config filename exactly (nginx/sites/<host>.conf).
+
+pos.bobur-dev.uz
