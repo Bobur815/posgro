@@ -7,6 +7,7 @@ import {
   type MxikPackage,
 } from "@shared/utils";
 import type { SubscriptionRules, SubscriptionState } from "@shared/utils/subscription";
+import type { LandingPlan, LandingContact } from "@shared/types/landing.types";
 
 export interface DeviceSession {
   id: string;
@@ -764,6 +765,27 @@ export const siteConfig = {
   },
   setSubscriptionPayment: async (payment: SubscriptionPayment): Promise<SubscriptionPayment> => {
     const { data } = await axiosInstance.put('/site-config/subscription-payment', payment);
+    return data;
+  },
+  /**
+   * Landing-page content for posgro.uz. Note these hold no prices — the landing page reads those
+   * from `getSubscriptionPlans`, the same key the subscription system bills from, so the page
+   * cannot quote a number the system does not honour.
+   */
+  getLandingPlans: async (): Promise<LandingPlan[]> => {
+    const { data } = await axiosInstance.get('/site-config/landing-plans');
+    return data;
+  },
+  setLandingPlans: async (plans: LandingPlan[]): Promise<LandingPlan[]> => {
+    const { data } = await axiosInstance.put('/site-config/landing-plans', { plans });
+    return data;
+  },
+  getLandingContact: async (): Promise<LandingContact> => {
+    const { data } = await axiosInstance.get('/site-config/landing-contact');
+    return data;
+  },
+  setLandingContact: async (contact: LandingContact): Promise<LandingContact> => {
+    const { data } = await axiosInstance.put('/site-config/landing-contact', contact);
     return data;
   },
   /** Trial, warning, grace and check-in days — super admin only. */

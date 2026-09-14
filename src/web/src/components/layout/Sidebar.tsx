@@ -18,6 +18,7 @@ import {
   ScrollText,
   Image,
   CreditCard,
+  Globe,
   Scale,
   type LucideIcon,
 } from "lucide-react";
@@ -262,6 +263,7 @@ export function Sidebar() {
         { to: "/admin/logs", icon: ScrollText, label: "Logs" },
         { to: "/admin/login-banner", icon: Image, label: "Banner" },
         { to: "/admin/subscription-plans", icon: CreditCard, label: "Plans" },
+        { to: "/admin/landing", icon: Globe, label: "Landing" },
         { to: "/settings/user", icon: Settings, label: t("nav.settings") },
       ]
     : [
@@ -394,6 +396,7 @@ export function Sidebar() {
                 CreditCard,
                 "Subscriptions",
               )}
+              {renderNavItem("/admin/landing", Globe, "Landing Page")}
               {renderNavItem("/settings/user", Settings, t("nav.settings"))}
             </NavSection>
           )}
