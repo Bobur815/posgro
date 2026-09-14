@@ -3,9 +3,11 @@
 Written 2026-09-14 on branch `dev`. Decisions 1, 2, 5 and 6 are **settled** (§10); 3, 4 and 7 have
 recommended defaults recorded there.
 
-**Status: Phase 1 in progress.** nginx configs and the deploy loop are written
-([`nginx/README.md`](../nginx/README.md)); DNS records, certbot and the `CORS_ORIGINS` secret are
-waiting on you. No application code has changed, and nothing in the field is affected yet.
+**Status: Phase 1 complete (2026-09-14).** `api`, `web` and `panel.posgro.uz` are live over HTTPS,
+serving the same backend and the same releases directory as `pos.bobur-dev.uz`, verified
+byte-identical. No application code changed and nothing in the field is affected — no terminal
+points at the new hosts yet. Outstanding: the `CORS_ORIGINS` secret and the apex TTL.
+Next: Phase 2 (legacy 301s) and Phase 3 (panel app, landing page, the `handlers.ts:959` fix).
 
 ---
 
@@ -312,13 +314,32 @@ Answer §10. Lower `posgro.uz` apex TTL to 300 if the apex is moving.
 | ☑ | Add `A` records for `api`, `web`, `panel`, `dev.*` → 144.91.121.160, **in Cloudflare**, grey cloud | done 2026-09-14, all six verified authoritative |
 | ☑ | Split nginx into `nginx/sites/*.conf` + `nginx/snippets/` | done |
 | ☑ | Teach `scripts/deploy/production.sh` to loop the directory, gated on `nginx/sites-live.txt` | done |
+| ☑ | Cherry-pick the infra commits onto `main` (`114cf77`, `46221ff`) — **not** a full `dev` merge, see below | done |
+| ☑ | Deploy #1 — ACME stubs for the four new hosts, legacy untouched | done |
+| ☑ | `certbot certonly --webroot --cert-name <host>` for `api`, `web`, `panel` | done, expire 2026-12-13 |
+| ☑ | Promote those three in `nginx/sites-live.txt`, deploy #2 | done |
+| ☑ | Verify both feeds and both APIs are byte-identical | **verified** — see below |
 | ☐ | Set the apex TTL to 5 min (do **not** change its value yet) | **you**, Cloudflare |
-| ☐ | Merge `dev` → `main` (production deploys from `main`) | **you** |
-| ☐ | Deploy #1 — installs ACME stubs for the new hosts | CI or VPS |
-| ☐ | `certbot certonly --webroot` for `api`, `web`, `panel` | **you**, on the VPS |
-| ☐ | Add those three to `nginx/sites-live.txt`, commit, deploy #2 | either |
 | ☐ | Add the new hosts to `CORS_ORIGINS` in the `ENV_FILE` GitHub secret | **you** |
-| ☐ | Verify both feeds and both APIs are byte-identical | either |
+
+### Phase 1 verification, 2026-09-14
+
+| Check | Result |
+|---|---|
+| `api.posgro.uz/api/health` · `/health` | 200 · 200 (the `= /health` → `/api/health` fix works) |
+| `web.posgro.uz/` + its `/web/assets/*.js` | 200 + 200 (1.25 MB) — the dual-`location` design serves the current `base: '/web/'` build |
+| `web.posgro.uz/some/deep/route` | 200 — SPA fallback intact |
+| `panel.posgro.uz/` · `/releases/latest.yml` | 200 · 200 |
+| `/uploads/banner-*.jpg` over **both** hosts | 200 / 1 507 524 bytes on each — identical |
+| Updater feed, old vs new host | **byte-identical** (v1.28.0) |
+| `/api/health`, old vs new host | **byte-identical** |
+| `pos.bobur-dev.uz` throughout | 200 — never interrupted |
+
+**Only the two infra commits went to `main`.** `main` was 28 commits behind `dev`, and those 28
+include the licence enforcement (`bb0fcb2`, `77ecccd`, `5d22ea6`) while `LICENSE_SIGNING_KEY` is
+**absent from the production `.env`** — shipping them would start the countdown on every till
+(see `subscription_license_rollout` in memory). They stay on `dev` until that key is in the
+`ENV_FILE` secret and the release is made deliberately. No application code changed in Phase 1.
 
 The new hosts serve the **same** backend and the **same** `/home/bobur/releases/` directory as
 `pos.bobur-dev.uz`. Both hostnames answer; nothing in the field changes.
