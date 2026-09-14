@@ -42,11 +42,18 @@ function sftpUpload(localFile, remoteFile) {
 console.log(`Uploading v${version} → ${remoteExe}`);
 console.log(`  source: ${localExe}`);
 
-sftpUpload(ymlPath, 'latest.yml');
+// ORDER MATTERS: the installer and its blockmap go up FIRST, and latest.yml — the file the
+// updater actually polls — goes up LAST.
+//
+// latest.yml is what makes a release visible. Sending it first advertises a version whose .exe
+// is still uploading, and a terminal that polls during those minutes sees an update, tries to
+// fetch it, and fails on a file that is not there yet. Publishing the manifest last means the
+// feed only ever names a file that is already complete on the server.
 sftpUpload(localExe, remoteExe);
 
-// Upload blockmap for differential (delta) downloads — electron-updater uses this
-// to download only the changed blocks instead of the full installer.
+// Blockmap enables differential (delta) downloads — electron-updater fetches only the changed
+// blocks instead of the whole installer. Also before latest.yml: a feed naming a version whose
+// blockmap is missing makes every client fall back to a full download.
 try {
   sftpUpload(localBlockmap, remoteBlockmap);
   console.log(`  blockmap uploaded → differential updates enabled`);
@@ -54,4 +61,8 @@ try {
   console.warn(`  warning: blockmap not found at ${localBlockmap}, differential updates disabled`);
 }
 
+// Last: this is the moment the release becomes live to every terminal in the field.
+sftpUpload(ymlPath, 'latest.yml');
+
 console.log(`Done! v${version} is live at https://pos.bobur-dev.uz/releases/`);
+console.log(`            and at https://panel.posgro.uz/releases/ (same directory)`);
