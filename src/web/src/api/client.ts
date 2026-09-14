@@ -670,13 +670,24 @@ export interface LogsQueryParams {
   level?: string;
   from?: string;
   to?: string;
+  /** A REGOS:VCR error number (e.g. 701003), or 'any' for every VCR error. */
+  vcrCode?: string;
   page?: number;
   limit?: number;
+}
+
+/** A VCR error number seen in the logs: how often, and REGOS's words for it the last time. */
+export interface VcrCodeSummary {
+  code: string;
+  count: number;
+  latest: string | null;
 }
 
 export interface LogsMeta {
   stores: string[];
   terminalsByStore: Record<string, string[]>;
+  /** Absent from a server older than the VCR filter. */
+  vcrCodes?: VcrCodeSummary[];
 }
 
 export const logs = {

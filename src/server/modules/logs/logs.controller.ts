@@ -43,6 +43,7 @@ export class LogsController {
     @Query('level') level?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('vcrCode') vcrCode?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
@@ -52,6 +53,7 @@ export class LogsController {
       level,
       from,
       to,
+      vcrCode,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     });

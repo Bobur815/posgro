@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UploadLogsDto } from './dto/upload-logs.dto';
 
@@ -7,14 +8,33 @@ import { UploadLogsDto } from './dto/upload-logs.dto';
 // terminal_logs doesn't grow unbounded.
 const LOG_RETENTION_DAYS = 30;
 
+/**
+ * The line a till writes for every REGOS:VCR failure, raw code included
+ * (src/main/fiscal/regos-vcr-service.ts): `[fiscal] raw VCR error [701003] Receipt.Sale: …`.
+ * The staff-facing message collapses several codes into one, so this is the line to search by.
+ */
+const VCR_MARKER = 'raw VCR error [';
+
+/** A REGOS code is six digits; 0 is the till's own "VCR unreachable". */
+const VCR_CODE = /^(0|\d{6})$/;
+
 export interface LogsQuery {
   storeId?: string;
   terminalId?: string;
   level?: string;
   from?: string;
   to?: string;
+  /** A VCR error number, or 'any' for every VCR error. */
+  vcrCode?: string;
   page?: number;
   limit?: number;
+}
+
+/** One VCR error number seen in the logs: how often, and REGOS's words for it the last time. */
+export interface VcrCodeSummary {
+  code: string;
+  count: number;
+  latest: string | null;
 }
 
 @Injectable()
@@ -55,7 +75,11 @@ export class LogsService {
   async getMeta(
     callerRole: string,
     callerStoreId: string | null,
-  ): Promise<{ stores: string[]; terminalsByStore: Record<string, string[]> }> {
+  ): Promise<{
+    stores: string[];
+    terminalsByStore: Record<string, string[]>;
+    vcrCodes: VcrCodeSummary[];
+  }> {
     const where: Record<string, unknown> = {};
     if (callerRole !== 'SUPER_ADMIN') {
       where.storeId = callerStoreId;
@@ -74,7 +98,31 @@ export class LogsService {
       terminalsByStore[row.storeId].push(row.terminalId);
     }
 
-    return { stores: Object.keys(terminalsByStore).sort(), terminalsByStore };
+    return {
+      stores: Object.keys(terminalsByStore).sort(),
+      terminalsByStore,
+      vcrCodes: await this.vcrCodes(callerRole === 'SUPER_ADMIN' ? null : callerStoreId, callerRole),
+    };
+  }
+
+  /** The VCR error numbers in the logs, most frequent first — the filter's suggestions. */
+  private async vcrCodes(storeId: string | null, callerRole: string): Promise<VcrCodeSummary[]> {
+    if (callerRole !== 'SUPER_ADMIN' && !storeId) return [];
+    const rows = await this.prisma.$queryRaw<
+      Array<{ code: string | null; count: number | bigint; latest: string | null }>
+    >`
+      SELECT substring("message" from 'raw VCR error \\[([0-9]+)\\]') AS code,
+             count(*)::int AS count,
+             (array_agg(substring("message" from 'raw VCR error \\[[0-9]+\\][^:]*: (.*)$')
+                        ORDER BY "timestamp" DESC))[1] AS latest
+      FROM terminal_logs
+      WHERE "message" LIKE ${`%${VCR_MARKER}%`}
+      ${storeId ? Prisma.sql`AND store_id = ${storeId}` : Prisma.empty}
+      GROUP BY 1
+      ORDER BY 2 DESC`;
+    return rows
+      .filter((r): r is typeof r & { code: string } => Boolean(r.code))
+      .map((r) => ({ code: r.code, count: Number(r.count), latest: r.latest }));
   }
 
   async getLogs(
@@ -97,6 +145,14 @@ export class LogsService {
 
     if (query.terminalId) where.terminalId = query.terminalId;
     if (query.level && query.level !== 'all') where.level = query.level;
+    if (query.vcrCode) {
+      const code = query.vcrCode.trim();
+      if (code !== 'any' && !VCR_CODE.test(code)) {
+        throw new BadRequestException('vcrCode must be a VCR error number, or "any"');
+      }
+      // The closing bracket makes it exact: 701003 must not also match a longer code.
+      where.message = { contains: code === 'any' ? VCR_MARKER : `${VCR_MARKER}${code}]` };
+    }
     if (query.from || query.to) {
       where.timestamp = {
         ...(query.from ? { gte: new Date(query.from) } : {}),
