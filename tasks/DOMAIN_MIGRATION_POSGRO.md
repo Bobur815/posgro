@@ -584,11 +584,25 @@ over the old host's `/releases/` (which keeps serving), the whole chain works wi
 visiting a shop.
 
 ### Phase 5 — Staging
-Mirror everything on `dev.api` / `dev.web` / `dev.panel.posgro.uz` (Decision 7). Update
-`src/web/vite.config.ts` proxy targets and `scripts/deploy/staging.sh`. Do Phases 1–4 on staging
-first, end to end — including a real Electron build with
-`VPS_API_URL=https://dev.api.posgro.uz/api`, a real sync, and the one-shot migration firing against
-a SQLite seeded with the legacy URL.
+
+**nginx done early (2026-09-14)**, pulled forward so the download portal could be clicked through
+before it faces customers. `src/panel` is built with `base: '/'`, so its assets are requested from
+the host root — `dev.pos.bobur-dev.uz/panel/` would serve `index.html` and then 404 every asset.
+The portal needs its own host, and therefore its own certificate; there was no one-line version
+of this.
+
+| | Step | State |
+|---|---|---|
+| ☑ | `nginx/sites-staging/*.conf` + `nginx/sites-live-staging.txt`, `staging.sh` loops like production | done |
+| ☑ | Certs for `dev.api` / `dev.web` / `dev.panel.posgro.uz`, promoted | done |
+| ☐ | `src/web/vite.config.ts` dev-proxy targets → `dev.api.posgro.uz` | pending |
+| ☐ | Phases 1–4 end to end on staging: a real Electron build against `VPS_API_URL=https://dev.api.posgro.uz/api`, a real sync, and the one-shot `api_url` migration firing against a SQLite seeded with the legacy URL | pending |
+
+Staging differences that are deliberate: its own `uploads-staging/` and `downloads-staging/` so
+nothing added there can surface on a real till or the live portal, but the **same**
+`/home/bobur/releases/`, because the portal's installer card is only proved against the feed the
+updater actually reads. Its `limit_req_zone` is named `posgro_staging_api` — production's
+`posgro_api` and the legacy staging host's `pos_staging_api` share the one `http{}` context.
 
 ### Phase 6 — Retire (not before every till reports the new host)
 Keep `pos.bobur-dev.uz` resolving and renewing indefinitely regardless. Retirement means "no longer
