@@ -3,11 +3,20 @@
 Written 2026-09-14 on branch `dev`. Decisions 1, 2, 5 and 6 are **settled** (§10); 3, 4 and 7 have
 recommended defaults recorded there.
 
-**Status: Phase 1 complete (2026-09-14).** `api`, `web` and `panel.posgro.uz` are live over HTTPS,
-serving the same backend and the same releases directory as `pos.bobur-dev.uz`, verified
-byte-identical. No application code changed and nothing in the field is affected — no terminal
-points at the new hosts yet. Outstanding: the `CORS_ORIGINS` secret and the apex TTL.
-Next: Phase 2 (legacy 301s) and Phase 3 (panel app, landing page, the `handlers.ts:959` fix).
+**Status: Phases 1 and 2 complete (2026-09-14).** `api`, `web` and `panel.posgro.uz` are live over
+HTTPS, serving the same backend and the same releases directory as `pos.bobur-dev.uz`, verified
+byte-identical. The old host now redirects its two human-facing paths to the new dashboard and
+keeps serving `/api/`, `/releases/` and `/uploads/` unchanged for the fleet.
+
+**Still no application code has changed, and no terminal points at the new hosts.** Everything so
+far is nginx and DNS; `main` carries only the four infra commits.
+
+Outstanding for you: the `CORS_ORIGINS` secret, the apex TTL, and — separately and more urgently
+than this migration — `LICENSE_SIGNING_KEY` in the `ENV_FILE` secret, which blocks the 28 app
+commits sitting on `dev`.
+
+Next: Phase 3 — the panel app, the landing page, the dashboard's move to the root of its host
+(vite `base` **and** `App.tsx` basename together), and the `handlers.ts:959` fix.
 
 ---
 
@@ -398,6 +407,28 @@ touched, no release, and no change to `handlers.ts` yet.
 
 `/` points at `https://posgro.uz` once the landing page exists; not before, since the apex still
 serves the old shared hosting.
+
+#### Phase 2 verification, 2026-09-14 — **complete**
+
+```
+MACHINE PATHS (must never redirect)
+  pos.bobur-dev.uz/api/health                200
+  pos.bobur-dev.uz/releases/latest.yml       200
+  pos.bobur-dev.uz/uploads/banner-*.jpg      200
+
+HUMAN PATHS (must redirect, preserving path + query)
+  pos.bobur-dev.uz/                    301 → https://web.posgro.uz/web/
+  pos.bobur-dev.uz/web                 301 → https://web.posgro.uz/web
+  pos.bobur-dev.uz/web/products?x=1    301 → https://web.posgro.uz/web/products?x=1
+
+CHAIN   one 301, then 200 — terminates, no loop
+FEEDS   latest.yml md5 identical on pos.bobur-dev.uz and panel.posgro.uz
+STAGING dev.pos.bobur-dev.uz/api/health 200 — untouched
+```
+
+One operational consequence: `web.posgro.uz` is a different origin from `pos.bobur-dev.uz`, so the
+dashboard session in `localStorage` does not travel with the redirect. Everyone signs in once more
+on the new host.
 
 ### Phase 3 — Build the new surfaces
 - `panel.posgro.uz` (§8).
