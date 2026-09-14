@@ -39,8 +39,16 @@ services:
       # workflows rewrite .env from the same shared secrets.ENV_FILE, so a value added there
       # would switch production on too. This file is staging-only, so the flag cannot leak.
       RECONCILIATION_LEDGER_ENABLED: "true"
+      DOWNLOADS_DIR: "/app/downloads"
+      RELEASES_DIR: "/app/releases"
     volumes:
       - ./uploads-staging:/app/uploads
+      # Staging keeps its own tools directory — uploading a driver here must not publish it to
+      # the live portal.
+      - ./downloads-staging:/app/downloads
+      # The SAME release feed production serves, read-only: staging is where the portal's
+      # installer card gets proved against a real latest.yml before it faces customers.
+      - ../releases:/app/releases:ro
     ports:
       # Loopback only — nginx proxies to 127.0.0.1:3002. See docker-compose.yml.
       - "127.0.0.1:3002:3002"

@@ -19,6 +19,7 @@ import {
   Image,
   CreditCard,
   Globe,
+  DownloadCloud,
   Scale,
   type LucideIcon,
 } from "lucide-react";
@@ -263,7 +264,9 @@ export function Sidebar() {
         { to: "/admin/logs", icon: ScrollText, label: "Logs" },
         { to: "/admin/login-banner", icon: Image, label: "Banner" },
         { to: "/admin/subscription-plans", icon: CreditCard, label: "Plans" },
-        { to: "/admin/landing", icon: Globe, label: "Landing" },
+        // Landing Page and Downloads are deliberately absent: five icons is the documented
+        // limit above, and neither is a phone task — one is long-form bilingual copy, the other
+        // uploads installers of hundreds of megabytes. Both are in the desktop sidebar.
         { to: "/settings/user", icon: Settings, label: t("nav.settings") },
       ]
     : [
@@ -397,6 +400,7 @@ export function Sidebar() {
                 "Subscriptions",
               )}
               {renderNavItem("/admin/landing", Globe, "Landing Page")}
+              {renderNavItem("/admin/downloads", DownloadCloud, "Downloads")}
               {renderNavItem("/settings/user", Settings, t("nav.settings"))}
             </NavSection>
           )}

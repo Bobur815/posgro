@@ -799,6 +799,73 @@ export const siteConfig = {
   },
 };
 
+export interface DownloadItem {
+  id: string;
+  slug: string;
+  titleRu: string;
+  titleUz: string;
+  descRu: string | null;
+  descUz: string | null;
+  category: string;
+  fileName: string;
+  filePath: string;
+  fileSize: number;
+  mimeType: string;
+  version: string | null;
+  sortOrder: number;
+  published: boolean;
+  downloads: number;
+  createdAt: string;
+}
+
+export interface LatestApp {
+  version: string;
+  size: number | null;
+  url: string;
+  releasedAt: string | null;
+}
+
+/** Drivers, tools and manuals offered on panel.posgro.uz. */
+export const downloads = {
+  listAll: async (): Promise<DownloadItem[]> => {
+    const { data } = await axiosInstance.get('/downloads/admin/all');
+    return data;
+  },
+  latestApp: async (): Promise<LatestApp | null> => {
+    const { data } = await axiosInstance.get('/downloads/latest-app');
+    return data;
+  },
+  /**
+   * `onProgress` exists because these are installers: without a progress bar a 300 MB upload on a
+   * shop's connection looks like a frozen page, and the operator retries it.
+   */
+  create: async (
+    file: File,
+    meta: Record<string, string>,
+    onProgress?: (percent: number) => void,
+  ): Promise<DownloadItem> => {
+    const form = new FormData();
+    form.append('file', file);
+    for (const [k, v] of Object.entries(meta)) if (v !== '') form.append(k, v);
+    const { data } = await axiosInstance.post('/downloads', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 0, // a large upload must not hit the client's default request timeout
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100));
+      },
+    });
+    return data;
+  },
+  update: async (id: string, patch: Partial<DownloadItem>): Promise<DownloadItem> => {
+    const { data } = await axiosInstance.put(`/downloads/${id}`, patch);
+    return data;
+  },
+  remove: async (id: string): Promise<{ id: string }> => {
+    const { data } = await axiosInstance.delete(`/downloads/${id}`);
+    return data;
+  },
+};
+
 /** The signed-in store's subscription, as `GET /store-config/subscription` reports it. */
 export interface StoreSubscription {
   plan: string | null;

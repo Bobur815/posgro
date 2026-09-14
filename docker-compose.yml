@@ -47,8 +47,19 @@ services:
       NODE_ENV: "production"
       PORT: "3001"
       RUN_MIGRATIONS: "true"
+      # Drivers, tools and manuals uploaded from the dashboard and served on panel.posgro.uz.
+      DOWNLOADS_DIR: "/app/downloads"
+      # Read-only view of the installer feed, so the portal reports the same version the
+      # terminals' updater will actually install. Read-only because nothing in the API has any
+      # business writing a release.
+      RELEASES_DIR: "/app/releases"
     volumes:
       - ./uploads:/app/uploads
+      - ./downloads:/app/downloads
+      # ~/releases on the host, beside ~/posgro. If it is ever absent Docker creates an empty
+      # directory, latest.yml is missing, and the portal shows "download unavailable" rather
+      # than failing — which is the right failure for a public page.
+      - ../releases:/app/releases:ro
     ports:
       # Loopback only — nginx proxies to 127.0.0.1:3001. Publishing on 0.0.0.0
       # exposes the API over plain HTTP and bypasses UFW (Docker's DNAT rules
