@@ -1,5 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  normalizeSubscriptionRules,
+  type SubscriptionRules,
+} from '../../../shared/utils/subscription';
+import {
+  normalizeLandingPlans,
+  normalizeLandingContact,
+  type LandingPlan,
+  type LandingContact,
+} from '../../../shared/types/landing.types';
 
 export interface LoginBanner {
   imageUrl: string;
@@ -26,31 +36,72 @@ export interface SubscriptionPayment {
   supportPhone: string;
 }
 
+/** The POS terminal login screen's banner — the key every till in the field already reads. */
 const BANNER_KEY = 'login_banner';
+/** The web dashboard login page's banner, kept apart from the terminals'. */
+const WEB_BANNER_KEY = 'web_login_banner';
 const PAYMENT_KEY = 'subscription_payment';
+const RULES_KEY = 'subscription_rules';
+/**
+ * Landing-page content edited from the dashboard (tasks/DOMAIN_MIGRATION_POSGRO.md §9.1).
+ * `landing_plans` holds presentation ONLY — the prices stay in `subscription_price_*`, which the
+ * subscription system already charges from, so the page can never quote a number the system
+ * does not honour.
+ */
+const LANDING_PLANS_KEY = 'landing_plans';
+const LANDING_CONTACT_KEY = 'landing_contact';
+/**
+ * The rules are read on every authenticated request (whether the store is blocked), so they are
+ * kept in memory for this long. A change made here takes effect at once; one made by another
+ * server process within a minute.
+ */
+const RULES_CACHE_MS = 60_000;
 const DEFAULT: LoginBanner = { imageUrl: '', title: '', subtitle: '' };
 const DEFAULT_PRICES: SubscriptionPlanPrices = { starter: 0, pro: 0, vip: 0 };
 const DEFAULT_PAYMENT: SubscriptionPayment = { qrPayload: '', paymentUrl: '', supportPhone: '' };
+
+function parseBanner(value: string): LoginBanner {
+  try {
+    return { ...DEFAULT, ...(JSON.parse(value) as Partial<LoginBanner>) };
+  } catch {
+    return DEFAULT;
+  }
+}
 
 @Injectable()
 export class SiteConfigService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** The POS terminal login screen's banner. */
   async getLoginBanner(): Promise<LoginBanner> {
     const row = await this.prisma.siteConfig.findUnique({ where: { key: BANNER_KEY } });
-    if (!row) return DEFAULT;
-    try {
-      return JSON.parse(row.value) as LoginBanner;
-    } catch {
-      return DEFAULT;
-    }
+    return row ? parseBanner(row.value) : DEFAULT;
   }
 
-  async setLoginBanner(banner: LoginBanner): Promise<LoginBanner> {
+  setLoginBanner(banner: LoginBanner): Promise<LoginBanner> {
+    return this.writeBanner(BANNER_KEY, banner);
+  }
+
+  /**
+   * The web dashboard login page's banner — separate from the terminals', so a photo framed for a
+   * till's screen and one for a laptop's can differ. Until one has been saved it is the POS
+   * banner, so the dashboard does not lose its image the day the two were split.
+   */
+  async getWebLoginBanner(): Promise<LoginBanner> {
+    const row = await this.prisma.siteConfig.findUnique({ where: { key: WEB_BANNER_KEY } });
+    return row ? parseBanner(row.value) : this.getLoginBanner();
+  }
+
+  setWebLoginBanner(banner: LoginBanner): Promise<LoginBanner> {
+    return this.writeBanner(WEB_BANNER_KEY, banner);
+  }
+
+  private async writeBanner(key: string, banner: LoginBanner): Promise<LoginBanner> {
+    const value = JSON.stringify(banner);
     await this.prisma.siteConfig.upsert({
-      where: { key: BANNER_KEY },
-      update: { value: JSON.stringify(banner) },
-      create: { key: BANNER_KEY, value: JSON.stringify(banner) },
+      where: { key },
+      update: { value },
+      create: { key, value },
     });
     return banner;
   }
@@ -103,5 +154,86 @@ export class SiteConfigService {
       create: { key: PAYMENT_KEY, value },
     });
     return payment;
+  }
+
+  private rulesCache: { rules: SubscriptionRules; at: number } | null = null;
+
+  /** Trial, warning, grace and check-in days (shared/utils/subscription.ts), defaults until saved. */
+  async getSubscriptionRules(): Promise<SubscriptionRules> {
+    if (this.rulesCache && Date.now() - this.rulesCache.at < RULES_CACHE_MS) {
+      return this.rulesCache.rules;
+    }
+    const row = await this.prisma.siteConfig.findUnique({ where: { key: RULES_KEY } });
+    let saved: Record<string, unknown> = {};
+    if (row) {
+      try {
+        saved = JSON.parse(row.value) as Record<string, unknown>;
+      } catch {
+        /* unreadable: the defaults */
+      }
+    }
+    const rules = normalizeSubscriptionRules(saved);
+    this.rulesCache = { rules, at: Date.now() };
+    return rules;
+  }
+
+  async setSubscriptionRules(input: SubscriptionRules): Promise<SubscriptionRules> {
+    const rules = normalizeSubscriptionRules(input);
+    const value = JSON.stringify(rules);
+    await this.prisma.siteConfig.upsert({
+      where: { key: RULES_KEY },
+      update: { value },
+      create: { key: RULES_KEY, value },
+    });
+    this.rulesCache = { rules, at: Date.now() };
+    return rules;
+  }
+
+  /**
+   * How the three tiers are presented on the landing page — names, taglines, feature bullets.
+   *
+   * Always three well-formed plans, even before anything is saved: the pricing table renders a
+   * card per tier, and a half-written config must not make a tier disappear from it.
+   */
+  async getLandingPlans(): Promise<LandingPlan[]> {
+    const row = await this.prisma.siteConfig.findUnique({ where: { key: LANDING_PLANS_KEY } });
+    return normalizeLandingPlans(row ? safeParse(row.value) : null);
+  }
+
+  async setLandingPlans(input: LandingPlan[]): Promise<LandingPlan[]> {
+    const plans = normalizeLandingPlans(input);
+    const value = JSON.stringify(plans);
+    await this.prisma.siteConfig.upsert({
+      where: { key: LANDING_PLANS_KEY },
+      update: { value },
+      create: { key: LANDING_PLANS_KEY, value },
+    });
+    return plans;
+  }
+
+  /** Phone numbers and social links shown on the landing page. */
+  async getLandingContact(): Promise<LandingContact> {
+    const row = await this.prisma.siteConfig.findUnique({ where: { key: LANDING_CONTACT_KEY } });
+    return normalizeLandingContact(row ? safeParse(row.value) : null);
+  }
+
+  async setLandingContact(input: LandingContact): Promise<LandingContact> {
+    const contact = normalizeLandingContact(input);
+    const value = JSON.stringify(contact);
+    await this.prisma.siteConfig.upsert({
+      where: { key: LANDING_CONTACT_KEY },
+      update: { value },
+      create: { key: LANDING_CONTACT_KEY, value },
+    });
+    return contact;
+  }
+}
+
+/** Unreadable JSON falls through to the normalizer's defaults rather than throwing a 500. */
+function safeParse(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
   }
 }

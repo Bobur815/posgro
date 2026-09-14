@@ -6,6 +6,8 @@ import {
   findBarcodeMatch,
   type MxikPackage,
 } from "@shared/utils";
+import type { SubscriptionRules, SubscriptionState } from "@shared/utils/subscription";
+import type { LandingPlan, LandingContact } from "@shared/types/landing.types";
 
 export interface DeviceSession {
   id: string;
@@ -64,12 +66,37 @@ axiosInstance.interceptors.response.use(
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
+/** One store this sign-in can open — the store switcher's entries. */
+export interface StoreChoice {
+  id: string;
+  name: string;
+  role: string;
+  /** At least one of the store's terminals has reported in lately — the store is open. */
+  online: boolean;
+  /** Managed on its terminal, not here: shown greyed out, and cannot be switched to. */
+  offlineOnly: boolean;
+  /** Blocked for an unpaid subscription: shown greyed out, and cannot be switched to. */
+  subscriptionBlocked: boolean;
+}
+
 export const auth = {
-  login: async (phone: string, password: string, storeId?: string) => {
+  /**
+   * Phone and password only: the server opens every store the password opens and signs in to
+   * `preferredStoreId` (the one this browser last used) when it may.
+   */
+  login: async (phone: string, password: string, preferredStoreId?: string) => {
     const body: Record<string, string> = { phone, password };
-    if (storeId) body.storeId = storeId;
+    if (preferredStoreId) body.preferredStoreId = preferredStoreId;
     const { data } = await axiosInstance.post("/auth/login", body);
-    return data as { token: string; user: unknown };
+    return data as { token: string; user: unknown; stores?: StoreChoice[] };
+  },
+  switchStore: async (storeId: string) => {
+    const { data } = await axiosInstance.post("/auth/switch-store", { storeId });
+    return data as { token: string; user: unknown; stores?: StoreChoice[] };
+  },
+  getStores: async (): Promise<StoreChoice[]> => {
+    const { data } = await axiosInstance.get("/auth/stores");
+    return data;
   },
   logout: async () => {
     try {
@@ -529,6 +556,10 @@ export interface StoreRecord {
   balance: number;
   subscriptionPlan: string | null;
   subscriptionExpiresAt: string | null;
+  /** Created once subscriptions were enforced: with no plan it is blocked. */
+  subscriptionRequired: boolean;
+  /** For a store already expired the day enforcement shipped: its grace counts from here. */
+  subscriptionGraceFrom: string | null;
   scheduledDeleteAt: string | null;
   mode: StoreMode;
   posAdminLocked: boolean;
@@ -640,13 +671,24 @@ export interface LogsQueryParams {
   level?: string;
   from?: string;
   to?: string;
+  /** A REGOS:VCR error number (e.g. 701003), or 'any' for every VCR error. */
+  vcrCode?: string;
   page?: number;
   limit?: number;
+}
+
+/** A VCR error number seen in the logs: how often, and REGOS's words for it the last time. */
+export interface VcrCodeSummary {
+  code: string;
+  count: number;
+  latest: string | null;
 }
 
 export interface LogsMeta {
   stores: string[];
   terminalsByStore: Record<string, string[]>;
+  /** Absent from a server older than the VCR filter. */
+  vcrCodes?: VcrCodeSummary[];
 }
 
 export const logs = {
@@ -692,6 +734,15 @@ export const siteConfig = {
     const { data } = await axiosInstance.put('/site-config/login-banner', banner);
     return data;
   },
+  /** This dashboard's own login banner — `getLoginBanner` is the POS terminals'. */
+  getWebLoginBanner: async (): Promise<LoginBanner> => {
+    const { data } = await axiosInstance.get('/site-config/web-login-banner');
+    return data;
+  },
+  updateWebLoginBanner: async (banner: LoginBanner): Promise<LoginBanner> => {
+    const { data } = await axiosInstance.put('/site-config/web-login-banner', banner);
+    return data;
+  },
   uploadImage: async (file: File): Promise<{ url: string }> => {
     const form = new FormData();
     form.append('file', file);
@@ -715,6 +766,133 @@ export const siteConfig = {
   setSubscriptionPayment: async (payment: SubscriptionPayment): Promise<SubscriptionPayment> => {
     const { data } = await axiosInstance.put('/site-config/subscription-payment', payment);
     return data;
+  },
+  /**
+   * Landing-page content for posgro.uz. Note these hold no prices — the landing page reads those
+   * from `getSubscriptionPlans`, the same key the subscription system bills from, so the page
+   * cannot quote a number the system does not honour.
+   */
+  getLandingPlans: async (): Promise<LandingPlan[]> => {
+    const { data } = await axiosInstance.get('/site-config/landing-plans');
+    return data;
+  },
+  setLandingPlans: async (plans: LandingPlan[]): Promise<LandingPlan[]> => {
+    const { data } = await axiosInstance.put('/site-config/landing-plans', { plans });
+    return data;
+  },
+  getLandingContact: async (): Promise<LandingContact> => {
+    const { data } = await axiosInstance.get('/site-config/landing-contact');
+    return data;
+  },
+  setLandingContact: async (contact: LandingContact): Promise<LandingContact> => {
+    const { data } = await axiosInstance.put('/site-config/landing-contact', contact);
+    return data;
+  },
+  /** Trial, warning, grace and check-in days — super admin only. */
+  getSubscriptionRules: async (): Promise<SubscriptionRules> => {
+    const { data } = await axiosInstance.get('/site-config/subscription-rules');
+    return data;
+  },
+  setSubscriptionRules: async (rules: SubscriptionRules): Promise<SubscriptionRules> => {
+    const { data } = await axiosInstance.put('/site-config/subscription-rules', rules);
+    return data;
+  },
+};
+
+export interface DownloadItem {
+  id: string;
+  slug: string;
+  titleRu: string;
+  titleUz: string;
+  descRu: string | null;
+  descUz: string | null;
+  category: string;
+  fileName: string;
+  filePath: string;
+  fileSize: number;
+  mimeType: string;
+  version: string | null;
+  sortOrder: number;
+  published: boolean;
+  downloads: number;
+  createdAt: string;
+}
+
+export interface LatestApp {
+  version: string;
+  size: number | null;
+  url: string;
+  releasedAt: string | null;
+}
+
+/** Drivers, tools and manuals offered on panel.posgro.uz. */
+export const downloads = {
+  listAll: async (): Promise<DownloadItem[]> => {
+    const { data } = await axiosInstance.get('/downloads/admin/all');
+    return data;
+  },
+  latestApp: async (): Promise<LatestApp | null> => {
+    const { data } = await axiosInstance.get('/downloads/latest-app');
+    return data;
+  },
+  /**
+   * `onProgress` exists because these are installers: without a progress bar a 300 MB upload on a
+   * shop's connection looks like a frozen page, and the operator retries it.
+   */
+  create: async (
+    file: File,
+    meta: Record<string, string>,
+    onProgress?: (percent: number) => void,
+  ): Promise<DownloadItem> => {
+    const form = new FormData();
+    form.append('file', file);
+    for (const [k, v] of Object.entries(meta)) if (v !== '') form.append(k, v);
+    const { data } = await axiosInstance.post('/downloads', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 0, // a large upload must not hit the client's default request timeout
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100));
+      },
+    });
+    return data;
+  },
+  update: async (id: string, patch: Partial<DownloadItem>): Promise<DownloadItem> => {
+    const { data } = await axiosInstance.put(`/downloads/${id}`, patch);
+    return data;
+  },
+  remove: async (id: string): Promise<{ id: string }> => {
+    const { data } = await axiosInstance.delete(`/downloads/${id}`);
+    return data;
+  },
+};
+
+/** The signed-in store's subscription, as `GET /store-config/subscription` reports it. */
+export interface StoreSubscription {
+  plan: string | null;
+  expiresAt: string | null;
+  state: SubscriptionState;
+  warnFrom: string | null;
+  blockAt: string | null;
+  daysLeft: number | null;
+  /** Self-service pay link with this store's ID filled in, or "" when none is configured. */
+  paymentUrl: string;
+  supportPhone: string;
+}
+
+export const storeConfig = {
+  getSubscription: async (): Promise<StoreSubscription> => {
+    const { data } = await axiosInstance.get('/store-config/subscription');
+    return {
+      plan: data.subscription_plan ?? null,
+      expiresAt: data.subscription_expires_at ?? null,
+      // A server from before enforcement sends no state: nothing to warn about.
+      state: data.subscription_state ?? 'unlimited',
+      warnFrom: data.warn_from ?? null,
+      blockAt: data.block_at ?? null,
+      daysLeft: data.days_left ?? null,
+      paymentUrl: data.payment?.payment_url ?? '',
+      supportPhone: data.payment?.support_phone ?? '',
+    };
   },
 };
 

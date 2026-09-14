@@ -4,9 +4,15 @@ import * as jwt from 'jsonwebtoken';
 import { getPrismaClient } from '../database/sqlite-client';
 import { setAuthToken, clearAuthToken, setServerToken, clearServerToken } from '../sync/queue-manager';
 import { AttemptThrottle } from './override-throttle';
+import { PIN_PATTERN, findUserIdByPin, hashNewPin, usersWithPin } from '../auth/pin';
+import { isSatellite } from '../lan/role';
+import * as satellite from '../lan/satellite-ops';
 import { refreshSubscriptionCache } from './subscription-handlers';
 import { getAppConfig } from '../config/app-config';
 import type { AuthUser } from '../../shared/types/user.types';
+import { assertNotSatellite } from '../lan/satellite-guard';
+import { requireSuperAdmin } from '../auth/super-admin';
+import { assertCanSignIn } from '../license/license';
 
 interface JwtPayload {
   sub: string;
@@ -66,74 +72,23 @@ async function restorePersistedServerToken(
   return false;
 }
 
-/** A quick-login PIN is 1 to 4 digits — short by design, it only ever unlocks a local session. */
-const PIN_PATTERN = /^\d{1,4}$/;
-
 /** Guards the manager-override prompt against being guessed at on an unattended till. */
 const overrideThrottle = new AttemptThrottle();
 
-type PinCandidate = { id: string; pin: string | null };
-
-/**
- * Active users of this terminal's store that carry a PIN.
- *
- * The store scope matters: a terminal caches users from whichever store it was last set up
- * against, and a stale row from another store must never be able to unlock this one.
- */
-async function usersWithPin(
-  prisma: ReturnType<typeof getPrismaClient>,
-  extra: { excludeUserId?: string } = {},
-): Promise<PinCandidate[]> {
-  const localConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
-  const storeId = localConfig?.storeId;
-
-  return prisma.user.findMany({
-    where: {
-      active: true,
-      pin: { not: null },
-      ...(storeId ? { storeId } : {}),
-      ...(extra.excludeUserId ? { id: { not: extra.excludeUserId } } : {}),
-    },
-    select: { id: true, pin: true },
-    orderBy: { createdAt: 'asc' },
-  });
-}
-
-/** The user whose PIN this is, or null. Compares against every candidate — PINs are not unique by construction. */
-async function findUserIdByPin(
-  prisma: ReturnType<typeof getPrismaClient>,
-  pin: string,
-): Promise<string | null> {
-  for (const candidate of await usersWithPin(prisma)) {
-    if (candidate.pin && (await bcrypt.compare(pin, candidate.pin))) return candidate.id;
-  }
-  return null;
-}
-
-/**
- * Hash a PIN for `userId`, rejecting a PIN another active user already owns.
- *
- * Two people sharing a PIN would make PIN login ambiguous — whoever was created first would
- * silently take over the other's session, including their shift and their name on the receipt.
- */
-async function hashNewPin(
-  prisma: ReturnType<typeof getPrismaClient>,
-  pin: string,
-  userId: string,
-): Promise<string> {
-  if (!PIN_PATTERN.test(pin)) {
-    throw new Error('auth.errors.invalid_pin_format');
-  }
-  for (const candidate of await usersWithPin(prisma, { excludeUserId: userId })) {
-    if (candidate.pin && (await bcrypt.compare(pin, candidate.pin))) {
-      throw new Error('auth.errors.pin_taken');
-    }
-  }
-  return bcrypt.hash(pin, 10);
-}
-
 export function setupAuthHandlers(): void {
   ipcMain.handle('auth:login', async (_event, phone: string, password: string) => {
+    // A satellite checks nobody itself: the main's users table is the only one that counts (§6.9),
+    // and there is no local fallback — not to its own stale rows, and not to the VPS.
+    if (await isSatellite()) {
+      const { user, token } = await satellite.login(phone, password);
+      currentUser = user;
+      return { token, user };
+    }
+
+    // A blocked store's till lets nobody in (its license, by the trusted clock). A satellite is
+    // checked by its main, above.
+    await assertCanSignIn();
+
     const prisma = getPrismaClient();
     const config = getAppConfig();
 
@@ -363,6 +318,15 @@ export function setupAuthHandlers(): void {
   });
 
   ipcMain.handle('auth:loginWithPin', async (_event, pin: string) => {
+    // PIN too goes to the main, where it is throttled per till and logged (§6.10).
+    if (await isSatellite()) {
+      const { user, token } = await satellite.loginWithPin(pin);
+      currentUser = user;
+      return { token, user };
+    }
+
+    await assertCanSignIn();
+
     const prisma = getPrismaClient();
     const config = getAppConfig();
 
@@ -432,6 +396,7 @@ export function setupAuthHandlers(): void {
    * different server (config:updateLocalConfig).
    */
   ipcMain.handle('auth:logout', async () => {
+    if (await isSatellite()) await satellite.logout();
     await clearAuthToken();
     currentUser = null;
   });
@@ -447,6 +412,13 @@ export function setupAuthHandlers(): void {
   ipcMain.handle('auth:restoreSession', async (_event, token: string) => {
     if (!token) {
       return null;
+    }
+
+    // On a satellite the token is the main's session: the main decides, or — with the main away —
+    // the session that was already open carries on read-only (§6.9).
+    if (await isSatellite()) {
+      currentUser = await satellite.restoreSession(token);
+      return currentUser;
     }
 
     const config = getAppConfig();
@@ -524,6 +496,7 @@ export function setupAuthHandlers(): void {
   });
 
   ipcMain.handle('users:create', async (_event, data) => {
+    await assertNotSatellite();
     if (!currentUser || currentUser.role !== 'ADMIN') {
       throw new Error('Unauthorized');
     }
@@ -563,6 +536,7 @@ export function setupAuthHandlers(): void {
   });
 
   ipcMain.handle('users:update', async (_event, id: string, data) => {
+    await assertNotSatellite();
     if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.id !== id)) {
       throw new Error('Unauthorized');
     }
@@ -606,6 +580,7 @@ export function setupAuthHandlers(): void {
     if (!currentUser) {
       throw new Error('Not authenticated');
     }
+    if (await isSatellite()) return satellite.changePassword(currentPassword, newPassword);
 
     const prisma = getPrismaClient();
     const user = await prisma.user.findUnique({ where: { id: currentUser.id } });
@@ -629,6 +604,7 @@ export function setupAuthHandlers(): void {
   });
 
   ipcMain.handle('users:delete', async (_event, id: string) => {
+    await assertNotSatellite();
     if (!currentUser || currentUser.role !== 'ADMIN') {
       throw new Error('Unauthorized');
     }
@@ -650,6 +626,7 @@ export function setupAuthHandlers(): void {
 
   // Whether PIN login is offered at all on this terminal — true as soon as anyone here has a PIN.
   ipcMain.handle('auth:isPinConfigured', async () => {
+    if (await isSatellite()) return satellite.isPinConfigured();
     const prisma = getPrismaClient();
     return (await usersWithPin(prisma)).length > 0;
   });
@@ -657,6 +634,7 @@ export function setupAuthHandlers(): void {
   // Whether the signed-in user personally has a PIN (drives "set up your PIN" after a password login).
   ipcMain.handle('auth:hasPin', async () => {
     if (!currentUser) return false;
+    if (await isSatellite()) return satellite.hasPin();
     const prisma = getPrismaClient();
     const user = await prisma.user.findUnique({
       where: { id: currentUser.id },
@@ -669,18 +647,35 @@ export function setupAuthHandlers(): void {
     if (!currentUser) {
       throw new Error('Not authenticated');
     }
+    if (await isSatellite()) return satellite.removePin();
     const prisma = getPrismaClient();
     await prisma.user.update({ where: { id: currentUser.id }, data: { pin: null } });
     return true;
   });
 
-  // Side-effect-free credential check, used to gate terminal-level settings on the login screen
-  // (changing the server URL from an unauthenticated screen would otherwise let anyone repoint
-  // this terminal at a server of their choosing). Deliberately NOT auth:loginWithPin — that
-  // starts a session. Accepts any staff PIN, or an active admin's password.
+  // Side-effect-free credential check, used to gate terminal-level settings on the login screen:
+  // the server URL and this terminal's role on the shop's LAN (changing either from an
+  // unauthenticated screen would otherwise let anyone repoint the terminal, or hand the shop's
+  // stock to another machine). Deliberately NOT auth:loginWithPin — that starts a session.
+  //
+  // The super-admin password, where the store has one (LAN plan §11.2): the same credential, and
+  // the same throttle, as every role act inside the dialog — a store admin's password or a staff
+  // PIN no longer opens it. A store with no super-admin password configured keeps the older gate
+  // (any staff PIN, or an active admin's password), so it is not locked out of fixing its own
+  // server URL; the role acts inside stay closed to it either way.
   ipcMain.handle('auth:verifyTerminalAccess', async (_event, secret: string) => {
     if (!secret) return false;
     const prisma = getPrismaClient();
+
+    const config = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+    if (config?.superAdminPassword) {
+      try {
+        await requireSuperAdmin(secret);
+        return true;
+      } catch {
+        return false;
+      }
+    }
 
     if (PIN_PATTERN.test(secret) && (await findUserIdByPin(prisma, secret))) {
       return true;
@@ -742,6 +737,7 @@ export function setupAuthHandlers(): void {
     if (!currentUser) {
       throw new Error('Not authenticated');
     }
+    if (await isSatellite()) return satellite.setupPin(pin);
 
     const prisma = getPrismaClient();
     const hashedPin = await hashNewPin(prisma, pin, currentUser.id);

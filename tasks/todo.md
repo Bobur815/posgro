@@ -1,3 +1,272 @@
+# Subscription warnings and blocking (started 2026-09-12)
+
+Plan: `~/.claude/plans/foamy-weaving-hamster.md`.
+
+- [x] Phase 1, server and dashboard: shared rule, migration, rules settings, trial on create,
+      status endpoint, dashboard login and session blocking, web banner and super-admin screens
+- [x] Phase 2, license: Ed25519 key script, signing, `/licenses/renew`, the license in
+      `store-config`, `SubscriptionGuard` (built as an interceptor — see review)
+- [x] Phase 3, POS: license storage and verification, trusted clock, enforcement, block screen,
+      banners (POS release)
+
+## Review
+
+**Phase 1**:
+- **Rule and data:** one rule (`src/shared/utils/subscription.ts`) judges active, warning, grace,
+  blocked or unlimited. The migration adds `subscription_required`, which is false for every
+  existing store. It also adds `subscription_grace_from`, set to ship day for stores already past
+  their date.
+- **Super admin:** the rules live in site config and are edited on the Subscription Plans page.
+- **Stores:**
+  - a new store starts on TRIAL (or blocked, with trials off);
+  - a new date clears the ship-day grace start, and re-saving the same date keeps it.
+- **Blocking:** dashboard sign-in, running sessions and store switching all refuse a blocked store
+  with `auth.errors.subscription_blocked`. The switcher lists it greyed out. The POS client is
+  exempt: the till enforces its own block in Phase 3.
+- **Web:** `/store-config/subscription` reports state, warn and block dates and days left. The web
+  shows a warning or grace banner, and the login page shows a blocked panel with the pay link and
+  support phone.
+
+Verified:
+- 749 tests pass. The new ones were shown red with the checks switched off (13 failed), and with
+  the grace start always cleared (3 failed).
+- Server and web tsc pass.
+- Staging preview, read-only: one store gets ship-day grace ("Mock store", STARTER, expired
+  2026-06-29).
+- Every web screen was driven over CDP with stand-in API answers.
+
+Not here:
+- The web login cannot fill a `{storeId}` pay link before sign-in, so it shows the link only
+  without one.
+- The POS side is Phases 2–3.
+
+**Phase 2**:
+- **License:** `shared/utils/license.ts` signs a store's plan and dates with Ed25519. Only the server
+  holds `LICENSE_SIGNING_KEY`; the POS carries the public key. `GET /store-config` and
+  `/store-config/subscription` return it.
+- **Renewal:** `POST /licenses/renew` swaps any genuine license for a fresh one, with no sign-in.
+- **Server-side block:** `SubscriptionInterceptor` refuses a blocked store's POS requests. It is an
+  interceptor rather than the planned guard, because global guards run before the JWT guard and so
+  can't see the user. Auth, store-config, heartbeat and log upload stay open (`@AllowWhenBlocked`).
+
+**Phase 3**:
+- **License on the POS:** `src/main/license/` keeps it. It only takes a newer one, genuine and for
+  this store.
+- **Trusted clock:** `max(system clock, mark + run time)`, with the mark in SQLite plus a
+  safeStorage file. With both gone it falls back to the newest sale or shift, and a newer license
+  resets it to server time.
+- **Sign-in:** refused while blocked, checked in the IPC login, the PIN login, the satellite routes
+  and the LAN dashboard login.
+- **Selling:** sales and new shifts are refused while blocked, or while the clock is set back.
+- **Tills with no license yet:** 14 days of allowance, then they must check in.
+- **Renewal:** on every sync, at setup, on the subscription read, and every 6 hours.
+- **Screens:** the login screen shows a block panel with "Check payment", and the app shows a
+  warning banner.
+
+Verified:
+- 793 tests pass.
+- Red proofs, one switch per guard:
+  - signature check: 4 failed;
+  - interceptor: 1 failed;
+  - sale and shift gate: 1 failed;
+  - clock: 6 failed;
+  - older-license rule: 1 failed.
+- tsc passes for the server, POS and web.
+- A real demo POS was driven over CDP:
+  - with a blocked license, the panel replaces the forms, "Check payment" says it is not paid, and
+    the IPC login is refused;
+  - with a license expiring in 2 days, the login and main screens show the warning.
+
+Before the POS release:
+- Add `LICENSE_SIGNING_KEY` to the `ENV_FILE` secret, so both servers issue licenses.
+- Until then every till runs on the 14-day allowance.
+
+---
+
+# §11.3 generation guard + §11.4 planned handoff (started 2026-09-11)
+
+- [x] A: `lan_lineage` + `main_generation` (schema ×3, migration 34); info/token carry them;
+      `MAIN_SUPERSEDED` at token fetch; join refuses a superseded main; leave bumps the generation.
+      Join/leave/`requireSuperAdmin` moved out of the IPC file (`lan/role-change.ts`,
+      `auth/super-admin.ts`) so the e2e harness drives the real code. 7 e2e cases, 6 shown red with
+      the guard off (the 7th is the positive join); 638 tests, tsc, build green.
+- [x] B: handoff code on the old main; freeze + `VACUUM INTO` snapshot; stage/patch/complete/swap
+      with a crash-safe marker; `pairing:repoint`; UI; three-instance run
+
+## Review
+
+**A** (`84df81e`): a satellite refuses a main that was replaced — same lineage at a lower
+generation, or another lineage at its main's address — at every token fetch; join refuses one;
+leaving a main makes the next generation.
+
+**B**: the main role moves while both machines are up. The old main issues a handoff code; the
+satellite taking over presents it; the old main freezes every write path, drains what was under
+way (queue, settles, fiscal device), and streams a `VACUUM INTO` copy of its database. The
+satellite stages and patches it (its id, generation + 1, its own machine settings, the old main
+paired under a new secret), the old main confirms by becoming its satellite and restarting, and
+the satellite swaps the copy in at its own restart. A marker makes a crash at any step end in one
+main, or in a pending takeover the operator resolves. Other satellites repoint without a code.
+
+Verified: 16 e2e cases in `handoff.e2e.test.ts` plus 2 drain/freeze unit cases, each guard shown
+red with its code disabled (freeze, machine settings, demotion, settle wait); 656 tests, tsc,
+build. Three real instances, driven over CDP: handoff from the dialog, T1 restarting as T2's
+satellite, repoint on T3, sales at all three through T2, and T1's old database refused by T3.
+
+Found on the way: `fetchTerminalToken` accepted a 200 with no token (fixed); my own test ports
+collided with two existing suites (moved).
+
+Not verifiable here: a real REGOS VCR on the new main, two physical machines on a LAN.
+
+---
+
+# Phase 4 — trim what a satellite cannot do (started 2026-09-11)
+
+From `tasks/LAN_MAIN_TERMINAL_PLAN.md` §7 Phase 4 (§4, §5.10).
+
+- [x] Main: machine settings writable on a satellite and kept out of its pull (the cash drawer and
+      scale toggles were refused there); `fiscal:zInfo` and the web-admin QR off on a satellite
+- [x] `mode-store.isSatellite` + `useAdminLocked()`; existing `posAdminLocked` gates switch to it
+- [x] Satellite-only hides: login bar buttons, settings tiles, monthly/analytics, VCR receipt actions
+- [x] Tests, and the two-instance run
+
+## Review
+
+A satellite now shows what a satellite does. For master data it is treated like a cashier-only
+store: `useAdminLocked()` = `posAdminLocked || isSatellite`, and the four places that already hid
+editing for cashier-only (ModeGuard, Sidebar, ProductList, ProductDetails) switched to it — stock,
+suppliers, users and product/category/arrival editing disappear with no new gating logic. On top:
+the login bar loses the phone-dashboard and subscription buttons (§4), Settings loses store,
+receipt, sync, fiscal and terminal-status tiles, the sidebar loses monthly report and analytics (a
+satellite's copy is one till's slice), and receipts lose fiscalize/refund/duplicate and the delete
+of a fiscalized receipt (all need the VCR at the main). A `MainOnlyGuard` covers those routes by URL.
+The sync button stays on a satellite — it refreshes from the main, over the LAN, so it no longer
+demands internet and reports a failure honestly when the main is away.
+
+**Bug fixed:** Phase 3.4's write guard allowed only `LOCAL_ONLY_SETTINGS` on a satellite, so it
+refused `cash_drawer_enabled`, `bulk_weigh_enabled` and `price_tag_templates` — a satellite could not
+switch on its own drawer or scale, and the next pull would have reset them to the main's. A
+satellite-scoped `SATELLITE_MACHINE_SETTINGS` fixes both the guard and the pull; the fleet's VPS sync
+is untouched (tested). Shown red without the pull exclusion.
+
+**Main process:** `fiscal:zInfo` reports fiscal off on a satellite (no VCR to ask) and
+`config:getWebAdminQr` returns null there.
+
+**Verified in the real app, two instances** (a main T1 and a satellite T3 paired over the LAN):
+satellite login bar has only the gear; password login and PIN setup went to the main (the PIN
+landed in the main's DB, not the satellite's); sidebar and settings trimmed as above; the drawer
+toggle saves, a store setting is refused `SATELLITE_READ_ONLY`, zInfo is off, the web QR is null,
+and typing a guarded URL lands on the POS. The main still shows all three login buttons, the full
+sidebar and all 12 settings tiles. 622 tests (was 607). **Not seen rendered:** the hidden fiscal
+receipt buttons — the demo shop had fiscalization off, so no sale had a fiscal status to show them.
+
+**Still open:** `receipt_width` per till, whether these machine settings should be local-only
+fleet-wide, a satellite's cached fiscal status going stale, and §11.3–11.4.
+
+---
+
+# §11 — the pairing dialog (started 2026-09-11)
+
+From `tasks/LAN_MAIN_TERMINAL_PLAN.md` §11.1–11.2: the role controls in the login-screen gear, so a
+shop can actually make a satellite. §11.3–11.5 (generation counter, handoff, emergency promotion
+with a recorded reason) stay open.
+
+- [x] Main process: super-admin gate on `pairing:remove`, one shared password check, join errors as
+      `settings.*` keys, a logged record when a satellite leaves
+- [x] Dialog primitives out of TerminalAccessBar; `settings.serverUrl*` → `settings.apiUrl*`
+- [x] Role panel: pair/remove satellites on a main; join, re-pair, leave on a satellite
+- [x] Role change relaunches the app; ru + uz strings; pure helpers tested
+
+## Review
+
+A shop can now make a satellite. The login-screen gear opens "Terminal settings": the API URL (on a
+main only — a satellite never talks to the VPS) and a new role panel. On a main it lists paired
+tills with last-seen times, issues a pairing code (big digits, the address to type, a live
+countdown, noticing when it is used), and removes a till. On a satellite it re-pairs with another
+main (§11.6) or leaves, behind a red disaster-recovery warning and a tick box (§11.5). Every role act
+asks for the super-admin password and the main process checks it each time; without one configured
+the panel says so and offers nothing (§11.2). A role change restarts the app.
+
+**Main process:** `pairing:remove` was ungated — anyone who opened the gear with a PIN could cut a
+till off. The four role acts now share one `requireSuperAdmin` and one throttle (leave had none).
+Join failures come back as `settings.*` keys via a tested `pairingErrorKey` — the main's refusals
+were English sentences on a Russian/Uzbek screen. `pairing:getCode` now returns the address with
+the code, so a reopened dialog can show both. Leaving logs which main, when, and how old the cache
+was — §11.5's record, until the generation counter exists.
+
+**Verified by running two real instances on this machine** (throwaway user-data dirs, demo stores,
+driven over CDP): unlock → panel → wrong super-admin password (translated error) → code with
+address and countdown → on the second instance a wrong code (translated) then the real one →
+"Подключено к «Demo Shop». Перезапуск…" → it came back as satellite T3, the main listed T3 with a
+last-seen time → login on the satellite went to the main (session token audience
+`posgro-lan-session`, bound to T3) → satellite panel and leave form → leave (logged record) →
+remove T3 on the main with the password. 607 tests (was 588): `pairingErrorKey` and the dialog
+helpers. `tsc` and `electron-vite build` clean. One full run failed two unrelated DB suites while the
+machine was loaded from the builds and instances; the rerun was 607/607 in 21s — failure text not
+captured.
+
+**Not done:** §11.3 generation counter, §11.4 planned handoff, and Phase 4 (hiding what a
+satellite refuses). The two login-screen buttons §4 hides on a satellite are still shown.
+
+---
+
+# Phase 3 — truth moves to the main (started 2026-09-11)
+
+From `tasks/LAN_MAIN_TERMINAL_PLAN.md` §7. Stock, receipt numbers, shifts, login and fiscalization
+move to the main; a satellite commits through it and keeps a read cache. One commit per slice.
+
+- [x] 3.0 LAN tokens signed with a per-main secret, not the installer-baked `JWT_SECRET`;
+      diagnose the ECONNRESET failures in the full test run
+- [x] 3.1 `commitSale()` — one serialized, transactional, idempotent commit path; IPC unchanged
+- [x] 3.2 The main answers satellites: login, PIN (throttled per terminal), user session,
+      sale commit, shifts, catalog pull; sync uploads each row under its own terminal id
+- [x] 3.3 The satellite talks only to its main: `main-link`, IPC routing, local sale cache,
+      local printing, no VCR, sync loop pointed at the main
+- [x] 3.4 Degraded mode (MAIN_UNREACHABLE, "waiting for main terminal") and satellite write guards
+
+## Decisions made while building (for the review)
+
+- **Satellites get no users table from the main.** Login goes to the main and a sale row keeps only
+  a cashier id, so `/terminal/sync/users` was dropped — one less place a password hash could leave.
+- **Product identity crosses the wire as the canonical barcode, not the id.** A satellite that used
+  to be an independent till keeps its own ids for barcode-matched products (products-sync keeps a
+  local id when the server's is taken), so its `productId` can name a different product on the
+  main. The main resolves lines by barcode; the stock it returns carries barcodes back.
+- **The main stamps its own clock on pulled products** (products-sync no longer copies the VPS
+  `updatedAt`), so the column a satellite pages through runs on one clock (§6.5).
+
+## Review
+
+Phase 3 is done: a satellite sells, logs in and keeps shifts through its main, and the main is the
+only place stock, receipt numbers, shifts and fiscalization happen. Five commits, `b8693a9` →
+`359b22d`; the plan's new §12 lists what shipped, what departed from the design, and what is open.
+
+**Found on the way, and fixed because the design depended on it:**
+
+- LAN tokens were signed with `JWT_SECRET`, baked into every installer — anyone with a copy could
+  forge a dashboard login for any shop or pose as any satellite. And `GET /settings` handed every
+  dashboard user (cashiers too) the stored VPS token and the fiscal password blob.
+- `sales:create` checked stock and decremented it in separate awaits — the §3 double-sell, inside
+  one process. Also fixed with it: a refused edit left the old lines' stock restored for good, and
+  a box line plus a loose line of one product could together overdraw the shelf.
+- The main would have uploaded satellite sales and shifts under its own terminal id.
+- The flaky full test runs were the keep-alive race: Node closes an idle socket at 5s just as fetch
+  reuses it. Reproduced in-process (2/20 vs 0/20 at 65s) — and the same race exists between a real
+  main and satellite, so the fix is in the server, not the tests.
+
+**Verified:** 588 tests (was 514), including a two-till end-to-end test — a real main server and
+database plus a satellite with its own database, over HTTP. Regression tests were shown red before
+their fixes: the forged-token and settings cases, the concurrency test (the transaction alone
+times out without the queue), the upload terminal id, and the lost-response retry (sells twice
+without the idempotency key). `tsc` clean; `electron-vite build` clean, bundles grepped.
+
+**Not verified:** two physical tills on a shop LAN, and a REGOS VCR returning a fiscal QR to a
+satellite. Nothing in the UI can pair a satellite yet (§11 gear dialog), so none of this is
+reachable by a shop until that lands — which also means it is inert in the field today.
+
+No version bump — bumped at deploy, per convention.
+
+---
+
 # Phase 2 (slice 2) — pairing (done 2026-09-10)
 
 How a satellite gets a device credential and its row in `paired_terminals`. Main-side protocol and

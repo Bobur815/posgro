@@ -11,7 +11,11 @@ import { UzbekPhoneInput } from "@components/common/UzbekPhoneInput";
 import { isUzPhoneComplete } from "@shared/utils/phone";
 import { Eye, EyeOff, Download } from "lucide-react";
 import { useToast } from "@context/ToastContext";
-import { siteConfig, type LoginBanner } from "../../api/client";
+import {
+  siteConfig,
+  type LoginBanner,
+  type SubscriptionPayment,
+} from "../../api/client";
 
 /**
  * Refusals that are about the store, not the credentials.
@@ -25,6 +29,12 @@ const STORE_BLOCKED_ERRORS = [
   "auth.errors.store_offline_only",
 ];
 
+/**
+ * The store's grace days have run out. Shown in place, with how to pay, rather than as a toast that
+ * disappears — paying is the next thing to do.
+ */
+const SUBSCRIPTION_BLOCKED = "auth.errors.subscription_blocked";
+
 const RELEASES_BASE = "/releases";
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
@@ -35,8 +45,15 @@ const Container = styled.div`
   background-color: ${({ theme }) => theme.colors.background};
 `;
 
+/* 40% of the window, the banner 60%. Percentage bases that add up to the whole leave nothing to
+   grow into, so the split is exact — as grow ratios over a zero basis it was not, because this
+   panel's padding sat outside its share. border-box keeps the padding inside the 40%; min-width: 0
+   stops the card's own width pushing the panel past it. Where the banner is hidden (narrow
+   screens), this panel grows into the whole width. */
 const LeftPanel = styled.div`
-  flex: 1;
+  flex: 1 1 40%;
+  box-sizing: border-box;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -46,7 +63,7 @@ const LeftPanel = styled.div`
 `;
 
 const RightPanel = styled.div<{ $imageUrl?: string }>`
-  flex: 1;
+  flex: 1 1 60%;
   position: relative;
   overflow: hidden;
   background: ${({ $imageUrl }) =>
@@ -190,6 +207,39 @@ const DownloadBanner = styled.a`
   }
 `;
 
+const BlockedPanel = styled.div`
+  margin-top: ${({ theme }) => theme.spacing.md};
+  padding: ${({ theme }) => theme.spacing.md};
+  border: 1px solid ${({ theme }) => theme.colors.error};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  background-color: ${({ theme }) => theme.colors.error}10;
+  color: ${({ theme }) => theme.colors.text};
+  font-size: 14px;
+  line-height: 1.5;
+
+  strong {
+    display: block;
+    margin-bottom: 4px;
+    color: ${({ theme }) => theme.colors.error};
+    font-size: 15px;
+  }
+
+  p {
+    margin: 0 0 8px;
+  }
+
+  a {
+    display: inline-block;
+    margin-bottom: 8px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    background: ${({ theme }) => theme.colors.primary};
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+  }
+`;
+
 const PasswordWrapper = styled.div`
   position: relative;
 `;
@@ -214,7 +264,6 @@ const EyeButton = styled.button`
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-const ENV_STORE_ID = import.meta.env.VITE_STORE_ID as string | undefined;
 const SAVED_KEY = "login_saved";
 
 export function LoginPage() {
@@ -227,12 +276,6 @@ export function LoginPage() {
   const [phoneDigits, setPhoneDigits] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [storeId, setStoreId] = useState(
-    ENV_STORE_ID ?? localStorage.getItem("last_store_id") ?? "",
-  );
-  const [showStoreId, setShowStoreId] = useState(
-    !ENV_STORE_ID && !localStorage.getItem("last_store_id"),
-  );
   const [rememberMe, setRememberMe] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
   const [latestRelease, setLatestRelease] = useState<{
@@ -240,23 +283,17 @@ export function LoginPage() {
     url: string;
   } | null>(null);
   const [banner, setBanner] = useState<LoginBanner | null>(null);
+  const [subscriptionBlocked, setSubscriptionBlocked] = useState(false);
+  const [payment, setPayment] = useState<SubscriptionPayment | null>(null);
 
   useEffect(() => {
     clearError();
     const raw = localStorage.getItem(SAVED_KEY);
     if (raw) {
       try {
-        const saved = JSON.parse(raw) as {
-          phone?: string;
-          password?: string;
-          storeId?: string;
-        };
+        const saved = JSON.parse(raw) as { phone?: string; password?: string };
         if (saved.phone) setPhoneDigits(saved.phone);
         if (saved.password) setPassword(saved.password);
-        if (saved.storeId && !ENV_STORE_ID) {
-          setStoreId(saved.storeId);
-          setShowStoreId(false);
-        }
         setRememberMe(true);
       } catch {
         /* ignore */
@@ -282,7 +319,7 @@ export function LoginPage() {
 
   useEffect(() => {
     siteConfig
-      .getLoginBanner()
+      .getWebLoginBanner()
       .then(setBanner)
       .catch(() => {});
   }, []);
@@ -292,11 +329,21 @@ export function LoginPage() {
     if (!isUzPhoneComplete(phoneDigits)) return;
 
     const fullPhone = "998" + phoneDigits;
-    const success = await login(fullPhone, password, storeId || undefined);
+    setSubscriptionBlocked(false);
+    // No store ID: the server opens every store this password opens, and the top bar switches
+    // between them.
+    const success = await login(fullPhone, password);
 
     if (!success) {
       const reason = useAuthStore.getState().error;
-      if (reason && STORE_BLOCKED_ERRORS.includes(reason)) {
+      if (reason === SUBSCRIPTION_BLOCKED) {
+        setSubscriptionBlocked(true);
+        clearError();
+        siteConfig
+          .getSubscriptionPayment()
+          .then(setPayment)
+          .catch(() => {});
+      } else if (reason && STORE_BLOCKED_ERRORS.includes(reason)) {
         // Long enough to actually read — it explains where to go instead.
         toast.error(t(reason), 12000);
         clearError();
@@ -307,16 +354,11 @@ export function LoginPage() {
     if (rememberMe) {
       localStorage.setItem(
         SAVED_KEY,
-        JSON.stringify({
-          phone: phoneDigits,
-          password,
-          storeId: storeId || undefined,
-        }),
+        JSON.stringify({ phone: phoneDigits, password }),
       );
     } else {
       localStorage.removeItem(SAVED_KEY);
     }
-    if (storeId) localStorage.setItem("last_store_id", storeId);
     navigate("/");
   };
 
@@ -370,38 +412,6 @@ export function LoginPage() {
               </EyeButton>
             </PasswordWrapper>
 
-            {!ENV_STORE_ID && (
-              <>
-                {!showStoreId ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowStoreId(true)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "inherit",
-                      opacity: 0.5,
-                      fontSize: 13,
-                      cursor: "pointer",
-                      textAlign: "left",
-                      padding: 0,
-                    }}
-                  >
-                    {storeId
-                      ? `${t("common.store")}: ${storeId}`
-                      : t("auth.enterStoreId") || "+ Enter store ID"}
-                  </button>
-                ) : (
-                  <Input
-                    label={t("common.storeId")}
-                    value={storeId}
-                    onChange={(e) => setStoreId(e.target.value)}
-                    placeholder="XXXX"
-                  />
-                )}
-              </>
-            )}
-
             <RememberRow>
               <input
                 type="checkbox"
@@ -425,6 +435,22 @@ export function LoginPage() {
               {isLoading ? t("common.loading") : t("auth.login")}
             </Button>
           </Form>
+
+          {subscriptionBlocked && (
+            <BlockedPanel role="alert">
+              <strong>{t("subscription.blockedTitle")}</strong>
+              <p>{t(SUBSCRIPTION_BLOCKED)}</p>
+              {/* A link naming its store ({storeId}) cannot be filled in before sign-in. */}
+              {payment?.paymentUrl && !payment.paymentUrl.includes("{storeId}") && (
+                <a href={payment.paymentUrl} target="_blank" rel="noopener noreferrer">
+                  {t("subscription.payOnline")}
+                </a>
+              )}
+              {payment?.supportPhone && (
+                <p>{t("subscription.callSupport", { phone: payment.supportPhone })}</p>
+              )}
+            </BlockedPanel>
+          )}
 
           <LangRow>
             <LangButton

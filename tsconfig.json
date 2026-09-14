@@ -26,5 +26,5 @@
     "types": ["jest"]
   },
   "include": ["src/**/*", "prisma/**/*"],
-  "exclude": ["node_modules", "dist", "dist-electron", "src/web"]
+  "exclude": ["node_modules", "dist", "dist-electron", "src/web", "src/panel"]
 }

@@ -32,10 +32,10 @@ export class UpdateStoreDto {
   @IsIn(['free', 'paid'])
   aiPlan?: string;
 
-  @ApiPropertyOptional({ example: 'PRO', description: 'Subscription plan: STARTER, PRO, or VIP' })
+  @ApiPropertyOptional({ example: 'PRO', description: 'Subscription plan: TRIAL, STARTER, PRO, or VIP' })
   @IsOptional()
   @IsString()
-  @IsIn(['STARTER', 'PRO', 'VIP'])
+  @IsIn(['TRIAL', 'STARTER', 'PRO', 'VIP'])
   subscriptionPlan?: string;
 
   @ApiPropertyOptional({ example: '2027-01-01T00:00:00.000Z', description: 'Subscription expiry date (null = perpetual)' })

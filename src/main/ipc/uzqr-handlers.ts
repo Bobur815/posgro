@@ -6,6 +6,7 @@ import {
   cancelUzQrPayment,
 } from '../fiscal/uzqr-payment';
 import type { UzQrStartResult, UzQrFinalResult } from '../../shared/types/fiscal.types';
+import { isSatellite } from '../lan/role';
 
 /**
  * UzQR IPC.
@@ -18,6 +19,10 @@ export function setupUzQrHandlers(): void {
   /** Whether the checkout screens should route UzQR through the QR modal at all. */
   ipcMain.handle('uzqr:isEnabled', async (): Promise<boolean> => {
     try {
+      // A UzQR payment is created on the VCR, and a satellite has none (LAN plan §5.11) — the
+      // setting it pulled from its main says what the main can do, not what this till can. Such a
+      // sale still rings up as a plain card payment.
+      if (await isSatellite()) return false;
       return (await regosVcrService.getUzQrConfig()).enabled;
     } catch {
       // Never let a config read failure block a sale — fall back to the plain tender.

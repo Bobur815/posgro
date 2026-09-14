@@ -101,3 +101,22 @@ export type {
   FiscalSaleTiming,
   FiscalTimings,
 } from './fiscal.types';
+
+export type {
+  LandingPlanId,
+  LandingPlan,
+  LandingPhone,
+  LandingSocial,
+  LandingContact,
+} from './landing.types';
+
+// Values, not types — the landing page and the dashboard both need the normalizers and the
+// id/platform lists, so these are exported as runtime exports rather than `export type`.
+export {
+  LANDING_PLAN_IDS,
+  KNOWN_SOCIAL_PLATFORMS,
+  DEFAULT_LANDING_CONTACT,
+  emptyLandingPlan,
+  normalizeLandingPlans,
+  normalizeLandingContact,
+} from './landing.types';

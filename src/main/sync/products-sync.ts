@@ -1,18 +1,35 @@
 import { getPrismaClient } from "../database/sqlite-client";
 import { getAppConfig } from "../config/app-config";
 import { getServerToken } from "./queue-manager";
-import { LOCAL_ONLY_SETTINGS } from "./local-only-settings";
+import { LOCAL_ONLY_SETTINGS, isSatelliteOwnSetting } from "./local-only-settings";
 
-export async function syncProducts(): Promise<
+/**
+ * Where the catalog comes from. The VPS for an ordinary terminal; the main terminal for a satellite
+ * (tasks/LAN_MAIN_TERMINAL_PLAN.md §5.8), which serves the same shapes so every parser below reads
+ * both hops unchanged.
+ */
+export interface PullSource {
+  /** True for the vendor server — gates the housekeeping that only makes sense there. */
+  isVps: boolean;
+  /** GET a resource (products, categories, settings); null when there is no credential. */
+  get(resource: string, query?: string): Promise<Pick<Response, "ok" | "statusText" | "json"> | null>;
+}
+
+export const vpsSource: PullSource = {
+  isVps: true,
+  async get(resource, query = "") {
+    const token = getServerToken();
+    if (!token) return null;
+    return fetch(`${getAppConfig().vpsApiUrl}/${resource}${query}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  },
+};
+
+export async function syncProducts(source: PullSource = vpsSource): Promise<
   { id: number; nameRu: string; stock: number }[]
 > {
   const prisma = getPrismaClient();
-  const config = getAppConfig();
-
-  const token = getServerToken();
-  if (!token) {
-    throw new Error("No server token available — log in first to sync");
-  }
 
   // Get last sync timestamp
   const lastSyncSetting = await prisma.systemSetting.findUnique({
@@ -21,14 +38,13 @@ export async function syncProducts(): Promise<
   const lastSync = lastSyncSetting?.value || new Date(0).toISOString();
 
   try {
-    const response = await fetch(
-      `${config.vpsApiUrl}/products?updatedAfter=${encodeURIComponent(lastSync)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
+    const response = await source.get(
+      "products",
+      `?updatedAfter=${encodeURIComponent(lastSync)}`,
     );
+    if (!response) {
+      throw new Error("No server token available — log in first to sync");
+    }
 
     if (!response.ok) {
       throw new Error(`Failed to fetch products: ${response.statusText}`);
@@ -100,7 +116,7 @@ export async function syncProducts(): Promise<
         boxBarcode: p.boxBarcode ?? null,
         storeProductCode: p.storeProductCode ?? null,
         createdAt: new Date(p.createdAt),
-        updatedAt: new Date(p.updatedAt),
+        // updatedAt is left to Prisma — see the note on the update below.
       };
       const idTaken = await prisma.product.findUnique({
         where: { id: p.id },
@@ -187,7 +203,13 @@ export async function syncProducts(): Promise<
               boxPrice: product.boxPrice ?? null,
               boxBarcode: product.boxBarcode ?? null,
               storeProductCode: product.storeProductCode ?? null,
-              updatedAt: new Date(product.updatedAt),
+              // No `updatedAt: product.updatedAt` — Prisma stamps this machine's clock instead.
+              // A local row's updatedAt then means one thing, "last changed here", whether the
+              // change came from the server or from a sale on this till. Copying the server's
+              // value mixed two clocks in one column, and a main's satellites page through that
+              // column with a cursor (LAN plan §6.5): a server-stamped row older than a
+              // sale-stamped one already seen would have been skipped for good. The pull cursor
+              // below is unaffected — it reads the server's values off the response, not the rows.
             },
           });
         } else {
@@ -295,6 +317,76 @@ export async function syncSuppliers(): Promise<void> {
   }
 }
 
+const DELETE_CURSOR_KEY = "last_product_delete_sync";
+
+/**
+ * Products deleted on the web dashboard. A hard delete leaves nothing in the `updatedAfter` pull
+ * above, so without this a till kept a product the shop had removed — and, with an admin signed
+ * in, uploaded it back (the server refuses that now; see products.service.ts syncBulk).
+ *
+ * A product nothing here references is deleted. One that local sales, arrivals, pre-weighed labels
+ * or stocktake lines point at is deactivated instead: it leaves the till's list and its barcode
+ * stops selling, while its history — possibly sales not yet uploaded — stays whole.
+ *
+ * VPS only: a satellite's catalog comes from its main. The cursor is the newest server `deletedAt`
+ * seen, never this machine's clock (the same rule as `last_product_sync`). A server that predates
+ * the deletion feed answers 404, which is not an error. Returns how many local products it changed.
+ */
+export async function syncDeletedProducts(source: PullSource = vpsSource): Promise<number> {
+  if (!source.isVps) return 0;
+  const prisma = getPrismaClient();
+
+  const cursorRow = await prisma.systemSetting.findUnique({ where: { key: DELETE_CURSOR_KEY } });
+  const since = cursorRow?.value || new Date(0).toISOString();
+
+  const response = await source.get("products/deleted", `?since=${encodeURIComponent(since)}`);
+  if (!response?.ok) return 0;
+  const rows = (await response.json()) as Array<{ barcode: string; deletedAt: string }>;
+  if (!Array.isArray(rows) || rows.length === 0) return 0;
+
+  let changed = 0;
+  let newest = since;
+  for (const row of rows) {
+    const deletedAt = new Date(row.deletedAt).toISOString();
+    if (deletedAt > newest) newest = deletedAt;
+
+    const local = await prisma.product.findUnique({
+      where: { barcode: String(row.barcode) },
+      select: {
+        id: true,
+        _count: {
+          select: { sales: true, inventoryMovements: true, preWeighedItems: true, inventoryCountItems: true },
+        },
+      },
+    });
+    if (!local) continue;
+
+    const referenced = Object.values(local._count as Record<string, number>).some((n) => n > 0);
+    try {
+      if (referenced) {
+        await prisma.product.update({ where: { id: local.id }, data: { active: false } });
+      } else {
+        await prisma.product.delete({ where: { id: local.id } });
+      }
+    } catch (err) {
+      // Something references it that the count above does not know about: hide it instead.
+      console.warn(
+        `[sync] could not delete product ${row.barcode}, deactivating it:`,
+        err instanceof Error ? err.message : err,
+      );
+      await prisma.product.update({ where: { id: local.id }, data: { active: false } });
+    }
+    changed++;
+  }
+
+  await prisma.systemSetting.upsert({
+    where: { key: DELETE_CURSOR_KEY },
+    update: { value: newest },
+    create: { key: DELETE_CURSOR_KEY, value: newest },
+  });
+  return changed;
+}
+
 export async function syncUsers(): Promise<void> {
   const prisma = getPrismaClient();
   const config = getAppConfig();
@@ -383,21 +475,14 @@ export async function syncUsers(): Promise<void> {
   }
 }
 
-export async function syncCategories(): Promise<void> {
+export async function syncCategories(source: PullSource = vpsSource): Promise<void> {
   const prisma = getPrismaClient();
-  const config = getAppConfig();
-
-  const token = getServerToken();
-  if (!token) {
-    throw new Error("No server token available — log in first to sync");
-  }
 
   try {
-    const response = await fetch(`${config.vpsApiUrl}/categories`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const response = await source.get("categories");
+    if (!response) {
+      throw new Error("No server token available — log in first to sync");
+    }
 
     if (!response.ok) {
       throw new Error(`Failed to fetch categories: ${response.statusText}`);
@@ -518,24 +603,21 @@ export async function syncCategories(): Promise<void> {
   }
 }
 
-export async function syncSettings(): Promise<void> {
+export async function syncSettings(source: PullSource = vpsSource): Promise<void> {
   const prisma = getPrismaClient();
   const config = getAppConfig();
   const token = getServerToken();
-  if (!token) return;
 
   try {
-    const response = await fetch(`${config.vpsApiUrl}/settings`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!response.ok) return;
+    const response = await source.get("settings");
+    if (!response || !response.ok) return;
 
     const settings = (await response.json()) as Record<string, string>;
 
     // One-time cleanup: older builds leaked the machine-scoped fiscal secret to the VPS. If the
     // server still holds it, delete it so it stops being served to (and clobbering) terminals.
     // Self-terminating — once deleted it never reappears in the response, so no flag is needed.
-    if ("regos_vcr_password_enc" in settings) {
+    if (source.isVps && token && "regos_vcr_password_enc" in settings) {
       try {
         await fetch(`${config.vpsApiUrl}/settings/regos_vcr_password_enc`, {
           method: "DELETE",
@@ -547,7 +629,9 @@ export async function syncSettings(): Promise<void> {
     }
 
     for (const [key, value] of Object.entries(settings)) {
-      if (LOCAL_ONLY_SETTINGS.has(key)) continue;
+      // From the VPS, only this machine's own keys are skipped. From a main, a satellite also keeps
+      // its till's hardware toggles — the main's drawer and scale say nothing about this till's.
+      if (source.isVps ? LOCAL_ONLY_SETTINGS.has(key) : isSatelliteOwnSetting(key)) continue;
       if (typeof value !== "string") continue;
 
       await prisma.systemSetting.upsert({

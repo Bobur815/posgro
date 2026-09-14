@@ -49,6 +49,10 @@ export const terminalRoutes: Route[] = [
         // where two businesses share a building's wifi.
         store_id: config.storeId,
         terminal_id: config.terminalId,
+        // So a satellite can refuse a main that has been replaced (§11.3) — checked again at every
+        // token, but a till about to pair needs it before it has one.
+        lineage: config.lanLineage ?? null,
+        generation: config.mainGeneration ?? 0,
       };
     },
   },
@@ -130,6 +134,8 @@ export const terminalRoutes: Route[] = [
     method: 'POST',
     path: '/terminal/token',
     public: true,
+    // A satellite refused a token reads it as "unpaired" — the wrong conclusion during a handoff.
+    duringHandoff: true,
     handler: async ({ body }) => {
       if (tokenThrottle.isLockedOut()) {
         throw forbidden('Too many attempts. Wait a minute and try again.');
@@ -152,7 +158,16 @@ export const terminalRoutes: Route[] = [
         data: { lastSeenAt: new Date() },
       });
 
-      return { token: signTerminalToken(terminalId), terminal_id: terminalId };
+      // Where this main stands in its lineage (§11.3). A satellite checks it with every token it
+      // takes — which is every hour, at every start, and whenever a different machine answering at
+      // this address fails to recognise its token — and refuses a main that has been replaced.
+      const config = await db().localConfig.findUnique({ where: { id: 'config' } });
+      return {
+        token: signTerminalToken(terminalId),
+        terminal_id: terminalId,
+        lineage: config?.lanLineage ?? null,
+        generation: config?.mainGeneration ?? 0,
+      };
     },
   },
 
@@ -180,6 +195,7 @@ export const terminalRoutes: Route[] = [
     method: 'POST',
     path: '/terminals/heartbeat',
     audience: 'terminal',
+    duringHandoff: true,
     handler: async ({ body, terminal }) => {
       const terminalId = terminal!.terminalId;
 

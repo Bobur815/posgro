@@ -24,6 +24,8 @@ import { StoreList } from './pages/Admin/StoreList';
 import { LogsPage } from './pages/Admin/LogsPage';
 import { LoginBannerPage } from './pages/Admin/LoginBannerPage';
 import { SubscriptionPlansPage } from './pages/Admin/SubscriptionPlansPage';
+import { LandingPage } from './pages/Admin/LandingPage';
+import { DownloadsPage } from './pages/Admin/DownloadsPage';
 
 function PrivateRoute({
   children,
@@ -114,6 +116,8 @@ export function App() {
           <Route path="admin/logs" element={<PrivateRoute superAdminOnly><LogsPage /></PrivateRoute>} />
           <Route path="admin/login-banner" element={<PrivateRoute superAdminOnly><LoginBannerPage /></PrivateRoute>} />
           <Route path="admin/subscription-plans" element={<PrivateRoute superAdminOnly><SubscriptionPlansPage /></PrivateRoute>} />
+          <Route path="admin/landing" element={<PrivateRoute superAdminOnly><LandingPage /></PrivateRoute>} />
+          <Route path="admin/downloads" element={<PrivateRoute superAdminOnly><DownloadsPage /></PrivateRoute>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

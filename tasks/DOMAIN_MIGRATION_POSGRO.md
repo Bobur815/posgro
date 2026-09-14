@@ -431,11 +431,57 @@ dashboard session in `localStorage` does not travel with the redirect. Everyone 
 on the new host.
 
 ### Phase 3 — Build the new surfaces
-- `panel.posgro.uz` (§8).
-- Landing page (§9).
-- Super-admin "Tools & Downloads" management page (§8.3).
-- Move the dashboard to the root of its host (§7.3.2).
-- Fix `handlers.ts:959` (§7.3.1).
+
+| | Piece | State |
+|---|---|---|
+| ☑ | Landing content in site-config + admin page (§9.1) | **done, verified on staging 2026-09-14** |
+| ☑ | `panel.posgro.uz` download portal (§8) | **done, verified on staging 2026-09-14** |
+| ☑ | Super-admin "Tools & Downloads" management page (§8.3) | done |
+| ☐ | Landing page itself, consuming §9.1 | after content is entered |
+| ☐ | Move the dashboard to the root of its host (§7.3.2) | vite `base` **and** `App.tsx` basename together |
+| ☐ | Fix `handlers.ts:959` (§7.3.1) | needs a POS release |
+
+#### Landing content — verified on staging, 2026-09-14
+
+```
+GET  /api/site-config/landing-plans     200  three well-formed tiers, ids starter/pro/vip, order 0/1/2
+GET  /api/site-config/landing-contact   200  empty but well-formed
+PUT  /api/site-config/landing-plans     401  without a SUPER_ADMIN token
+PUT  /api/site-config/landing-contact   401  without a SUPER_ADMIN token
+/web/admin/landing                      200  route and UI present in the deployed bundle
+```
+
+20/20 site-config tests pass (16 new). Enter content at
+`https://dev.pos.bobur-dev.uz/web/admin/landing`.
+
+#### Download portal — verified on staging, 2026-09-14
+
+```
+GET  /api/downloads               200  []
+GET  /api/downloads/latest-app    200  {"version":"1.28.0","size":153859304,
+                                        "url":"/releases/POSGRO-Setup-1.28.0.exe", ...}
+        ^ the REAL feed, through the read-only ../releases bind mount — byte-for-byte the
+          same release the terminals' updater is serving
+GET  /api/downloads/admin/all     401  without a SUPER_ADMIN token
+POST /api/downloads               401
+DEL  /api/downloads/:id           401
+:3002/panel/                      200  <title>POSGRO — Yuklab olish</title>, asset 200
+/web/admin/downloads                   route + sidebar present in the deployed bundle
+
+MIGRATION  20260914000001_add_download_items | finished 10:03:40 | rolled_back=no
+           download_items: 18 columns, matching the model exactly
+```
+
+225/225 server tests pass (18 new). Manage files at
+`https://dev.pos.bobur-dev.uz/web/admin/downloads`.
+
+⚠️ The portal is not reachable over `dev.pos.bobur-dev.uz` — staging still runs the old
+single-file nginx with no `/panel` route, so it was verified against the origin on `:3002`.
+Staging's nginx moves to the per-host layout in Phase 5.
+
+**All of this is application code and lives on `dev` only.** It reaches production with the full
+`dev` → `main` merge, which is still gated on `LICENSE_SIGNING_KEY`. `main` carries the four infra
+commits and nothing else.
 
 #### 7.3.1 The till's dashboard QR must stop guessing
 
@@ -538,11 +584,44 @@ over the old host's `/releases/` (which keeps serving), the whole chain works wi
 visiting a shop.
 
 ### Phase 5 — Staging
-Mirror everything on `dev.api` / `dev.web` / `dev.panel.posgro.uz` (Decision 7). Update
-`src/web/vite.config.ts` proxy targets and `scripts/deploy/staging.sh`. Do Phases 1–4 on staging
-first, end to end — including a real Electron build with
-`VPS_API_URL=https://dev.api.posgro.uz/api`, a real sync, and the one-shot migration firing against
-a SQLite seeded with the legacy URL.
+
+**nginx done early (2026-09-14)**, pulled forward so the download portal could be clicked through
+before it faces customers. `src/panel` is built with `base: '/'`, so its assets are requested from
+the host root — `dev.pos.bobur-dev.uz/panel/` would serve `index.html` and then 404 every asset.
+The portal needs its own host, and therefore its own certificate; there was no one-line version
+of this.
+
+| | Step | State |
+|---|---|---|
+| ☑ | `nginx/sites-staging/*.conf` + `nginx/sites-live-staging.txt`, `staging.sh` loops like production | done |
+| ☑ | Certs for `dev.api` / `dev.web` / `dev.panel.posgro.uz`, promoted | done |
+| ☑ | Portal verified end to end at `https://dev.panel.posgro.uz` | done |
+| ☐ | `src/web/vite.config.ts` dev-proxy targets → `dev.api.posgro.uz` | pending |
+| ☐ | Phases 1–4 end to end on staging: a real Electron build against `VPS_API_URL=https://dev.api.posgro.uz/api`, a real sync, and the one-shot `api_url` migration firing against a SQLite seeded with the legacy URL | pending |
+
+#### Staging portal — verified 2026-09-14
+
+```
+https://dev.panel.posgro.uz/                        200  <title>POSGRO — Yuklab olish</title>
+  /assets/index-CmIsnetV.js                         200
+  /api/downloads/latest-app                         200  v1.28.0, 153859304 bytes (the real feed)
+  /api/downloads                                    200  []
+  /releases/POSGRO-Setup-1.28.0.exe                  200  the download button target resolves
+Bundle carries both languages: "POSGRO kassa dasturi" and "Кассовая программа POSGRO"
+https://dev.web.posgro.uz/web/   200     https://dev.api.posgro.uz/api/health  200
+dev.pos.bobur-dev.uz and all four production hosts: 200, untouched
+```
+
+⚠️ **A duplicate-directive bug in the upload routes broke `nginx -t` server-wide** before this
+landed — see `tasks/lessons.md`. nginx kept running on its old config, but any restart would have
+left it down and the nightly production deploy would have aborted. Fixed by splitting the proxy
+snippet into headers / normal-timeout / long-timeout variants.
+
+Staging differences that are deliberate: its own `uploads-staging/` and `downloads-staging/` so
+nothing added there can surface on a real till or the live portal, but the **same**
+`/home/bobur/releases/`, because the portal's installer card is only proved against the feed the
+updater actually reads. Its `limit_req_zone` is named `posgro_staging_api` — production's
+`posgro_api` and the legacy staging host's `pos_staging_api` share the one `http{}` context.
 
 ### Phase 6 — Retire (not before every till reports the new host)
 Keep `pos.bobur-dev.uz` resolving and renewing indefinitely regardless. Retirement means "no longer
@@ -660,8 +739,9 @@ You are designing this in Claude Design; these are the constraints that matter f
   arriving at the site are usually logging in, not installing.
 - UZ/RU toggle and the same dark/light treatment as the panel, so the three sites feel like one
   product.
-- Static output only — no API calls. It must stay up even if the API is down, which is exactly
-  when people will visit looking for support contact details.
+- Static build, with live config fetched on top of baked-in fallbacks — see §9.1. The page must
+  render complete with the API down, which is exactly when people visit looking for a support
+  number.
 
 **Content recommendations (Uzbek grocery-retail market):**
 1. Hero — one sentence on what it is, in Uzbek first. Screenshot of the till screen, not an
@@ -671,11 +751,86 @@ You are designing this in Claude Design; these are the constraints that matter f
 3. Compliance block — fiscal receipts (REGOS/OFD), marking codes (Asl-Belgisi), MXIK/tasnif. Shop
    owners buy POS software to stay legal first and to count money second.
 4. Hardware — scales (Rongta), thermal and label printers, scanners.
-5. Pricing — Starter / Pro / VIP. The prices already live in `site-config`
-   (`SubscriptionPlanPrices`); for a static page, hardcode them and accept a manual edit when they
-   change, or fetch from the site-config endpoint with a hardcoded fallback.
-6. Contact — Telegram (`@Bobur_AbuAbdulaziz`) and a phone number. Telegram converts far better than
-   a contact form here.
+5. Pricing — Starter / Pro / VIP, edited from the dashboard (§9.1).
+6. Contact — phone and socials, edited from the dashboard (§9.1). Telegram converts far better
+   than a contact form here, so give it the prominent slot.
+
+### 9.1 Dashboard-managed content (added 2026-09-14 at your request)
+
+Tariff plans and contact details are edited in the super-admin dashboard, not in the landing
+page's source.
+
+**This does not make the landing dynamic.** It stays a static build with every value baked in as a
+fallback, and fetches the live config on load to replace them. If `api.posgro.uz` is unreachable —
+exactly when people come looking for a support number — the page still renders complete and
+correct, just possibly with slightly stale prices. No spinner, no empty state, no blank section.
+
+```
+render baked-in defaults immediately
+   → fetch https://api.posgro.uz/api/site-config/{subscription-plans,landing-plans,landing-contact}
+   → on success, swap the values in
+   → on failure, keep what is on screen and say nothing
+```
+
+Cross-origin, so `https://posgro.uz` must be in `CORS_ORIGINS` — it is (added 2026-09-14).
+
+#### Prices stay single-source
+
+`subscription_plan_prices` (starter/pro/vip) already exists, is already **public**
+(`@Get('subscription-plans')` has no guard), and already drives the subscription system and
+`SubscriptionPlansPage`. The landing reads those same numbers. A separate set of "marketing"
+prices would drift from what the system actually charges, and the first person to notice would be
+a customer.
+
+What is missing is presentation, so that is all the new key holds:
+
+```ts
+// site-config key: 'landing_plans'
+interface LandingPlan {
+  id: 'starter' | 'pro' | 'vip';   // price comes from subscription_plan_prices[id]
+  nameRu: string;  nameUz: string;
+  taglineRu: string;  taglineUz: string;
+  featuresRu: string[];  featuresUz: string[];
+  highlighted: boolean;            // the "most popular" card
+  order: number;
+  ctaUrl?: string;                 // defaults to the Telegram contact
+}
+```
+
+```ts
+// site-config key: 'landing_contact'
+interface LandingContact {
+  phones: { label: string; number: string }[];   // "Sotuv" / "+998 90 166 27 14"
+  socials: { platform: string; url: string; order: number }[];
+  email?: string;
+  addressRu?: string;  addressUz?: string;
+  workingHoursRu?: string;  workingHoursUz?: string;
+}
+```
+
+`platform` is a free string rendered against a known icon set — `telegram`, `instagram`,
+`youtube`, `facebook`, `tiktok`, `whatsapp`, `linkedin`, `x` — with a generic link icon for
+anything else. That way a new network is added from the dashboard without a release.
+
+Note `subscription_payment.supportPhone` already exists and is public. `landing_contact.phones`
+supersedes it for display purposes; leave the payment one alone, it is what the till's
+subscription dialog shows.
+
+#### Endpoints — same pattern as every other site-config key
+
+```
+GET /api/site-config/landing-plans      public       → LandingPlan[]
+PUT /api/site-config/landing-plans      SUPER_ADMIN
+GET /api/site-config/landing-contact    public       → LandingContact
+PUT /api/site-config/landing-contact    SUPER_ADMIN
+```
+
+#### Admin UI
+
+One new page, `src/web/src/pages/Admin/LandingPage.tsx`, sitting beside `LoginBannerPage.tsx` and
+`SubscriptionPlansPage.tsx`, with two panels: **Plans** and **Contact**. The Plans panel shows the
+price for each tier inline — read from `subscription_plan_prices`, saved back to that same key —
+so the operator edits price and copy in one place without two sources of truth existing.
 
 **Hosting:** static files on the POS VPS under nginx (`/var/www/posgro-landing`), deployed by the
 same pipeline. Do not put it behind NestJS — it has no reason to share a runtime with the API.

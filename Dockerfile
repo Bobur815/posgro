@@ -18,6 +18,13 @@ RUN npm ci --legacy-peer-deps
 # Vite outDir is ../../dist/web → /app/dist/web
 RUN npm run build
 
+# Build the public download portal (src/panel has its own package.json)
+WORKDIR /app/src/panel
+COPY src/panel/package*.json ./
+RUN npm ci --legacy-peer-deps
+# Vite outDir is ../../dist/panel → /app/dist/panel
+RUN npm run build
+
 WORKDIR /app
 
 # ---- Runtime stage ----

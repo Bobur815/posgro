@@ -17,6 +17,18 @@ import { join } from 'path';
 
 const dataDir = mkdtempSync(join(tmpdir(), 'posgro-local-server-'));
 
+// Real SQLite, bcrypt and (for some) a real HTTP server, on a machine running every other suite at
+// once: a cold full run has pushed single steps past Jest's 5s default and cascaded into unrelated
+// failures. A generous ceiling only changes how long a genuinely hung test takes to fail.
+jest.setTimeout(30_000);
+
+// electron-log wants a running Electron at import time. The router reaches it through the fiscal
+// service a satellite's sale is settled by; quiet and inspectable here instead.
+jest.mock('../logger', () => ({
+  log: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+  flushLogs: () => [],
+}));
+
 jest.mock('electron', () => ({
   app: {
     getPath: () => dataDir,
@@ -29,6 +41,7 @@ import { initializeDatabase, closeDatabase, getPrismaClient } from '../database/
 import { startLocalServer, stopLocalServer, getLocalServerStatus } from './index';
 import { cancelPairingCode, issuePairingCode } from './pairing';
 import * as bcrypt from 'bcryptjs';
+import * as jwt from 'jsonwebtoken';
 
 const PORT = 5399;
 let token = '';
@@ -155,7 +168,17 @@ describe('the server itself', () => {
   // It says what a satellite needs to pick the right machine, and nothing about the business.
   it('leaks nothing else on /terminal/info', async () => {
     const body = await (await fetch(`http://127.0.0.1:${PORT}/api/terminal/info`)).json();
-    expect(Object.keys(body).sort()).toEqual(['role', 'service', 'store_id', 'terminal_id']);
+    // lineage/generation added for §11.3: a till about to pair needs them before it has a
+    // credential. They say which chain of mains this is, nothing about takings, stock or people —
+    // and a lineage is no key to anything: a device secret is still needed to use it.
+    expect(Object.keys(body).sort()).toEqual([
+      'generation',
+      'lineage',
+      'role',
+      'service',
+      'store_id',
+      'terminal_id',
+    ]);
   });
 });
 
@@ -462,6 +485,22 @@ describe('auth', () => {
     });
     expect(res.status).toBe(401);
   });
+
+  /**
+   * `JWT_SECRET` is baked into the installer, so it is the same on every terminal in the fleet. A
+   * token signed with it — correctly shaped, correct audience — must still open nothing, or anyone
+   * with a copy of the installer could walk into any shop's dashboard or pose as any satellite.
+   */
+  it.each([
+    ['a dashboard token', 'posgro-local-web', { sub: 'user-admin', phone: '+998900000001', role: 'ADMIN' }, '/products'],
+    ['a terminal token', 'posgro-lan-terminal', { sub: 'T2', kind: 'terminal' }, '/terminal/whoami'],
+  ])('refuses %s signed with the installer’s baked secret', async (_label, audience, claims, path) => {
+    const forged = jwt.sign(claims, process.env.JWT_SECRET!, { audience, expiresIn: '1h' });
+    const res = await fetch(`http://127.0.0.1:${PORT}/api${path}`, {
+      headers: { Authorization: `Bearer ${forged}` },
+    });
+    expect(res.status).toBe(401);
+  });
 });
 
 describe('products', () => {
@@ -556,6 +595,45 @@ describe('settings', () => {
 
   it('returns every setting as one map', async () => {
     expect((await api('GET', '/settings')).json).toMatchObject({ receipt_header: 'Test Shop' });
+  });
+
+  /**
+   * The VPS never holds these keys, so the dashboard has never needed them — and served from here
+   * they would hand any signed-in user the stored VPS token and the key LAN tokens are signed with.
+   */
+  describe("the terminal's own keys", () => {
+    beforeAll(async () => {
+      await getPrismaClient().systemSetting.upsert({
+        where: { key: 'server_token' },
+        update: { value: 'vps-token' },
+        create: { key: 'server_token', value: 'vps-token' },
+      });
+    });
+
+    it('leaves them out of the map', async () => {
+      const { json } = await api('GET', '/settings');
+      expect(json).not.toHaveProperty('lan_signing_secret');
+      expect(json).not.toHaveProperty('server_token');
+    });
+
+    it('reads one as absent', async () => {
+      expect((await api('GET', '/settings/lan_signing_secret')).json).toEqual({
+        key: 'lan_signing_secret',
+        value: null,
+      });
+    });
+
+    it('refuses to overwrite or delete one', async () => {
+      expect((await api('PUT', '/settings/lan_signing_secret', { value: 'mine' })).status).toBe(403);
+      expect((await api('DELETE', '/settings/lan_signing_secret')).status).toBe(403);
+    });
+
+    it('does exist, so leaving it out is the filter and not an accident', async () => {
+      const row = await getPrismaClient().systemSetting.findUnique({
+        where: { key: 'lan_signing_secret' },
+      });
+      expect(row?.value).toMatch(/^[0-9a-f]{64}$/);
+    });
   });
 });
 
@@ -768,5 +846,31 @@ describe('endpoints that need the online server', () => {
   it('serves store-config the way the terminal itself would', async () => {
     const { json } = await api('GET', '/store-config');
     expect(json).toMatchObject({ mode: 'OFFLINE_ONLY', pos_admin_locked: false });
+  });
+});
+
+/**
+ * The dashboard served by a terminal has the same two banners as the VPS: the POS one and its own,
+ * which shows the POS one until it is saved.
+ */
+describe('login banners', () => {
+  const POS = { imageUrl: 'https://example.test/till.jpg', title: 'Till', subtitle: 'Cashiers' };
+  const WEB = { imageUrl: 'https://example.test/laptop.jpg', title: 'Dashboard', subtitle: 'Owners' };
+
+  it('shows the POS banner on the web login until a web one is saved', async () => {
+    expect((await api('PUT', '/site-config/login-banner', POS)).status).toBe(200);
+    const { status, json } = await api('GET', '/site-config/web-login-banner', undefined, false);
+    expect(status).toBe(200);
+    expect(json).toEqual(POS);
+  });
+
+  it('keeps the two apart once the web banner is saved', async () => {
+    expect((await api('PUT', '/site-config/web-login-banner', WEB)).status).toBe(200);
+    expect((await api('GET', '/site-config/web-login-banner', undefined, false)).json).toEqual(WEB);
+    expect((await api('GET', '/site-config/login-banner', undefined, false)).json).toEqual(POS);
+  });
+
+  it('lets only an admin change the web banner', async () => {
+    expect((await api('PUT', '/site-config/web-login-banner', POS, false)).status).toBe(401);
   });
 });

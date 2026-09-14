@@ -1,7 +1,8 @@
 import * as bcrypt from 'bcryptjs';
 import { authenticate, publicUser, signToken } from '../auth';
 import { db, required } from '../helpers';
-import { badRequest, notFound, unauthorized, type Route } from '../router';
+import { badRequest, forbidden, notFound, unauthorized, type Route } from '../router';
+import { assertCanSignIn } from '../../license/license';
 
 /**
  * Auth for the LAN dashboard.
@@ -18,6 +19,13 @@ export const authRoutes: Route[] = [
     handler: async ({ body }) => {
       const phone = String(required(body?.phone, 'phone'));
       const password = String(required(body?.password, 'password'));
+      // An OFFLINE_ONLY store's web dashboard is this till's — blocked along with it. The web login
+      // page knows the key and shows how to pay.
+      try {
+        await assertCanSignIn();
+      } catch (e) {
+        throw forbidden(e instanceof Error ? e.message : 'auth.errors.subscription_blocked');
+      }
       const user = await authenticate(phone, password);
 
       await recordSession(user.id, undefined);

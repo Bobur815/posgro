@@ -1,14 +1,29 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
+import { createReadStream } from 'fs';
+import { stat } from 'fs/promises';
 import { join } from 'path';
+import { pipeline } from 'stream/promises';
 import { app } from 'electron';
 import { getPrismaClient } from '../database/sqlite-client';
 import { getLanAddress } from '../network/lan-address';
-import { verifyToken, verifyTerminalToken } from './auth';
+import { loadSigningSecret, verifySessionToken, verifyToken, verifyTerminalToken } from './auth';
 import { buildRouter } from './routes';
 import { StaticFiles } from './static-files';
 import { shouldServeLocally } from './serve-policy';
 import { isPairingOpen } from './pairing';
-import { HttpError, Router, sendError, sendJson, type RequestContext } from './router';
+import { onHandedOff } from './handoff';
+import { HANDING_OFF, isWriteFrozen } from '../sales/write-freeze';
+import {
+  FileReply,
+  HttpError,
+  Router,
+  SESSION_HEADER,
+  SESSION_REQUIRED,
+  sendError,
+  sendJson,
+  type RequestContext,
+  type SessionUser,
+} from './router';
 
 /**
  * The dashboard, served by the till itself.
@@ -27,8 +42,10 @@ import { HttpError, Router, sendError, sendJson, type RequestContext } from './r
  */
 
 /** Same default as the QR builder in `../ipc/handlers.ts`, and the port Vite uses in dev. */
-const DEFAULT_PORT = 5173;
+export const DEFAULT_PORT = 5173;
 const MAX_BODY_BYTES = 12 * 1024 * 1024; // Generous enough for a base64 invoice photo.
+/** Idle keep-alive, deliberately longer than any client's own — see startLocalServer. */
+const KEEP_ALIVE_MS = 65_000;
 
 let server: Server | null = null;
 let listeningPort: number | null = null;
@@ -42,6 +59,11 @@ export interface LocalServerStatus {
 }
 
 let lastError: string | null = null;
+
+// A main that has handed its role over is a satellite, and a satellite serves nothing (§11.4).
+onHandedOff(() => {
+  void stopLocalServer();
+});
 
 export function getLocalServerStatus(): LocalServerStatus {
   const address = getLanAddress();
@@ -98,6 +120,7 @@ export async function syncLocalServerWithMode(): Promise<void> {
 export async function startLocalServer(): Promise<void> {
   if (server) return;
 
+  await loadSigningSecret();
   const port = await resolvePort();
   const statics = new StaticFiles(webRoot());
   const router = buildRouter();
@@ -107,6 +130,14 @@ export async function startLocalServer(): Promise<void> {
       else res.end();
     });
   });
+
+  // Hold idle keep-alive sockets longer than any client does, so the client is always the one to
+  // let go. Node's 5s default loses a race with fetch's own idle timeout: a socket closed here just
+  // as a satellite reuses it arrives there as ECONNRESET — a failed sale attempt for nothing.
+  // Reproduced in-process (2 of 20 requests after a 5.2s stall; 0 of 20 at 65s), and it is what
+  // the loaded full test runs were hitting. headersTimeout must stay above it.
+  instance.keepAliveTimeout = KEEP_ALIVE_MS;
+  instance.headersTimeout = KEEP_ALIVE_MS + 1_000;
 
   await new Promise<void>((resolve) => {
     instance.once('error', (err: NodeJS.ErrnoException) => {
@@ -207,22 +238,68 @@ async function handleApi(
       }
     }
 
+    // A person-level satellite route needs the person too. Re-read from the users table rather than
+    // trusted from the token, so deactivating someone on the main stops them at every till at once
+    // instead of whenever their twelve-hour session happens to run out.
+    let session: SessionUser | undefined;
+    if (isTerminalRoute && route.session) {
+      const raw = req.headers[SESSION_HEADER];
+      const claim = terminal
+        ? verifySessionToken(Array.isArray(raw) ? raw[0] : raw, terminal.terminalId)
+        : null;
+      const row = claim
+        ? await getPrismaClient().user.findUnique({ where: { id: claim.userId } })
+        : null;
+      if (!row || !row.active) return sendError(res, 401, SESSION_REQUIRED);
+      session = {
+        id: row.id,
+        phone: row.phone,
+        role: row.role,
+        nameRu: row.nameRu,
+        nameUz: row.nameUz,
+      };
+    }
+
+    // A handoff is taking the new main's copy of this database (§11.4): a write now would be lost.
+    // In a sale refusal's shape, so a satellite's screen names it and keeps the cart.
+    if (method !== 'GET' && isWriteFrozen() && !route.duringHandoff) {
+      return sendError(res, 409, JSON.stringify({ code: HANDING_OFF }));
+    }
+
     const ctx: RequestContext = {
       params,
       query: Object.fromEntries(url.searchParams),
       body: await readJsonBody(req),
       user: user ?? undefined,
       terminal: terminal ?? undefined,
+      session,
       req,
     };
 
     const result = await route.handler(ctx);
+    if (result instanceof FileReply) return await sendFile(res, result);
     sendJson(res, method === 'POST' ? 201 : 200, result);
   } catch (err) {
     if (err instanceof HttpError) return sendError(res, err.status, err.message);
     // Never let an internal message reach the network — it can carry file paths or SQL.
     console.error(`[local-server] ${method} ${apiPath} failed:`, err);
     sendError(res, 500, 'Internal error');
+  }
+}
+
+async function sendFile(res: ServerResponse, reply: FileReply): Promise<void> {
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    reply.cleanup?.();
+  };
+  try {
+    const { size } = await stat(reply.path);
+    res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': size });
+    await pipeline(createReadStream(reply.path), res);
+  } finally {
+    cleanup();
   }
 }
 

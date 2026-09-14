@@ -6,6 +6,7 @@ import { setupAutoUpdater } from "./updater/auto-updater";
 import { autoUpdater } from "electron-updater";
 import { SyncService } from "./sync/sync-service";
 import { regosVcrService } from "./fiscal/regos-vcr-service";
+import { startLicenseRefresh, stopLicenseRefresh } from "./license/license";
 import {
   initializeDatabase,
   readStoreBootstrap,
@@ -17,6 +18,9 @@ import { getServerToken } from "./sync/queue-manager";
 import { stopLocalServer, syncLocalServerWithMode } from "./local-server";
 import { getCurrentUser } from "./ipc/auth-handlers";
 import { log } from "./logger";
+import { isSatellite } from "./lan/role";
+import { applyPendingTakeover } from "./lan/takeover";
+import { onHandedOff } from "./local-server/handoff";
 
 // Disable GPU acceleration — prevents renderer crash on remote desktop sessions
 // (AnyDesk, RDP, TeamViewer) where no real GPU is available.
@@ -176,13 +180,40 @@ async function launchMainApp(): Promise<void> {
   // REGOS:VCR fiscalization startup (logs resolved config). The periodic background retry worker
   // was removed — fiscalization runs on new-sale, on shift close, and via the manual
   // "Fiscalise all old receipts" admin button.
-  regosVcrService.start();
+  //
+  // Not on a satellite: the VCR is a local service on the main terminal, so a satellite has nothing
+  // to talk to — the main fiscalizes its sales for it (LAN plan §5.11).
+  if (!(await isSatellite())) {
+    regosVcrService.start();
+    // The store's license renews itself here too, not only on sync: an OFFLINE_ONLY till never
+    // syncs, and still has to learn of a payment and check in by its deadline. A satellite holds
+    // none — its main's is the one that counts.
+    startLicenseRefresh();
+  }
 }
 
 async function bootstrap() {
   try {
+    // A takeover of the main role (LAN plan §11.4) swaps this till's database for the copy it took
+    // from the old main — here, before anything opens the file, because a live SQLite file cannot
+    // be replaced from under its client.
+    const takeover = await applyPendingTakeover().catch((err) => {
+      log.error("[takeover] could not finish a pending takeover:", err);
+      return "pending" as const;
+    });
+    if (takeover !== "none") log.warn(`[takeover] at startup: ${takeover}`);
+
     // Initialize local SQLite database
     await initializeDatabase();
+
+    // Having handed the main role to another till, this one is its satellite: restart as one, so
+    // nothing started for the old role (the VCR service, the LAN server, sync) keeps running.
+    onHandedOff(() => {
+      setTimeout(() => {
+        app.relaunch({ args: process.argv.slice(1) });
+        app.exit(0);
+      }, 1500);
+    });
 
     // Register all IPC handlers once (sync handlers reference module-level syncService)
     setupIpcHandlers();
@@ -250,6 +281,7 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     syncService?.stop();
     regosVcrService.stop();
+    stopLicenseRefresh();
     void stopLocalServer();
     app.quit();
   }
@@ -264,6 +296,7 @@ app.on("activate", () => {
 app.on("before-quit", () => {
   syncService?.stop();
   regosVcrService.stop();
+  stopLicenseRefresh();
   // Closing the listener stops the shop network being served by a terminal that is shutting down.
   void stopLocalServer();
 });

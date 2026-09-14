@@ -4,10 +4,12 @@ import { authRoutes } from './auth';
 import { categoryRoutes, settingsRoutes } from './catalog';
 import { inventoryRoutes } from './inventory';
 import { inventoryCountRoutes } from './inventory-counts';
+import { handoffRoutes } from './handoff';
 import { invoiceRoutes, logRoutes, markingRoutes, mxikRoutes, siteConfigRoutes, storeRoutes } from './misc';
 import { productRoutes } from './products';
 import { reconciliationRoutes } from './reconciliation';
 import { salesRoutes } from './sales';
+import { satelliteRoutes } from './satellite';
 import { supplierRoutes } from './suppliers';
 import { terminalRoutes } from './terminal';
 import { userRoutes } from './users';
@@ -39,5 +41,7 @@ export function buildRouter(): Router {
     ...markingRoutes,
     ...logRoutes,
     ...terminalRoutes,
+    ...handoffRoutes,
+    ...satelliteRoutes,
   ]);
 }

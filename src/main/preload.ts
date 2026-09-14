@@ -1,5 +1,14 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 
+/** Mirrors `MainLinkStatus` in lan/main-link.ts; kept here so preload imports no main-process code. */
+export interface LanLinkStatus {
+  /** Null until the first request has been made. */
+  reachable: boolean | null;
+  lastContactAt: string | null;
+  /** The main at the address was refused as superseded (§11.3) — reachable, but not ours. */
+  superseded: boolean;
+}
+
 // Expose protected methods to the renderer process
 contextBridge.exposeInMainWorld("electronAPI", {
   // Authentication
@@ -293,13 +302,35 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getCode: () => ipcRenderer.invoke("pairing:getCode"),
     cancelCode: () => ipcRenderer.invoke("pairing:cancelCode"),
     list: () => ipcRenderer.invoke("pairing:list"),
-    remove: (terminalId: string) => ipcRenderer.invoke("pairing:remove", terminalId),
+    remove: (superAdminPassword: string, terminalId: string) =>
+      ipcRenderer.invoke("pairing:remove", superAdminPassword, terminalId),
     joinAsSatellite: (
       superAdminPassword: string,
       input: { mainTerminalUrl: string; code: string; name?: string },
     ) => ipcRenderer.invoke("pairing:joinAsSatellite", superAdminPassword, input),
     leave: (superAdminPassword: string) =>
       ipcRenderer.invoke("pairing:leave", superAdminPassword),
+    issueHandoffCode: (superAdminPassword: string) =>
+      ipcRenderer.invoke("pairing:issueHandoffCode", superAdminPassword),
+    getHandoffState: () => ipcRenderer.invoke("pairing:getHandoffState"),
+    cancelHandoffCode: () => ipcRenderer.invoke("pairing:cancelHandoffCode"),
+    takeOver: (superAdminPassword: string, code: string) =>
+      ipcRenderer.invoke("pairing:takeOver", superAdminPassword, code),
+    pendingTakeover: () => ipcRenderer.invoke("pairing:pendingTakeover"),
+    resolveTakeover: (superAdminPassword: string, action: "finish" | "discard") =>
+      ipcRenderer.invoke("pairing:resolveTakeover", superAdminPassword, action),
+    repoint: (superAdminPassword: string, mainTerminalUrl: string) =>
+      ipcRenderer.invoke("pairing:repoint", superAdminPassword, mainTerminalUrl),
+  },
+
+  // A satellite's line to its main terminal: whether it is up, for the "unreachable" banner.
+  lan: {
+    getStatus: () => ipcRenderer.invoke("lan:getStatus"),
+    onStatus: (callback: (status: LanLinkStatus) => void) => {
+      const handler = (_event: IpcRendererEvent, status: LanLinkStatus) => callback(status);
+      ipcRenderer.on("lan:status", handler);
+      return () => ipcRenderer.removeListener("lan:status", handler);
+    },
   },
 
   // Login-screen banner. Cached in the main process so it renders with no internet.
@@ -338,6 +369,24 @@ contextBridge.exposeInMainWorld("electronAPI", {
     get: () => ipcRenderer.invoke("subscription:get"),
     openPaymentLink: (url: string) =>
       ipcRenderer.invoke("subscription:openPaymentLink", url),
+  },
+
+  // This till's license: whether it may sign in and sell, and why not (src/main/license/)
+  license: {
+    getStatus: () => ipcRenderer.invoke("license:getStatus"),
+    refresh: () => ipcRenderer.invoke("license:refresh"),
+    onChanged: (
+      callback: (
+        status: import("../shared/types/store.types").TillLicenseStatus,
+      ) => void,
+    ) => {
+      const handler = (
+        _event: IpcRendererEvent,
+        status: import("../shared/types/store.types").TillLicenseStatus,
+      ) => callback(status);
+      ipcRenderer.on("license:changed", handler);
+      return () => ipcRenderer.removeListener("license:changed", handler);
+    },
   },
 
   // Smena (shift) management
@@ -711,17 +760,43 @@ declare global {
           mainTerminalUrl: string | null;
           serverError: string | null;
         }>;
-        getCode: () => Promise<{ code: string; expiresAt: number } | null>;
+        getCode: () => Promise<{
+          code: string;
+          expiresAt: number;
+          mainTerminalUrl: string | null;
+          serverError: string | null;
+        } | null>;
         cancelCode: () => Promise<boolean>;
         list: () => Promise<
           Array<{ terminalId: string; name: string | null; pairedAt: string; lastSeenAt: string | null }>
         >;
-        remove: (terminalId: string) => Promise<boolean>;
+        remove: (superAdminPassword: string, terminalId: string) => Promise<boolean>;
         joinAsSatellite: (
           superAdminPassword: string,
           input: { mainTerminalUrl: string; code: string; name?: string },
         ) => Promise<{ storeName: string; mainTerminalId: string }>;
         leave: (superAdminPassword: string) => Promise<boolean>;
+        /** On a main: consent to handing the main role over (§11.4). */
+        issueHandoffCode: (superAdminPassword: string) => Promise<{ code: string; expiresAt: number }>;
+        getHandoffState: () => Promise<{
+          code: string | null;
+          expiresAt: number | null;
+          /** A satellite has begun taking over: writes are frozen here. */
+          inProgress: boolean;
+        }>;
+        cancelHandoffCode: () => Promise<boolean>;
+        /** On a satellite: take the main role over; the app must restart afterwards. */
+        takeOver: (superAdminPassword: string, code: string) => Promise<{ newMainUrl: string }>;
+        /** A takeover whose confirmation never arrived, waiting for the operator. */
+        pendingTakeover: () => Promise<{ oldMainUrl: string; at: string } | null>;
+        resolveTakeover: (superAdminPassword: string, action: "finish" | "discard") => Promise<boolean>;
+        /** On a satellite: its main's new address (§11.6). */
+        repoint: (superAdminPassword: string, mainTerminalUrl: string) => Promise<{ mainTerminalId: string }>;
+      };
+      lan: {
+        /** Null on a terminal that is not a satellite. */
+        getStatus: () => Promise<LanLinkStatus | null>;
+        onStatus: (callback: (status: LanLinkStatus) => void) => () => void;
       };
       banner: {
         get: () => Promise<{ imageUrl: string; title: string; subtitle: string }>;
@@ -770,6 +845,19 @@ declare global {
           import("../shared/types/store.types").StoreSubscription
         >;
         openPaymentLink: (url: string) => Promise<boolean>;
+      };
+      license: {
+        getStatus: () => Promise<
+          import("../shared/types/store.types").TillLicenseStatus
+        >;
+        refresh: () => Promise<
+          import("../shared/types/store.types").TillLicenseStatus
+        >;
+        onChanged: (
+          callback: (
+            status: import("../shared/types/store.types").TillLicenseStatus,
+          ) => void,
+        ) => () => void;
       };
       smena: {
         getCurrent: () => Promise<unknown | null>;

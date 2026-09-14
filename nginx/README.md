@@ -249,5 +249,48 @@ door open for a cross-origin tool and costs nothing.
   ```
   If you want it pinned, add `default_server` to the legacy host's `listen` lines — but that is
   a change to the one file the fleet depends on, so only do it for a real reason.
-- **Staging is untouched.** `nginx.staging.conf` and `scripts/deploy/staging.sh` still use the
-  old single-file layout; they move in Phase 5.
+- **Staging uses the same layout**, in `sites-staging/` against port 3002, gated on
+  `sites-live-staging.txt`. See below.
+
+---
+
+## Staging
+
+The same layout against port 3002, in `sites-staging/`, gated on `sites-live-staging.txt` and
+deployed by `scripts/deploy/staging.sh`. It shares `snippets/` with production.
+
+| File | Host | Serves |
+|---|---|---|
+| `sites-staging/dev.pos.bobur-dev.uz.conf` | `dev.pos.bobur-dev.uz` | The original staging host, moved verbatim |
+| `sites-staging/dev.api.posgro.uz.conf` | `dev.api.posgro.uz` | `/api/`, `/uploads/`, `/health` |
+| `sites-staging/dev.web.posgro.uz.conf` | `dev.web.posgro.uz` | Dashboard, same dual-location arrangement |
+| `sites-staging/dev.panel.posgro.uz.conf` | `dev.panel.posgro.uz` | The download portal |
+
+Staging differences that are deliberate, not oversights:
+
+- **Its own uploads and downloads directories** (`uploads-staging/`, `downloads-staging/`). A
+  banner or driver added on staging must never appear on a real till or the live portal.
+- **The same `/home/bobur/releases/`** as production, though. The portal's installer card is only
+  proved by the feed the updater actually reads; a fake one would test nothing.
+- **A distinct `limit_req_zone` name** (`posgro_staging_api`). Production's `posgro_api` and the
+  legacy staging host's `pos_staging_api` are already taken, and all of them land in one `http{}`.
+
+### Why the portal needs its own host even on staging
+
+`src/panel` is built with `base: '/'`, so its assets are requested from the host root. There is no
+sub-path to bolt it onto: `dev.pos.bobur-dev.uz/panel/` would serve `index.html` and then 404
+every asset. That is why clicking through the portal requires `dev.panel.posgro.uz` and a
+certificate, rather than a one-line addition to the old config.
+
+### Bootstrapping the staging hosts
+
+Same three steps as production, with the staging manifest:
+
+```bash
+# 1. deploy (push to dev) installs ACME stubs for the three new hosts
+# 2. on the VPS:
+sudo certbot certonly --webroot -w /var/www/certbot --cert-name dev.panel.posgro.uz -d dev.panel.posgro.uz
+sudo certbot certonly --webroot -w /var/www/certbot --cert-name dev.web.posgro.uz   -d dev.web.posgro.uz
+sudo certbot certonly --webroot -w /var/www/certbot --cert-name dev.api.posgro.uz   -d dev.api.posgro.uz
+# 3. add them to nginx/sites-live-staging.txt, commit, push
+```

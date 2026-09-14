@@ -20,6 +20,7 @@ import { Modal } from "../../components/common/Modal";
 import { VirtualKeyboard } from "../../components/common/VirtualKeyboard";
 import { useToast } from "../../context/ToastContext";
 import { amountHint } from "@shared/utils";
+import { parseSaleError } from "../POS/saleErrors";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -540,7 +541,9 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
       setInitialCash("");
       toast.success(t("smena.openedToast", "Смена открыта"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      // Refusals come as sale-style codes — a blocked store, a clock set back — so say them the
+      // way the checkout does.
+      toast.error(parseSaleError(err, t));
     }
   }
 

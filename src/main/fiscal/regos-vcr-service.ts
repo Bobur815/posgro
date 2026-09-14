@@ -8,6 +8,7 @@ import { getAppConfig } from '../config/app-config';
 import { getVcrPassword, hasVcrPassword, setVcrPassword } from './secret-store';
 import { log } from '../logger';
 import { FiscalTimer } from './fiscal-timing';
+import { isWriteFrozen } from '../sales/write-freeze';
 import { normalizePollOptions } from './uzqr-poll';
 import {
   RegosVcrClient,
@@ -123,6 +124,15 @@ class RegosVcrService {
     const run = this.vcrChain.then(fn, fn);
     this.vcrChain = run.then(() => undefined, () => undefined);
     return run;
+  }
+
+  /**
+   * Resolves once everything already queued for the device has finished — for a main handing its
+   * role over (§11.4), so a receipt the device is printing right now is recorded as fiscalized in
+   * the copy the new main takes, rather than fiscalized again there.
+   */
+  drain(): Promise<void> {
+    return this.runExclusive(async () => undefined);
   }
 
   // ── Config ──────────────────────────────────────────────────────────────────
@@ -638,6 +648,10 @@ class RegosVcrService {
 
   private async fiscalizeSaleImpl(saleId: string, timer = new FiscalTimer()): Promise<void> {
     timer.phase('queue');
+    // Handing the main role over (§11.4): the new main's copy may already be taken, and a receipt
+    // fiscalized here now would read PENDING there and be fiscalized a second time. Left PENDING,
+    // it is fiscalized once — by the new main.
+    if (isWriteFrozen()) return;
     const cfg = await this.resolveConfig();
     if (!cfg.enabled) return;
     const prisma = getPrismaClient();

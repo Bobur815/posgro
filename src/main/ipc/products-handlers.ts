@@ -3,6 +3,7 @@ import { ipcMain } from "electron";
 import { getPrismaClient } from "../database/sqlite-client";
 import { getCurrentUser } from "./auth-handlers";
 import { Product, ProductFilterParams } from "@shared/types";
+import { assertNotSatellite } from '../lan/satellite-guard';
 
 function toNumber(value: unknown): number {
   if (value === null || value === undefined) return 0;
@@ -352,6 +353,7 @@ export function setupProductsHandlers(): void {
   );
 
   ipcMain.handle("products:create", async (_event, data) => {
+    await assertNotSatellite();
     const currentUser = getCurrentUser();
     if (!currentUser || currentUser.role !== "ADMIN") {
       throw new Error("Unauthorized");
@@ -413,6 +415,7 @@ export function setupProductsHandlers(): void {
   ipcMain.handle(
     "products:update",
     async (_event, id: number | string, data) => {
+      await assertNotSatellite();
       const currentUser = getCurrentUser();
       if (!currentUser || currentUser.role !== "ADMIN") {
         throw new Error("Unauthorized");
@@ -506,6 +509,7 @@ export function setupProductsHandlers(): void {
   );
 
   ipcMain.handle("products:delete", async (_event, id: number | string) => {
+    await assertNotSatellite();
     const currentUser = getCurrentUser();
     if (!currentUser || currentUser.role !== "ADMIN") {
       throw new Error("Unauthorized");

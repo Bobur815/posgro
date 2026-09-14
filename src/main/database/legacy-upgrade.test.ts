@@ -16,6 +16,11 @@ import { join } from 'path';
 
 const dataDir = mkdtempSync(join(tmpdir(), 'posgro-legacy-'));
 
+// Real SQLite, bcrypt and (for some) a real HTTP server, on a machine running every other suite at
+// once: a cold full run has pushed single steps past Jest's 5s default and cascaded into unrelated
+// failures. A generous ceiling only changes how long a genuinely hung test takes to fail.
+jest.setTimeout(30_000);
+
 jest.mock('electron', () => ({
   app: { getPath: () => dataDir, getAppPath: () => join(__dirname, '..', '..', '..') },
 }));
@@ -127,5 +132,13 @@ describe('upgrading a database created by an older build', () => {
     expect(config).not.toBeNull();
     expect(config.isMain).toBe(true);
     expect(config.mainTerminalUrl).toBeNull();
+  });
+
+  // §11.3: an upgraded terminal belongs to no lineage yet, so the generation guard compares
+  // nothing until a main pairs its first till.
+  it('upgrades into no lineage and generation zero', async () => {
+    const config = await getPrismaClient().localConfig.findUnique({ where: { id: 'config' } });
+    expect(config.lanLineage).toBeNull();
+    expect(config.mainGeneration).toBe(0);
   });
 });

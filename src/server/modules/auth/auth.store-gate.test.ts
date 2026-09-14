@@ -1,4 +1,6 @@
 import { AuthService } from './auth.service';
+import type { DashboardStore } from './dashboard-access';
+import { DAY_MS, DEFAULT_SUBSCRIPTION_RULES } from '../../../shared/utils/subscription';
 
 /**
  * The store gate as it is actually wired, not just the rule.
@@ -14,11 +16,18 @@ import { AuthService } from './auth.service';
 // bcrypt.compare against a real hash is slow and irrelevant here; every password is "right".
 jest.mock('bcryptjs', () => ({ compare: jest.fn(async () => true), hash: jest.fn(async () => 'h') }));
 
-type Store = { active: boolean; mode: string } | null;
+type Store = DashboardStore | null;
 
 const ONLINE: Store = { active: true, mode: 'ONLINE' };
 const OFFLINE_ONLY: Store = { active: true, mode: 'OFFLINE_ONLY' };
 const DEACTIVATED: Store = { active: false, mode: 'ONLINE' };
+/** Expired a month ago, far past its grace days. */
+const UNPAID: Store = {
+  active: true,
+  mode: 'ONLINE',
+  subscriptionPlan: 'PRO',
+  subscriptionExpiresAt: new Date(Date.now() - 30 * DAY_MS),
+};
 
 function build(user: {
   role: string;
@@ -50,11 +59,13 @@ function build(user: {
     },
   };
   const findByPhoneAndStore = jest.fn(async () => row);
+  const siteConfig = { getSubscriptionRules: jest.fn(async () => DEFAULT_SUBSCRIPTION_RULES) };
 
   const service = new AuthService(
     { ...usersService, findByPhoneAndStore } as never,
     jwtService as never,
     prisma as never,
+    siteConfig as never,
   );
   return { service, prisma, jwtService, row };
 }
@@ -71,6 +82,7 @@ describe('login()', () => {
   it.each([
     ['a deactivated store', DEACTIVATED, 'auth.errors.store_inactive'],
     ['an OFFLINE_ONLY store', OFFLINE_ONLY, 'auth.errors.store_offline_only'],
+    ['a store blocked for its subscription', UNPAID, 'auth.errors.subscription_blocked'],
   ])('refuses %s with a translatable reason', async (_label, store, expected) => {
     const { service } = build({ role: 'ADMIN', storeId: 's1', store });
     await expect(service.login(creds)).rejects.toThrow(expected);
@@ -106,6 +118,14 @@ describe('login()', () => {
       token: 'signed.jwt.token',
     });
   });
+
+  // A blocked till must still reach the server to learn it has been paid for.
+  it('lets a POS sign in to a store blocked for its subscription', async () => {
+    const { service } = build({ role: 'ADMIN', storeId: 's1', store: UNPAID });
+    await expect(service.login({ ...creds, client: 'pos' })).resolves.toMatchObject({
+      token: 'signed.jwt.token',
+    });
+  });
 });
 
 describe('validateUser()', () => {
@@ -120,6 +140,7 @@ describe('validateUser()', () => {
   it.each([
     ['deactivated mid-session', DEACTIVATED],
     ['switched to OFFLINE_ONLY mid-session', OFFLINE_ONLY],
+    ['past its grace days mid-session', UNPAID],
   ])('cuts off a running session when the store is %s', async (_label, store) => {
     const { service } = build({ role: 'ADMIN', storeId: 's1', store });
     await expect(service.validateUser(payload)).resolves.toBeNull();

@@ -1,4 +1,4 @@
-import { shouldSync, shouldUploadMasterData } from './sync-policy';
+import { shouldSync, shouldUploadMasterData, syncTarget } from './sync-policy';
 
 describe('shouldSync', () => {
   it('syncs an ONLINE store', () => {
@@ -50,5 +50,35 @@ describe('shouldUploadMasterData', () => {
     ['config missing', undefined],
   ])('uploads for an admin when the lock is unknown (%s)', (_label, config) => {
     expect(shouldUploadMasterData('ADMIN', config)).toBe(true);
+  });
+});
+
+describe('syncTarget', () => {
+  // §1: a satellite's server is its main, always — whatever the store's mode says.
+  it.each([
+    ['an ONLINE shop', 'ONLINE'],
+    ['an OFFLINE_ONLY shop', 'OFFLINE_ONLY'],
+    ['a shop never activated', null],
+  ])('sends a satellite of %s to its main, never the VPS', (_label, mode) => {
+    expect(syncTarget({ mode, isMain: false })).toBe('main');
+  });
+
+  it('keeps a main in an ONLINE shop on the VPS', () => {
+    expect(syncTarget({ mode: 'ONLINE', isMain: true })).toBe('vps');
+  });
+
+  it('leaves a main in an OFFLINE_ONLY shop with nothing to sync to', () => {
+    expect(syncTarget({ mode: 'OFFLINE_ONLY', isMain: true })).toBe('none');
+  });
+
+  // Every terminal in the field before this feature has no opinion on its role. It must sync
+  // exactly as it did the day before the upgrade.
+  it.each([
+    ['role absent', { mode: 'ONLINE' }],
+    ['role null', { mode: 'ONLINE', isMain: null }],
+    ['config unreadable', null],
+    ['config missing', undefined],
+  ])('treats a terminal with no role as it always was (%s)', (_label, config) => {
+    expect(syncTarget(config)).toBe('vps');
   });
 });

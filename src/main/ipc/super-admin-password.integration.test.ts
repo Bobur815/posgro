@@ -14,6 +14,11 @@ import * as bcrypt from 'bcryptjs';
 
 const dataDir = mkdtempSync(join(tmpdir(), 'posgro-override-'));
 
+// Real SQLite, bcrypt and (for some) a real HTTP server, on a machine running every other suite at
+// once: a cold full run has pushed single steps past Jest's 5s default and cascaded into unrelated
+// failures. A generous ceiling only changes how long a genuinely hung test takes to fail.
+jest.setTimeout(30_000);
+
 jest.mock('electron', () => ({
   app: { getPath: () => dataDir, getAppPath: () => join(__dirname, '..', '..', '..') },
 }));

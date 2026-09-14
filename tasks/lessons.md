@@ -2,6 +2,41 @@
 
 Patterns worth not repeating, recorded as they come up.
 
+## The app logger starts electron-log on import — keep it off the sale path
+
+`src/main/logger.ts` calls `log.initialize()` when imported. `license.ts` imported it for one
+`log.info`, and `license.ts` sits under `commitSale` and `openShift`, so every suite that commits a
+sale failed to load under the usual `electron` mock: `this.electron.app?.isReady is not a function`.
+
+**Rule:** modules on the sale and shift path log with `console.*` — the logger hooks console in the
+app, so nothing is lost — and `../logger` is imported only where no test reaches through
+`commitSale`.
+
+## Git Bash rewrites a `/route` argument into a Windows path
+
+`node subs-web.mjs banner /web/settings/user` reached node as
+`C:/Program Files/Git/web/settings/user`: MSYS converts any argument that looks like a POSIX path
+before handing it to a native program. The CDP script built `http://localhost:5173C:/Program…`,
+`Page.navigate` failed with "Cannot navigate to invalid URL", and every scenario ran on the page
+already open — the login page — which looked like an auth bug and cost several rounds.
+
+**Rule:** from Git Bash, set `MSYS_NO_PATHCONV=1` when passing a URL path (anything starting with
+`/`) to node or another native tool, and print a CDP reply whole — `error` included — not `.result`.
+
+**Also:** seeding `localStorage` on a page where the app is running does not stick — the app writes
+its own state over it before the next page reads it. Seed from a same-origin page that runs no app
+code (an intercepted `/api/__seed` URL), then navigate.
+
+## A red proof that does not compile proves nothing
+
+To show new tests fail without the code, I switched checks off with `false && …` and
+`...(false && {…})`. ts-jest refused both (spreading `false` is a type error), so every suite failed
+to *load* — "Tests: 0 total" — and a grep for `error TS` found nothing because jest colours it.
+
+**Rule:** switch code off with something the compiler cannot see through (`!process.env.RED && …`),
+run with `FORCE_COLOR=0`, and read the count: a proof is "N failed" with N > 0 among tests that ran,
+never "0 total". Restore from a backup copy and `cmp` it.
+
 ## An "already exists" guard around schema creation hides every table added later
 
 `createSchemaIfNeeded` in `src/main/database/sqlite-client.ts` returned early when `local_config`
@@ -130,3 +165,121 @@ An import into the PLU manager showed both at once: "Barcode 2" and 23000 displa
 else's software, separate "position confirmed" from "meaning guessed" in the code and in the
 report, and say which columns to check on screen after the first import. Treat a sample value
 like `90` as the unit's first clue: a price that small usually has implied decimals.
+
+## Reproduce a flake in the topology it fails in, not a tidier one
+
+The full test run failed now and then with `fetch failed … ECONNRESET` in the LAN server suite,
+only when the machine was saturated (a cold run: 7 ts-jest workers on 8 threads, ~190s instead of
+~20s). The first experiment put the server in a child process and stalled the client — 0 failures
+in 60 tries — and it would have been easy to call the keep-alive theory disproved. The tests run
+server and client on **one** event loop; reproduced that way it failed 2 in 20 at Node's 5s
+`keepAliveTimeout` and 0 in 20 at 65s.
+
+**Rule:** a negative result only counts if the experiment shares the failing setup's topology —
+same process boundaries, same event loop, same load. And when the same race can happen in
+production (a satellite reusing a socket the main just closed), fix it in the code, not the test.
+
+## An async function cannot hand back a promise
+
+`settleSale()` was written to return the in-flight fiscalization so each caller could choose how
+long to wait. Declared `async (): Promise<Promise<void> | null>` that is impossible: promises
+flatten, so `await settleSale()` would have silently waited out the whole OFD round-trip on every
+sale at the till's own counter. The typechecker caught it only because the result was then passed
+where a promise was expected.
+
+**Rule:** to return work still in progress from an async function, wrap it —
+`{ fiscalizing: Promise<void> | null }`.
+
+## Classify errors by name, not instanceof, when they may come from another realm
+
+`isNetworkError` tested `err instanceof TypeError` to recognise fetch's `TypeError('fetch failed')`.
+Node's fetch throws its own realm's TypeError; in a Jest context that is not the test's
+`TypeError`, so "main unreachable" surfaced as an unexplained crash. The two-till e2e test found it.
+
+**Rule:** for errors crossing a boundary you do not own (native fetch, another window, a worker),
+match on `err.name` or `err.cause?.code`.
+
+## Scripted edits on CRLF files: `.` does not match `\r`
+
+A script inserted an import after the last `^import .*;\r?$` match. In JavaScript `.` excludes
+`\r`, so the insertion point landed between `\r` and `\n` — one line ended `\r\r\n`, the new one in
+a bare `\n`. With mixed endings git stops normalising the file, and three files showed as
+~4,000-line diffs for a 60-line change.
+
+**Rule:** after scripting edits in this repo (CRLF working copies), count line endings before
+staging — a file with both CRLF and bare LF, or any `\r\r\n`, is broken. Prefer the Edit tool,
+which preserves them; and never pass code containing backticks through a shell string.
+
+## A process killer that matches on command-line text can match its own shell
+
+The instance helper stopped Electron by `CommandLine -like '*ho-t1*'`. The shell running it had
+`ho-t1.log` in its own command line, so it killed itself (exit 255, nothing launched). The fix that
+followed required a `"` the real command line does not contain, and matched nothing. Separately, a
+`| grep | tail` after launching Electron hung for five minutes: the pipe stays open while the
+app's child processes hold inherited handles.
+
+**Rule:** kill by process name *and* an anchored regex on the exact argument
+(`Name -eq 'electron.exe' -and CommandLine -match 'user-data-dir=\S*ho-t1(\s|"|$)'`), and send a
+background launcher's output to a file, never through a pipe.
+
+## A new test that listens on a port must check which ports the other suites use
+
+`handoff.e2e.test.ts` took 5398–5400, already used by `satellite.integration` and
+`local-server.integration`. Alone every suite passed; in the parallel full run ten tests of another
+suite failed, which looked like load flakiness until the ports were compared.
+
+**Rule:** before choosing a port in a test, grep `*.test.ts` for `PORT =` and `listen(`; when a
+suite fails only in the full run, check shared ports before blaming load.
+
+## nginx rejects a repeated directive; it does not treat the nearer one as an override
+
+The `/api/downloads` upload routes set `proxy_read_timeout`/`proxy_send_timeout` and then included
+`posgro-proxy.conf`, which sets them too. That is not an override — nginx fails the whole config
+with `"proxy_send_timeout" directive is duplicate`. The reported file:line is the *snippet*,
+because that is where nginx meets the second occurrence, so the error points at the file that was
+correct. Following it would have broken every host that includes the snippet.
+
+Worse than a failed deploy: the deploy script copies configs and *then* runs `nginx -t`. The
+broken files were already installed and symlinked, so nginx kept serving its old in-memory config
+while `nginx -t` failed from then on — a reboot would have left nginx down, and the nightly
+production deploy would have aborted at its own guard. The failure was silent until someone ran a
+deploy.
+
+**Rule:** a location includes exactly one proxy snippet, and sets no directive that snippet
+already sets. When a route needs different timeouts, make a second snippet (headers factored into
+a third that both include) rather than overriding inline. Before pushing an nginx change, grep for
+locations that both `include` a snippet and set a directive it contains — a duplicate is a
+server-wide outage on the next restart, not a local mistake. And read a duplicate-directive
+file:line as "the second occurrence", not "the culprit".
+
+## `git clean -fd` in the deploy will delete an unignored bind-mount directory
+
+Uploading a driver on staging failed with `ENOENT ... open '/app/downloads/<file>'`, which reads
+like a permissions or path bug. It was neither. Inside the container:
+
+```
+drwxr-xr-x  0 root root  0  /app/downloads      <- link count 0, size 0
+touch: /app/downloads/.probe: No such file or directory   (as root)
+```
+
+The cause was **`git clean -fd` in the deploy action**. It deletes untracked directories and
+leaves *ignored* ones alone. `.gitignore` covered `/uploads/*` and `/uploads-staging/` but had
+nothing for downloads, so `downloads-staging/` was deleted on every deploy and recreated by the
+script's `mkdir -p` — a new inode each time, orphaning the running container's mount. The
+container kept the dead inode (530157) while the host had a live one (530162).
+
+I first blamed the ordering of `mkdir` versus `docker compose up` and "fixed" it by recreating the
+container. That appeared to work — the write test passed — and failed again on the next upload,
+because recreating only resets the clock until the next deploy. The fix is the `.gitignore` entry.
+
+The tell I walked past: `uploads` worked and `downloads` did not, in the same container, through
+the same code path. The difference between the two mounts *was* the bug, and comparing
+`stat -c %i` inside the container against the host found it in a minute.
+
+**Rule:** any host directory bind-mounted into a container must be **ignored** in `.gitignore`,
+not merely untracked — `git clean -fd` is part of the deploy. Mirror the `/uploads/*` +
+`!/uploads/.gitkeep` pattern so the directory survives in the checkout too. When a containerised
+write fails with ENOENT on a path that plainly exists, compare the mount's inode and link count
+on both sides before suspecting the code: `links=0` means stale, and
+`--force-recreate` is a symptom fix — find what is replacing the directory. When one mount works
+and a sibling does not, diff the two before doing anything else.

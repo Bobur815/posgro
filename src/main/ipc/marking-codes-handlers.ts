@@ -213,12 +213,14 @@ export function setupMarkingCodesHandlers(): void {
  */
 export async function savePendingMarkingCodes(
   entries: PendingMarkingCodeEntry[],
+  /** The till that sold them — a satellite's, when this terminal committed the sale as its main. */
+  soldOnTerminalId?: string,
 ): Promise<void> {
   if (!entries || entries.length === 0) return;
 
   const prisma = getPrismaClient();
   const config = getAppConfig();
-  const terminalId = config.terminalId || 'unknown';
+  const terminalId = soldOnTerminalId || config.terminalId || 'unknown';
   const token = getServerToken();
 
   const toSync: Array<{

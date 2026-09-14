@@ -22,6 +22,18 @@ async function bootstrap() {
   const webDistPath = join(__dirname, '..', 'web');
   app.useStaticAssets(webDistPath, { prefix: '/web' });
 
+  // The public download portal (panel.posgro.uz). Same arrangement as /web: nginx owns the
+  // public path and proxies the host root here, so the app is built with base '/'.
+  const panelDistPath = join(__dirname, '..', 'panel');
+  app.useStaticAssets(panelDistPath, { prefix: '/panel' });
+
+  // Uploaded drivers, tools and manuals. Served by nginx in production; this keeps them reachable
+  // in development and if anything bypasses nginx. Kept apart from /uploads — different size
+  // profile, different retention.
+  const downloadsPath = process.env.DOWNLOADS_DIR || join(process.cwd(), 'downloads');
+  if (!existsSync(downloadsPath)) mkdirSync(downloadsPath, { recursive: true });
+  app.useStaticAssets(downloadsPath, { prefix: '/downloads' });
+
   // Serve uploaded files (banner images, etc.)
   // Use UPLOADS_DIR so files persist across deploys (dist/ is wiped on each build)
   const uploadsPath = process.env.UPLOADS_DIR || join(process.cwd(), 'uploads');
@@ -90,6 +102,12 @@ async function bootstrap() {
   const webIndex = join(webDistPath, 'index.html');
   app.use('/web', (_req: any, res: any, next: any) => {
     res.sendFile(webIndex, (err: unknown) => { if (err) next(); });
+  });
+
+  // Same for the portal.
+  const panelIndex = join(panelDistPath, 'index.html');
+  app.use('/panel', (_req: any, res: any, next: any) => {
+    res.sendFile(panelIndex, (err: unknown) => { if (err) next(); });
   });
 
   const port = process.env.PORT || 3001;

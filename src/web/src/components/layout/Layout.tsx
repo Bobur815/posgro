@@ -2,11 +2,21 @@ import React from 'react';
 import { Outlet } from 'react-router-dom';
 import styled from 'styled-components';
 import { Sidebar } from './Sidebar';
+import { TopBar } from './TopBar';
+import { SubscriptionBanner } from './SubscriptionBanner';
 import { SidebarProvider } from '@context/SidebarContext';
 
 const Container = styled.div`
   display: flex;
   min-height: 100vh;
+`;
+
+/** The top bar over the page, beside the sidebar. */
+const Main = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 `;
 
 const Content = styled.main`
@@ -27,9 +37,13 @@ export function Layout() {
     <SidebarProvider>
       <Container>
         <Sidebar />
-        <Content>
-          <Outlet />
-        </Content>
+        <Main>
+          <TopBar />
+          <SubscriptionBanner />
+          <Content>
+            <Outlet />
+          </Content>
+        </Main>
       </Container>
     </SidebarProvider>
   );

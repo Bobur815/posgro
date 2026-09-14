@@ -11,6 +11,7 @@ import { ChevronDown, ChevronRight, Pencil, Printer, Trash2, ShieldCheck, Shield
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../context/ToastContext';
 import { useSuperAdminGate } from '../../components/gate/SuperAdminGate';
+import { useModeStore } from '../../store/mode-store';
 
 // Date-range options for the history filter. Lets the cashier reach older receipts so they can
 // be (re-)fiscalized from here — e.g. after enabling the non-VAT-payer mode or fixing an MXIK.
@@ -290,6 +291,10 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   const gate = useSuperAdminGate();
+  // On a satellite the fiscal device is at the main (LAN plan §5.11): fiscalizing, refunding and
+  // printing a fiscal duplicate all happen there. So does removing a fiscalized receipt, which
+  // needs a fiscal refund first — hidden here rather than failing halfway.
+  const isSatellite = useModeStore((s) => s.isSatellite);
 
   const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
 
@@ -452,7 +457,7 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
                       )}
                     </SaleInfo>
                     <Amount>{formatCurrency(sale.finalAmount)}</Amount>
-                    {(sale.fiscalStatus === 'FAILED' || sale.fiscalStatus === 'PENDING') && (
+                    {!isSatellite && (sale.fiscalStatus === 'FAILED' || sale.fiscalStatus === 'PENDING') && (
                       <FiscalizeButton
                         onClick={(e) => handleFiscalize(sale, e)}
                         disabled={fiscalizingId === sale.id}
@@ -462,7 +467,7 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
                         {fiscalizingId === sale.id ? t('common.processing') : t('pos.fiscalize', 'Фискализировать')}
                       </FiscalizeButton>
                     )}
-                    {sale.fiscalStatus === 'FISCALIZED' && (
+                    {!isSatellite && sale.fiscalStatus === 'FISCALIZED' && (
                       <>
                         {!sale.refunded && (
                           <RefundButton
@@ -504,15 +509,17 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
                         <Pencil size={16} />
                       </EditButton>
                     )}
-                    <DeleteButton
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeleteConfirmId(sale.id);
-                      }}
-                      title={t('common.delete')}
-                    >
-                      <Trash2 size={16} />
-                    </DeleteButton>
+                    {!(isSatellite && sale.fiscalStatus === 'FISCALIZED' && !sale.refunded) && (
+                      <DeleteButton
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteConfirmId(sale.id);
+                        }}
+                        title={t('common.delete')}
+                      >
+                        <Trash2 size={16} />
+                      </DeleteButton>
+                    )}
                   </SaleHeader>
                   {expanded && sale.items && (
                     <ItemsPanel>

@@ -13,11 +13,30 @@
 export interface TerminalSyncConfig {
   mode?: string | null;
   posAdminLocked?: boolean | null;
+  isMain?: boolean | null;
 }
 
 /** False only for an OFFLINE_ONLY store, whose SQLite is the source of truth and has no server. */
 export function shouldSync(config: TerminalSyncConfig | null | undefined): boolean {
   return config?.mode !== 'OFFLINE_ONLY';
+}
+
+/**
+ * Who this terminal syncs with, if anyone.
+ *
+ * "A satellite's server is the main terminal, always. The main terminal's server is the VPS, or
+ * nothing" (tasks/LAN_MAIN_TERMINAL_PLAN.md §1). The role is checked before the mode: a satellite
+ * of an OFFLINE_ONLY shop still has a server — its main — and a satellite of an ONLINE shop must
+ * still never talk to the VPS, or it would upload a copy of sales the main already uploads.
+ *
+ * Only an explicit `false` makes a satellite; a missing role is a terminal from before the feature,
+ * which syncs exactly as it always did.
+ */
+export type SyncTarget = 'main' | 'vps' | 'none';
+
+export function syncTarget(config: TerminalSyncConfig | null | undefined): SyncTarget {
+  if (config?.isMain === false) return 'main';
+  return shouldSync(config) ? 'vps' : 'none';
 }
 
 /**

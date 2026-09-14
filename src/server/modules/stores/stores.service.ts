@@ -2,12 +2,16 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateStoreDto } from "./dto/create-store.dto";
 import { UpdateStoreDto } from "./dto/update-store.dto";
 import * as bcrypt from "bcryptjs";
 import { UserRole } from "@prisma/client";
+import { normalizeUzPhone } from "../../../shared/utils/phone";
+import { DAY_MS, TRIAL_PLAN } from "../../../shared/utils/subscription";
+import { SiteConfigService } from "../site-config/site-config.service";
 
 /**
  * Exactly the columns a store may be read back as.
@@ -28,6 +32,8 @@ const STORE_FIELDS = {
   balance: true,
   subscriptionPlan: true,
   subscriptionExpiresAt: true,
+  subscriptionRequired: true,
+  subscriptionGraceFrom: true,
   settings: true,
   scheduledDeleteAt: true,
   mode: true,
@@ -47,6 +53,21 @@ const STORE_COUNTS = {
   },
 } as const;
 
+/** A new store admin's password when the phone has no account yet. */
+const DEFAULT_ADMIN_PASSWORD = "123456";
+
+/**
+ * A phone as the rest of the system stores it — 998XXXXXXXXX (shared/utils/phone.ts), which is also
+ * what the dashboard's login sends. Store contact phones used to be saved as typed
+ * ("+998 932144774"), so one number showed two ways. Undefined stays undefined (not being
+ * changed); empty means none.
+ */
+function cleanPhone(phone: string | null | undefined): string | null | undefined {
+  if (phone === undefined) return undefined;
+  const digits = (phone ?? "").replace(/\D/g, "");
+  return digits ? normalizeUzPhone(digits) : null;
+}
+
 /** What the dashboard needs to know about the override password: whether there is one. */
 type StoreRow = { superAdminPassword?: string | null };
 function withPasswordFlag<T extends StoreRow>(store: T) {
@@ -56,7 +77,10 @@ function withPasswordFlag<T extends StoreRow>(store: T) {
 
 @Injectable()
 export class StoresService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private siteConfig: SiteConfigService,
+  ) {}
 
   async findAll() {
     const stores = await this.prisma.store.findMany({
@@ -99,32 +123,49 @@ export class StoresService {
     }
   }
 
+  /**
+   * The accounts a phone number already has, newest first — one per store, since users are per
+   * store. Refuses a super admin's phone: at login the super admin account wins by phone
+   * (users.service.ts findByPhoneAndStore), so a store account under it could never be signed in to.
+   */
+  private async accountsForPhone(phone: string) {
+    const accounts = await this.prisma.user.findMany({
+      where: { phone },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, storeId: true, role: true, active: true, password: true },
+    });
+    if (accounts.some((a) => a.role === UserRole.SUPER_ADMIN)) {
+      throw new ConflictException("This phone number belongs to a super admin");
+    }
+    return accounts;
+  }
+
+  /**
+   * The password hash a new admin account starts with. One owner with several stores has one
+   * account in each, under one phone: a new account takes the hash of the one that phone already
+   * has, so the owner's own password opens every store at the dashboard's single login
+   * (auth.service.ts loginAcrossStores). A phone new to the system gets the default.
+   */
+  private async startingPassword(accounts: Array<{ role: UserRole; active: boolean; password: string }>) {
+    const source =
+      accounts.find((a) => a.active && a.role === UserRole.ADMIN) ??
+      accounts.find((a) => a.active) ??
+      accounts[0];
+    return source ? source.password : bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 10);
+  }
+
   async create(createStoreDto: CreateStoreDto) {
     const id = await this.generateStoreId();
 
-    if (createStoreDto.phone) {
-      const existingStore = await this.prisma.store.findFirst({
-        where: { phone: createStoreDto.phone },
-      });
-      if (existingStore) {
-        throw new ConflictException(
-          "Store with this phone number already exists",
-        );
-      }
+    const phone = cleanPhone(createStoreDto.phone);
 
-      const existingUser = await this.prisma.user.findFirst({
-        where: { phone: createStoreDto.phone },
-      });
-      if (existingUser) {
-        throw new ConflictException(
-          "A user with this phone number already exists",
-        );
-      }
-    }
-
-    const hashedPassword = createStoreDto.phone
-      ? await bcrypt.hash("123456", 10)
+    // No uniqueness on the phone: one owner's stores share it, and the admin account made below is
+    // one more account of the same person (see startingPassword).
+    const hashedPassword = phone
+      ? await this.startingPassword(await this.accountsForPhone(phone))
       : null;
+
+    const rules = await this.siteConfig.getSubscriptionRules();
 
     // Wrap both creates in a transaction so no orphaned store is left if user creation fails
     const store = await this.prisma.$transaction(async (tx) => {
@@ -133,11 +174,18 @@ export class StoresService {
           id,
           name: createStoreDto.name,
           address: createStoreDto.address,
-          phone: createStoreDto.phone,
+          phone,
           settings: createStoreDto.settings
             ? JSON.stringify(createStoreDto.settings)
             : null,
           active: true,
+          // Held to its subscription from day one: with no plan it is blocked, so while trials are
+          // switched on it opens on one (shared/utils/subscription.ts).
+          subscriptionRequired: true,
+          ...(rules.trialEnabled && {
+            subscriptionPlan: TRIAL_PLAN,
+            subscriptionExpiresAt: new Date(Date.now() + rules.trialDays * DAY_MS),
+          }),
           // Both fall back to the schema defaults (ONLINE / false) when the caller omits them.
           ...(createStoreDto.mode !== undefined && { mode: createStoreDto.mode }),
           ...(createStoreDto.posAdminLocked !== undefined && {
@@ -155,11 +203,11 @@ export class StoresService {
         },
       });
 
-      if (createStoreDto.phone && hashedPassword) {
+      if (phone && hashedPassword) {
         await tx.user.create({
           data: {
             storeId: s.id,
-            phone: createStoreDto.phone,
+            phone,
             password: hashedPassword,
             role: UserRole.ADMIN,
             nameUz: "Administrator",
@@ -177,28 +225,27 @@ export class StoresService {
     return this.findById(store.id);
   }
 
-  async resetAdminUser(storeId: string, phone: string) {
+  /**
+   * Make `phone` this store's admin.
+   *
+   * An account it already has here is reset to the default password — that is what this is for, a
+   * forgotten password. A phone with accounts only in other stores gets one here with their
+   * password (see startingPassword), so the owner's one sign-in covers this store too.
+   */
+  async resetAdminUser(storeId: string, rawPhone: string) {
     await this.findById(storeId);
+    const phone = cleanPhone(rawPhone);
+    if (!phone) throw new BadRequestException("Phone is required");
 
-    const existingUser = await this.prisma.user.findFirst({
-      where: { phone },
-    });
-    if (existingUser && existingUser.storeId !== storeId) {
-      throw new ConflictException(
-        "A user with this phone already exists in another store",
-      );
-    }
+    const accounts = await this.accountsForPhone(phone);
+    const here = accounts.find((a) => a.storeId === storeId);
 
-    const hashedPassword = await bcrypt.hash("123456", 10);
-
-    if (existingUser) {
-      // Update the existing user to ADMIN and reset password
+    if (here) {
       return this.prisma.user.update({
-        where: { id: existingUser.id },
+        where: { id: here.id },
         data: {
           role: UserRole.ADMIN,
-          password: hashedPassword,
-          storeId,
+          password: await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 10),
           active: true,
         },
         select: { id: true, phone: true, role: true, nameRu: true },
@@ -209,7 +256,7 @@ export class StoresService {
       data: {
         storeId,
         phone,
-        password: hashedPassword,
+        password: await this.startingPassword(accounts),
         role: UserRole.ADMIN,
         nameUz: "Administrator",
         nameRu: "Администратор",
@@ -220,22 +267,29 @@ export class StoresService {
   }
 
   async update(id: string, updateStoreDto: UpdateStoreDto) {
-    await this.findById(id);
+    const current = await this.findById(id);
 
     const data: Record<string, unknown> = {};
 
     if (updateStoreDto.name !== undefined) data.name = updateStoreDto.name;
     if (updateStoreDto.address !== undefined)
       data.address = updateStoreDto.address;
-    if (updateStoreDto.phone !== undefined) data.phone = updateStoreDto.phone;
+    if (updateStoreDto.phone !== undefined) data.phone = cleanPhone(updateStoreDto.phone);
     if (updateStoreDto.active !== undefined)
       data.active = updateStoreDto.active;
     if (updateStoreDto.aiPlan !== undefined) data.aiPlan = updateStoreDto.aiPlan;
     if (updateStoreDto.subscriptionPlan !== undefined) data.subscriptionPlan = updateStoreDto.subscriptionPlan;
     if (updateStoreDto.subscriptionExpiresAt !== undefined) {
-      data.subscriptionExpiresAt = updateStoreDto.subscriptionExpiresAt
+      const expiresAt = updateStoreDto.subscriptionExpiresAt
         ? new Date(updateStoreDto.subscriptionExpiresAt)
         : null;
+      data.subscriptionExpiresAt = expiresAt;
+      // A new date is a fresh start, so grace left over from the day enforcement shipped goes.
+      // Only a new one: the store screen sends the date with every save, and re-saving an unpaid
+      // store unchanged must not cut its grace short.
+      if ((expiresAt?.getTime() ?? null) !== (current.subscriptionExpiresAt?.getTime() ?? null)) {
+        data.subscriptionGraceFrom = null;
+      }
     }
     if (updateStoreDto.mode !== undefined) data.mode = updateStoreDto.mode;
     if (updateStoreDto.posAdminLocked !== undefined)

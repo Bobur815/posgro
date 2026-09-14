@@ -5,6 +5,8 @@ import { Sidebar } from './Sidebar';
 import { AppBar, APP_BAR_HEIGHT } from './AppBar';
 import { SidebarProvider, useSidebar } from '../../context/SidebarContext';
 import { SmenaPage } from '../../pages/Smena/SmenaPage';
+import { MainLinkBanner } from './MainLinkBanner';
+import { LicenseBanner } from './LicenseBanner';
 
 const Content = styled.main`
   padding-top: ${APP_BAR_HEIGHT + 4}px;
@@ -24,6 +26,8 @@ function LayoutInner() {
       <AppBar />
       <Sidebar />
       <Content>
+        <MainLinkBanner />
+        <LicenseBanner />
         <Outlet />
       </Content>
       {smenaOpen && <SmenaPage onClose={closeSmenaModal} />}

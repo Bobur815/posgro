@@ -7,6 +7,15 @@ export class LoginDto {
   @IsOptional()
   storeId?: string;
 
+  /**
+   * Without `storeId`: the store to open first, if this person's password opens it — the one the
+   * browser last worked in. Otherwise the first by name. Never a way in by itself.
+   */
+  @ApiPropertyOptional({ example: 'store-123', description: 'Store to open first, when no storeId is given' })
+  @IsString()
+  @IsOptional()
+  preferredStoreId?: string;
+
   @ApiProperty({ example: 'admin', description: 'User phone number' })
   @IsString()
   @IsNotEmpty()

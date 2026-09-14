@@ -4,6 +4,7 @@ import { probeApiUrl } from '../config/api-url-probe';
 import { getPrismaClient, writeStoreBootstrap, closeDatabase, initializeDatabase } from '../database/sqlite-client';
 import { setServerToken } from '../sync/queue-manager';
 import { seedLocalDatabase } from '../database/seed';
+import { acceptLicense } from '../license/license';
 
 interface SetupCompleteData {
   storeId: string;
@@ -50,7 +51,12 @@ async function fetchSuperAdminPassword(
     });
     if (!response.ok) return;
 
-    const body = (await response.json()) as { super_admin_password_hash?: string | null };
+    const body = (await response.json()) as {
+      super_admin_password_hash?: string | null;
+      license?: string | null;
+    };
+    // The till's first license, so a new terminal starts licensed rather than on the allowance.
+    await acceptLicense(body.license).catch(() => false);
     // Only write when the server actually sent the field, so an older server that does not know
     // about it cannot silently clear an override this terminal already holds.
     if (!('super_admin_password_hash' in body)) return;

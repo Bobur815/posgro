@@ -1,5 +1,4 @@
 import { ipcMain } from 'electron';
-import * as bcrypt from 'bcryptjs';
 import { getPrismaClient } from '../database/sqlite-client';
 import { getLanAddress } from '../network/lan-address';
 import {
@@ -8,41 +7,40 @@ import {
   issuePairingCode,
 } from '../local-server/pairing';
 import { getLocalServerStatus, syncLocalServerWithMode } from '../local-server';
-import { AttemptThrottle } from './override-throttle';
+import { requireSuperAdmin } from '../auth/super-admin';
+import { newLineage } from '../lan/lineage';
+import { joinMain, leaveMain, repointMain, type JoinInput } from '../lan/role-change';
+import { cancelHandoffCode, getHandoffState, issueHandoffCode } from '../local-server/handoff';
 import {
-  fetchTerminalToken,
-  normaliseMainUrl,
-  pairWithMain,
-  probeMainTerminal,
-} from '../lan/main-terminal-client';
+  getPendingTakeover,
+  resolvePendingTakeover,
+  takeOverAsMain,
+} from '../lan/takeover';
 import { log } from '../logger';
 
 /**
- * Pairing satellites, from the main terminal's side.
+ * Pairing satellites, and changing this terminal's role (tasks/LAN_MAIN_TERMINAL_PLAN.md §11).
  *
- * Issuing a code is gated on the **super-admin password**, not the terminal PIN or a store admin's
- * password (§11.2). A pairing code grants a machine standing access to the shop's data, which is a
- * different class of act from editing a URL — and `auth:verifyTerminalAccess` accepts any active
- * ADMIN's password or a four-digit PIN.
- *
- * The password is verified here rather than reusing `auth:verifySuperAdminPassword` from the
- * renderer, so that a caller cannot verify once and then issue codes forever: each issue carries
- * its own proof.
+ * Every act here is gated on the **super-admin password** (`auth/super-admin.ts`, §11.2), verified
+ * on each call. The role changes themselves live in `lan/role-change.ts`, so the same code runs in
+ * the app and in the two-till end-to-end test; what is here is the main-side pairing code and the
+ * IPC surface.
  */
-
-const issueThrottle = new AttemptThrottle();
-
-/** Separate from issuing: joining is done on a different machine by a different person. */
-const joinThrottle = new AttemptThrottle();
 
 /**
- * Where a satellite keeps the device secret it was issued.
- *
- * Plaintext, like the `server_token` row beside it — this is a credential the machine must present,
- * so it has to be readable here. What limits the damage is that it is worth nothing anywhere else:
- * it names one terminal, on one main, on one shop network.
+ * What the operator types into the satellite besides the code. Null when the listener could not
+ * bind or the machine has no usable LAN address — then the code alone is useless, and the dialog
+ * shows `serverError` rather than a code that cannot be redeemed.
  */
-const DEVICE_SECRET_KEY = 'lan_device_secret';
+function whereToFindThisMain(): { mainTerminalUrl: string | null; serverError: string | null } {
+  const status = getLocalServerStatus();
+  const address = getLanAddress();
+  return {
+    mainTerminalUrl:
+      status.running && status.port && address ? `http://${address}:${status.port}/api` : null,
+    serverError: status.error,
+  };
+}
 
 export function setupPairingHandlers(): void {
   /**
@@ -54,49 +52,32 @@ export function setupPairingHandlers(): void {
    * cycle if nobody used it.
    */
   ipcMain.handle('pairing:issueCode', async (_event, superAdminPassword: string) => {
-    if (issueThrottle.isLockedOut()) {
-      throw new Error('settings.pairingThrottled');
-    }
-
     const prisma = getPrismaClient();
-    const config = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+    const config = await requireSuperAdmin(superAdminPassword);
+    if (!config.isMain) throw new Error('settings.pairingNotMain');
 
-    // A store with no override configured cannot pair at all, rather than falling back to a weaker
-    // gate. `verifySuperAdminPassword` returns false in that case for the same reason: a missing
-    // configuration must not read as an open door.
-    if (!config?.superAdminPassword) {
-      throw new Error('settings.pairingNeedsSuperAdmin');
+    // The first till this main pairs starts its lineage (§11.3): from here on, every satellite
+    // knows which chain of mains it belongs to, and can refuse one that was replaced.
+    if (!config.lanLineage) {
+      await prisma.localConfig.update({
+        where: { id: 'config' },
+        data: { lanLineage: newLineage() },
+      });
     }
-    if (!config.isMain) {
-      throw new Error('settings.pairingNotMain');
-    }
-
-    if (!superAdminPassword || !(await bcrypt.compare(superAdminPassword, config.superAdminPassword))) {
-      issueThrottle.recordFailure();
-      throw new Error('settings.superAdminPasswordWrong');
-    }
-    issueThrottle.reset();
 
     const { code, expiresAt } = issuePairingCode();
     await syncLocalServerWithMode();
-
-    const status = getLocalServerStatus();
-    return {
-      code,
-      expiresAt,
-      // What the operator has to type into the satellite. Null when the listener could not bind or
-      // the machine has no usable LAN address — in which case the code alone is useless, and the
-      // dialog should say so rather than showing a code that cannot be redeemed.
-      mainTerminalUrl:
-        status.running && status.port && getLanAddress()
-          ? `http://${getLanAddress()}:${status.port}/api`
-          : null,
-      serverError: status.error,
-    };
+    return { code, expiresAt, ...whereToFindThisMain() };
   });
 
-  /** The outstanding code, so reopening the dialog does not mint a second one. */
-  ipcMain.handle('pairing:getCode', async () => getPairingCode());
+  /**
+   * The outstanding code, so reopening the dialog shows it again instead of minting a second one —
+   * with the address that goes with it, which is half of what the operator has to type.
+   */
+  ipcMain.handle('pairing:getCode', async () => {
+    const active = getPairingCode();
+    return active ? { ...active, ...whereToFindThisMain() } : null;
+  });
 
   ipcMain.handle('pairing:cancelCode', async () => {
     cancelPairingCode();
@@ -122,104 +103,71 @@ export function setupPairingHandlers(): void {
   /**
    * Unpair a satellite. The credential stops working immediately, and once the last one is gone
    * the LAN server closes — an ONLINE shop that stops using satellites stops listening.
+   *
+   * Gated like issuing: the dialog it lives in is unlocked by a PIN, and cutting a till off from the
+   * shop's stock mid-shift is not a PIN-level act.
    */
-  ipcMain.handle('pairing:remove', async (_event, terminalId: string) => {
+  ipcMain.handle('pairing:remove', async (_event, superAdminPassword: string, terminalId: string) => {
+    await requireSuperAdmin(superAdminPassword);
     await getPrismaClient().pairedTerminal.deleteMany({ where: { terminalId } });
     await syncLocalServerWithMode();
+    log.info(`[pairing] satellite ${terminalId} removed`);
     return true;
   });
 
-  /**
-   * Become a satellite of the main terminal at `mainTerminalUrl`.
-   *
-   * The order matters: probe, pair, **prove the credential works**, and only then write the role.
-   * A pairing that half-succeeded would otherwise leave a till believing it is a satellite of
-   * something it cannot talk to — unable to sell, and unable to explain why.
-   *
-   * Gated on the super-admin password like any other role change (§11.2): this hands the till's
-   * authority over its own data to another machine.
-   */
   ipcMain.handle(
     'pairing:joinAsSatellite',
-    async (
-      _event,
-      superAdminPassword: string,
-      input: { mainTerminalUrl: string; code: string; name?: string },
-    ) => {
-      if (joinThrottle.isLockedOut()) throw new Error('settings.pairingThrottled');
+    async (_event, superAdminPassword: string, input: JoinInput) => joinMain(superAdminPassword, input),
+  );
 
-      const prisma = getPrismaClient();
-      const config = await prisma.localConfig.findUnique({ where: { id: 'config' } });
-      if (!config) throw new Error('settings.terminalNotConfigured');
+  ipcMain.handle('pairing:leave', async (_event, superAdminPassword: string) => {
+    await leaveMain(superAdminPassword);
+    return true;
+  });
 
-      if (!config.superAdminPassword) throw new Error('settings.pairingNeedsSuperAdmin');
-      if (
-        !superAdminPassword ||
-        !(await bcrypt.compare(superAdminPassword, config.superAdminPassword))
-      ) {
-        joinThrottle.recordFailure();
-        throw new Error('settings.superAdminPasswordWrong');
-      }
-      joinThrottle.reset();
+  // ── Handing the main role to another till (§11.4) ──────────────────────────────────────────
 
-      // A main with satellites of its own must not be demoted out from under them.
-      if (config.isMain && (await prisma.pairedTerminal.count()) > 0) {
-        throw new Error('settings.cannotDemoteWithSatellites');
-      }
+  /**
+   * On the main: consent to a handoff, as a code for the till taking over. Only a till already
+   * paired with this main can take it over, so with none paired there is nobody to hand over to.
+   */
+  ipcMain.handle('pairing:issueHandoffCode', async (_event, superAdminPassword: string) => {
+    const config = await requireSuperAdmin(superAdminPassword);
+    if (!config.isMain) throw new Error('settings.pairingNotMain');
+    if ((await getPrismaClient().pairedTerminal.count()) === 0) {
+      throw new Error('settings.handoffNoSatellites');
+    }
+    const issued = issueHandoffCode();
+    log.warn('[handoff] handoff code issued');
+    return issued;
+  });
 
-      const url = normaliseMainUrl(input.mainTerminalUrl ?? '');
-      const probe = await probeMainTerminal(url, config.storeId);
-      if (!probe.ok) throw new Error(`settings.mainTerminal_${probe.reason.replace(/-/g, '_')}`);
+  ipcMain.handle('pairing:getHandoffState', async () => getHandoffState());
 
-      const paired = await pairWithMain(url, input.code, config.terminalId, input.name);
-      if (!paired.secret) throw new Error('settings.pairingFailed');
+  ipcMain.handle('pairing:cancelHandoffCode', async () => {
+    cancelHandoffCode();
+    return true;
+  });
 
-      // Prove it before believing it. If the secret we were just handed does not work, nothing has
-      // been written yet and the till is still exactly what it was.
-      await fetchTerminalToken(url, config.terminalId, paired.secret);
+  /** On a satellite: take the main role over. The renderer restarts the app on success. */
+  ipcMain.handle('pairing:takeOver', async (_event, superAdminPassword: string, code: string) =>
+    takeOverAsMain(superAdminPassword, { code }),
+  );
 
-      await prisma.systemSetting.upsert({
-        where: { key: DEVICE_SECRET_KEY },
-        update: { value: paired.secret },
-        create: { key: DEVICE_SECRET_KEY, value: paired.secret },
-      });
-      await prisma.localConfig.update({
-        where: { id: 'config' },
-        data: { isMain: false, mainTerminalUrl: url },
-      });
+  ipcMain.handle('pairing:pendingTakeover', async () => getPendingTakeover());
 
-      // A satellite serves nothing, so this closes the listener if one was open.
-      await syncLocalServerWithMode();
-
-      log.info(`[pairing] now a satellite of ${paired.mainTerminalId} (store ${paired.storeId})`);
-      return { storeName: paired.storeName, mainTerminalId: paired.mainTerminalId };
+  ipcMain.handle(
+    'pairing:resolveTakeover',
+    async (_event, superAdminPassword: string, action: 'finish' | 'discard') => {
+      await resolvePendingTakeover(superAdminPassword, action === 'finish' ? 'finish' : 'discard');
+      return true;
     },
   );
 
-  /**
-   * Stop being a satellite and go back to being an independent main.
-   *
-   * Deliberately local-only: it does not ask the main to forget this terminal, because the usual
-   * reason to run it is that the main cannot be reached. Removing the row on the main is a
-   * separate act, done from the main (`pairing:remove`).
-   */
-  ipcMain.handle('pairing:leave', async (_event, superAdminPassword: string) => {
-    const prisma = getPrismaClient();
-    const config = await prisma.localConfig.findUnique({ where: { id: 'config' } });
-    if (!config?.superAdminPassword) throw new Error('settings.pairingNeedsSuperAdmin');
-    if (
-      !superAdminPassword ||
-      !(await bcrypt.compare(superAdminPassword, config.superAdminPassword))
-    ) {
-      throw new Error('settings.superAdminPasswordWrong');
-    }
-
-    await prisma.systemSetting.deleteMany({ where: { key: DEVICE_SECRET_KEY } });
-    await prisma.localConfig.update({
-      where: { id: 'config' },
-      data: { isMain: true, mainTerminalUrl: null },
-    });
-    await syncLocalServerWithMode();
-    return true;
-  });
+  /** On a satellite: its main's new address, after a handoff (§11.6). */
+  ipcMain.handle(
+    'pairing:repoint',
+    async (_event, superAdminPassword: string, mainTerminalUrl: string) =>
+      repointMain(superAdminPassword, mainTerminalUrl),
+  );
 }

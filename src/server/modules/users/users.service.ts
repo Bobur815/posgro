@@ -5,6 +5,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcryptjs';
 import { USER_ROLES } from '@shared/constants';
 import { UserRole } from '@prisma/client';
+import { DASHBOARD_STORE_SELECT } from '../auth/dashboard-access';
 
 @Injectable()
 export class UsersService {
@@ -61,7 +62,7 @@ export class UsersService {
         // Joined rather than fetched separately: `validateUser` runs on every authenticated
         // request and needs the store's state to keep a deactivated shop out. Pulling it in here
         // costs no extra round trip.
-        store: { select: { active: true, mode: true } },
+        store: { select: DASHBOARD_STORE_SELECT },
       },
     });
 
@@ -120,6 +121,20 @@ export class UsersService {
     }
 
     return null;
+  }
+
+  /**
+   * Every store account a phone number has — one row per store, since users are per store — with
+   * the state of its store. For a login that names no store (the web dashboard), which keeps the
+   * accounts the password opens. Capped: each one costs a bcrypt compare.
+   */
+  async findStoreAccountsByPhone(phone: string) {
+    return this.prisma.user.findMany({
+      where: { phone, storeId: { not: null }, role: { not: UserRole.SUPER_ADMIN } },
+      include: { store: { select: { id: true, name: true, ...DASHBOARD_STORE_SELECT } } },
+      orderBy: { createdAt: 'asc' },
+      take: 20,
+    });
   }
 
   async create(createUserDto: CreateUserDto, storeId: string) {

@@ -13,6 +13,18 @@ export interface MainTerminalInfo {
   role: 'main' | 'satellite';
   storeId: string;
   terminalId: string;
+  /** Where it stands in its lineage (§11.3). Null lineage from a main too old to say. */
+  lineage: string | null;
+  generation: number;
+}
+
+/** A lineage position from a main's JSON answer — tolerant of an older main that omits it. */
+function positionOf(
+  body: Record<string, unknown> | null,
+): { lineage: string | null; generation: number } {
+  const lineage = typeof body?.lineage === 'string' && body.lineage ? body.lineage : null;
+  const generation = Number(body?.generation);
+  return { lineage, generation: Number.isInteger(generation) && generation >= 0 ? generation : 0 };
 }
 
 export type ProbeResult =
@@ -59,6 +71,7 @@ export async function probeMainTerminal(
       role: body.role === 'main' ? 'main' : 'satellite',
       storeId: String(body.store_id ?? ''),
       terminalId: String(body.terminal_id ?? ''),
+      ...positionOf(body),
     };
 
     if (info.role !== 'main') return { ok: false, reason: 'not-a-main' };
@@ -71,6 +84,42 @@ export async function probeMainTerminal(
   } finally {
     done();
   }
+}
+
+/** The main answered a pairing attempt, and said no. */
+export class PairingRefused extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'PairingRefused';
+  }
+}
+
+/**
+ * What to tell the person at the satellite when pairing fails, as a `settings.*` key.
+ *
+ * The main's refusals are English sentences written for a log; the person typing a code into a
+ * till reads Russian or Uzbek. Each refusal this maps has a different fix — retype the code, wait
+ * out the lockout, give this till a different id — so they are kept apart rather than collapsed into
+ * one "failed". The main's messages are matched by fragment: both ends are this codebase, and an
+ * unmatched one still lands on the generic key rather than leaking English onto the screen.
+ */
+export function pairingErrorKey(err: unknown): string {
+  const name = (err as { name?: string } | null)?.name;
+  // By name, not instanceof — fetch's errors come from Node's own realm (see main-link.ts).
+  if (name === 'TypeError' || name === 'AbortError' || name === 'TimeoutError') {
+    return 'settings.mainTerminal_unreachable';
+  }
+  if (err instanceof PairingRefused || name === 'PairingRefused') {
+    const { status, message } = err as PairingRefused;
+    if (status === 403 && /too many attempts/i.test(message)) return 'settings.pairingThrottled';
+    if (status === 403 && /not a main/i.test(message)) return 'settings.mainTerminal_not_a_main';
+    if (status === 403) return 'settings.pairingCodeWrong';
+    if (status === 400 && /belongs to the main/i.test(message)) return 'settings.pairingIdIsMain';
+  }
+  return 'settings.pairingFailed';
 }
 
 export interface PairResult {
@@ -98,8 +147,9 @@ export async function pairWithMain(
 
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
     if (!response.ok) {
-      // The main's own words, which say whether the code was wrong, expired, or the id clashed.
-      throw new Error(String(body?.message ?? `HTTP ${response.status}`));
+      // The main's own words, which say whether the code was wrong, expired, or the id clashed —
+      // kept with the status so `pairingErrorKey` can say it in the operator's language.
+      throw new PairingRefused(response.status, String(body?.message ?? `HTTP ${response.status}`));
     }
 
     return {
@@ -113,12 +163,19 @@ export async function pairWithMain(
   }
 }
 
+export interface TerminalTokenGrant {
+  token: string;
+  /** The issuing main's lineage position, for the split-brain guard (§11.3). */
+  lineage: string | null;
+  generation: number;
+}
+
 /** Trade the stored device secret for a short-lived terminal token. */
 export async function fetchTerminalToken(
   url: string,
   terminalId: string,
   secret: string,
-): Promise<string> {
+): Promise<TerminalTokenGrant> {
   const { signal, done } = withTimeout();
   try {
     const response = await fetch(`${normaliseMainUrl(url)}/terminal/token`, {
@@ -129,7 +186,10 @@ export async function fetchTerminalToken(
     });
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
     if (!response.ok) throw new Error(String(body?.message ?? `HTTP ${response.status}`));
-    return String(body?.token ?? '');
+    // A 200 is not a token: anything can answer one, and an empty Bearer would only be refused
+    // later, somewhere less clear. Whatever answered did not recognise this terminal.
+    if (typeof body?.token !== 'string' || !body.token) throw new Error('No token in the answer');
+    return { token: body.token, ...positionOf(body) };
   } finally {
     done();
   }

@@ -263,6 +263,15 @@ const LogCardMessage = styled.div`
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
+/**
+ * What the VCR field sends: 'any', or a whole code — six digits, or 0 for "VCR unreachable".
+ * Anything half-typed sends nothing, so the list does not flicker through every prefix.
+ */
+function vcrFilter(value: string): string | undefined {
+  const v = value.trim().toLowerCase();
+  return v === "any" || /^(0|\d{6})$/.test(v) ? v : undefined;
+}
+
 function formatTimestamp(ts: string): string {
   return new Date(ts).toLocaleString(undefined, {
     year: "numeric",
@@ -285,7 +294,9 @@ export function LogsPage() {
   const [terminalId, setTerminalId] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [vcrCode, setVcrCode] = useState("");
   const [page, setPage] = useState(1);
+  const vcr = vcrFilter(vcrCode);
 
   useEffect(() => {
     logs.getMeta().then(setMeta).catch(() => {});
@@ -311,8 +322,9 @@ export function LogsPage() {
     if (terminalId) params.terminalId = terminalId;
     if (from) params.from = new Date(from).toISOString();
     if (to) params.to = new Date(to).toISOString();
+    if (vcr) params.vcrCode = vcr;
     return params;
-  }, [page, level, storeId, terminalId, from, to]);
+  }, [page, level, storeId, terminalId, from, to, vcr]);
 
   useEffect(() => {
     fetchLogs(buildParams());
@@ -396,6 +408,29 @@ export function LogsPage() {
           }}
           title="To date"
         />
+
+        {/* The raw REGOS:VCR code, from the "[fiscal] raw VCR error [701003] …" line a till writes
+            for every fiscal failure. Suggestions are the codes actually in the logs. */}
+        <Input
+          list="vcr-codes"
+          inputMode="numeric"
+          value={vcrCode}
+          placeholder="VCR error, e.g. 701003"
+          title="REGOS:VCR error number — or 'any' for every VCR error"
+          style={{ width: 210 }}
+          onChange={(e) => {
+            setVcrCode(e.target.value);
+            handleFilterChange();
+          }}
+        />
+        <datalist id="vcr-codes">
+          <option value="any">Any VCR error</option>
+          {(meta.vcrCodes ?? []).map((c) => (
+            <option key={c.code} value={c.code}>
+              {`${c.count}× ${c.latest ?? ""}`.trim()}
+            </option>
+          ))}
+        </datalist>
       </Filters>
 
       {error && <div style={{ color: "red", fontSize: 15 }}>{error}</div>}
