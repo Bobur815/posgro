@@ -226,8 +226,12 @@ door open for a cross-origin tool and costs nothing.
   `pos_api`; `api.posgro.uz` uses `posgro_api`. Pick a new name for any new host.
 - **`include snippets/...` resolves against the nginx prefix** (`/etc/nginx`), which is where the
   deploy script copies them.
-- **`web.posgro.uz` works both before and after the Phase 3 `base` change** — see the comment at
-  the top of that file. Do not delete its `location /web` block.
+- **The dashboard's working URL is `https://web.posgro.uz/web/`, not the root — until Phase 3.**
+  nginx serves index.html and its assets at the root fine, but the app does not render there:
+  `BrowserRouter basename="/web"` (`src/web/src/App.tsx:67`, and `basename:"/web"` in the deployed
+  bundle) matches no route at `/` and renders null. Phase 3 must change **both** the vite `base`
+  and that basename. A 200 from curl does not prove an SPA mounted — check the router, not the
+  status code. Do not delete the `location /web` block; it serves the current build.
 - **`api.posgro.uz` must keep serving `/uploads/`.** The terminal builds the banner image URL from
   its own API URL with `/api` stripped (`src/main/ipc/banner-handlers.ts:85-88`), so the images
   are fetched from the API host, not the dashboard host.

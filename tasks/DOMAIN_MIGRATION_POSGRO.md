@@ -327,13 +327,22 @@ Answer §10. Lower `posgro.uz` apex TTL to 300 if the apex is moving.
 | Check | Result |
 |---|---|
 | `api.posgro.uz/api/health` · `/health` | 200 · 200 (the `= /health` → `/api/health` fix works) |
-| `web.posgro.uz/` + its `/web/assets/*.js` | 200 + 200 (1.25 MB) — the dual-`location` design serves the current `base: '/web/'` build |
-| `web.posgro.uz/some/deep/route` | 200 — SPA fallback intact |
+| `web.posgro.uz/web/` + its `/web/assets/*.js` | 200 + 200 (1.25 MB) — **this is the working dashboard URL today** |
+| `web.posgro.uz/` (root) | 200, but **renders blank** — see the correction below |
+| `web.posgro.uz/some/deep/route` | 200 — SPA fallback serves index.html |
 | `panel.posgro.uz/` · `/releases/latest.yml` | 200 · 200 |
 | `/uploads/banner-*.jpg` over **both** hosts | 200 / 1 507 524 bytes on each — identical |
 | Updater feed, old vs new host | **byte-identical** (v1.28.0) |
 | `/api/health`, old vs new host | **byte-identical** |
 | `pos.bobur-dev.uz` throughout | 200 — never interrupted |
+
+**Correction (found during Phase 2):** the Phase 1 checks above prove nginx *serves* the dashboard
+at the root, not that the app *mounts* there. It does not. `src/web/src/App.tsx:67` pins
+`BrowserRouter basename="/web"` — verified as `basename:"/web"` inside the deployed bundle — so at
+`/` the router matches no route and renders null. **The working dashboard URL is
+`https://web.posgro.uz/web/`.** Phase 3 must change the vite `base` **and** that basename together.
+Lesson for the rest of this migration: an HTTP 200 says a file was served; it says nothing about
+whether a client-side app rendered.
 
 **Only the two infra commits went to `main`.** `main` was 28 commits behind `dev`, and those 28
 include the licence enforcement (`bb0fcb2`, `77ecccd`, `5d22ea6`) while `LICENSE_SIGNING_KEY` is
@@ -367,11 +376,28 @@ will sit as a stub until the record moves. Flip it last.
 **Ship nothing to tills in this phase.** Prove the new hosts serve identical bytes first.
 
 ### Phase 2 — Make the old host permanently redundant, not dead
-- `pos.bobur-dev.uz/api/*` → keep proxying to the API (do **not** 301; a 301 on a POST with a
-  bearer token is a class of bug you do not want to debug in a shop).
-- `pos.bobur-dev.uz/releases/` → keep serving the same directory.
-- `pos.bobur-dev.uz/web` → `301` to `https://web.posgro.uz`.
-- `pos.bobur-dev.uz/` → `301` to `https://posgro.uz`.
+
+Redundant for **people**, unchanged for **machines**. The split is the whole point.
+
+| Path | Phase 2 | Why |
+|---|---|---|
+| `/api/*` | **unchanged proxy** | Every till in the field still has this host in `local_config.api_url`. A 301 on a POST carrying a bearer token is a bug you do not want to debug in a shop. |
+| `/releases/` | **unchanged** | Compiled into every installed updater. It is the only channel that can deliver the release that repoints a till (§6). |
+| `/uploads/` | **unchanged** | Tills resolve banner images against their own API origin (`banner-handlers.ts:85-88`). A redirect here blanks the login banner on unmigrated terminals. |
+| `/web` | **301 → `https://web.posgro.uz$request_uri`** | Browser SPA only. `$request_uri` preserves path and query, so bookmarks and deep links survive. |
+| `/` | **301 → `https://web.posgro.uz/web/`** | Was `301 /web`; same destination, now on the new host. |
+
+The `/web` target **keeps the `/web` prefix**: the dashboard's router is pinned to it
+(`basename="/web"`), so `web.posgro.uz/` renders nothing until Phase 3 moves it. Phase 3 changes
+this to a bare host redirect.
+
+Free side effect worth noting: the till's dashboard QR is built as `apiUrl` minus `/api` plus
+`/web` (`handlers.ts:959`), which on an unmigrated terminal is exactly
+`https://pos.bobur-dev.uz/web`. Scanning it now lands on the new dashboard — with no terminal
+touched, no release, and no change to `handlers.ts` yet.
+
+`/` points at `https://posgro.uz` once the landing page exists; not before, since the apex still
+serves the old shared hosting.
 
 ### Phase 3 — Build the new surfaces
 - `panel.posgro.uz` (§8).
