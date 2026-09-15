@@ -131,6 +131,31 @@ timeout 120 bash -c 'until docker compose ps api | grep -q "healthy"; do sleep 3
   && echo "✅ API is healthy" \
   || { echo "❌ API failed to become healthy"; docker compose logs --tail=100 api; docker compose ps; exit 1; }
 
+echo "🌍 Publish the landing page"
+
+# posgro.uz is served by nginx as STATIC FILES, not proxied to NestJS like the dashboard and the
+# portal. That is the point: it is the page someone opens when something is broken and they want
+# a phone number, so it must not go down with the API container. The files are built inside the
+# image (Dockerfile) and copied out onto the host here.
+#
+# The copy is split on whether the target exists because `cp -r src dest` CREATES dest the first
+# time but NESTS inside it every time after — the classic cp trap, and bobur's sudo has no mkdir
+# to avoid it with.
+rm -rf landing-dist
+if docker compose cp api:/app/dist/landing ./landing-dist 2>/dev/null; then
+  if [ -d /var/www/posgro-landing ]; then
+    sudo cp -r landing-dist/. /var/www/posgro-landing/
+  else
+    sudo cp -r landing-dist /var/www/posgro-landing
+  fi
+  rm -rf landing-dist
+  echo "  ✅ landing published to /var/www/posgro-landing"
+  # Vite hashes asset filenames, so superseded bundles linger here rather than being overwritten.
+  # Harmless — nothing links to them — and clearing them would need an rm that sudo will not run.
+else
+  echo "  ⚠️  no /app/dist/landing in the image — skipped (landing page left as it was)"
+fi
+
 echo "✅ Status"
 docker compose ps
 docker compose logs -n 100 api || true

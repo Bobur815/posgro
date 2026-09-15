@@ -25,6 +25,16 @@ RUN npm ci --legacy-peer-deps
 # Vite outDir is ../../dist/panel → /app/dist/panel
 RUN npm run build
 
+# Build the landing page (src/landing has its own package.json).
+#
+# NestJS never serves this one — nginx serves it as static files from /var/www. It is built here
+# only so the deploy has something to copy out of the image; see scripts/deploy/production.sh.
+WORKDIR /app/src/landing
+COPY src/landing/package*.json ./
+RUN npm ci --legacy-peer-deps
+# Vite outDir is ../../dist/landing → /app/dist/landing
+RUN npm run build
+
 WORKDIR /app
 
 # ---- Runtime stage ----
