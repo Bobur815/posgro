@@ -22,7 +22,7 @@ import {
   InventoryArrivalDescription,
 } from '@shared/types';
 import { SUPPLIER_PAYMENT_METHOD_I18N_KEYS } from '@shared/constants/payment-methods';
-import { formatCurrency, formatCurrency as formatCurrencyBase } from '@shared/utils';
+import { formatCurrency } from '@shared/utils';
 import { formatDate, formatDateTime } from '../../utils/formatters';
 import { ArrowLeft, Edit, Trash, ChevronDown, ChevronUp, Plus } from 'lucide-react';
 import { MobileCard, MobileCardList, DesktopOnly } from '../../components/common/MobileCard';

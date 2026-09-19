@@ -143,7 +143,6 @@ export function useSuppliers() {
     setError(null);
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { createdBy: _removed, ...payload } = data;
       const result = await suppliersApi.createTransaction(payload);
       if (selectedSupplier?.id === data.supplierId) {
@@ -218,7 +217,6 @@ export function useSuppliers() {
     setError(null);
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { createdBy: _removed, ...payload } = data;
       const result = await suppliersApi.recordPayment(payload);
       if (selectedSupplier?.id === data.supplierId) {

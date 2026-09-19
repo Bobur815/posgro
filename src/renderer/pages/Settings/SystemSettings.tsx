@@ -149,7 +149,7 @@ export function SystemSettings() {
   const [terminalId, setTerminalId] = useState("");
   const [storeId, setStoreId] = useState("");
 
-  const [syncStatus, setSyncStatus] = useState<{
+  const [, setSyncStatus] = useState<{
     isSyncing: boolean;
     lastSyncTime: string | null;
   }>({ isSyncing: false, lastSyncTime: null });

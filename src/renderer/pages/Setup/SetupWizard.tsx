@@ -497,7 +497,6 @@ export function SetupWizard() {
     const field = activeField as keyof WizardData;
     if (key === 'BACKSPACE') setData(p => ({ ...p, [field]: String(p[field]).slice(0, -1) }));
     else setData(p => ({ ...p, [field]: String(p[field]) + key }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeField, data.phone.length]);
 
   // ─── Render ──────────────────────────────────────────────────────────────

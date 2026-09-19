@@ -152,7 +152,7 @@ export function AppBar() {
   const navigate = useNavigate();
   const { isCollapsed, toggleSidebar, openSmenaModal } = useSidebar();
   const { user, logout } = useAuthStore();
-  const { status, refreshStatus } = useSync();
+  const { refreshStatus } = useSync();
   const { mode } = useTheme();
   const toast = useToast();
 

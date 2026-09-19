@@ -379,7 +379,6 @@ export function ProductForm({
   const barcodeCheckTimeout = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  const isMobile = window.matchMedia("(pointer: coarse)").matches;
   const isBulkWeighted = initialData?.groupCode === "019";
 
   const [formData, setFormData] = useState({
@@ -442,7 +441,7 @@ export function ProductForm({
   // Separate from showQrScanner: that one feeds the MXIK/Asl-Belgisi lookup, this one just
   // drops a plain retail barcode into the boxBarcode field.
   const [showBoxBarcodeScanner, setShowBoxBarcodeScanner] = useState(false);
-  const [isLookingUpAslBelgisi, setIsLookingUpAslBelgisi] = useState(false);
+  const [, setIsLookingUpAslBelgisi] = useState(false);
   const [showMxikPicker, setShowMxikPicker] = useState(false);
   const [mxikPickerQuery, setMxikPickerQuery] = useState("");
   const [mxikPickerResults, setMxikPickerResults] = useState<CatalogEntry[]>(

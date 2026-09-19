@@ -233,8 +233,6 @@ async function printHTML(html: string, widthMm: number): Promise<boolean> {
     return true;
   }
 
-  const widthMicrons = widthMm * 1000;
-
   // Render at 4× scale (384 effective DPI) so the 203 DPI printer downsamples
   // rather than upsamples — downsampling always produces sharper text than upscaling.
   // Physical window width must also scale so CSS mm values lay out correctly.

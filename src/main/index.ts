@@ -28,6 +28,9 @@ app.disableHardwareAcceleration();
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 try {
+  // electron-squirrel-startup only exists on Windows Squirrel installs, so it is required
+  // lazily inside a try/catch rather than imported.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   if (require("electron-squirrel-startup")) {
     app.quit();
   }
