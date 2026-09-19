@@ -10,8 +10,6 @@
     "prebuild:pos": "npm run prisma:generate:sqlite && node -e \"const fs=require('fs'),d='dist';if(fs.existsSync(d))fs.readdirSync(d).filter(f=>/\\.(exe|blockmap|yml)$/.test(f)).forEach(f=>fs.unlinkSync(d+'/'+f))\"",
     "build:pos": "npm run build:web && cross-env APP_MODE=pos electron-vite build && electron-builder --config electron-builder.config.js",
     "deploy:pos": "npm run build:pos && node scripts/upload-release.js",
-    "build:telegram": "tsc --project src/telegram-bot/tsconfig.json",
-    "deploy:telegram": "bash scripts/deploy-telegram.sh",
     "import:mxik-catalog": "npx tsx scripts/import-mxik-catalog.ts",
     "backfill:package-code": "npx tsx scripts/backfill-package-code.ts",
     "seed:mxik-categories": "npx tsx scripts/seed-mxik-categories.ts",

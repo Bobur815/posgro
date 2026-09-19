@@ -667,3 +667,71 @@ needs a server deploy.
 `src/web`.** The inner build only writes `dist/web` (what the NestJS server serves); the terminal's
 LAN dashboard serves `dist-web`, which only the root script stages. Getting this wrong looks like a
 clean build and silently ships nothing. See tasks/lessons.md.
+
+---
+
+# Telegram bot on production + terminal log alerts (2026-09-19)
+
+## Plan
+- [x] Persist bot sessions — `telegram_chats` table, so a deploy stops logging everyone out
+- [x] `LogAlertsService` — filter, batch 60s, collapse fiscal pairs, dedup, fan out to store admins
+- [x] Alerts on/off + verbose toggle in the bot
+- [x] Staging guard so two stacks never poll one token (409 Conflict)
+- [x] Retire the standalone `src/telegram-bot/` PM2 copy
+- [x] Tests, build, migration dry-run
+
+## What was found
+The bot was never enabled in production: `TELEGRAM_BOT_TOKEN` is absent from the VPS `.env`, so
+`TelegramService.onModuleInit()` has been hitting its `if (!token)` guard and logging "Telegram bot
+disabled" on every boot since the module was written. The new bot is `@posgro_bot` (id 8721831787).
+
+Sessions lived in a `Map`, so every deploy logged every user out. Fine for a menu, not for a
+notification channel — hence `telegram_chats`.
+
+The log feed is not sendable verbatim. Measured on production, one store, 24h:
+
+| level | lines/day | what they are |
+|-------|-----------|---------------|
+| error | 156 | fiscal failures — but **two lines per failure** (raw REGOS + staff-facing), heavily repeated |
+| warn  | 286 | loudest level; excluded, not requested |
+| info  | 116 | almost entirely `[fiscal-timing] … ok total=3983ms …`, one per receipt |
+
+So ~270 messages/day of mostly telemetry. The service filters `[fiscal-timing]` out, batches a
+minute at a time, keys the two fiscal lines on their shared REGOS code to collapse them into one
+entry, and counts repeats as `×N` — counting *staff* lines, since there is exactly one per receipt
+and counting both would double every figure.
+
+## Decisions worth remembering
+- **`verbose` cannot be a Postgres column name.** `CREATE TABLE (… verbose boolean …)` is a syntax
+  error unquoted. Prisma always quotes so it would have worked, but psql debugging would not —
+  the column is `verbose_alerts`, the Prisma field is still `verbose`.
+- **Alerts are HTML, not Markdown.** Bodies quote raw log lines; one stray `*`, `_` or `[` in a log
+  line makes Telegram reject the entire message. HTML needs three characters escaped and is safe.
+- **SUPER_ADMIN chats default to `alerts: false`** — they have no single store, so the default would
+  subscribe them to every terminal in the fleet. They can opt in from the same menu.
+- **`enqueue()` is fire-and-forget and never throws.** Lines are already durable in `terminal_logs`
+  before it runs; a Telegram outage must not fail a terminal's log upload.
+- **Staging must not share the token.** Both workflows write `.env` from the same `secrets.ENV_FILE`,
+  and two processes long-polling one token get 409 Conflict. `docker-compose.staging.yml` overrides
+  `TELEGRAM_BOT_TOKEN` to empty and reads `TELEGRAM_BOT_TOKEN_STAGING` instead — same trick, and
+  same reasoning, as `RECONCILIATION_LEDGER_ENABLED`.
+
+## Verified
+- 29 tests pass across `log-alerts.test.ts` (20 new) and `logs.service.test.ts`; every fixture
+  string is a real line sampled from production `terminal_logs`.
+- `npm run build:server` clean — no circular import from `LogsModule → TelegramModule`.
+- Migration dry-run against `posgro_staging` inside `BEGIN … ROLLBACK`: table and index create,
+  a BigInt chat id round-trips, defaults land right, and the fan-out's exact `WHERE` returns the
+  row. Nothing was left behind.
+- `npm run lint` is broken repo-wide and was already: ESLint 9.39 with no `eslint.config.js`
+  (only the old `.eslintrc` format). Untouched here — pre-existing, and its own job.
+
+## Remaining — manual, not doable from here
+1. Add `TELEGRAM_BOT_TOKEN=8721831787:…` to the **`ENV_FILE` GitHub secret**. Writing it on the VPS
+   by hand is pointless: `ssh-deploy/action.yml` replaces `.env` wholesale on every deploy.
+2. After staging proves the migration, merge `dev` → `main` and trigger the production deploy.
+3. Stop the retired PM2 bot on the UZ VPS: `pm2 delete grocery-telegram-bot && pm2 save`
+   (`45.138.158.220:2222`). Deleting the source does not reach that box. It runs a different token,
+   so it conflicts with nothing meanwhile.
+
+No version bump — server-only, which CLAUDE.md's versioning rule exempts.
