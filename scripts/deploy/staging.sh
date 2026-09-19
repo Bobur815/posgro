@@ -16,7 +16,13 @@ test -s .env                 || { echo "❌ .env is empty";       exit 1; }
 grep -q '^JWT_SECRET='  .env || { echo "❌ JWT_SECRET missing";  exit 1; }
 grep -q '^DB_PASSWORD=' .env || { echo "❌ DB_PASSWORD missing"; exit 1; }
 
-# Telegram bot runs on the UZ VPS only — strip the token so NestJS keeps it disabled.
+# Staging must never long-poll the production bot: two pollers on one token get 409 Conflict
+# from Telegram and neither works reliably — and the one that breaks is production's.
+#
+# docker-compose.staging.yml already blanks TELEGRAM_BOT_TOKEN via an `environment:` override,
+# which is the documented guard. This strip is the second layer, kept because both deploys write
+# .env from the same secrets.ENV_FILE and the blast radius of getting it wrong is production.
+# It does not touch TELEGRAM_BOT_TOKEN_STAGING, so staging can still run a bot of its own.
 sed -i '/^TELEGRAM_BOT_TOKEN=/d' .env
 
 echo "🌐 Deploy nginx configs"

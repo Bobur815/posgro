@@ -17,8 +17,10 @@ test -s .env                 || { echo "❌ .env is empty";       exit 1; }
 grep -q '^JWT_SECRET='  .env || { echo "❌ JWT_SECRET missing";  exit 1; }
 grep -q '^DB_PASSWORD=' .env || { echo "❌ DB_PASSWORD missing"; exit 1; }
 
-# Telegram bot runs on the UZ VPS only — strip the token so NestJS keeps it disabled.
-sed -i '/^TELEGRAM_BOT_TOKEN=/d' .env
+# NOTE: this used to strip TELEGRAM_BOT_TOKEN, because the bot ran on a separate UZ VPS and
+# NestJS had to keep it disabled here. That host is gone and the bot now runs inside this API
+# (src/server/modules/telegram), so the token is passed through and production is the one
+# process that long-polls it.
 
 echo "🌐 Deploy nginx configs"
 
