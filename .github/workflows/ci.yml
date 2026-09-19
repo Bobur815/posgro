@@ -1,0 +1,39 @@
+name: CI
+
+# The repo's first non-deploy workflow. Until now nothing ran on a push except the deploy itself,
+# so a broken lint or a dead import only ever surfaced on someone's machine — and since there was
+# no ESLint config at all, not even there.
+on:
+  push:
+    branches:
+      - dev
+      - main
+  pull_request:
+  workflow_dispatch:
+
+# A second push to the same branch makes the first run pointless — cancel it rather than queue it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the Dockerfile's node:20-alpine, so CI and the deployed image agree.
+          node-version: 20
+          cache: npm
+
+      # Root deps only. The lint is not type-aware and ESLint does not resolve imports, so
+      # src/web, src/panel and src/landing need no install of their own, and nothing here needs
+      # `prisma generate` — which keeps this job to about a minute.
+      - run: npm ci --legacy-peer-deps
+
+      - run: npm run lint
