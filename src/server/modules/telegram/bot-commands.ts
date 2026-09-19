@@ -364,12 +364,16 @@ export interface AlertLine {
 
 /** One batched digest of what a store's terminals logged in the last minute. HTML. */
 export function msgLogAlert(
-  data: { terminals: string[]; shown: AlertLine[]; hidden: number },
+  data: { terminals: string[]; shown: AlertLine[]; hidden: number; storeId?: string | null },
   lang?: Lang,
 ): string {
   const title = t('🖥 <b>Terminal jurnali</b>', '🖥 <b>Журнал терминала</b>', lang);
   const terminalsLabel = t('Terminallar', 'Терминалы', lang);
-  const header = `${title}\n${terminalsLabel}: <code>${escapeHtml(data.terminals.join(', '))}</code>`;
+  // Named only for the fleet-wide subscriber; a store's own admin knows which store this is.
+  const store = data.storeId
+    ? `\n${t("Do'kon", 'Магазин', lang)}: <code>${escapeHtml(data.storeId)}</code>`
+    : '';
+  const header = `${title}${store}\n${terminalsLabel}: <code>${escapeHtml(data.terminals.join(', '))}</code>`;
 
   const lines = data.shown.map((l) => {
     const icon = l.level === 'error' ? '🔴' : '🔵';

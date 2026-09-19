@@ -211,7 +211,16 @@ export class LogAlertsService implements OnModuleDestroy {
 
     try {
       const chats = await this.prisma.telegramChat.findMany({
-        where: { storeId, role: { in: ['ADMIN', 'SUPER_ADMIN'] }, alerts: true },
+        where: {
+          alerts: true,
+          OR: [
+            { storeId, role: 'ADMIN' },
+            // A SUPER_ADMIN has no store of their own, so matching on storeId would never find
+            // them. They are opted out by default (see the contact handler) precisely because
+            // switching this on subscribes them to every store in the fleet.
+            { role: 'SUPER_ADMIN' },
+          ],
+        },
       });
       if (chats.length === 0) return;
 
@@ -219,7 +228,9 @@ export class LogAlertsService implements OnModuleDestroy {
         // Rendered per chat: a verbose subscriber sees the telemetry the others are spared.
         const groups = collapse(entries, chat.verbose);
         if (groups.length === 0) continue;
-        await this.deliver(chat.chatId, chat.lang as Lang, groups, entries);
+        // Only the fleet-wide subscriber needs telling which store this is.
+        const from = chat.role === 'SUPER_ADMIN' ? storeId : null;
+        await this.deliver(chat.chatId, chat.lang as Lang, groups, entries, from);
       }
     } catch (err) {
       this.logger.error(`Log alert flush failed for store ${storeId}`, err as Error);
@@ -231,10 +242,12 @@ export class LogAlertsService implements OnModuleDestroy {
     lang: Lang,
     groups: AlertGroup[],
     entries: BufferedLog[],
+    storeId: string | null,
   ): Promise<void> {
     const terminals = [...new Set(entries.map((e) => e.terminalId))].sort();
     const html = fmt.msgLogAlert(
       {
+        storeId,
         terminals,
         shown: groups.slice(0, MAX_GROUPS_PER_MESSAGE),
         hidden: Math.max(0, groups.length - MAX_GROUPS_PER_MESSAGE),

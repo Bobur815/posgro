@@ -192,6 +192,14 @@ describe('the message an admin receives', () => {
     expect(html).toMatch(/…и ещё \d+/);
   });
 
+  // A super-admin's chat is subscribed to every store at once, so the store has to be on the message.
+  it('names the store only when the subscriber follows more than one', () => {
+    expect(msgLogAlert({ terminals: ['T1'], shown: groups, hidden: 0, storeId: '1234' }, 'ru'))
+      .toContain('1234');
+    expect(msgLogAlert({ terminals: ['T1'], shown: groups, hidden: 0, storeId: null }, 'ru'))
+      .not.toContain('Магазин');
+  });
+
   it('speaks Uzbek to an Uzbek chat', () => {
     const html = msgLogAlert({ terminals: ['T1'], shown: groups, hidden: 0 }, 'uz');
     expect(html).toContain('Terminal jurnali');
