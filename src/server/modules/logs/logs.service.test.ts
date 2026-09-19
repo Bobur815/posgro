@@ -19,7 +19,9 @@ function build(vcrRows: unknown[] = []) {
     },
     $queryRaw: jest.fn(async () => vcrRows),
   };
-  return { service: new LogsService(prisma as never), prisma };
+  // The alert fan-out is exercised in log-alerts.test.ts; here it only has to be inert.
+  const logAlerts = { enqueue: jest.fn() };
+  return { service: new LogsService(prisma as never, logAlerts as never), prisma, logAlerts };
 }
 
 /** The `where` the listing query ran with. */

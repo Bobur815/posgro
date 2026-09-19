@@ -39,6 +39,11 @@ services:
       # workflows rewrite .env from the same shared secrets.ENV_FILE, so a value added there
       # would switch production on too. This file is staging-only, so the flag cannot leak.
       RECONCILIATION_LEDGER_ENABLED: "true"
+      # Same reason, sharper consequence: two processes long-polling one bot token get 409
+      # Conflict from Telegram and the bot flaps between them. Staging therefore stays silent
+      # unless given a token of its own — the empty default trips the `if (!token)` guard in
+      # TelegramService, which is exactly the "bot disabled" path production ran on for months.
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN_STAGING:-}"
       DOWNLOADS_DIR: "/app/downloads"
       RELEASES_DIR: "/app/releases"
     volumes:

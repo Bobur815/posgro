@@ -778,3 +778,39 @@ model SmenaMovement {
   @@index([smenaId])
   @@map("smena_movements")
 }
+
+/// A Telegram chat that has authenticated with the bot, and what it wants from it.
+///
+/// This exists because the bot's sessions used to live in a `Map` in `TelegramService`, so every
+/// API restart silently logged every user out. Once the bot pushes terminal-log alerts, the link
+/// between a chat and a store has to outlive a deploy.
+///
+/// Deliberately not a relation to Store/User/Supplier: it is a *cache* of an identity that
+/// `resolveIdentity()` re-derives from the phone number, not a source of truth. A stale row for a
+/// deleted store costs one failed lookup; a foreign key would make deleting a store depend on
+/// whoever happened to open the bot.
+model TelegramChat {
+  /// Telegram chat ids exceed 2^31, so BigInt — an Int here overflows for newer accounts.
+  chatId     BigInt  @id @map("chat_id")
+  role       String // ADMIN | USER | SUPER_ADMIN | SUPPLIER
+  userId     String? @map("user_id")
+  supplierId String? @map("supplier_id")
+  storeId    String? @map("store_id")
+  phone      String
+  name       String
+  lang       String  @default("ru") // uz | ru
+
+  /// Receive terminal log alerts for this chat's store.
+  alerts  Boolean @default(true)
+  /// Include the per-receipt `[fiscal-timing]` telemetry that is filtered out by default.
+  /// Mapped, because PostgreSQL will not parse a bare `verbose` as a column name — Prisma always
+  /// quotes, but anyone reaching for psql should not have to discover that.
+  verbose Boolean @default(false) @map("verbose_alerts")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// The alert fan-out's only query: who in this store wants alerts.
+  @@index([storeId, role])
+  @@map("telegram_chats")
+}

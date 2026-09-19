@@ -329,3 +329,85 @@ export function msgError(context?: string, lang?: Lang): string {
     lang,
   );
 }
+
+// ─── Terminal log alerts ──────────────────────────────────────────────────────
+
+/**
+ * Alert bodies are sent as HTML, not Markdown: they quote raw log lines, and a log line is free to
+ * contain a stray `*`, `_` or `[` that makes Telegram reject the whole message as malformed
+ * Markdown. HTML needs only these three characters escaped, so the text can never break the parse.
+ */
+export function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Keeps one alert line readable; the full text is always in the dashboard's log view. */
+const ALERT_TEXT_MAX = 180;
+
+function clip(s: string): string {
+  const flat = s.replace(/\s+/g, ' ').trim();
+  return flat.length > ALERT_TEXT_MAX ? `${flat.slice(0, ALERT_TEXT_MAX - 1)}…` : flat;
+}
+
+export interface AlertLine {
+  level: 'info' | 'error';
+  text: string;
+  count: number;
+  terminals: string[];
+}
+
+/** One batched digest of what a store's terminals logged in the last minute. HTML. */
+export function msgLogAlert(
+  data: { terminals: string[]; shown: AlertLine[]; hidden: number },
+  lang?: Lang,
+): string {
+  const title = t('🖥 <b>Terminal jurnali</b>', '🖥 <b>Журнал терминала</b>', lang);
+  const terminalsLabel = t('Terminallar', 'Терминалы', lang);
+  const header = `${title}\n${terminalsLabel}: <code>${escapeHtml(data.terminals.join(', '))}</code>`;
+
+  const lines = data.shown.map((l) => {
+    const icon = l.level === 'error' ? '🔴' : '🔵';
+    const times = l.count > 1 ? ` <b>×${l.count}</b>` : '';
+    // Only name terminals per line when the store has more than one and they differ from the
+    // header — otherwise every line repeats what the header already said.
+    const where =
+      data.terminals.length > 1 && l.terminals.length < data.terminals.length
+        ? ` <i>(${escapeHtml(l.terminals.join(', '))})</i>`
+        : '';
+    return `${icon}${times} ${escapeHtml(clip(l.text))}${where}`;
+  });
+
+  const more =
+    data.hidden > 0
+      ? `\n\n${t(`…va yana ${data.hidden} ta`, `…и ещё ${data.hidden}`, lang)}`
+      : '';
+
+  return `${header}\n\n${lines.join('\n')}${more}`;
+}
+
+// ─── Alert settings ───────────────────────────────────────────────────────────
+
+export function msgAlertSettings(
+  state: { alerts: boolean; verbose: boolean },
+  lang?: Lang,
+): string {
+  const on = t('yoqilgan', 'включены', lang);
+  const off = t("o'chirilgan", 'выключены', lang);
+  return t(
+    `🔔 <b>Ogohlantirishlar</b>\n\nJurnal xabarlari: <b>${state.alerts ? on : off}</b>\nBatafsil rejim: <b>${state.verbose ? on : off}</b>\n\nBatafsil rejim har bir chek uchun texnik o'lchov satrlarini ham qo'shadi.`,
+    `🔔 <b>Уведомления</b>\n\nСообщения журнала: <b>${state.alerts ? on : off}</b>\nПодробный режим: <b>${state.verbose ? on : off}</b>\n\nПодробный режим добавляет технические строки тайминга по каждому чеку.`,
+    lang,
+  );
+}
+
+/** Labels for the two inline switches in the alert settings menu. */
+export function btnAlertToggle(state: { alerts: boolean; verbose: boolean }, lang?: Lang) {
+  return {
+    alerts: state.alerts
+      ? t("🔕 Jurnalni o'chirish", '🔕 Выключить журнал', lang)
+      : t('🔔 Jurnalni yoqish', '🔔 Включить журнал', lang),
+    verbose: state.verbose
+      ? t("📉 Batafsil rejimni o'chirish", '📉 Выключить подробный режим', lang)
+      : t('📈 Batafsil rejimni yoqish', '📈 Включить подробный режим', lang),
+  };
+}

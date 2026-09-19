@@ -7,10 +7,14 @@ import { InventoryService } from '../inventory/inventory.service';
 import { ProductsService } from '../products/products.service';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { StoresService } from '../stores/stores.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import * as fmt from './bot-commands';
 import type { Lang } from './bot-commands';
 
 type UserRole = 'ADMIN' | 'USER' | 'SUPER_ADMIN' | 'SUPPLIER';
+
+/** Who a phone number belongs to — re-derived on every login, never read back from the chat row. */
+type Identity = Omit<BotSession, 'lang' | 'alerts' | 'verbose'>;
 
 interface BotSession {
   phone: string;
@@ -20,6 +24,10 @@ interface BotSession {
   storeId: string;
   name: string;
   lang: Lang;
+  /** Receive terminal log alerts for this store. */
+  alerts: boolean;
+  /** Include the per-receipt `[fiscal-timing]` telemetry in those alerts. */
+  verbose: boolean;
 }
 
 // Keyboard button labels — language-aware, built per user
@@ -32,6 +40,7 @@ const BTN_UZ = {
   BALANCE: "💰 Mening balansim",
   TRANSACTIONS: "📋 Tranzaksiyalar",
   MY_PRODUCTS: "📦 Mening tovarlarim",
+  ALERTS: "🔔 Ogohlantirishlar",
   WEB: "🌐 Veb-panel",
 } as const;
 
@@ -44,6 +53,7 @@ const BTN_RU = {
   BALANCE: "💰 Мой баланс",
   TRANSACTIONS: "📋 Транзакции",
   MY_PRODUCTS: "📦 Мои товары",
+  ALERTS: "🔔 Уведомления",
   WEB: "🌐 Веб-панель",
 } as const;
 
@@ -57,6 +67,7 @@ const ALL_BTNS: Record<keyof typeof BTN_UZ, string[]> = {
   BALANCE: [BTN_UZ.BALANCE, BTN_RU.BALANCE],
   TRANSACTIONS: [BTN_UZ.TRANSACTIONS, BTN_RU.TRANSACTIONS],
   MY_PRODUCTS: [BTN_UZ.MY_PRODUCTS, BTN_RU.MY_PRODUCTS],
+  ALERTS: [BTN_UZ.ALERTS, BTN_RU.ALERTS],
   WEB: [BTN_UZ.WEB, BTN_RU.WEB],
 };
 
@@ -80,18 +91,105 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     private readonly productsService: ProductsService,
     private readonly analyticsService: AnalyticsService,
     private readonly storesService: StoresService,
+    private readonly prisma: PrismaService,
   ) {}
 
-  onModuleInit() {
+  async onModuleInit() {
     const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
     if (!token) {
       this.logger.warn('TELEGRAM_BOT_TOKEN not set — Telegram bot disabled');
       return;
     }
+    // Restore before polling starts, so the first update after a deploy already has its session.
+    await this.loadSessions();
     this.bot = new Telegraf(token);
     this.registerHandlers(this.bot);
+    // launch() resolves only when the bot stops, so it is deliberately not awaited.
     this.bot.launch().catch((err) => this.logger.error('Bot launch error', err));
-    this.logger.log('Telegram bot started (long polling)');
+    this.logger.log(`Telegram bot started (long polling), ${this.sessions.size} session(s) restored`);
+  }
+
+  // ─── Session persistence ──────────────────────────────────────────────────
+
+  /**
+   * Sessions used to live only in `this.sessions`, so every deploy silently logged everyone out.
+   * That was survivable for a menu; it is not for a notification channel that has to know which
+   * chat belongs to which store.
+   */
+  private async loadSessions(): Promise<void> {
+    try {
+      const chats = await this.prisma.telegramChat.findMany();
+      for (const c of chats) {
+        this.sessions.set(Number(c.chatId), {
+          phone: c.phone,
+          role: c.role as UserRole,
+          userId: c.userId ?? undefined,
+          supplierId: c.supplierId ?? undefined,
+          storeId: c.storeId ?? '',
+          name: c.name,
+          lang: c.lang === 'uz' ? 'uz' : 'ru',
+          alerts: c.alerts,
+          verbose: c.verbose,
+        });
+      }
+    } catch (err) {
+      // A bot with empty sessions still works — everyone just re-shares their number.
+      this.logger.error('Could not restore Telegram sessions', err as Error);
+    }
+  }
+
+  private async persistSession(chatId: number, session: BotSession): Promise<void> {
+    const shared = {
+      role: session.role,
+      userId: session.userId ?? null,
+      supplierId: session.supplierId ?? null,
+      storeId: session.storeId || null,
+      phone: session.phone,
+      name: session.name,
+      lang: session.lang,
+    };
+    try {
+      await this.prisma.telegramChat.upsert({
+        where: { chatId: BigInt(chatId) },
+        // alerts/verbose are the chat's own settings — a re-login must not reset them.
+        update: shared,
+        create: { chatId: BigInt(chatId), ...shared, alerts: session.alerts, verbose: session.verbose },
+      });
+    } catch (err) {
+      this.logger.error(`Could not persist Telegram session for chat ${chatId}`, err as Error);
+    }
+  }
+
+  private async forgetSession(chatId: number): Promise<void> {
+    this.sessions.delete(chatId);
+    await this.prisma.telegramChat
+      .delete({ where: { chatId: BigInt(chatId) } })
+      .catch(() => undefined); // Not linked yet — nothing to forget.
+  }
+
+  // ─── Outbound ─────────────────────────────────────────────────────────────
+
+  /**
+   * Sends an HTML message on behalf of another service (log alerts). HTML rather than Markdown
+   * because alert bodies quote raw log lines, which are free to contain a stray `*` or `_`.
+   *
+   * Reports 'blocked' for the one failure worth acting on: the user blocked the bot or deleted the
+   * chat, so the caller should stop sending rather than retry every minute forever.
+   */
+  async sendHtml(chatId: bigint | number, html: string): Promise<'ok' | 'blocked' | 'failed'> {
+    if (!this.bot) return 'failed';
+    try {
+      await this.bot.telegram.sendMessage(Number(chatId), html, {
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true },
+      });
+      return 'ok';
+    } catch (err) {
+      const code = (err as { response?: { error_code?: number } }).response?.error_code;
+      if (code === 403 || code === 400) return 'blocked';
+      this.logger.error(`Telegram send to ${chatId} failed`, err as Error);
+      return 'failed';
+    }
   }
 
   onModuleDestroy() {
@@ -105,7 +203,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     return [digits, `+${digits}`];
   }
 
-  private async resolveIdentity(rawPhone: string): Promise<Omit<BotSession, 'lang'> | null> {
+  private async resolveIdentity(rawPhone: string): Promise<Identity | null> {
     for (const phone of this.phoneVariants(rawPhone)) {
       const user = await this.usersService.findByPhoneAnyStore(phone);
       if (user) {
@@ -144,18 +242,19 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     return Markup.keyboard([[Markup.button.contactRequest(label)]]).oneTime().resize();
   }
 
-  private kbAdmin(lang: Lang) {
+  private kbAdmin(lang: Lang, role: UserRole) {
     return Markup.keyboard([
       [btn('ANALYTICS', lang), btn('STOCK', lang)],
       [btn('LOW_STOCK', lang), btn('SUPPLIERS', lang)],
-      [btn('WEB', lang)],
+      // Only ADMIN chats receive log alerts, so only they get the switch for them.
+      role === 'ADMIN' ? [btn('ALERTS', lang), btn('WEB', lang)] : [btn('WEB', lang)],
     ]).resize();
   }
 
   private kbSuperAdmin(lang: Lang) {
     return Markup.keyboard([
       [btn('STORES', lang)],
-      [btn('WEB', lang)],
+      [btn('ALERTS', lang), btn('WEB', lang)],
     ]).resize();
   }
 
@@ -164,6 +263,14 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       [btn('BALANCE', lang), btn('TRANSACTIONS', lang)],
       [btn('MY_PRODUCTS', lang)],
     ]).resize();
+  }
+
+  private inlineAlertButtons(state: { alerts: boolean; verbose: boolean; lang: Lang }) {
+    const labels = fmt.btnAlertToggle(state, state.lang);
+    return Markup.inlineKeyboard([
+      [Markup.button.callback(labels.alerts, 'alerts_toggle')],
+      [Markup.button.callback(labels.verbose, 'alerts_verbose')],
+    ]);
   }
 
   private inlineWebButton() {
@@ -180,7 +287,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private registerHandlers(bot: Telegraf) {
     // /start — reset session, ask language
     bot.start(async (ctx) => {
-      this.sessions.delete(ctx.chat.id);
+      // /start is a full re-auth, so the stored link goes too — including its alert settings.
+      await this.forgetSession(ctx.chat.id);
       this.langPrefs.delete(ctx.chat.id);
       await ctx.reply(
         fmt.msgSelectLanguage(),
@@ -220,14 +328,22 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           await ctx.reply(fmt.msgUnknownPhone(lang), this.inlineWebButton());
           return;
         }
-        const session: BotSession = { ...identity, lang };
+        const session: BotSession = {
+          ...identity,
+          lang,
+          // A store admin is who these alerts are for, so they are on from the start. A
+          // SUPER_ADMIN would receive every store's terminals at once, so they opt in instead.
+          alerts: identity.role === 'ADMIN',
+          verbose: false,
+        };
         this.sessions.set(ctx.chat.id, session);
+        await this.persistSession(ctx.chat.id, session);
         if (session.role === 'SUPPLIER') {
           await ctx.reply(fmt.msgSupplierMenu(session.name, lang), this.kbSupplier(lang));
         } else if (session.role === 'SUPER_ADMIN') {
           await ctx.reply(fmt.msgSuperAdminMenu(session.name, lang), this.kbSuperAdmin(lang));
         } else {
-          await ctx.reply(fmt.msgAdminMenu(session.name, lang), this.kbAdmin(lang));
+          await ctx.reply(fmt.msgAdminMenu(session.name, lang), this.kbAdmin(lang, session.role));
         }
       } catch (err) {
         this.logger.error('Contact handler error', err);
@@ -399,6 +515,41 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         this.logger.error('Supplier products error', err);
         await ctx.reply(fmt.msgError('products', session.lang));
       }
+    });
+
+    // ── Alert settings ────────────────────────────────────────────────────
+    bot.hears(ALL_BTNS.ALERTS, async (ctx) => {
+      const session = this.sessions.get(ctx.chat.id);
+      if (!session || session.role === 'SUPPLIER' || session.role === 'USER') return;
+      await ctx.replyWithHTML(
+        fmt.msgAlertSettings(session, session.lang),
+        this.inlineAlertButtons(session),
+      );
+    });
+
+    bot.action(['alerts_toggle', 'alerts_verbose'], async (ctx) => {
+      if (!ctx.chat) return;
+      const session = this.sessions.get(ctx.chat.id);
+      if (!session) {
+        await ctx.answerCbQuery();
+        return;
+      }
+      const action = (ctx.callbackQuery as { data?: string }).data;
+      if (action === 'alerts_toggle') session.alerts = !session.alerts;
+      else session.verbose = !session.verbose;
+
+      await this.prisma.telegramChat
+        .update({
+          where: { chatId: BigInt(ctx.chat.id) },
+          data: { alerts: session.alerts, verbose: session.verbose },
+        })
+        .catch((err) => this.logger.error('Alert toggle failed', err as Error));
+
+      await ctx.answerCbQuery();
+      await ctx.editMessageText(fmt.msgAlertSettings(session, session.lang), {
+        parse_mode: 'HTML',
+        ...this.inlineAlertButtons(session),
+      });
     });
 
     // ── Web panel ─────────────────────────────────────────────────────────

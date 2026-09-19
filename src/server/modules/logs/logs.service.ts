@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { LogAlertsService } from '../telegram/log-alerts.service';
 import { UploadLogsDto } from './dto/upload-logs.dto';
 
 // Terminal logs are diagnostic, not source-of-truth — keep ~1 month and purge the rest nightly so
@@ -41,7 +42,10 @@ export interface VcrCodeSummary {
 export class LogsService {
   private readonly logger = new Logger(LogsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly logAlerts: LogAlertsService,
+  ) {}
 
   /**
    * Nightly retention sweep — drops terminal_logs older than the retention window across all
@@ -68,6 +72,10 @@ export class LogsService {
         timestamp: new Date(e.ts),
       })),
     });
+
+    // Fan out to the store's admins on Telegram. Deliberately not awaited and never throwing: the
+    // entries are already durable above, and a Telegram outage must not fail a terminal's upload.
+    this.logAlerts.enqueue(storeId, dto.terminalId, dto.entries);
 
     return { saved: dto.entries.length };
   }
