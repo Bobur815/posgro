@@ -754,3 +754,46 @@ again and staging confirmed back to "Telegram bot disabled".
    so it conflicts with nothing meanwhile.
 
 No version bump — server-only, which CLAUDE.md's versioning rule exempts.
+
+---
+
+# Linting (2026-09-19)
+
+`npm run lint` had never worked: there was no `.eslintrc` and no `eslint.config.js` anywhere, so
+ESLint 9 exited with "couldn't find an eslint.config.js" every time and nothing was ever checked.
+`eslint.config.js` is the config that was missing — not a flat-config migration.
+
+## Choices worth remembering
+- **Not type-aware.** Type-aware rules would need a tsconfig wired per sub-project (main, renderer,
+  server, web, panel, landing) and take minutes. `tsc` already covers all of it via `build:server`
+  and `build:pos`. The lint runs in ~13s.
+- **`--ext` was removed in ESLint 9.** Which files get linted is `files` in the config now, so the
+  script is plain `eslint src`.
+- **`no-explicit-any` is a warning, not an error** (215 of them). They sit where types genuinely are
+  unknown until runtime — IPC payloads, Prisma JSON columns, SDK responses. As errors the script
+  could never pass, which is exactly how a lint script ends up unused.
+- Rules switched off for patterns this repo uses deliberately: `no-control-regex` (GS/RS separators
+  in marking codes, ESC/POS sequences), empty `catch` (the "best effort" idiom), single-extends
+  interfaces (the four `styled.d.ts` theme augmentations), and `require()` in tests (jest mocks).
+- **`eslint-plugin-react-hooks` is now installed.** The renderer and web apps already carried
+  `exhaustive-deps` disable comments for a plugin that was never there, so ESLint errored on
+  "Definition for rule not found" instead of checking hooks.
+
+## What it found
+39 errors, all fixed: 31 dead imports/locals/catch bindings, two `if (stdout) {}` blocks whose
+bodies had been deleted, a ternary evaluated for side effects, and seven `eslint-disable` directives
+that had been silently dead (six naming `no-var-requires`, renamed in typescript-eslint v8).
+
+One real bug: `suppliers.service.syncBulk` ran `created++` after a Prisma `upsert` regardless of
+which branch executed, so the endpoint reported every update as a creation and always returned
+`updated: 0`. Now looks the row up first, matching `users.service.syncBulk`.
+
+## CI
+`.github/workflows/ci.yml` — the repo's first non-deploy workflow. Runs `npm ci` + `npm run lint` on
+pushes to dev/main and on every PR. Needs neither `prisma generate` nor the sub-project installs,
+because the lint is not type-aware and ESLint does not resolve imports.
+
+**It does not gate deploys.** `deploy-staging.yml` triggers on the same push to `dev` and runs in
+parallel, so a red lint will not stop a staging deploy. Making it a gate means either branch
+protection with CI as a required check (a repo setting, not a file) or restructuring the deploy
+workflow to depend on this job.
