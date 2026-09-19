@@ -179,6 +179,19 @@ describe('the message an admin receives', () => {
     expect(html).toContain('ещё');
   });
 
+  // Telegram rejects anything over 4096 characters, so a burst of long lines must not be sent whole.
+  it('stays inside Telegram’s message limit, dropping whole lines and saying how many', () => {
+    const long = Array.from({ length: 20 }, (_, i) => ({
+      level: 'error' as const,
+      text: `[70100${i % 10}] ${'очень длинная строка ошибки '.repeat(8)}`,
+      count: 1,
+      terminals: ['T1'],
+    }));
+    const html = msgLogAlert({ terminals: ['T1'], shown: long, hidden: 3 }, 'ru');
+    expect(html.length).toBeLessThanOrEqual(4096);
+    expect(html).toMatch(/…и ещё \d+/);
+  });
+
   it('speaks Uzbek to an Uzbek chat', () => {
     const html = msgLogAlert({ terminals: ['T1'], shown: groups, hidden: 0 }, 'uz');
     expect(html).toContain('Terminal jurnali');

@@ -173,20 +173,22 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
    * Sends an HTML message on behalf of another service (log alerts). HTML rather than Markdown
    * because alert bodies quote raw log lines, which are free to contain a stray `*` or `_`.
    *
-   * Reports 'blocked' for the one failure worth acting on: the user blocked the bot or deleted the
-   * chat, so the caller should stop sending rather than retry every minute forever.
+   * Reports 'blocked' for the one failure worth acting on — the chat is gone for good — so the
+   * caller can stop sending rather than retry every minute forever. Everything else is 'failed'
+   * and simply dropped: a 400 is far more often our own malformed HTML than a dead chat, and
+   * unsubscribing an admin over our bug is the wrong way to fail.
    */
   async sendHtml(chatId: bigint | number, html: string): Promise<'ok' | 'blocked' | 'failed'> {
     if (!this.bot) return 'failed';
     try {
-      await this.bot.telegram.sendMessage(Number(chatId), html, {
-        parse_mode: 'HTML',
-        link_preview_options: { is_disabled: true },
-      });
+      await this.bot.telegram.sendMessage(Number(chatId), html, { parse_mode: 'HTML' });
       return 'ok';
     } catch (err) {
-      const code = (err as { response?: { error_code?: number } }).response?.error_code;
-      if (code === 403 || code === 400) return 'blocked';
+      const res = (err as { response?: { error_code?: number; description?: string } }).response;
+      const gone =
+        res?.error_code === 403 || // blocked the bot, or kicked it from the group
+        (res?.error_code === 400 && /chat not found|user is deactivated/i.test(res.description ?? ''));
+      if (gone) return 'blocked';
       this.logger.error(`Telegram send to ${chatId} failed`, err as Error);
       return 'failed';
     }

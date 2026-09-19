@@ -344,6 +344,12 @@ export function escapeHtml(s: string): string {
 /** Keeps one alert line readable; the full text is always in the dashboard's log view. */
 const ALERT_TEXT_MAX = 180;
 
+/**
+ * Telegram rejects a message over 4096 characters outright, and twenty quoted log lines can reach
+ * that. Cut well short of the limit — HTML escaping expands what is counted here.
+ */
+const ALERT_MESSAGE_MAX = 3500;
+
 function clip(s: string): string {
   const flat = s.replace(/\s+/g, ' ').trim();
   return flat.length > ALERT_TEXT_MAX ? `${flat.slice(0, ALERT_TEXT_MAX - 1)}…` : flat;
@@ -382,7 +388,20 @@ export function msgLogAlert(
       ? `\n\n${t(`…va yana ${data.hidden} ta`, `…и ещё ${data.hidden}`, lang)}`
       : '';
 
-  return `${header}\n\n${lines.join('\n')}${more}`;
+  const body = `${header}\n\n${lines.join('\n')}${more}`;
+  if (body.length <= ALERT_MESSAGE_MAX) return body;
+
+  // Drop whole lines from the end rather than cutting mid-tag: a truncated `<b>` leaves unbalanced
+  // HTML, and Telegram answers that by rejecting the message instead of merely shortening it.
+  const kept: string[] = [];
+  let size = header.length + 2;
+  for (const l of lines) {
+    if (size + l.length + 1 > ALERT_MESSAGE_MAX) break;
+    kept.push(l);
+    size += l.length + 1;
+  }
+  const dropped = data.shown.length - kept.length + data.hidden;
+  return `${header}\n\n${kept.join('\n')}\n\n${t(`…va yana ${dropped} ta`, `…и ещё ${dropped}`, lang)}`;
 }
 
 // ─── Alert settings ───────────────────────────────────────────────────────────
