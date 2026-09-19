@@ -162,9 +162,11 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
   private async forgetSession(chatId: number): Promise<void> {
     this.sessions.delete(chatId);
-    await this.prisma.telegramChat
-      .delete({ where: { chatId: BigInt(chatId) } })
-      .catch(() => undefined); // Not linked yet — nothing to forget.
+    // deleteMany, not delete: /start on a chat that was never linked is the normal first contact,
+    // and delete() would throw P2025 — which Prisma's own error log prints before we can catch it,
+    // putting a scary "Invalid prisma.telegramChat.delete() invocation" in the logs every time
+    // someone opens the bot for the first time.
+    await this.prisma.telegramChat.deleteMany({ where: { chatId: BigInt(chatId) } });
   }
 
   // ─── Outbound ─────────────────────────────────────────────────────────────

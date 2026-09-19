@@ -726,9 +726,28 @@ and counting both would double every figure.
 - `npm run lint` is broken repo-wide and was already: ESLint 9.39 with no `eslint.config.js`
   (only the old `.eslintrc` format). Untouched here — pre-existing, and its own job.
 
+## Proven live on staging (2026-09-19)
+Staging was given the token temporarily (production's bot was off, so no 409), then it was removed
+again and staging confirmed back to "Telegram bot disabled".
+
+- Migration applied by `prisma migrate deploy`; `telegram_chats` matches the schema.
+- Bot came up: "Telegram bot started (long polling), 0 session(s) restored".
+- A real admin linked by sharing a phone. The row persisted with the right defaults —
+  `role=ADMIN, store=1234, lang=uz, alerts=t, verbose_alerts=f` — and `/start` cleared it again.
+- Suppliers resolve as SUPPLIER and are not subscribed (`alerts=f`), as intended.
+- Seven synthetic lines uploaded → one message delivered, containing `×2` for the two 701003
+  receipts (four log lines, pair-collapsed and counted by staff line), `704030` kept separate,
+  and **no** `[fiscal-timing]` line. Confirmed received by the admin.
+- Send-failure path exercised with a bogus chat id: Telegram's "chat not found" was classified as
+  gone and that row's `alerts` flipped to false, exactly once.
+
 ## Remaining — manual, not doable from here
-1. Add `TELEGRAM_BOT_TOKEN=8721831787:…` to the **`ENV_FILE` GitHub secret**. Writing it on the VPS
-   by hand is pointless: `ssh-deploy/action.yml` replaces `.env` wholesale on every deploy.
+1. Add `TELEGRAM_BOT_TOKEN=8721831787:…` to the **`ENV_FILE` GitHub secret** — the existing one, as
+   a new line. A separate secret of that name does nothing; no workflow reads it. Writing it on the
+   VPS by hand is equally pointless: `ssh-deploy/action.yml` replaces `.env` wholesale every deploy.
+   Staging is safe from the shared secret: an empty `environment:` value does override `env_file`,
+   verified with a throwaway container on the VPS (a first probe suggested otherwise, but it was
+   measuring Compose's interpolation of `command:` rather than the container's environment).
 2. After staging proves the migration, merge `dev` → `main` and trigger the production deploy.
 3. Stop the retired PM2 bot on the UZ VPS: `pm2 delete grocery-telegram-bot && pm2 save`
    (`45.138.158.220:2222`). Deleting the source does not reach that box. It runs a different token,
