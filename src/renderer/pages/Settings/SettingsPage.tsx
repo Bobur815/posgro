@@ -11,7 +11,6 @@ import {
   RefreshCw,
   Tag,
   Users,
-  Package,
   Scale,
   Monitor,
   Download,

@@ -24,7 +24,6 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
-  PlusCircle,
   Edit,
   Trash,
   X,
@@ -44,7 +43,6 @@ import {
 } from "../../components/common/MobileCard";
 import {
   mxik as mxikApi,
-  products as productsApi,
   aslBelgisi,
 } from "../../api/client";
 import { BarcodeScannerModal } from "../../components/common/BarcodeScannerModal";

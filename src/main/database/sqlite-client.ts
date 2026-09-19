@@ -7,7 +7,7 @@ import fs from 'fs';
 // In production the JS files live inside app.asar; the .node binary is unpacked to
 // app.asar.unpacked/ via asarUnpack and Electron redirects require() transparently.
 const prismaClientPath = path.join(app.getAppPath(), 'src', 'generated', 'prisma-sqlite');
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { PrismaClient, Prisma } = require(prismaClientPath);
 
 type PrismaClientType = InstanceType<typeof PrismaClient>;

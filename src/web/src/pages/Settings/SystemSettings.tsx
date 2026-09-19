@@ -189,12 +189,6 @@ const BalanceValue = styled.span`
   font-weight: 700;
   color: ${({ theme }) => theme.colors.text};
 `;
-const BalanceLabel = styled.div`
-  font-size: 13px;
-  color: ${({ theme }) => theme.colors.textSecondary};
-  margin-bottom: 4px;
-`;
-
 export function SystemSettings() {
   const { t } = useTranslation();
 

@@ -136,26 +136,40 @@ export class SuppliersService {
     let created = 0, updated = 0, errors = 0;
     for (const s of suppliers) {
       try {
-        await this.prisma.supplier.upsert({
+        // Look first rather than upsert: Prisma does not report which branch an upsert took, so
+        // the previous version counted every success as `created` and always returned updated: 0.
+        // This mirrors users.service.ts syncBulk, which already counts the two apart.
+        const existing = await this.prisma.supplier.findUnique({
           where: { id: s.id },
-          update: {
-            nameUz: s.nameUz,
-            nameRu: s.nameRu,
-            phone: s.phone || null,
-            address: s.address || null,
-            ...(s.active !== undefined && { active: s.active }),
-          },
-          create: {
-            id: s.id,
-            storeId,
-            nameUz: s.nameUz,
-            nameRu: s.nameRu,
-            phone: s.phone || null,
-            address: s.address || null,
-            active: s.active !== undefined ? s.active : true,
-          },
+          select: { id: true },
         });
-        created++;
+
+        if (existing) {
+          await this.prisma.supplier.update({
+            where: { id: s.id },
+            data: {
+              nameUz: s.nameUz,
+              nameRu: s.nameRu,
+              phone: s.phone || null,
+              address: s.address || null,
+              ...(s.active !== undefined && { active: s.active }),
+            },
+          });
+          updated++;
+        } else {
+          await this.prisma.supplier.create({
+            data: {
+              id: s.id,
+              storeId,
+              nameUz: s.nameUz,
+              nameRu: s.nameRu,
+              phone: s.phone || null,
+              address: s.address || null,
+              active: s.active !== undefined ? s.active : true,
+            },
+          });
+          created++;
+        }
       } catch {
         errors++;
       }

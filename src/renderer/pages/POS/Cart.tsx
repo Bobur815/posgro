@@ -407,7 +407,7 @@ export function Cart() {
         />
       ) : (
         <ItemsList>
-          {items.map((item, index) => {
+          {items.map((item) => {
             const isWeighed = item.unit === "кг" || item.unit === "л";
             const step = isWeighed ? 0.1 : 1;
 

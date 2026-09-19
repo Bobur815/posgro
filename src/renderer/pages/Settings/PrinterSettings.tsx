@@ -141,7 +141,7 @@ export function PrinterSettings() {
       await window.electronAPI.settings.set("printer_name", name);
       setSelectedPrinter(name);
       toast.success(t("printer.saved"));
-    } catch (err) {
+    } catch {
       toast.error(t("common.error"));
     }
   };
@@ -174,7 +174,7 @@ export function PrinterSettings() {
     try {
       await window.electronAPI.printer.testPrint();
       toast.success(t("printer.testSent"));
-    } catch (err) {
+    } catch {
       toast.error(t("printer.testFailed"));
     } finally {
       setIsTesting(false);

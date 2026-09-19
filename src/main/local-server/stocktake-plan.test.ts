@@ -2,7 +2,6 @@
 // from an Electron runtime path. Neither exists under Jest, so the namespace is served straight
 // from the generated client instead — the same Decimal, without booting Electron.
 jest.mock('../database/sqlite-client', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   getPrismaNamespace: () => require('../../generated/prisma-sqlite').Prisma,
 }));
 

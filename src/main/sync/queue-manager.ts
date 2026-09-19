@@ -1,6 +1,5 @@
 import { safeStorage } from 'electron';
 
-const TOKEN_KEY = 'auth_token';
 
 // In-memory storage as fallback
 let memoryToken: string | null = null;

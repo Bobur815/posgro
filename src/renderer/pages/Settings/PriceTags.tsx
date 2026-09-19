@@ -455,7 +455,6 @@ export function PriceTags() {
 
   // --- Editor View ---
   if (editing) {
-    const isNew = !templates.find((t) => t.id === editing.id);
     return (
       <Container>
         <EditorTopBar>

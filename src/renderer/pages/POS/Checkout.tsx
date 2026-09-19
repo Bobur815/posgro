@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { useCartStore } from "../../store/cart-store";
-import { useSidebar } from "../../context/SidebarContext";
 import { useSales } from "../../hooks/useSales";
 import { useToast } from "../../context/ToastContext";
 import { Modal } from "../../components/common/Modal";

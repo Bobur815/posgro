@@ -2,7 +2,6 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import styled, { type DefaultTheme } from 'styled-components';
 import { Modal } from '../../components/common/Modal';
-import { Button } from '../../components/common/Button';
 import { useSales } from '../../hooks/useSales';
 import type { Sale } from '@shared/types/sale.types';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';

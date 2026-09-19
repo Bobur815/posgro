@@ -6,7 +6,6 @@ import { useProducts } from "../../hooks/useProducts";
 import { useAuthStore } from "../../store/auth-store";
 import { useAdminLocked } from "../../store/mode-store";
 import { Button } from "../../components/common/Button";
-import { Input } from "../../components/common/Input";
 import { Product } from "@shared/types";
 import { products as productsApi } from "../../api/ipc-client";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";

@@ -88,7 +88,6 @@ beforeAll(async () => {
     },
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const bcrypt = require('bcryptjs');
   await prisma.user.create({
     data: {

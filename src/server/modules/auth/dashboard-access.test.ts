@@ -95,9 +95,7 @@ describe('dashboardLoginBlockReason', () => {
 
   // Every reason must be a key the browser can translate.
   it('returns keys that exist in both locales', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const ru = require('../../../renderer/i18n/locales/ru.json');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const uz = require('../../../renderer/i18n/locales/uz.json');
     const unpaid: DashboardStore = { active: true, mode: 'ONLINE', subscriptionRequired: true };
     for (const store of [deactivated, offlineOnly, unpaid]) {

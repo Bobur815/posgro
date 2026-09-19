@@ -16,9 +16,8 @@ import { getAppConfig, updateConfig } from "../config/app-config";
 import { probeApiUrl } from "../config/api-url-probe";
 import { setupPairingHandlers } from "./pairing-handlers";
 import { setupBannerHandlers } from "./banner-handlers";
-import { getLanAddress } from "../network/lan-address";
 import { getLocalServerStatus } from "../local-server";
-import { getAuthToken, getServerToken, clearServerToken } from "../sync/queue-manager";
+import { getServerToken, clearServerToken } from "../sync/queue-manager";
 import { getPrismaClient, readStoreBootstrap, writeStoreBootstrap } from "../database/sqlite-client";
 import {
   setPrinterConfig,

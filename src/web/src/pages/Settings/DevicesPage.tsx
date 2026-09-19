@@ -265,7 +265,7 @@ function parseUA(ua: string | null): { deviceType: DeviceType; os: string; brows
   return { deviceType, os, browser };
 }
 
-function DeviceTypeIcon({ type, current }: { type: DeviceType; current: boolean }) {
+function DeviceTypeIcon({ type }: { type: DeviceType; current: boolean }) {
   const props = { size: 20 };
   switch (type) {
     case "mobile": return <Smartphone {...props} />;
@@ -399,7 +399,8 @@ export function DevicesPage() {
   const toggleExpand = (ip: string) => {
     setExpandedIps((prev) => {
       const next = new Set(prev);
-      next.has(ip) ? next.delete(ip) : next.add(ip);
+      if (next.has(ip)) next.delete(ip);
+      else next.add(ip);
       return next;
     });
   };
@@ -553,7 +554,7 @@ export function DevicesPage() {
                 {isExpanded && (
                   <SessionsExpanded>
                     {device.sessions.map((session) => {
-                      const { deviceType, os, browser } = parseUA(session.userAgent);
+                      const { os, browser } = parseUA(session.userAgent);
                       return (
                         <SessionRow key={session.id}>
                           <SessionInfo>

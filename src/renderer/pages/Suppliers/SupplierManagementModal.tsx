@@ -14,7 +14,7 @@ import { Supplier, SupplierPaymentType } from "@shared/types";
 import { convertUzbekText } from "@shared/utils/transliterator";
 import { UzbekPhoneInput } from "../../components/common/UzbekPhoneInput";
 import { phoneToDigits, formatUzPhone } from "@shared/utils/phone";
-import { Pencil, Trash2, Plus, ArrowLeft, CirclePlus, Keyboard, ChevronDown, ChevronUp } from "lucide-react";
+import { Pencil, Trash2, ArrowLeft, CirclePlus, Keyboard, ChevronDown, ChevronUp } from "lucide-react";
 
 const List = styled.div`
   display: flex;

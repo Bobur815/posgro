@@ -229,7 +229,7 @@ export function CategoryManagementModal({
       await loadCategories();
       onCategoryChanged();
       setView('list');
-    } catch (err) {
+    } catch {
       toast.error(t('common.error'));
     } finally {
       setIsLoading(false);
@@ -246,7 +246,7 @@ export function CategoryManagementModal({
       await loadCategories();
       onCategoryChanged();
       setCategoryToDelete(null);
-    } catch (err) {
+    } catch {
       toast.error(t('common.error'));
     } finally {
       setIsLoading(false);

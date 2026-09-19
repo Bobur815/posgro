@@ -19,13 +19,10 @@ export async function runMigrations(): Promise<void> {
   try {
 
     // Run Prisma migrate deploy
-    const { stdout, stderr } = await execAsync('npx prisma migrate deploy', {
+    const { stderr } = await execAsync('npx prisma migrate deploy', {
       env,
       cwd: app.getAppPath(),
     });
-
-    if (stdout) {
-    }
 
     if (stderr) {
       console.warn('Migration warnings:', stderr);
@@ -50,13 +47,10 @@ export async function resetDatabase(): Promise<void> {
   try {
 
     // Run Prisma migrate reset (WARNING: This deletes all data!)
-    const { stdout, stderr } = await execAsync('npx prisma migrate reset --force', {
+    const { stderr } = await execAsync('npx prisma migrate reset --force', {
       env,
       cwd: app.getAppPath(),
     });
-
-    if (stdout) {
-    }
 
     if (stderr) {
       console.warn('Reset warnings:', stderr);
