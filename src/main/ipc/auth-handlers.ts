@@ -151,7 +151,7 @@ export function setupAuthHandlers(): void {
           const hashedPassword = await bcrypt.hash(password, 10);
           user = await prisma.user.upsert({
             where: { phone },
-            update: { password: hashedPassword, role: body.user.role, nameUz: body.user.nameUz, nameRu: body.user.nameRu, active: true, storeId },
+            update: { password: hashedPassword, role: body.user.role, nameUz: body.user.nameUz, nameRu: body.user.nameRu, active: true, storeId, synced: true },
             create: {
               id: body.user.id,
               phone: body.user.phone,
@@ -161,6 +161,8 @@ export function setupAuthHandlers(): void {
               nameRu: body.user.nameRu,
               active: true,
               storeId,
+              // Straight from the server, so there is nothing of this till's to upload.
+              synced: true,
             },
           });
           synced = true;
@@ -584,6 +586,11 @@ export function setupAuthHandlers(): void {
     }
     if (data.password) {
       updateData.password = await bcrypt.hash(data.password, 10);
+    }
+    // A profile edit made here goes up on the next admin sync; until then the pull leaves it be.
+    // The PIN is local-only and never syncs, so changing just that marks nothing.
+    if (['nameUz', 'nameRu', 'active', 'role'].some((k) => k in updateData)) {
+      updateData.synced = false;
     }
     // undefined = leave the PIN alone, null/'' = clear it, digits = replace it.
     if (data.pin !== undefined) {

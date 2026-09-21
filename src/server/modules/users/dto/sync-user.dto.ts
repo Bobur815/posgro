@@ -24,20 +24,26 @@ export class SyncUserItemDto {
   @IsNotEmpty()
   phone!: string;
 
-  @ApiProperty({ description: 'Pre-hashed bcrypt password' })
-  @IsString()
-  @IsNotEmpty()
-  password!: string;
+  // The profile — password, names, role, active — comes only with a user the terminal created or
+  // edited itself. The server owns everyone else's; see UsersService.upsertBulk.
 
-  @ApiProperty({ example: 'Ism Familiya' })
+  @ApiPropertyOptional({ description: 'Pre-hashed bcrypt password' })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  nameUz!: string;
+  password?: string;
 
-  @ApiProperty({ example: 'Имя Фамилия' })
+  @ApiPropertyOptional({ example: 'Ism Familiya' })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  nameRu!: string;
+  nameUz?: string;
+
+  @ApiPropertyOptional({ example: 'Имя Фамилия' })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  nameRu?: string;
 
   @ApiPropertyOptional({ enum: USER_ROLES, default: USER_ROLES.USER })
   @IsOptional()

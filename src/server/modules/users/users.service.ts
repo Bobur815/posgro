@@ -269,13 +269,25 @@ export class UsersService {
     return { success: true };
   }
 
+  /**
+   * A terminal's users, merged into this store's.
+   *
+   * The server owns who a user is. A terminal sends a profile (password, names, role, active)
+   * only for a user it created or edited itself; any other row carries just its id, phone and
+   * nasiya balance. Without a profile the balance is all that changes, and a user this server no
+   * longer has is not re-created — it was deleted here, and the terminal's copy is the stale one.
+   * Older terminals send a profile for everyone, which keeps their old behaviour.
+   *
+   * Matched by id first, so a phone number changed on either side still finds its row; by phone
+   * after that, for a user this server already knew under an id of its own.
+   */
   async upsertBulk(
     users: {
       id: string;
       phone: string;
-      password: string;
-      nameUz: string;
-      nameRu: string;
+      password?: string;
+      nameUz?: string;
+      nameRu?: string;
       role?: string;
       active?: boolean;
       debt?: number;
@@ -285,41 +297,56 @@ export class UsersService {
   ) {
     let created = 0;
     let updated = 0;
+    let skipped = 0;
     const errors: string[] = [];
 
     for (const u of users) {
       try {
-        const existing = await this.prisma.user.findUnique({
-          where: { storeId_phone: { storeId, phone: u.phone } },
-        });
+        const hasProfile = u.nameUz !== undefined && u.nameRu !== undefined && u.password !== undefined;
+        // The till owns the balance; this row is a mirror of it. Absent means an older terminal
+        // that does not know about nasiya, and its silence must not zero a balance another
+        // terminal reported.
+        const balance = {
+          ...(u.debt !== undefined ? { debt: u.debt } : {}),
+          ...(u.debtDueDate !== undefined
+            ? { debtDueDate: u.debtDueDate ? new Date(u.debtDueDate) : null }
+            : {}),
+        };
+
+        const byId = await this.prisma.user.findUnique({ where: { id: u.id } });
+        const existing =
+          byId && byId.storeId === storeId
+            ? byId
+            : await this.prisma.user.findUnique({
+                where: { storeId_phone: { storeId, phone: u.phone } },
+              });
 
         if (existing) {
           await this.prisma.user.update({
             where: { id: existing.id },
-            data: {
-              nameUz: u.nameUz,
-              nameRu: u.nameRu,
-              role: (u.role as any) || existing.role,
-              active: u.active ?? existing.active,
-              // The till owns the balance; this row is a mirror of it. Absent means an older
-              // terminal that does not know about nasiya, and its silence must not zero a
-              // balance another terminal reported.
-              ...(u.debt !== undefined ? { debt: u.debt } : {}),
-              ...(u.debtDueDate !== undefined
-                ? { debtDueDate: u.debtDueDate ? new Date(u.debtDueDate) : null }
-                : {}),
-            },
+            data: hasProfile
+              ? {
+                  phone: u.phone,
+                  nameUz: u.nameUz,
+                  nameRu: u.nameRu,
+                  role: (u.role as any) || existing.role,
+                  active: u.active ?? existing.active,
+                  ...balance,
+                }
+              : balance,
           });
           updated++;
+        } else if (!hasProfile) {
+          skipped++;
         } else {
           await this.prisma.user.create({
             data: {
               id: u.id,
               storeId,
               phone: u.phone,
-              password: u.password,
-              nameUz: u.nameUz,
-              nameRu: u.nameRu,
+              password: u.password!,
+              nameUz: u.nameUz!,
+              nameRu: u.nameRu!,
               role: (u.role as any) || 'USER',
               active: u.active ?? true,
               debt: u.debt ?? 0,
@@ -333,7 +360,7 @@ export class UsersService {
       }
     }
 
-    return { created, updated, errors };
+    return { created, updated, skipped, errors };
   }
 
   async updatePassword(id: string, hashedPassword: string) {

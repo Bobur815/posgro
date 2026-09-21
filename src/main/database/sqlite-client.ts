@@ -897,6 +897,19 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
     `;
   }
 
+  // Migration 36: users.synced — the server's copy of a user wins unless this till changed it.
+  //
+  // Before this, every admin sync cycle uploaded every local user in full and the server took the
+  // till's name/role/active over its own, so an edit made on the dashboard was reverted by the
+  // next till to sync (and a user deleted there came straight back). Existing rows start as synced:
+  // the server already has them, and treating them as local edits would push the stale copies one
+  // last time. Customers are the exception — a debtor created at a cashier-only till may never
+  // have been uploaded, and sending their profile once is how the server learns of them.
+  if (!(await columnExists(prisma, 'users', 'synced'))) {
+    await prisma.$executeRaw`ALTER TABLE users ADD COLUMN synced INTEGER NOT NULL DEFAULT 1`;
+    await prisma.$executeRaw`UPDATE users SET synced = 0 WHERE role = 'CLIENT'`;
+  }
+
   await prisma.$executeRaw`
     CREATE INDEX IF NOT EXISTS idx_debt_txn_open ON debt_transactions(user_id, settled_at)
   `;

@@ -121,7 +121,7 @@ async function uploadDebtTransactions(
   });
 }
 
-async function uploadUsers(
+export async function uploadUsers(
   prisma: ReturnType<typeof getPrismaClient>,
   token: string,
 ): Promise<void> {
@@ -135,11 +135,19 @@ async function uploadUsers(
   const payload = users.map((u: User) => ({
     id: u.id,
     phone: u.phone,
-    password: u.password,
-    nameUz: u.nameUz,
-    nameRu: u.nameRu,
-    role: u.role,
-    active: u.active,
+    // Who the person is belongs to the server. Only a profile this till changed or created
+    // (`synced: false`) is sent; for everyone else the server keeps its own copy, so an edit
+    // made on the dashboard is not reverted by the next till to sync. Without a profile the
+    // server only updates the balance, and never re-creates a user it has deleted.
+    ...(u.synced
+      ? {}
+      : {
+          password: u.password,
+          nameUz: u.nameUz,
+          nameRu: u.nameRu,
+          role: u.role,
+          active: u.active,
+        }),
     // Nasiya. The till is where a debt is taken on and paid off, so it is authoritative for the
     // balance and the server mirrors it — the reverse of how the rest of this table syncs.
     debt: Number(u.debt ?? 0),
@@ -150,6 +158,23 @@ async function uploadUsers(
   if (!res.ok) {
     const text = await res.text();
     console.error(`Failed to upload users (HTTP ${res.status}): ${text}`);
+    return;
+  }
+
+  const result = (await res.json().catch(() => null)) as { errors?: string[] } | null;
+  if (result?.errors?.length) {
+    console.warn(`[uploadUsers] server refused some users: ${result.errors.join("; ")}`);
+  }
+
+  // Sent, so the server's copy is authoritative again — including for a row it refused (a phone
+  // another user already holds, say): the pull that follows puts the server's version back
+  // rather than leaving this till to re-send a losing edit forever. Matched on updatedAt so an
+  // edit made while the request was in flight stays unsynced and goes next cycle.
+  for (const u of users.filter((row: User) => !row.synced)) {
+    await prisma.user.updateMany({
+      where: { id: u.id, updatedAt: u.updatedAt },
+      data: { synced: true },
+    });
   }
 }
 
