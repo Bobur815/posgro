@@ -28,7 +28,7 @@ const STRINGS = {
       "Aloqa uzilsa ham savdo to'xtamaydi. Cheklar terminalda saqlanadi va internet qaytganda serverga o'zi yuboriladi.",
     'features.fiscal.t': 'Fiskal chek',
     'features.fiscal.d':
-      'REGOS va OFD bilan ishlaydi. Har bir savdo qonun talab qilganidek rasmiylashtiriladi.',
+      'Har bir savdo qonun talab qilganidek rasmiylashtiriladi.',
     'features.marking.t': 'Markirovka',
     'features.marking.d':
       "Asl-Belgisi orqali markirovkali mahsulotlar tekshiriladi va sotuvda hisobga olinadi.",
@@ -81,7 +81,7 @@ const STRINGS = {
       'Продажи не останавливаются при обрыве связи. Чеки хранятся на терминале и уходят на сервер сами, когда интернет вернётся.',
     'features.fiscal.t': 'Фискальный чек',
     'features.fiscal.d':
-      'Работает с REGOS и ОФД. Каждая продажа оформляется так, как требует закон.',
+      'Каждая продажа оформляется так, как требует закон.',
     'features.marking.t': 'Маркировка',
     'features.marking.d':
       'Маркированные товары проверяются через Asl-Belgisi и учитываются при продаже.',
