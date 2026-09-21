@@ -7,6 +7,7 @@ import {
   Settings,
   Users,
   MonitorSmartphone,
+  Wallet,
 } from "lucide-react";
 import { useAuthStore } from "../../store/auth-store";
 
@@ -97,6 +98,15 @@ export function SettingsPage() {
       title: t("settings.devicesSettings"),
       description: t("settings.devicesSettingsDescription"),
       path: "/settings/devices",
+    },
+    {
+      icon: <Wallet size={32} />,
+      title: t("debtors.title", "Должники"),
+      description: t(
+        "debtors.dashboardDescription",
+        "Кто и сколько должен магазину — только просмотр",
+      ),
+      path: "/settings/debtors",
     },
   ];
 

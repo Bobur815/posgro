@@ -81,7 +81,26 @@ export class SyncSaleDto {
   @IsNotEmpty()
   finalAmount!: string;
 
-  @ApiProperty({ example: 'cash', description: 'Payment method (cash/card)' })
+  /**
+   * Nasiya. Optional: a terminal from before the feature sends neither, and its sales were paid
+   * in full — which is what the defaults below mean.
+   */
+  @ApiPropertyOptional({ example: '30000', description: 'Paid at the counter' })
+  @IsOptional()
+  @IsString()
+  paidAmount?: string;
+
+  @ApiPropertyOptional({ example: '70000', description: 'Left on the customer tab' })
+  @IsOptional()
+  @IsString()
+  debtAmount?: string;
+
+  @ApiPropertyOptional({ example: 'cluser123', description: 'Who owes the debt' })
+  @IsOptional()
+  @IsString()
+  debtUserId?: string;
+
+  @ApiProperty({ example: 'cash', description: 'Payment method (cash/card/uzqr/debt)' })
   @IsString()
   @IsNotEmpty()
   paymentMethod!: string;

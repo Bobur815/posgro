@@ -8,6 +8,20 @@ export const SALE_TENDERS = ["cash", "card", "uzqr"] as const;
 export type SaleTender = (typeof SALE_TENDERS)[number];
 
 /**
+ * What `payment_method` says when nothing was paid at the counter — the whole receipt went on a
+ * customer's tab (nasiya).
+ *
+ * Deliberately NOT in SALE_TENDERS: those are the three ways money arrives now, and the Checkout
+ * screen renders one tile per entry. A part-paid credit sale keeps the tender that took the
+ * money (`cash`/`card`/`uzqr`) and records the rest in `sales.debt_amount`, so only a receipt
+ * where nothing at all was paid is stored as "debt".
+ *
+ * `isCashTender` already answers false for it, which is the property that matters: debt is never
+ * money in the till.
+ */
+export const DEBT_TENDER = "debt" as const;
+
+/**
  * Only cash lands in the drawer. UzQR settles to the merchant's bank account exactly like
  * a card, so every drawer/X-Z/cashless split must treat it as card-side.
  *

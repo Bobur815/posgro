@@ -16,6 +16,10 @@ function row(over: Partial<ProductPerformanceRow> & { productId: number }): Prod
     categoryId: 1,
     categoryRu: 'Молочные',
     categoryUz: 'Sut mahsulotlari',
+    // Restocked during the period: the case that is eligible for every list, so the tests that
+    // are not about the worst-list filter are unaffected by it.
+    arrived: true,
+    stock: 0,
     ...over,
   };
 }
@@ -100,6 +104,61 @@ describe('rankProducts', () => {
     expect(rankProducts([...dupes].reverse()).byQuantity.bottom.map((p) => p.productId)).toEqual([
       4, 7,
     ]);
+  });
+
+  describe('the worst list only ranks what the shop was actually trying to sell', () => {
+    // The truth table the rule was agreed against: a product is eligible for the WORST list if it
+    // arrived during the period, or if it has run out. Not restocked and still on the shelf means
+    // the shop already decided not to reorder it, so its zero is not news.
+    const cases: Array<{ arrived: boolean; stock: number; eligible: boolean }> = [
+      { arrived: true, stock: 5, eligible: true },
+      { arrived: true, stock: 0, eligible: true },
+      { arrived: false, stock: 0, eligible: true },
+      { arrived: false, stock: 5, eligible: false },
+    ];
+
+    for (const { arrived, stock, eligible } of cases) {
+      it(`${eligible ? 'ranks' : 'skips'} a product with arrived=${arrived} stock=${stock}`, () => {
+        const r = rankProducts([
+          row({ productId: 1, quantity: 100, revenue: 500_000, cost: 1 }),
+          row({ productId: 2, quantity: 0, arrived, stock }),
+        ]);
+        const worst = r.byQuantity.bottom.map((p) => p.productId);
+        expect(worst.includes(2)).toBe(eligible);
+      });
+    }
+
+    it('leaves the best sellers untouched', () => {
+      // Excluded from the worst list is not excluded from the report: a product nobody reordered
+      // can still be the best seller of the period.
+      const r = rankProducts([
+        row({ productId: 1, quantity: 100, arrived: false, stock: 5 }),
+        row({ productId: 2, quantity: 1 }),
+      ]);
+      expect(r.byQuantity.top[0].productId).toBe(1);
+      expect(r.byQuantity.bottom.map((p) => p.productId)).toEqual([2]);
+    });
+
+    it('still counts excluded products in the catalogue totals', () => {
+      // The counts describe what the lists are drawn from, so they must not shrink with the filter.
+      const r = rankProducts([
+        row({ productId: 1, quantity: 0, arrived: false, stock: 5 }),
+        row({ productId: 2, quantity: 0, hasCost: false }),
+      ]);
+      expect(r.totalProducts).toBe(2);
+      expect(r.neverSoldCount).toBe(2);
+      expect(r.noCostCount).toBe(1);
+    });
+
+    it('ranks everything when a feeder has not supplied the two columns', () => {
+      // The rows come from three raw-SQL queries and are type-asserted, not checked. A feeder that
+      // has not been updated must keep the old behaviour rather than silently empty the list.
+      const legacy = { ...row({ productId: 1, quantity: 0 }) } as Record<string, unknown>;
+      delete legacy.arrived;
+      delete legacy.stock;
+      const r = rankProducts([legacy as unknown as ProductPerformanceRow]);
+      expect(r.byQuantity.bottom.map((p) => p.productId)).toEqual([1]);
+    });
   });
 
   it('caps each list at ten entries', () => {

@@ -1,4 +1,9 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
+import type {
+  Debtor,
+  DebtLedger,
+  UnpaidCreditSale,
+} from "../shared/types/debt.types";
 
 /** Mirrors `MainLinkStatus` in lan/main-link.ts; kept here so preload imports no main-process code. */
 export interface LanLinkStatus {
@@ -171,6 +176,21 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("suppliers:getBalance", supplierId),
     recordPayment: (data: unknown) =>
       ipcRenderer.invoke("suppliers:recordPayment", data),
+  },
+
+  // Nasiya: customers who take goods on credit, and what they have paid back.
+  debtors: {
+    list: (opts?: { search?: string; withDebtOnly?: boolean; includeStaff?: boolean }) =>
+      ipcRenderer.invoke("debtors:list", opts),
+    create: (data: unknown) => ipcRenderer.invoke("debtors:create", data),
+    update: (id: string, data: unknown) =>
+      ipcRenderer.invoke("debtors:update", id, data),
+    getLedger: (userId: string) => ipcRenderer.invoke("debtors:getLedger", userId),
+    getUnpaidSales: (userId: string) =>
+      ipcRenderer.invoke("debtors:getUnpaidSales", userId),
+    recordPayment: (data: unknown) =>
+      ipcRenderer.invoke("debtors:recordPayment", data),
+    adjust: (data: unknown) => ipcRenderer.invoke("debtors:adjust", data),
   },
 
   // Sync
@@ -676,6 +696,19 @@ declare global {
         deleteTransaction: (id: string) => Promise<boolean>;
         getBalance: (supplierId: string) => Promise<unknown>;
         recordPayment: (data: unknown) => Promise<unknown>;
+      };
+      debtors: {
+        list: (opts?: {
+          search?: string;
+          withDebtOnly?: boolean;
+          includeStaff?: boolean;
+        }) => Promise<Debtor[]>;
+        create: (data: unknown) => Promise<Debtor>;
+        update: (id: string, data: unknown) => Promise<Debtor>;
+        getLedger: (userId: string) => Promise<DebtLedger>;
+        getUnpaidSales: (userId: string) => Promise<UnpaidCreditSale[]>;
+        recordPayment: (data: unknown) => Promise<{ debtor: Debtor; settledSales: string[] }>;
+        adjust: (data: unknown) => Promise<Debtor>;
       };
       sync: {
         trigger: () => Promise<void>;

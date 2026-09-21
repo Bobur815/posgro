@@ -13,6 +13,7 @@ import { satelliteRoutes } from './satellite';
 import { supplierRoutes } from './suppliers';
 import { terminalRoutes } from './terminal';
 import { userRoutes } from './users';
+import { debtorRoutes } from './debtors';
 
 /**
  * The local API, assembled.
@@ -28,6 +29,7 @@ export function buildRouter(): Router {
     ...categoryRoutes,
     ...salesRoutes,
     ...userRoutes,
+    ...debtorRoutes,
     ...settingsRoutes,
     ...inventoryRoutes,
     ...inventoryCountRoutes,

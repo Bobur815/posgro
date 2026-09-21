@@ -8,6 +8,7 @@ import type {
   Product,
   InventoryArrival,
   User,
+  DebtTransaction as DebtTransactionRow,
 } from "../../generated/prisma-sqlite";
 
 async function apiPost(
@@ -56,6 +57,10 @@ export async function uploadLocalData(): Promise<void> {
   const since = await getLastUploadTime(prisma);
 
   await uploadUsers(prisma, token);
+  // After the users: a ledger row whose person the server has not seen yet would fail its
+  // foreign key, and the server skips it rather than taking the batch down — so sending the
+  // people first is what keeps that from happening at all on a terminal's first upload.
+  await uploadDebtTransactions(prisma, token);
   await uploadCategories(prisma, token, since);
   await uploadSuppliers(prisma, token, since);
   await uploadProducts(prisma, token, since);
@@ -63,6 +68,57 @@ export async function uploadLocalData(): Promise<void> {
   await uploadSettings(prisma, token);
 
   await setLastUploadTime(prisma);
+}
+
+/**
+ * Mirror this till's nasiya ledger up.
+ *
+ * The balance itself rides with the user row; this is the history behind it, which the dashboard's
+ * read-only debtor page needs in order to show anything but a number. Unsynced rows only, marked
+ * on success — the server upserts on the till's own row id, so a re-send after a dropped response
+ * updates the same row instead of charging a customer twice.
+ */
+async function uploadDebtTransactions(
+  prisma: ReturnType<typeof getPrismaClient>,
+  token: string,
+): Promise<void> {
+  const rows = await prisma.debtTransaction.findMany({
+    where: { synced: false },
+    orderBy: { createdAt: 'asc' },
+    take: 200,
+  });
+  if (rows.length === 0) return;
+
+  const payload = rows.map((t: DebtTransactionRow) => ({
+    id: t.id,
+    userId: t.userId,
+    type: t.type,
+    // String, like every other amount crossing this wire.
+    amount: t.amount.toString(),
+    paymentMethod: t.paymentMethod ?? undefined,
+    saleId: t.saleId ?? undefined,
+    settledAt: t.settledAt ? new Date(t.settledAt).toISOString() : undefined,
+    dueDate: t.dueDate ? new Date(t.dueDate).toISOString() : undefined,
+    note: t.note ?? undefined,
+    createdBy: t.createdBy,
+    createdAt: new Date(t.createdAt).toISOString(),
+  }));
+
+  const res = await apiPost('/debtors/sync-bulk', token, { transactions: payload });
+  if (!res.ok) {
+    const text = await res.text();
+    console.error(`Failed to upload debt transactions (HTTP ${res.status}): ${text}`);
+    return;
+  }
+
+  // Only what the server actually took. A row it skipped — its user has not landed yet — stays
+  // unsynced and goes again next cycle, by which time uploadUsers() will have fixed the cause.
+  const { synced } = (await res.json().catch(() => ({ synced: 0 }))) as { synced?: number };
+  if (!synced) return;
+  await prisma.debtTransaction.updateMany({
+    where: { id: { in: rows.slice(0, synced).map((t: DebtTransactionRow) => t.id) } },
+    data: { synced: true },
+  });
 }
 
 async function uploadUsers(
@@ -84,6 +140,10 @@ async function uploadUsers(
     nameRu: u.nameRu,
     role: u.role,
     active: u.active,
+    // Nasiya. The till is where a debt is taken on and paid off, so it is authoritative for the
+    // balance and the server mirrors it — the reverse of how the rest of this table syncs.
+    debt: Number(u.debt ?? 0),
+    debtDueDate: u.debtDueDate ? new Date(u.debtDueDate).toISOString() : null,
   }));
 
   const res = await apiPost("/users/sync-bulk", token, { users: payload });

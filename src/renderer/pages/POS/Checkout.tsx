@@ -8,7 +8,9 @@ import { Modal } from "../../components/common/Modal";
 import { Button } from "../../components/common/Button";
 import { NumberPad } from "../../components/common/NumberPad";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
-import { UZQR_BRAND_COLOR, type SaleTender } from "@shared/constants";
+import { UZQR_BRAND_COLOR, DEBT_TENDER, type SaleTender } from "@shared/constants";
+import { DebtorPickerModal, type DebtSelection } from "./DebtorPickerModal";
+import { HandCoins } from "lucide-react";
 import { UzQrLogo } from "./UzQrLogo";
 import { UzQrPaymentModal } from "./UzQrPaymentModal";
 import { parseSaleError } from "./saleErrors";
@@ -135,6 +137,11 @@ const ShortcutHint = styled.span`
   font-size: 14px;
   opacity: 0.7;
   font-weight: 500;
+`;
+
+/** Sits under the pay row, separated: it is an alternative to paying, not another tender. */
+const CreditAction = styled.div`
+  margin-top: ${({ theme }) => theme.spacing.sm};
 `;
 
 const Actions = styled.div`
@@ -291,6 +298,8 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   // When on, choosing UzQR opens the QR modal and the sale is only created once the buyer pays.
   const [uzqrEnabled, setUzqrEnabled] = useState(false);
   const [uzQrAmount, setUzQrAmount] = useState<number | null>(null);
+  /** The debtor picker is up — the checkout panel steps aside while it is. */
+  const [creditOpen, setCreditOpen] = useState(false);
 
   useEffect(() => {
     window.electronAPI.fiscal
@@ -347,10 +356,14 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
    * Write the sale. For UzQR this runs only AFTER the buyer has paid, with the confirmed
    * payment attached — the cart survives an abandoned or timed-out payment untouched.
    */
-  const completeSale = async (uzqrPayment?: {
-    vcrPaymentId: string;
-    rrn: string | null;
-  }) => {
+  const completeSale = async (
+    uzqrPayment?: {
+      vcrPaymentId: string;
+      rrn: string | null;
+    },
+    /** Set when the cashier put part or all of this receipt on a customer's tab. */
+    credit?: DebtSelection,
+  ) => {
     if (isLoading) return;
 
     try {
@@ -364,7 +377,13 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
           piecesPerUnit: item.piecesPerUnit,
           preWeighedItemId: item.preWeighedItemId,
         })),
-        paymentMethod,
+        // A receipt paid for entirely on credit is stored as DEBT_TENDER; a part-paid one keeps
+        // the tender that actually took the money.
+        paymentMethod:
+          credit && credit.debtAmount >= total ? DEBT_TENDER : paymentMethod,
+        debtAmount: credit?.debtAmount,
+        debtUserId: credit?.debtor.id,
+        debtDueDate: credit?.debtDueDate ?? undefined,
         discountAmount: effectiveDiscount,
         markingCodes: items
           .filter((i) => i.markingCode)
@@ -392,9 +411,15 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
         clearCart();
         window.dispatchEvent(new Event("stock-updated"));
         toast.success(
-          editingSaleId
-            ? t("pos.saleUpdated")
-            : `${t("pos.paymentComplete")} — ${t("pos.receiptNumber")}: ${sale.receiptNumber}`,
+          credit
+            ? t("debtors.creditRecorded", {
+                defaultValue: "В долг: {{amount}} — {{name}}",
+                amount: formatCurrency(credit.debtAmount),
+                name: i18n.language === "uz" ? credit.debtor.nameUz : credit.debtor.nameRu,
+              })
+            : editingSaleId
+              ? t("pos.saleUpdated")
+              : `${t("pos.paymentComplete")} — ${t("pos.receiptNumber")}: ${sale.receiptNumber}`,
         );
         onComplete();
       }
@@ -434,6 +459,21 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   };
 
   handlePaymentRef.current = handlePayment;
+
+  if (creditOpen) {
+    // Replaces the checkout panel while it is up, exactly as the UzQR modal does: the cashier is
+    // answering "who owes this, and how much", and the tender tiles behind would be a trap.
+    return (
+      <DebtorPickerModal
+        total={total}
+        onCancel={() => setCreditOpen(false)}
+        onConfirm={(selection) => {
+          setCreditOpen(false);
+          void completeSale(undefined, selection);
+        }}
+      />
+    );
+  }
 
   if (uzQrAmount !== null) {
     // Replaces the checkout panel rather than stacking on it — the cashier's only choices while
@@ -525,6 +565,18 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
               <ShortcutHint>(F10)</ShortcutHint>
             </Button>
           </Actions>
+
+          {/* Nasiya. Not one of the tender tiles: those are the three ways money arrives now,
+              and this is the one where it does not. An edit keeps the sale's original terms —
+              re-deciding the credit on a receipt already charged to someone is a different job,
+              done from the debtors screen. */}
+          {!editingSaleId && (
+            <CreditAction>
+              <Button variant="secondary" onClick={() => setCreditOpen(true)} fullWidth>
+                <HandCoins size={16} /> {t("debtors.sellOnCredit", "Продажа в долг")}
+              </Button>
+            </CreditAction>
+          )}
         </LeftCol>
 
         <RightCol>

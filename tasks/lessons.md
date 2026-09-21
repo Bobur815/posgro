@@ -283,3 +283,31 @@ write fails with ENOENT on a path that plainly exists, compare the mount's inode
 on both sides before suspecting the code: `links=0` means stale, and
 `--force-recreate` is a symptom fix — find what is replacing the directory. When one mount works
 and a sibling does not, diff the two before doing anything else.
+
+## A column added to a `CREATE TABLE IF NOT EXISTS` never reaches a database that has the table
+
+`debt_transactions` was created in migration 35. Later the same day a `synced` column was added to
+it — to the `CREATE TABLE`, because the table was new and no terminal had it yet. That is true of
+terminals in the field, and false of every machine that had already run a build from earlier that
+day: `CREATE TABLE IF NOT EXISTS` is a no-op for them, the column never appeared, and boot died on
+the next statement with `P2010 … no such column: synced`.
+
+The developer's own machine found it, which is the lucky version. The same shape on a store's
+terminal is a till that will not start.
+
+Neither existing guard could see it:
+
+- `sqlite-schema.test.ts` compares the Prisma models against the *text* of `sqlite-client.ts`,
+  where the column is plainly present — in a statement that will never run again.
+- `legacy-upgrade.test.ts` started from a database old enough to have no `debt_transactions` at
+  all, so the `CREATE` ran and the column appeared.
+
+**Rule:** a column added to a table `sqlite-client.ts` already creates needs a guarded
+`ALTER TABLE` *as well as* its place in the `CREATE`. The `CREATE` is for databases that do not
+have the table; the `ALTER` is for every database that does. This is the `audit_logs` lesson and
+migration 27 one level down — table, then column — and it will recur every time a table is edited
+in the same release that introduced it.
+
+**Also:** the seed in `legacy-upgrade.test.ts` now includes a table in its *intermediate* shape,
+not only its oldest one. "Upgrades from the last release" and "upgrades from a build someone was
+running yesterday" are different starting points, and only the second one shows this class of bug.

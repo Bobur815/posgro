@@ -17,6 +17,7 @@ import {
   Download,
   CheckCircle,
   ShieldCheck,
+  HandCoins,
 } from "lucide-react";
 import { SyncButton } from "../common/SyncButton";
 import { useAuthStore } from "../../store/auth-store";
@@ -306,6 +307,9 @@ export function Sidebar() {
               {!adminLocked &&
                 renderNavItem("/products/stock", ClipboardList, t("nav.inventory"))}
               {!adminLocked && renderNavItem("/suppliers", Truck, t("suppliers.title"))}
+              {/* Debts are this shop's own book — they exist whether or not the store keeps its
+                  stock on the terminal, so this is not gated on adminLocked. */}
+              {renderNavItem("/debtors", HandCoins, t("debtors.title"))}
               <StyledNavLink to="/settings" onClick={collapseSidebar}>
                 <IconWrapper><Settings size={17} /></IconWrapper>
                 <NavText>{t("nav.settings")}</NavText>

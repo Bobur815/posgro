@@ -18,6 +18,7 @@ import { Analytics } from './pages/Reports/Analytics';
 import { UserList } from './pages/Users/UserList';
 import { SettingsPage } from './pages/Settings/SettingsPage';
 import { SystemSettings } from './pages/Settings/SystemSettings';
+import { DebtorsPage } from './pages/Settings/DebtorsPage';
 import { UserSettings } from './pages/Settings/UserSettings';
 import { DevicesPage } from './pages/Settings/DevicesPage';
 import { StoreList } from './pages/Admin/StoreList';
@@ -108,6 +109,7 @@ export function App() {
           {/* Settings */}
           <Route path="settings" element={<PrivateRoute adminOnly><SettingsPage /></PrivateRoute>} />
           <Route path="settings/system" element={<PrivateRoute adminOnly><SystemSettings /></PrivateRoute>} />
+          <Route path="settings/debtors" element={<PrivateRoute adminOnly><DebtorsPage /></PrivateRoute>} />
           <Route path="settings/user" element={<UserSettings />} />
           <Route path="settings/devices" element={<DevicesPage />} />
 

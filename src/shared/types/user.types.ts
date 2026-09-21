@@ -76,4 +76,10 @@ export interface UserListItem {
    * it is", never "clear it".
    */
   hasPin?: boolean;
+  /**
+   * Nasiya balance. Positive = this person owes the shop. Staff can run a tab for their own
+   * store, so a cashier's row carries one like anybody else's.
+   */
+  debt?: number;
+  debtDueDate?: string | Date | null;
 }

@@ -1,3 +1,192 @@
+# Nasiya, round two: dashboard, phone input, due dates, receipt details (2026-09-21)
+
+- [x] Staff debts on the dashboard's user list (both backends)
+- [x] Read-only debtors page on the dashboard, under Settings
+- [x] UzbekPhoneInput in the POS debtor picker
+- [x] Due date pickers — on the credit itself, and on the debtor
+- [x] Foldable receipt details inside the debtor ledger
+
+## The ledger now reaches the server
+
+The dashboard could have shown a balance (it rides with the user row) but never a history —
+nothing uploaded `DebtTransaction`. A read-only page without payments on it is a shell, so the
+ledger syncs like sales do: `synced` flag on the SQLite table, `uploadDebtTransactions()` after
+the users upload (a row whose person the server has not seen yet would fail its FK), and
+`POST /debtors/sync-bulk` upserting on the till's own row id.
+
+Both migrations were still unreleased, so the flag went into the CREATE rather than a follow-up
+ALTER.
+
+## Read-only, and why
+
+`DebtorsService` on the VPS and `routes/debtors.ts` on the terminal answer the same two paths in
+the same shape — the dashboard is one component against two backends, so an OFFLINE_ONLY shop
+gets the same page. Neither can take a payment. A debt is settled where the customer, the drawer
+and the fiscal device are; writing one here would produce a balance no till agrees with, and the
+till would win the next sync. The page says so in a banner rather than leaving someone hunting
+for a button.
+
+## Foldable, not a second modal
+
+`DebtorDetails` is already a modal, and a dialog stacked on a dialog is a trap on a touch till —
+you lose track of which Close closes what. A CHARGE row unfolds in place to show what was bought,
+fetching that receipt on first open (a debtor with a hundred charges would otherwise pull a
+hundred receipts to show one). Payments have nothing to unfold and stay flat.
+
+## Due dates
+
+Two places, deliberately. The picker sets one when the credit is given — prefilled from whatever
+that person already agreed, so the usual case is one tap — and it is written to BOTH the charge
+row and `users.debtDueDate`. The charge keeps its own date so a ledger entry can always say what
+was agreed for that receipt; the user-level field is the headline "pay everything by", and it
+follows the latest thing agreed. `DebtorDetails` edits the latter directly.
+
+## Also
+
+- The debtors page toggle is customers-only again, but the role filter is applied *only* when the
+  list is not already filtered to people who owe — so staff debt can never be hidden by a role.
+  That invariant has a test named after it.
+- The POS picker uses `UzbekPhoneInput`, holding nine national digits and submitting `998…`,
+  validated with `isUzPhoneComplete` rather than "is it non-empty".
+- Staff debt shows on the terminal's Users screen (clickable, opens the ledger) and on the
+  dashboard's (read-only, links to the debtors page).
+
+## Test flakiness, again
+
+A cold full run (`jest --clearCache`) fails 2–3 tests in the LAN/satellite suites with
+`Exceeded timeout of 30000 ms`; those suites take 220s cold against ~20s warm. Same saturation
+flake `lessons.md` documents. Warm runs are 912/912. Not caused by this work — the failing test
+is `/terminal/sync/settings` — but the cold number is not clean and should not be reported as if
+it were.
+
+---
+
+# Worst sellers, stock value, shift alerts, and nasiya (2026-09-21)
+
+Plan: `~/.claude/plans/dapper-jumping-parnas.md`.
+
+- [x] Worst sellers exclude products that were not restocked and still have stock
+- [x] ReconciliationPage shows stock on hand valued at cost and at retail
+- [x] Telegram reports a shift opening and closing to a store's admins
+- [x] Nasiya: CLIENT role, debt on User, a ledger, credit at the till, payoff, sync
+
+## Worst sellers
+
+One ranking brain (`analytics.ranking.ts`), three SQL feeders. Each feeder now selects `stock`
+and an indexed `EXISTS` over `inventory_arrivals` for the period; `sellableInPeriod()` keeps a
+product in the WORST list only when it arrived in the period or has run out. The rule is the
+literal one the user chose: **not restocked and still on the shelf drops out**, so a slow mover
+nobody reordered is not reported as a worst seller. Best sellers are untouched, and
+`neverSoldCount`/`noCostCount`/`totalProducts` still describe the whole catalogue.
+
+Both flags default to "include" when a feeder has not supplied them — the rows are type-asserted
+raw SQL, so a fourth feeder that forgets them keeps the old behaviour instead of emptying the list.
+
+## Stock value
+
+`stockValue: { atCost, atRetail, productCount, missingCostCount }` on `/reconciliation/goods`, in
+BOTH backends. A missing cost price is counted, never valued at zero, and the card says so.
+
+Worth noting: the terminal's own `/reconciliation/goods` is a stub (`ledgerEnabled: false`) because
+a till keeps no movement ledger — but valuing the shelf needs no ledger, so this figure is real
+there too. An OFFLINE_ONLY shop gets the two cards.
+
+## Telegram shifts
+
+The server never hears about an **open** shift — terminals sync `status: 'CLOSED'` only. So the
+till pings `POST /smena/opened` fire-and-forget (nothing is persisted; an offline shop simply gets
+no open message). Closing hooks `upsertOne`, which now reads the row before the upsert: a terminal
+retries a shift until the server confirms it, and without that read every retry would re-send the
+end-of-day report.
+
+`TelegramService.notifyStoreAdmins/alertChats/sendAlert` now hold the audience rule that was
+embedded in `LogAlertsService.flush`, so there is one definition of "a store's admins" and one
+place that unsubscribes a chat which has blocked the bot.
+
+## Nasiya
+
+A debtor is a `User` with role **CLIENT** — not a table of its own, because the person running a
+tab may be staff (the requirement says so explicitly), and two tables would mean two answers to
+"whose phone number is this". `debt` and `debtDueDate` hang off `User` for any role.
+
+- **Ledger** (`sales/debt-ledger.ts`): CHARGE/PAYMENT/ADJUSTMENT, signed in the main process and
+  never by the caller. Payments settle the oldest unpaid receipt first.
+- **Fiscal**: a credit sale gets `fiscalStatus: 'DEFERRED_DEBT'` — a status no retry sweep selects
+  — and is fiscalized only when payments have covered it. That is why the allocator has to know
+  WHICH receipt a part payment finished, and why it is tested directly.
+- **Money**: `sales.paid_amount` / `debt_amount` split the receipt. Every drawer and shift figure
+  now reads `paid_amount`; migration 35 backfills it to `final_amount` on historical rows. A cash
+  payoff is recorded as a shift PAY_IN, which is the only way an X/Z report can account for money
+  arriving outside a sale. `money.service.ts`'s prepared `newDebts` term is now non-zero.
+- **Login**: CLIENT is refused at all four login paths, and excluded at the two `UsersService`
+  lookups the server's logins go through. It is also excluded from `findByPhoneAnyStore`, which
+  would otherwise have let a debtor open the shop's Telegram bot and read its takings.
+
+## Two bugs the tests found, not the review
+
+- `allocatePayment` took an amount *and* read the ledger, double-counting every payment. It now
+  derives everything from the ledger, which also settles anything a crash left unallocated.
+- `void notifyClosed(...)` was an unhandled rejection away from taking the API process down.
+  Both fire-and-forget calls are `.catch()`-ed now.
+
+And one regression the suite caught: the satellite sale cache did not mirror `paidAmount`, so a
+satellite cut off from its main showed a drawer of zero for a day of trading.
+
+## Not done
+
+Browsing and settling debtors **from a satellite** needs a `/debtors` LAN route — deferred, as
+agreed in the plan. A satellite can already create a credit sale; the main charges it.
+
+Version not bumped — bumped once at deploy time, then `npm run deploy:pos`. The server changes
+(shift alerts, sync fields, reconciliation) need a server deploy, and Postgres needs
+`prisma migrate dev` for the CLIENT enum value, the three Sale columns, the two User columns and
+`debt_transactions`.
+
+---
+
+# Fiscalization timing: what the field numbers say (2026-09-20)
+
+Three real receipts off terminal T1, evening of 2026-09-20:
+
+| receipt | total | our code | `Receipt.Sale` | share |
+|---|---|---|---|---|
+| T1260920244 20:53 | 5501ms | 85ms | 5416ms | 98.5% |
+| T1260920242 20:40 | 4598ms | 72ms | 4519ms | 98.3% |
+| T1260920240 20:33 FAILED | 3277ms | 86ms | 2841ms + ~350ms failure handling | 87% |
+
+`queue=0ms` throughout — no contention, the single-threaded queue is not the problem. `zreport=0ms`
+— the open-Z cache holds. Our own work grew from the ~15ms measured earlier to ~80ms (it is `load`,
+a Prisma `findUnique` with items) and is 1.5% of the total: **there is nothing left to win on our
+side.** The trend is entirely REGOS's: 2.4s median measured earlier → `total=3983ms` typical in the
+2026-09-19 log survey → 4.5–5.5s here.
+
+Cost to the shop: `sales:create` returns at once, so the cashier is free, but `printSaleReceipt`
+awaits fiscalization before printing (the paper needs `regosQrCodeUrl`), so the customer waits the
+full ~5s for paper. A satellite waits up to `FISCAL_WAIT_MS` = 10s.
+
+## Instrumentation added (this session)
+
+- **Receipt size on the timing line.** `FiscalTimer.contents(positions, marked)`, set right after
+  the positions are built, prints `pos=N marked=M` before the phase breakdown and lands in
+  `recentSales()`. REGOS verifies every DataMatrix inside `Receipt.Sale`, so marked-code count is
+  the leading hypothesis for the spread — and we could not test it, because nothing recorded what
+  each receipt carried. Also shown per receipt in Fiscal settings.
+- **Device capacity at shift open and close.** `logDeviceCapacity()` logs
+  `Sys.GetOverflowInfo` — REGOS's `AvaialableUnsendReceiptCount` is how many *more* unsent receipts
+  the applet can hold, so it falls as an OFD backlog builds. Deliberately off the sale path (it
+  would add a round-trip to a single-threaded device); the open/close pair brackets one shift and
+  reads as a delta. Both lines carry the `[fiscal-timing]` prefix, which `LogAlertsService` already
+  filters out of Telegram alerts.
+
+## Still open
+
+- **"Чек печатает виртуальная касса" on T1 is unconfirmed.** If it is on, the VCR prints paper
+  synchronously *inside* `Receipt.Sale` — seconds sitting in the number, fixable by flipping it and
+  printing ourselves. Flagged as open since the earlier session and still not checked end to end.
+- Take the numbers to REGOS if the two new signals come back clean.
+
+---
+
 # Subscription warnings and blocking (started 2026-09-12)
 
 Plan: `~/.claude/plans/foamy-weaving-hamster.md`.

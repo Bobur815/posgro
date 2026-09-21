@@ -20,7 +20,7 @@ export const FALLBACK_PLANS: LandingPlan[] = [
     "featuresRu": [
       "Одно кассовое место",
       "Работает без интернета и синхронизируется, когда связь появится",
-      "Фискальный чек (REGOS / OFD)",
+      "Фискальный чек",
       "Маркированные товары (Asl-Belgisi)",
       "Продажа по штрих-коду и с весами",
       "Смена, приход и расход кассы, X- и Z-отчёты",
@@ -29,7 +29,7 @@ export const FALLBACK_PLANS: LandingPlan[] = [
     "featuresUz": [
       "Bitta kassa o'rni",
       "Internetsiz ishlaydi, aloqa tiklanganda o'zi sinxronlaydi",
-      "Fiskal chek (REGOS / OFD)",
+      "Fiskal chek",
       "Markirovkali mahsulotlar (Asl-Belgisi)",
       "Shtrix-kod va tarozi bilan savdo",
       "Smena, kassa kirim-chiqimi, X va Z hisobot",

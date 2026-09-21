@@ -11,6 +11,8 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { useToast } from '../../context/ToastContext';
 import { SyncButton } from '../common/SyncButton';
 import { useModeStore } from '../../store/mode-store';
+import { roleLabelKey } from '@shared/constants/roles';
+import { useLicenseNotice, LicenseNoticeBar } from './LicenseBanner';
 
 export const APP_BAR_HEIGHT = 48;
 
@@ -234,6 +236,10 @@ export function AppBar() {
     ? (i18n.language === 'uz' ? user.nameUz : user.nameRu)
     : '';
 
+  // The licence notice lives in the row itself, so it takes the spare width the spacer would
+  // otherwise hold — only one of the two is ever in the layout.
+  const licenseNotice = useLicenseNotice();
+
   return (
     <Bar>
       {/* Hamburger / Close */}
@@ -247,7 +253,8 @@ export function AppBar() {
         <BrandName>POSGRO</BrandName>
       </BrandWrapper>
 
-      <Spacer />
+      {/* Licence notice, in place of the spacer when there is one to show */}
+      {licenseNotice ? <LicenseNoticeBar notice={licenseNotice} inline /> : <Spacer />}
 
       {/* Smena indicator */}
       {smenaOpen !== null && (
@@ -275,7 +282,7 @@ export function AppBar() {
           <User size={15} style={{ color: 'inherit', opacity: 0.6 }} />
           <UserName>{userName}</UserName>
           <RoleBadge>
-            {user.role === 'ADMIN' ? t('users.admin') : t('users.cashier')}
+            {t(roleLabelKey(user.role), { defaultValue: user.role })}
           </RoleBadge>
         </UserChip>
       )}

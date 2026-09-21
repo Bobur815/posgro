@@ -69,6 +69,11 @@ export async function syncSales(): Promise<SalesSyncResult> {
           totalAmount: sale.totalAmount.toString(),
           discountAmount: sale.discountAmount.toString(),
           finalAmount: sale.finalAmount.toString(),
+          // Nasiya: what was taken at the counter, and what went on a customer's tab. Without
+          // these the server's money reconciliation would report every credit sale as collected.
+          paidAmount: sale.paidAmount.toString(),
+          debtAmount: sale.debtAmount.toString(),
+          debtUserId: sale.debtUserId ?? undefined,
           paymentMethod: sale.paymentMethod,
           cashierId: sale.cashierId,
           cashierName: sale.cashierName || sale.cashierId,

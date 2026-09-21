@@ -35,8 +35,10 @@ async function computeShiftTotals(smenaId: string): Promise<ShiftTotals> {
   const prisma = getPrismaClient();
 
   type SalesRow = { payment_method: string; total: number };
+  // paid_amount, not final_amount: credit handed over now is not money in this shift. See
+  // computeSmenaStats(), which this mirrors.
   const salesRows = (await prisma.$queryRawUnsafe(
-    `SELECT payment_method, COALESCE(SUM(final_amount), 0) as total
+    `SELECT payment_method, COALESCE(SUM(paid_amount), 0) as total
      FROM sales WHERE smena_id = ? GROUP BY payment_method`,
     smenaId,
   )) as SalesRow[];
@@ -196,4 +198,50 @@ export async function syncSmenas(): Promise<SmenaSyncResult> {
   }
 
   return result;
+}
+
+/**
+ * Tell the server a shift has just opened, so its admins hear about it on Telegram.
+ *
+ * Nothing is stored server-side and nothing here is retried: the server keeps CLOSED shifts
+ * only, and this is one message, now or never. A shop whose internet is down at opening time
+ * simply gets no open message — its close notification still arrives through the normal sync.
+ *
+ * Deliberately not part of a sync cycle: the point is that the admin's phone buzzes while the
+ * till is being opened, not up to a cycle later. Callers must not await it.
+ */
+export async function announceShiftOpened(smena: {
+  id: string;
+  terminalId: string;
+  cashierName: string;
+  initialCash: unknown;
+  openedAt: Date | string;
+  zReportNumber: number;
+}): Promise<void> {
+  const config = getAppConfig();
+  const token = getServerToken();
+  if (!token) return;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    await fetch(`${config.vpsApiUrl}/smena/opened`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: smena.id,
+        terminalId: smena.terminalId,
+        cashierName: smena.cashierName,
+        // String, like every other money field crossing this wire — a JSON number would round.
+        initialCash: String(smena.initialCash),
+        openedAt: new Date(smena.openedAt).toISOString(),
+        zReportNumber: smena.zReportNumber,
+      }),
+    });
+    clearTimeout(timeoutId);
+  } catch {
+    // Fire-and-forget, exactly like the heartbeat: an older server has no such route, and an
+    // offline shop must still be able to open its shift.
+  }
 }

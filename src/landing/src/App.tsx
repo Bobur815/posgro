@@ -1,5 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import styled, { ThemeProvider, createGlobalStyle, css } from 'styled-components';
+import React, { useEffect, useState } from "react";
+import styled, {
+  ThemeProvider,
+  createGlobalStyle,
+  css,
+} from "styled-components";
 import {
   WifiOff,
   Receipt,
@@ -18,11 +22,23 @@ import {
   Instagram,
   Facebook,
   Link as LinkIcon,
-} from 'lucide-react';
-import { lightTheme, darkTheme, type Theme } from '@theme/themes';
-import { translate, initialLang, saveLang, formatPrice, type Lang, type StringKey } from './i18n';
-import { FALLBACK_PLANS, FALLBACK_PRICES, FALLBACK_CONTACT, type Prices } from './content';
-import type { LandingPlan, LandingContact } from '@shared/types/landing.types';
+} from "lucide-react";
+import { lightTheme, darkTheme, type Theme } from "@theme/themes";
+import {
+  translate,
+  initialLang,
+  saveLang,
+  formatPrice,
+  type Lang,
+  type StringKey,
+} from "./i18n";
+import {
+  FALLBACK_PLANS,
+  FALLBACK_PRICES,
+  FALLBACK_CONTACT,
+  type Prices,
+} from "./content";
+import type { LandingPlan, LandingContact } from "@shared/types/landing.types";
 
 /**
  * posgro.uz — the landing page.
@@ -35,14 +51,14 @@ import type { LandingPlan, LandingContact } from '@shared/types/landing.types';
  * (tasks/DOMAIN_MIGRATION_POSGRO.md §9.1).
  */
 
-const DASHBOARD_URL = 'https://web.posgro.uz/web/';
-const PANEL_URL = 'https://panel.posgro.uz';
-const THEME_KEY = 'posgro-landing-theme';
+const DASHBOARD_URL = "https://web.posgro.uz/web/";
+const PANEL_URL = "https://panel.posgro.uz";
+const THEME_KEY = "posgro-landing-theme";
 
 /** The brand mark: the same gradient square and "PG" as the app icon (src/web/src/branding). */
 const BRAND = {
-  light: { from: '#1976d2', to: '#dc004e' },
-  dark: { from: '#90caf9', to: '#f48fb1' },
+  light: { from: "#1976d2", to: "#dc004e" },
+  dark: { from: "#90caf9", to: "#f48fb1" },
 };
 
 const GlobalStyle = createGlobalStyle`
@@ -113,8 +129,12 @@ const NavLink = styled.a`
   font-weight: 600;
   text-decoration: none;
   color: ${({ theme }) => theme.colors.textSecondary};
-  &:hover { color: ${({ theme }) => theme.colors.primary}; }
-  @media (max-width: 860px) { display: none; }
+  &:hover {
+    color: ${({ theme }) => theme.colors.primary};
+  }
+  @media (max-width: 860px) {
+    display: none;
+  }
 `;
 
 const IconBtn = styled.button`
@@ -130,7 +150,10 @@ const IconBtn = styled.button`
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  &:hover { color: ${({ theme }) => theme.colors.primary}; border-color: ${({ theme }) => theme.colors.primary}; }
+  &:hover {
+    color: ${({ theme }) => theme.colors.primary};
+    border-color: ${({ theme }) => theme.colors.primary};
+  }
 `;
 
 const LoginBtn = styled.a<{ $dark: boolean }>`
@@ -144,7 +167,9 @@ const LoginBtn = styled.a<{ $dark: boolean }>`
   font-size: 14px;
   font-weight: 700;
   text-decoration: none;
-  &:hover { opacity: 0.9; }
+  &:hover {
+    opacity: 0.9;
+  }
 `;
 
 const Main = styled.main`
@@ -200,7 +225,9 @@ const PrimaryCta = styled.a<{ $dark: boolean }>`
   font-weight: 700;
   text-decoration: none;
   box-shadow: ${({ theme }) => theme.shadows.md};
-  &:hover { opacity: 0.9; }
+  &:hover {
+    opacity: 0.9;
+  }
 `;
 
 const SecondaryCta = styled.a`
@@ -215,7 +242,10 @@ const SecondaryCta = styled.a`
   font-size: 16px;
   font-weight: 700;
   text-decoration: none;
-  &:hover { border-color: ${({ theme }) => theme.colors.primary}; color: ${({ theme }) => theme.colors.primary}; }
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.primary};
+    color: ${({ theme }) => theme.colors.primary};
+  }
 `;
 
 const SectionTitle = styled.h2`
@@ -290,15 +320,19 @@ const PlanCard = styled.div<{ $featured: boolean; $dark: boolean }>`
   border-radius: 14px;
   background: ${({ theme }) => theme.colors.surface};
   border: ${({ $featured, theme }) =>
-    $featured ? '2px solid transparent' : `1px solid ${theme.colors.border}`};
+    $featured ? "2px solid transparent" : `1px solid ${theme.colors.border}`};
   ${({ $featured, $dark }) =>
     $featured &&
     css`
       /* Gradient border without a wrapper: paint the surface, then the brand gradient, and let
          the border box show only the second. */
-      background-image: linear-gradient(var(--surface), var(--surface)),
-        linear-gradient(135deg, ${$dark ? BRAND.dark.from : BRAND.light.from},
-          ${$dark ? BRAND.dark.to : BRAND.light.to});
+      background-image:
+        linear-gradient(var(--surface), var(--surface)),
+        linear-gradient(
+          135deg,
+          ${$dark ? BRAND.dark.from : BRAND.light.from},
+          ${$dark ? BRAND.dark.to : BRAND.light.to}
+        );
       background-origin: border-box;
       background-clip: padding-box, border-box;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
@@ -362,7 +396,11 @@ const FeatureItem = styled.li`
   align-items: flex-start;
   font-size: 14px;
   line-height: 1.5;
-  svg { flex: 0 0 auto; margin-top: 2px; color: ${({ theme }) => theme.colors.primary}; }
+  svg {
+    flex: 0 0 auto;
+    margin-top: 2px;
+    color: ${({ theme }) => theme.colors.primary};
+  }
 `;
 
 const PlanCta = styled.a<{ $featured: boolean; $dark: boolean }>`
@@ -383,7 +421,9 @@ const PlanCta = styled.a<{ $featured: boolean; $dark: boolean }>`
           border: 1px solid ${theme.colors.border};
           color: ${theme.colors.text};
         `}
-  &:hover { opacity: 0.9; }
+  &:hover {
+    opacity: 0.9;
+  }
 `;
 
 const ContactGrid = styled.div`
@@ -414,7 +454,9 @@ const ContactValue = styled.a`
   font-weight: 700;
   text-decoration: none;
   color: ${({ theme }) => theme.colors.text};
-  &:hover { color: ${({ theme }) => theme.colors.primary}; }
+  &:hover {
+    color: ${({ theme }) => theme.colors.primary};
+  }
 `;
 
 const Socials = styled.div`
@@ -434,7 +476,10 @@ const Social = styled.a`
   border: 1px solid ${({ theme }) => theme.colors.border};
   background: ${({ theme }) => theme.colors.surface};
   color: ${({ theme }) => theme.colors.textSecondary};
-  &:hover { color: ${({ theme }) => theme.colors.primary}; border-color: ${({ theme }) => theme.colors.primary}; }
+  &:hover {
+    color: ${({ theme }) => theme.colors.primary};
+    border-color: ${({ theme }) => theme.colors.primary};
+  }
 `;
 
 const Footer = styled.footer`
@@ -453,8 +498,14 @@ const FooterLinks = styled.div`
   gap: 20px;
   margin-bottom: 12px;
   flex-wrap: wrap;
-  a { color: ${({ theme }) => theme.colors.primary}; text-decoration: none; font-weight: 600; }
-  a:hover { text-decoration: underline; }
+  a {
+    color: ${({ theme }) => theme.colors.primary};
+    text-decoration: none;
+    font-weight: 600;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
 `;
 
 const SOCIAL_ICONS: Record<string, typeof Send> = {
@@ -464,30 +515,33 @@ const SOCIAL_ICONS: Record<string, typeof Send> = {
 };
 
 const FEATURES: Array<{ icon: typeof WifiOff; t: StringKey; d: StringKey }> = [
-  { icon: WifiOff, t: 'features.offline.t', d: 'features.offline.d' },
-  { icon: Receipt, t: 'features.fiscal.t', d: 'features.fiscal.d' },
-  { icon: ShieldCheck, t: 'features.marking.t', d: 'features.marking.d' },
-  { icon: Printer, t: 'features.hardware.t', d: 'features.hardware.d' },
-  { icon: Network, t: 'features.multi.t', d: 'features.multi.d' },
-  { icon: LineChart, t: 'features.dashboard.t', d: 'features.dashboard.d' },
+  { icon: WifiOff, t: "features.offline.t", d: "features.offline.d" },
+  { icon: Receipt, t: "features.fiscal.t", d: "features.fiscal.d" },
+  { icon: ShieldCheck, t: "features.marking.t", d: "features.marking.d" },
+  { icon: Printer, t: "features.hardware.t", d: "features.hardware.d" },
+  { icon: Network, t: "features.multi.t", d: "features.multi.d" },
+  { icon: LineChart, t: "features.dashboard.t", d: "features.dashboard.d" },
 ];
 
 function initialDark(): boolean {
   try {
     const saved = localStorage.getItem(THEME_KEY);
-    if (saved === 'dark') return true;
-    if (saved === 'light') return false;
+    if (saved === "dark") return true;
+    if (saved === "light") return false;
   } catch {
     /* ignore */
   }
-  return typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: dark)').matches;
+  return (
+    typeof matchMedia !== "undefined" &&
+    matchMedia("(prefers-color-scheme: dark)").matches
+  );
 }
 
 /** Never throws and never returns undefined — the caller keeps what is already on screen. */
 async function getJson<T>(path: string, fallback: T): Promise<T> {
   try {
     const res = await fetch(`https://api.posgro.uz/api${path}`, {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: "application/json" },
     });
     if (!res.ok) return fallback;
     return (await res.json()) as T;
@@ -504,7 +558,7 @@ export function App() {
   const [contact, setContact] = useState<LandingContact>(FALLBACK_CONTACT);
 
   const t = (key: StringKey) => translate(lang, key);
-  const ru = lang === 'ru';
+  const ru = lang === "ru";
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -513,7 +567,7 @@ export function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light');
+      localStorage.setItem(THEME_KEY, dark ? "dark" : "light");
     } catch {
       /* the page works fine without remembering */
     }
@@ -521,13 +575,15 @@ export function App() {
 
   useEffect(() => {
     // Live content replaces the baked copy when it arrives. A failure leaves what is rendered.
-    getJson('/site-config/landing-plans', FALLBACK_PLANS).then((p) => p.length && setPlans(p));
-    getJson('/site-config/subscription-plans', FALLBACK_PRICES).then(setPrices);
-    getJson('/site-config/landing-contact', FALLBACK_CONTACT).then(setContact);
+    getJson("/site-config/landing-plans", FALLBACK_PLANS).then(
+      (p) => p.length && setPlans(p),
+    );
+    getJson("/site-config/subscription-plans", FALLBACK_PRICES).then(setPrices);
+    getJson("/site-config/landing-contact", FALLBACK_CONTACT).then(setContact);
   }, []);
 
   const theme: Theme = dark ? darkTheme : lightTheme;
-  const telegram = contact.socials.find((s) => s.platform === 'telegram')?.url;
+  const telegram = contact.socials.find((s) => s.platform === "telegram")?.url;
   /** An empty ctaUrl falls back to Telegram — one link to change, not three. */
   const planHref = (p: LandingPlan) => p.ctaUrl || telegram || DASHBOARD_URL;
 
@@ -535,47 +591,50 @@ export function App() {
     <ThemeProvider theme={theme}>
       <GlobalStyle />
       {/* --surface feeds the featured card's gradient border, which needs the solid colour twice. */}
-      <div style={{ ['--surface' as string]: theme.colors.surface }}>
+      <div style={{ ["--surface" as string]: theme.colors.surface }}>
         <Bar>
           <Brand href="/">
             <Mark $dark={dark}>PG</Mark>
             POSGRO
           </Brand>
-          <NavLink href="#features">{t('nav.features')}</NavLink>
-          <NavLink href="#pricing">{t('nav.pricing')}</NavLink>
-          <NavLink href="#contact">{t('nav.contact')}</NavLink>
-          <IconBtn onClick={() => setLang(ru ? 'uz' : 'ru')} title={t('lang.toggle')}>
-            {ru ? 'RU' : 'UZ'}
+          <NavLink href="#features">{t("nav.features")}</NavLink>
+          <NavLink href="#pricing">{t("nav.pricing")}</NavLink>
+          <NavLink href="#contact">{t("nav.contact")}</NavLink>
+          <IconBtn
+            onClick={() => setLang(ru ? "uz" : "ru")}
+            title={t("lang.toggle")}
+          >
+            {ru ? "RU" : "UZ"}
           </IconBtn>
-          <IconBtn onClick={() => setDark(!dark)} title={t('theme.toggle')}>
+          <IconBtn onClick={() => setDark(!dark)} title={t("theme.toggle")}>
             {dark ? <Sun size={16} /> : <Moon size={16} />}
           </IconBtn>
           <LoginBtn $dark={dark} href={DASHBOARD_URL}>
             <LogIn size={15} />
-            {t('nav.login')}
+            {t("nav.login")}
           </LoginBtn>
         </Bar>
 
         <Main>
           <Hero>
             <H1>
-              <Accent $dark={dark}>POSGRO</Accent> — {t('hero.title')}
+              <Accent $dark={dark}>POSGRO</Accent> — {t("hero.title")}
             </H1>
-            <Lede>{t('hero.lede')}</Lede>
+            <Lede>{t("hero.lede")}</Lede>
             <CtaRow>
               <PrimaryCta $dark={dark} href={DASHBOARD_URL}>
                 <LogIn size={18} />
-                {t('hero.cta')}
+                {t("hero.cta")}
               </PrimaryCta>
               <SecondaryCta href={PANEL_URL}>
                 <Download size={18} />
-                {t('hero.download')}
+                {t("hero.download")}
               </SecondaryCta>
             </CtaRow>
           </Hero>
 
           <Section id="features">
-            <SectionTitle>{t('features.title')}</SectionTitle>
+            <SectionTitle>{t("features.title")}</SectionTitle>
             <SectionLede />
             <FeatureGrid>
               {FEATURES.map(({ icon: Icon, t: title, d }) => (
@@ -591,22 +650,34 @@ export function App() {
           </Section>
 
           <Section id="pricing">
-            <SectionTitle>{t('pricing.title')}</SectionTitle>
-            <SectionLede>{t('pricing.lede')}</SectionLede>
+            <SectionTitle>{t("pricing.title")}</SectionTitle>
+            <SectionLede>{t("pricing.lede")}</SectionLede>
             <PriceGrid>
               {plans.map((plan) => {
                 const price = prices[plan.id] ?? 0;
                 const features = ru ? plan.featuresRu : plan.featuresUz;
                 return (
-                  <PlanCard key={plan.id} $featured={plan.highlighted} $dark={dark}>
-                    {plan.highlighted && <Badge $dark={dark}>{t('pricing.popular')}</Badge>}
-                    <PlanName>{(ru ? plan.nameRu : plan.nameUz) || plan.id}</PlanName>
-                    <PlanTagline>{ru ? plan.taglineRu : plan.taglineUz}</PlanTagline>
+                  <PlanCard
+                    key={plan.id}
+                    $featured={plan.highlighted}
+                    $dark={dark}
+                  >
+                    {plan.highlighted && (
+                      <Badge $dark={dark}>{t("pricing.popular")}</Badge>
+                    )}
+                    <PlanName>
+                      {(ru ? plan.nameRu : plan.nameUz) || plan.id}
+                    </PlanName>
+                    <PlanTagline>
+                      {ru ? plan.taglineRu : plan.taglineUz}
+                    </PlanTagline>
                     <Price>
                       {formatPrice(price)}
                       <PriceUnit>
-                        {t('pricing.sum')}
-                        {plan.id === 'vip' ? ` ${t('pricing.once')}` : t('pricing.month')}
+                        {t("pricing.sum")}
+                        {plan.id === "vip"
+                          ? ` ${t("pricing.once")}`
+                          : t("pricing.month")}
                       </PriceUnit>
                     </Price>
                     <FeatureList>
@@ -617,8 +688,12 @@ export function App() {
                         </FeatureItem>
                       ))}
                     </FeatureList>
-                    <PlanCta $featured={plan.highlighted} $dark={dark} href={planHref(plan)}>
-                      {t('pricing.cta')}
+                    <PlanCta
+                      $featured={plan.highlighted}
+                      $dark={dark}
+                      href={planHref(plan)}
+                    >
+                      {t("pricing.cta")}
                     </PlanCta>
                   </PlanCard>
                 );
@@ -627,17 +702,20 @@ export function App() {
           </Section>
 
           <Section id="contact">
-            <SectionTitle>{t('contact.title')}</SectionTitle>
-            <SectionLede>{t('contact.lede')}</SectionLede>
+            <SectionTitle>{t("contact.title")}</SectionTitle>
+            <SectionLede>{t("contact.lede")}</SectionLede>
             <ContactGrid>
               {contact.phones.map((p, i) => (
                 <ContactCard key={i}>
                   <ContactLabel>
-                    <Phone size={13} style={{ verticalAlign: -2, marginRight: 5 }} />
-                    {p.label || t('contact.phone')}
+                    <Phone
+                      size={13}
+                      style={{ verticalAlign: -2, marginRight: 5 }}
+                    />
+                    {p.label || t("contact.phone")}
                   </ContactLabel>
                   {/* tel: needs the digits, the page shows the readable form */}
-                  <ContactValue href={`tel:${p.number.replace(/[^\d+]/g, '')}`}>
+                  <ContactValue href={`tel:${p.number.replace(/[^\d+]/g, "")}`}>
                     {p.number}
                   </ContactValue>
                 </ContactCard>
@@ -645,8 +723,11 @@ export function App() {
               {(ru ? contact.workingHoursRu : contact.workingHoursUz) && (
                 <ContactCard>
                   <ContactLabel>
-                    <Clock size={13} style={{ verticalAlign: -2, marginRight: 5 }} />
-                    {t('contact.hours')}
+                    <Clock
+                      size={13}
+                      style={{ verticalAlign: -2, marginRight: 5 }}
+                    />
+                    {t("contact.hours")}
                   </ContactLabel>
                   <ContactValue as="div">
                     {ru ? contact.workingHoursRu : contact.workingHoursUz}
@@ -679,15 +760,15 @@ export function App() {
 
         <Footer>
           <FooterLinks>
-            <a href={DASHBOARD_URL}>{t('footer.dashboard')}</a>
-            <a href={PANEL_URL}>{t('footer.download')}</a>
+            <a href={DASHBOARD_URL}>{t("footer.dashboard")}</a>
+            <a href={PANEL_URL}>{t("footer.download")}</a>
             {telegram && (
               <a href={telegram} target="_blank" rel="noreferrer noopener">
-                {t('contact.write')}
+                {t("contact.write")}
               </a>
             )}
           </FooterLinks>
-          © {new Date().getFullYear()} POSGRO. {t('footer.rights')}
+          © {new Date().getFullYear()} POSGRO. {t("footer.rights")}
         </Footer>
       </div>
     </ThemeProvider>

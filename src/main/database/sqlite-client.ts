@@ -844,6 +844,65 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
       ALTER TABLE local_config ADD COLUMN main_generation INTEGER NOT NULL DEFAULT 0
     `;
   }
+
+  // Migration 35: nasiya — customers who take goods on credit.
+  //
+  // `users.debt` is the running balance and `debt_transactions` its history; a sale records what
+  // was paid at the counter apart from what went on the tab. Every column defaults to 0 or NULL,
+  // so an existing database upgrades into "nobody owes anything", which is exactly true.
+  //
+  // The generated client asks INSERTs for every column in the schema, so a column added there and
+  // not here means P2022 on the next sale — the way migration 27 broke every till that had not
+  // run `prisma db push` by hand.
+  if (!(await columnExists(prisma, 'users', 'debt'))) {
+    await prisma.$executeRaw`ALTER TABLE users ADD COLUMN debt DECIMAL NOT NULL DEFAULT 0`;
+    await prisma.$executeRaw`ALTER TABLE users ADD COLUMN debt_due_date DATETIME`;
+  }
+  if (!(await columnExists(prisma, 'sales', 'debt_amount'))) {
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN paid_amount DECIMAL NOT NULL DEFAULT 0`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN debt_amount DECIMAL NOT NULL DEFAULT 0`;
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN debt_user_id TEXT`;
+    // Existing sales were paid in full — the split is new, the money was not. Without this every
+    // historical receipt would read as 0 paid and quietly deflate any drawer figure computed
+    // from paidAmount.
+    await prisma.$executeRaw`UPDATE sales SET paid_amount = final_amount WHERE paid_amount = 0`;
+  }
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS debt_transactions (
+      id             TEXT PRIMARY KEY,
+      user_id        TEXT NOT NULL,
+      type           TEXT NOT NULL,
+      amount         DECIMAL NOT NULL,
+      payment_method TEXT,
+      sale_id        TEXT,
+      settled_at     DATETIME,
+      due_date       DATETIME,
+      note           TEXT,
+      created_by     TEXT NOT NULL,
+      synced         INTEGER NOT NULL DEFAULT 0,
+      created_at     DATETIME NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `;
+  // `synced` was added to the CREATE above after the table already existed on machines running a
+  // build from earlier the same day — and CREATE TABLE IF NOT EXISTS is a no-op for them, so the
+  // column never appeared and the index below died with "no such column: synced" on boot.
+  //
+  // The same trap as the `audit_logs` guard and migration 27, one level down: a column added to a
+  // CREATE TABLE only reaches databases that did not have the table yet. Adding a column to a
+  // table this file already creates ALWAYS needs its own guarded ALTER as well.
+  if (!(await columnExists(prisma, 'debt_transactions', 'synced'))) {
+    await prisma.$executeRaw`
+      ALTER TABLE debt_transactions ADD COLUMN synced INTEGER NOT NULL DEFAULT 0
+    `;
+  }
+
+  await prisma.$executeRaw`
+    CREATE INDEX IF NOT EXISTS idx_debt_txn_open ON debt_transactions(user_id, settled_at)
+  `;
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_debt_txn_sale ON debt_transactions(sale_id)`;
+  // The upload's only query: what this till has not mirrored up yet.
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_debt_txn_synced ON debt_transactions(synced)`;
 }
 
 /** True if `column` exists on `table` — silent (no thrown query, no prisma:error log). */

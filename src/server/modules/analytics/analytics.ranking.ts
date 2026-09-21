@@ -21,6 +21,28 @@ export interface ProductPerformanceRow {
   categoryId: number;
   categoryRu: string;
   categoryUz: string;
+  /** Whether any stock of this product was received during the reporting period. */
+  arrived: boolean;
+  /** Stock on hand now. Only its zero-ness matters — see `sellableInPeriod`. */
+  stock: number;
+}
+
+/**
+ * Whether a product may appear in the WORST sellers list.
+ *
+ * Selling nothing only means something if the shop was trying to sell it. A product that was not
+ * restocked during the period and still has stock sitting on the shelf is excluded: the store
+ * chose not to buy more of it, so its zero is a decision already taken, not news. What is left is
+ * what the shop did buy in (`arrived`) and what it ran out of (`stock === 0`).
+ *
+ * The best-sellers list is unaffected — nothing about having sold well is in question.
+ *
+ * Both fields default to "include" when a caller has not supplied them. They arrive from three
+ * separate raw-SQL feeders whose rows are type-asserted rather than checked, so a feeder that has
+ * not been updated must keep the pre-existing behaviour instead of silently emptying the list.
+ */
+export function sellableInPeriod(row: Pick<ProductPerformanceRow, 'arrived' | 'stock'>): boolean {
+  return (row.arrived ?? true) || (row.stock ?? 0) === 0;
 }
 
 /** A category present among the ranked products, for the UI's filter. */
@@ -95,7 +117,12 @@ function toRanked(r: ProductPerformanceRow): RankedProduct {
  * that sold nothing, so without a deterministic secondary key the "worst sellers" list would
  * reshuffle between two refreshes of the same period and read as though stock had moved.
  */
-function slice(rows: RankedProduct[], value: (r: RankedProduct) => number): RankingSlice {
+function slice(
+  rows: RankedProduct[],
+  value: (r: RankedProduct) => number,
+  /** The population the bottom list is drawn from — narrower than `rows`, see `sellableInPeriod`. */
+  bottomRows: RankedProduct[] = rows,
+): RankingSlice {
   const byValueThenName = (a: RankedProduct, b: RankedProduct, dir: 1 | -1) => {
     const d = (value(a) - value(b)) * dir;
     if (d !== 0) return d;
@@ -107,22 +134,27 @@ function slice(rows: RankedProduct[], value: (r: RankedProduct) => number): Rank
 
   return {
     top: [...rows].sort((a, b) => byValueThenName(a, b, -1)).slice(0, RANK_LIMIT),
-    bottom: [...rows].sort((a, b) => byValueThenName(a, b, 1)).slice(0, RANK_LIMIT),
+    bottom: [...bottomRows].sort((a, b) => byValueThenName(a, b, 1)).slice(0, RANK_LIMIT),
   };
 }
 
 export function rankProducts(rows: readonly ProductPerformanceRow[]): ProductRanking {
   const ranked = rows.map(toRanked);
+  // The worst lists are drawn from a narrower population than the best ones.
+  const worstEligible = rows.filter(sellableInPeriod).map(toRanked);
 
   // Profit rankings run over a smaller population on purpose: a product with no cost price has
   // an unknown margin, and ranking it as if the margin were zero would put every uncosted
   // product at the bottom of "least profitable" and hide the ones actually losing money.
   const costed = ranked.filter((r) => r.profit !== null);
+  const costedWorst = worstEligible.filter((r) => r.profit !== null);
 
   return {
-    byQuantity: slice(ranked, (r) => r.quantity),
-    byRevenue: slice(ranked, (r) => r.revenue),
-    byProfit: slice(costed, (r) => r.profit as number),
+    byQuantity: slice(ranked, (r) => r.quantity, worstEligible),
+    byRevenue: slice(ranked, (r) => r.revenue, worstEligible),
+    byProfit: slice(costed, (r) => r.profit as number, costedWorst),
+    // The three counts below describe the whole catalogue, not the lists — they are what the UI
+    // says the sample is drawn from, so the worst-list filter must not narrow them.
     neverSoldCount: ranked.filter((r) => r.quantity === 0).length,
     noCostCount: ranked.length - costed.length,
     totalProducts: ranked.length,

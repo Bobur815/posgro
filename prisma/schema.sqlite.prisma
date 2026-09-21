@@ -96,7 +96,9 @@ model User {
   id        String   @id @default(cuid())
   phone     String   @unique
   password  String
-  role      String   @default("USER") // ADMIN, USER
+  // ADMIN, USER, CLIENT. A CLIENT is a customer who buys on credit, not staff: no permissions,
+  // and refused at every login path. SUPER_ADMIN exists on the server but never reaches a till.
+  role      String   @default("USER")
   nameUz    String   @map("name_uz")
   nameRu    String   @map("name_ru")
   active    Boolean  @default(true)
@@ -105,11 +107,58 @@ model User {
   // it is never synced to or from the VPS, and can only be changed inside the POS app.
   pin       String?  @map("pin")
 
+  // Nasiya (buying on credit). Positive = this person owes the shop. Held as a running balance
+  // like Supplier.balance, updated in the same transaction as the ledger row that moved it —
+  // debtTransactions is the history, this is the answer to "how much do they owe right now".
+  // Not exclusive to CLIENT: a cashier or admin can run a tab too.
+  debt        Decimal   @default(0)
+  // When the whole balance is due, if anything was agreed. Per person, not per sale.
+  debtDueDate DateTime? @map("debt_due_date")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  debtTransactions DebtTransaction[]
+
   @@index([storeId])
   @@map("users")
+}
+
+/// One movement of a person's debt: goods taken on credit, or money paid back.
+///
+/// Append-only, and signed the same way Supplier.balance is: CHARGE is positive (they owe more),
+/// PAYMENT negative. The sign is decided in the handler from `type`, never taken from the caller.
+///
+/// A CHARGE carries the sale it came from and is stamped `settledAt` once payments have covered
+/// it. That is what makes "fiscalize a credit sale only when it is fully paid" answerable: the
+/// balance alone cannot say WHICH receipt the money finished paying for.
+model DebtTransaction {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id])
+
+  type          String  // CHARGE | PAYMENT | ADJUSTMENT
+  amount        Decimal // + increases the debt, − reduces it
+  paymentMethod String? @map("payment_method") // CASH | CARD, on PAYMENT rows
+
+  // CHARGE only: the credit sale, and when it was finally paid off.
+  saleId    String?   @map("sale_id")
+  settledAt DateTime? @map("settled_at")
+
+  dueDate DateTime? @map("due_date")
+  note    String?
+
+  createdBy String   @map("created_by")
+  /// Mirrored up to the VPS yet? The dashboard's debtor page is read-only and needs the history,
+  /// not just the balance, so the ledger syncs like sales do — idempotently, on the till's own id.
+  synced    Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // The allocator's query: this person's unsettled charges, oldest first.
+  @@index([userId, settledAt])
+  @@index([saleId])
+  @@index([synced])
+  @@map("debt_transactions")
 }
 
 // ==================== PRODUCTS & INVENTORY ====================
@@ -262,6 +311,16 @@ model Sale {
   finalAmount    Decimal  @map("final_amount")
   paymentMethod  String   @map("payment_method")
 
+  // Nasiya. `paidAmount` is what actually changed hands at the counter and `debtAmount` what was
+  // left on the customer's tab; they sum to finalAmount. Every drawer, shift and cash figure must
+  // read paidAmount, because debtAmount is money the shop has not got yet.
+  //
+  // Zero debtAmount (every pre-existing row, and every ordinary sale) means paidAmount is simply
+  // the whole receipt — which is why nothing had to be backfilled.
+  paidAmount Decimal @default(0) @map("paid_amount")
+  debtAmount Decimal @default(0) @map("debt_amount")
+  debtUserId String? @map("debt_user_id")
+
   cashierId   String @map("cashier_id")
   cashierName String @map("cashier_name")
   terminalId  String @map("terminal_id")
@@ -269,8 +328,10 @@ model Sale {
   smenaId  String?  @map("smena_id")
   smena    Smena?   @relation(fields: [smenaId], references: [id])
 
-  // REGOS:VCR fiscalization
-  fiscalStatus    String?   @map("fiscal_status") // PENDING | FISCALIZED | FAILED | DISABLED
+  // REGOS:VCR fiscalization.
+  // DEFERRED_DEBT is a credit sale waiting to be paid: no fiscal receipt is issued until the
+  // customer has settled it, and no retry sweep may pick it up in the meantime.
+  fiscalStatus    String?   @map("fiscal_status") // PENDING | FISCALIZED | FAILED | DISABLED | DEFERRED_DEBT
   fiscalAttempts  Int       @default(0) @map("fiscal_attempts")
   fiscalError     String?   @map("fiscal_error")
   regosReceiptId  String?   @map("regos_receipt_id")

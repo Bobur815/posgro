@@ -1,4 +1,14 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum, IsBoolean, IsArray, ValidateNested } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEnum,
+  IsBoolean,
+  IsArray,
+  IsNumber,
+  IsDateString,
+  ValidateNested,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { USER_ROLES, UserRole } from '@shared/constants';
@@ -38,6 +48,20 @@ export class SyncUserItemDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  /**
+   * Nasiya balance, as the terminal has it. The till is authoritative: a debt is taken on and
+   * paid off at the counter, so this endpoint mirrors its figure rather than reconciling one.
+   */
+  @ApiPropertyOptional({ example: 150000 })
+  @IsOptional()
+  @IsNumber()
+  debt?: number;
+
+  @ApiPropertyOptional({ example: '2026-10-01T00:00:00.000Z' })
+  @IsOptional()
+  @IsDateString()
+  debtDueDate?: string | null;
 }
 
 export class SyncUsersBulkDto {

@@ -10,6 +10,7 @@ import * as satellite from '../lan/satellite-ops';
 import { refreshSubscriptionCache } from './subscription-handlers';
 import { getAppConfig } from '../config/app-config';
 import type { AuthUser } from '../../shared/types/user.types';
+import { isClient } from '../../shared/constants/roles';
 import { assertNotSatellite } from '../lan/satellite-guard';
 import { requireSuperAdmin } from '../auth/super-admin';
 import { assertCanSignIn } from '../license/license';
@@ -180,6 +181,13 @@ export function setupAuthHandlers(): void {
       throw new Error('auth.errors.user_deactivated');
     }
 
+    // A debtor is a customer, not staff. Their row carries a password because the column is NOT
+    // NULL, never because anyone is meant to sign in with it. Reported as "no such user" rather
+    // than a role refusal: the login screen has no business confirming who banks here.
+    if (isClient(user!.role)) {
+      throw new Error('auth.errors.user_not_found');
+    }
+
     console.log(`[auth:login] proceeding with user id=${user!.id} storeId=${user!.storeId} role=${user!.role}`);
 
     // Verify password against local hash
@@ -346,6 +354,11 @@ export function setupAuthHandlers(): void {
     if (!pinUser || !pinUser.active) {
       throw new Error('auth.errors.user_deactivated');
     }
+    // A customer never gets a PIN, but the pad refuses one on its own account rather than
+    // trusting that nothing ever wrote one.
+    if (isClient(pinUser.role)) {
+      throw new Error('auth.errors.invalid_pin');
+    }
 
     // Generate JWT token
     const token = jwt.sign(
@@ -477,7 +490,10 @@ export function setupAuthHandlers(): void {
     const storeId = localConfig?.storeId;
 
     const users = await prisma.user.findMany({
-      where: storeId ? { storeId } : {},
+      // Staff only. Nasiya customers live in the same table but are not people who work here;
+      // they have their own screens, and listing them as users to be given PINs and passwords
+      // would be both confusing and dangerous.
+      where: { ...(storeId ? { storeId } : {}), role: { not: 'CLIENT' } },
       select: {
         id: true,
         phone: true,
@@ -487,12 +503,22 @@ export function setupAuthHandlers(): void {
         active: true,
         createdAt: true,
         pin: true,
+        // Staff can run a tab for their own store, and the Users screen is where an admin looks
+        // a member of staff up — so what they owe belongs next to their name rather than only on
+        // a debtors page they would have to think to open.
+        debt: true,
+        debtDueDate: true,
       },
       orderBy: { createdAt: 'desc' },
     });
 
     // The hash never leaves the main process — the UI only needs to know a PIN exists.
-    return users.map(({ pin, ...user }: { pin: string | null }) => ({ ...user, hasPin: !!pin }));
+    return users.map(({ pin, ...user }: { pin: string | null; debt: unknown }) => ({
+      ...user,
+      hasPin: !!pin,
+      // Decimal → number before it crosses the IPC boundary, as every other money field is.
+      debt: Number(user.debt ?? 0),
+    }));
   });
 
   ipcMain.handle('users:create', async (_event, data) => {
@@ -550,6 +576,10 @@ export function setupAuthHandlers(): void {
       updateData.active = data.active;
     }
     if (data.role && currentUser.role === 'ADMIN') {
+      // Staff roles only. Turning an account into a CLIENT here would lock its owner out the
+      // next time they tried to sign in, and turning a customer into staff would hand out an
+      // account on a password nobody chose. Debtors are managed from the debtors screens.
+      if (data.role === 'CLIENT') throw new Error('Unauthorized');
       updateData.role = data.role;
     }
     if (data.password) {

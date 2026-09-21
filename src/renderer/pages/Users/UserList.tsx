@@ -8,7 +8,10 @@ import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 import { formatDate } from "../../utils/formatters";
 import { UserFormModal } from "./UserFormModal";
 import type { UserListItem } from "@shared/types";
-import { ArrowLeft, Edit, Plus, UserCheck, UserX } from "lucide-react";
+import { roleLabelKey } from "@shared/constants/roles";
+import { formatCurrency as formatCurrencyBase } from "@shared/utils";
+import { DebtorDetails } from "../Debtors/DebtorDetails";
+import { ArrowLeft, Edit, Plus, UserCheck, UserX, Wallet } from "lucide-react";
 
 const Container = styled.div`
   display: flex;
@@ -40,6 +43,29 @@ const Badge = styled.span<{ $active?: boolean }>`
   color: white;
 `;
 
+/**
+ * A member of staff's own tab.
+ *
+ * Shown as a button, not a label: the useful next action on "Алишер owes 80 000" is taking his
+ * money, and that lives one click away in the same ledger the debtors page opens. Muted to
+ * nothing when the balance is zero, so a screen of staff who owe nothing stays quiet.
+ */
+const DebtButton = styled.button<{ $owing: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: ${({ $owing }) => ($owing ? 700 : 400)};
+  cursor: ${({ $owing }) => ($owing ? "pointer" : "default")};
+  border: 1px solid
+    ${({ $owing, theme }) => ($owing ? theme.colors.error : "transparent")};
+  background: ${({ $owing, theme }) => ($owing ? `${theme.colors.error}14` : "transparent")};
+  color: ${({ $owing, theme }) =>
+    $owing ? theme.colors.error : theme.colors.textSecondary};
+`;
+
 const RoleBadge = styled.span<{ $role: string }>`
   display: inline-block;
   padding: 2px 8px;
@@ -52,6 +78,8 @@ const RoleBadge = styled.span<{ $role: string }>`
 
 export function UserList() {
   const { t, i18n } = useTranslation();
+  const formatCurrency = (amount: number) =>
+    formatCurrencyBase(amount, i18n.language as "ru" | "uz");
   const navigate = useNavigate();
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,6 +91,8 @@ export function UserList() {
     open: boolean;
     user?: UserListItem;
   }>({ open: false });
+  /** Whose tab is open, if any — the same ledger the debtors page shows. */
+  const [debtUserId, setDebtUserId] = useState<string | null>(null);
   useEffect(() => {
     loadUsers();
   }, []);
@@ -100,9 +130,37 @@ export function UserList() {
       header: t("users.role"),
       render: (user: UserListItem) => (
         <RoleBadge $role={user.role}>
-          {user.role === "ADMIN" ? t("users.admin") : t("users.cashier")}
+          {t(roleLabelKey(user.role), { defaultValue: user.role })}
         </RoleBadge>
       ),
+    },
+    {
+      key: "debt",
+      header: t("debtors.debt", "Долг"),
+      render: (user: UserListItem) => {
+        const debt = user.debt ?? 0;
+        // Negative is money paid ahead, not a debt, and must not be shown in red as one.
+        const owing = debt > 0;
+        return (
+          <DebtButton
+            type="button"
+            $owing={owing}
+            disabled={debt === 0}
+            onClick={() => debt !== 0 && setDebtUserId(user.id)}
+            title={owing ? t("debtors.takePayment", "Принять оплату") : undefined}
+          >
+            {owing && <Wallet size={13} />}
+            {debt === 0
+              ? "—"
+              : debt < 0
+                ? t("debtors.prepaid", {
+                    defaultValue: "аванс {{amount}}",
+                    amount: formatCurrency(-debt),
+                  })
+                : formatCurrency(debt)}
+          </DebtButton>
+        );
+      },
     },
     {
       key: "active",
@@ -209,6 +267,19 @@ export function UserList() {
             setUserToToggle(null);
           }}
           onCancel={() => setUserToToggle(null)}
+        />
+      )}
+
+      {/* The same ledger the debtors page opens, so taking a payment from a cashier and taking
+          one from a customer are the same screen and the same rules. */}
+      {debtUserId && (
+        <DebtorDetails
+          debtorId={debtUserId}
+          onClose={() => {
+            setDebtUserId(null);
+            // A payment may have moved the balance shown in the row behind.
+            loadUsers();
+          }}
         />
       )}
     </Container>

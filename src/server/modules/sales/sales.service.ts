@@ -105,6 +105,11 @@ export class SalesService {
         totalAmount: syncSaleDto.totalAmount,
         discountAmount: syncSaleDto.discountAmount || '0',
         finalAmount: syncSaleDto.finalAmount,
+        // An older terminal sends no split, and everything it sold was paid for — so the whole
+        // receipt is the paid part rather than the column default of zero.
+        paidAmount: syncSaleDto.paidAmount ?? syncSaleDto.finalAmount,
+        debtAmount: syncSaleDto.debtAmount ?? '0',
+        debtUserId: syncSaleDto.debtUserId ?? null,
         paymentMethod: syncSaleDto.paymentMethod,
         cashierId: resolvedCashierId,
         cashierName: syncSaleDto.cashierName,

@@ -22,6 +22,10 @@ export interface RemoteSale {
   discountAmount: string | number;
   finalAmount: string | number;
   paymentMethod: string;
+  /** Nasiya split. Optional: a main from before the feature sends neither, and owes nothing. */
+  paidAmount?: string | number;
+  debtAmount?: string | number;
+  debtUserId?: string | null;
   cashierId: string;
   cashierName: string;
   terminalId: string;
@@ -164,6 +168,13 @@ export async function cacheSale(sale: RemoteSale, stock: RemoteStock[]): Promise
     discountAmount: sale.discountAmount,
     finalAmount: sale.finalAmount,
     paymentMethod: sale.paymentMethod,
+    // Nasiya. Mirrored because this till's own shift figures are computed from `paidAmount` —
+    // left at the column default every cached sale would read as nothing paid, and a satellite
+    // cut off from its main would show a drawer of zero for a day of trading. A main that is
+    // too old to send the split says so by omission, and its sales were paid in full.
+    paidAmount: sale.paidAmount ?? sale.finalAmount,
+    debtAmount: sale.debtAmount ?? 0,
+    debtUserId: sale.debtUserId ?? null,
     cashierId: sale.cashierId,
     cashierName: sale.cashierName,
     terminalId: sale.terminalId,

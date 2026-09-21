@@ -3,6 +3,7 @@ import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { getPrismaClient } from '../database/sqlite-client';
 import { forbidden, unauthorized, type AuthenticatedUser } from './router';
+import { isClient } from '../../shared/constants/roles';
 
 /**
  * Authentication for the LAN dashboard.
@@ -245,8 +246,10 @@ export async function authenticate(phone: string, password: string) {
   const user = await prisma.user.findUnique({ where: { phone } });
 
   // One message for "no such user" and "wrong password" alike — telling them apart tells an
-  // attacker on the shop Wi-Fi which phone numbers are worth guessing against.
-  if (!user || !(await bcrypt.compare(password, user.password))) {
+  // attacker on the shop Wi-Fi which phone numbers are worth guessing against. A customer
+  // record (nasiya debtor) is refused the same way: it is not an account, whatever its password
+  // column happens to hold.
+  if (!user || isClient(user.role) || !(await bcrypt.compare(password, user.password))) {
     recordFailure(phone);
     throw unauthorized('Invalid phone or password');
   }

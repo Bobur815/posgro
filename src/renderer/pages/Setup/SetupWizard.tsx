@@ -4,10 +4,14 @@ import i18n from "../../i18n";
 import styled from "styled-components";
 import { CheckCircle, Store, KeyRound, ShieldCheck, ChevronRight } from "lucide-react";
 import { VirtualKeyboard } from "../../components/common/VirtualKeyboard";
+import { KeyboardToggle } from "../../components/common/VirtualKeyboardControls";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
 import { UzbekPhoneInput } from "../../components/common/UzbekPhoneInput";
 import { isUzPhoneComplete } from "@shared/utils/phone";
+
+/** The panel's own height — used to keep the keyboard button clear of it while it is open. */
+const KEYBOARD_HEIGHT = 360;
 
 // ─── Styled Components ─────────────────────────────────────────────────────
 
@@ -103,6 +107,25 @@ const StepLabel = styled.span<{ $active: boolean; $done: boolean }>`
     $active ? '#fff' : $done ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.5)'};
   font-size: 14px;
   font-weight: ${({ $active }) => ($active ? 600 : 400)};
+`;
+
+/**
+ * Home for the only control that opens the on-screen keyboard.
+ *
+ * Fixed rather than in the flow so one button serves every step, and lifted above the panel's own
+ * height while it is open so it stays reachable to close it again.
+ */
+const KbFloat = styled.div<{ $kbOpen: boolean }>`
+  position: fixed;
+  right: 24px;
+  bottom: ${({ $kbOpen }) => ($kbOpen ? `${KEYBOARD_HEIGHT + 16}px` : '24px')};
+  z-index: 600;
+  display: flex;
+  background: ${({ theme }) => theme.colors.surface};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: 8px;
+  box-shadow: ${({ theme }) => theme.shadows.md};
+  padding: 6px 8px;
 `;
 
 const Content = styled.div<{ $kbOpen?: boolean }>`
@@ -471,13 +494,17 @@ export function SetupWizard() {
   };
 
   // ── Virtual Keyboard ─────────────────────────────────────────────────────
+  // The panel opens from its button only. `activeField` says where keys land, never whether the
+  // panel shows — focusing a field must not throw a keyboard over the form for someone typing on
+  // a real one.
   const [activeField, setActiveField] = useState<string | null>(null);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   const NUMBER_ONLY_FIELDS = new Set(['phone', 'taxRate', 'syncInterval']);
 
   const handleVirtualKey = useCallback((key: string) => {
     if (!activeField) return;
-    if (key === 'ENTER') { setActiveField(null); return; }
+    if (key === 'ENTER') { setKeyboardOpen(false); return; }
 
     if (activeField === 'phone') {
       if (key === 'BACKSPACE') setData(p => ({ ...p, phone: p.phone.slice(0, -1) }));
@@ -530,7 +557,7 @@ export function SetupWizard() {
       </Sidebar>
 
       {/* Main content */}
-      <Content $kbOpen={activeField !== null}>
+      <Content $kbOpen={keyboardOpen}>
         {currentStep === 'login' && (
           <>
             <StepHeader>
@@ -715,13 +742,26 @@ export function SetupWizard() {
 
       </Content>
 
-      {activeField !== null && (
+      <KbFloat $kbOpen={keyboardOpen}>
+        <KeyboardToggle
+          kb={{
+            open: keyboardOpen,
+            numeric: false,
+            toggle: () => setKeyboardOpen((v) => !v),
+            close: () => setKeyboardOpen(false),
+            onKeyPress: handleVirtualKey,
+          }}
+          title={t('setup.keyboard', { defaultValue: 'Клавиатура' })}
+        />
+      </KbFloat>
+
+      {keyboardOpen && (
         <VirtualKeyboard
           fixed
           zIndex={500}
-          numbersOnly={NUMBER_ONLY_FIELDS.has(activeField)}
+          numbersOnly={activeField !== null && NUMBER_ONLY_FIELDS.has(activeField)}
           onKeyPress={handleVirtualKey}
-          onClose={() => setActiveField(null)}
+          onClose={() => setKeyboardOpen(false)}
         />
       )}
 

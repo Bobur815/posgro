@@ -76,9 +76,15 @@ export class MoneyReconciliationService {
       return { tender: g.paymentMethod, amount, saleCount: g._count._all };
     });
 
-    // Debts are not tracked yet. Kept as an explicit term rather than omitted so the formula
-    // below is already the final one — the nasiya feature only has to make this non-zero.
-    const newDebts = ZERO;
+    // Goods handed over on credit in this period: sold, so inside `netSales`, but never
+    // collected — which is exactly why the drawer is smaller than the sales figure. Taken from
+    // the sales themselves rather than the debt ledger, because the question here is what THIS
+    // period's trading did to the money, not what the customer has paid since.
+    const credit = await this.prisma.sale.aggregate({
+      where: { storeId, createdAt: { gte: periodStart, lte: periodEnd } },
+      _sum: { debtAmount: true },
+    });
+    const newDebts = credit._sum.debtAmount ?? ZERO;
 
     // finalAmount is ALREADY net of discountAmount (finalAmount = totalAmount − discountAmount),
     // so discounts must not be subtracted a second time here. They are reported for context only.

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { SmenaService } from './smena.service';
-import { SyncSmenaBulkDto } from './dto/sync-smena.dto';
+import { SyncSmenaBulkDto, ShiftOpenedDto } from './dto/sync-smena.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { StoreGuard } from '../../common/guards/store.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -25,6 +25,21 @@ export class SmenaController {
   @ApiResponse({ status: 201, description: 'Shifts synced' })
   async syncBulk(@CurrentStore() storeId: string, @Body() dto: SyncSmenaBulkDto) {
     return this.smenaService.syncFromTerminal(storeId, dto.smenas);
+  }
+
+  /**
+   * Announce a shift that has just opened, so the store's admins hear about it on Telegram.
+   *
+   * Nothing is stored — the server keeps closed shifts only. Unguarded by role for the same
+   * reason as sync-bulk: it is a cashier's terminal calling, and StoreGuard already pins it to
+   * its own store. Answers 201 even when no admin is subscribed; the terminal does not care.
+   */
+  @Post('opened')
+  @ApiOperation({ summary: 'Announce a shift opening (notification only, not persisted)' })
+  @ApiResponse({ status: 201, description: 'Announcement accepted' })
+  async opened(@CurrentStore() storeId: string, @Body() dto: ShiftOpenedDto) {
+    await this.smenaService.notifyOpened(storeId, dto);
+    return { ok: true };
   }
 
   @Get()

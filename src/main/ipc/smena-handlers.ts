@@ -14,6 +14,7 @@ import {
 } from '../sales/shifts';
 import { isSatellite } from '../lan/role';
 import * as satellite from '../lan/satellite-ops';
+import { announceShiftOpened } from '../sync/smena-sync';
 
 /**
  * This till's shifts. The database side lives in `sales/shifts.ts`, shared with a main terminal
@@ -40,6 +41,12 @@ export function setupSmenaHandlers(): void {
 
     // Open the REGOS:VCR Z-report for this shift (best-effort, only if fiscal enabled)
     void regosVcrService.openShift(smena.id);
+
+    // Tell the store's admins on Telegram. Not awaited: the cashier is standing at the till and
+    // the shift is already open locally — the message is worth nothing if it costs them a wait.
+    announceShiftOpened(smena).catch((err) =>
+      console.error('[Smena] Could not announce the shift opening:', err),
+    );
 
     return smena;
   });

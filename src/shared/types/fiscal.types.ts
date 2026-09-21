@@ -247,6 +247,9 @@ export interface FiscalSaleTiming {
   receiptNumber: string;
   totalMs: number;
   ok: boolean;
+  /** Positions on the receipt, and how many carried a marking code. Absent if it failed early. */
+  positions?: number;
+  marked?: number;
   phases: Array<{ name: string; ms: number }>;
 }
 

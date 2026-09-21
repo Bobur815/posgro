@@ -132,6 +132,43 @@ export class SyncSmenaDto {
   movements!: SyncSmenaMovementDto[];
 }
 
+/**
+ * A shift that has just opened, announced by the terminal as it happens.
+ *
+ * Deliberately not a sync payload: nothing here is stored. The server keeps CLOSED shifts only,
+ * so this carries just enough to write one Telegram message. Money is a string like everywhere
+ * else in this file, so the som figures do not go through a JSON number.
+ */
+export class ShiftOpenedDto {
+  @ApiProperty({ example: 'clsmena123' })
+  @IsString()
+  @IsNotEmpty()
+  id!: string;
+
+  @ApiProperty({ example: 'T1' })
+  @IsString()
+  @IsNotEmpty()
+  terminalId!: string;
+
+  @ApiProperty({ example: 'Иван Иванов' })
+  @IsString()
+  @IsNotEmpty()
+  cashierName!: string;
+
+  @ApiProperty({ example: '150000' })
+  @IsString()
+  @IsNotEmpty()
+  initialCash!: string;
+
+  @ApiProperty({ example: '2026-08-29T08:00:00.000Z' })
+  @IsDateString()
+  openedAt!: string;
+
+  @ApiProperty({ example: 42 })
+  @IsInt()
+  zReportNumber!: number;
+}
+
 export class SyncSmenaBulkDto {
   @ApiProperty({ type: [SyncSmenaDto] })
   @IsArray()

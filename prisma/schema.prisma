@@ -69,6 +69,7 @@ model Store {
   inventoryArrivals    InventoryArrival[]
   suppliers            Supplier[]
   supplierTransactions SupplierTransaction[]
+  debtTransactions     DebtTransaction[]
   systemSettings       SystemSetting[]
   terminalHeartbeats   TerminalHeartbeat[]
   terminalLogs         TerminalLog[]
@@ -87,6 +88,8 @@ enum UserRole {
   SUPER_ADMIN // Can manage all stores
   ADMIN // Store admin
   USER // Cashier
+  /// A customer who buys on credit. Not staff: no permissions, and refused at every login path.
+  CLIENT
 }
 
 model User {
@@ -100,14 +103,60 @@ model User {
   nameRu   String   @map("name_ru")
   active   Boolean  @default(true)
 
+  /// Nasiya (buying on credit). Positive = this person owes the shop. A running balance kept in
+  /// step with `debtTransactions`, which is its history — mirrored up from the till that changed
+  /// it, since the till is where the customer actually pays. Not exclusive to CLIENT: staff run
+  /// tabs too.
+  debt        Decimal   @default(0) @db.Decimal(12, 2)
+  /// When the whole balance is due, if anything was agreed. Per person, not per sale.
+  debtDueDate DateTime? @map("debt_due_date")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  sessions UserSession[]
+  sessions         UserSession[]
+  debtTransactions DebtTransaction[]
 
   @@unique([storeId, phone]) // Same phone can exist in different stores
   @@index([storeId])
   @@map("users")
+}
+
+/// One movement of a person's debt: goods taken on credit, or money paid back.
+///
+/// Append-only, and signed like the supplier ledger it is modelled on: CHARGE is positive (they
+/// owe more), PAYMENT negative. The sign is decided from `type` by the till that writes the row,
+/// never taken from a client.
+///
+/// A CHARGE carries the sale it came from and is stamped `settledAt` once payments have covered
+/// it — which is what makes "fiscalize a credit sale only when it is fully paid" answerable. The
+/// balance alone cannot say WHICH receipt the money finished paying for.
+///
+/// Mirrored up from the terminal, so the id is the till's own and re-syncing is an upsert.
+model DebtTransaction {
+  id      String @id @default(cuid())
+  storeId String @map("store_id")
+  store   Store  @relation(fields: [storeId], references: [id])
+  userId  String @map("user_id")
+  user    User   @relation(fields: [userId], references: [id])
+
+  type          String // CHARGE | PAYMENT | ADJUSTMENT
+  amount        Decimal @db.Decimal(12, 2) // + increases the debt, − reduces it
+  paymentMethod String? @map("payment_method") // CASH | CARD, on PAYMENT rows
+
+  saleId    String?   @map("sale_id")
+  settledAt DateTime? @map("settled_at")
+
+  dueDate DateTime? @map("due_date")
+  note    String?
+
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([storeId, userId])
+  @@index([userId, settledAt])
+  @@index([saleId])
+  @@map("debt_transactions")
 }
 
 model UserSession {
@@ -219,7 +268,14 @@ model Sale {
   totalAmount    Decimal @map("total_amount") @db.Decimal(10, 2)
   discountAmount Decimal @default(0) @map("discount_amount") @db.Decimal(10, 2)
   finalAmount    Decimal @map("final_amount") @db.Decimal(10, 2)
-  paymentMethod  String  @map("payment_method") // cash, card
+  paymentMethod  String  @map("payment_method") // cash, card, uzqr, debt
+
+  /// Nasiya: what changed hands at the counter, and what was left on the customer's tab. The two
+  /// sum to finalAmount, and every cash or drawer figure must read paidAmount — debtAmount is
+  /// money the shop has not got yet. Zero debt (every ordinary sale) means paidAmount is the lot.
+  paidAmount Decimal @default(0) @map("paid_amount") @db.Decimal(10, 2)
+  debtAmount Decimal @default(0) @map("debt_amount") @db.Decimal(10, 2)
+  debtUserId String? @map("debt_user_id")
 
   cashierId   String @map("cashier_id")
   cashierName String @map("cashier_name") // Denormalized for reports

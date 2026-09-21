@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { Sale } from '@shared/types/sale.types';
 import type { SaleTender } from '@shared/constants';
+import type { DEBT_TENDER } from '@shared/constants';
 
 interface CreateSaleData {
   items: Array<{
@@ -13,8 +14,18 @@ interface CreateSaleData {
     // piece count reported to the fiscal system; absent/1 for every ordinary line.
     piecesPerUnit?: number;
   }>;
-  paymentMethod: SaleTender;
+  /** DEBT_TENDER when nothing was paid at the counter — the whole receipt went on a tab. */
+  paymentMethod: SaleTender | typeof DEBT_TENDER;
   discountAmount?: number;
+  /**
+   * Nasiya: how much of this receipt goes on `debtUserId`'s tab rather than being paid now.
+   * Absent on an ordinary sale. The main process clamps it to the receipt total and writes the
+   * charge in the same transaction as the sale.
+   */
+  debtAmount?: number;
+  debtUserId?: string;
+  /** When the credit was agreed to be paid. ISO date; absent means nothing was agreed. */
+  debtDueDate?: string;
   // Scanned mandatory-marking (Asl-Belgisi) codes, by line barcode — used for fiscalization
   markingCodes?: Array<{ barcode: string; label: string }>;
   // When true, send the receipt to REGOS:VCR to fiscalize immediately. Default (false/absent)

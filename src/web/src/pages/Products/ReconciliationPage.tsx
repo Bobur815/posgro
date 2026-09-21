@@ -65,6 +65,13 @@ const CardLabel = styled.div`
   margin-bottom: 4px;
 `;
 
+/** Qualifies the figure above it — what it leaves out, or what it counts. */
+const CardNote = styled.div`
+  font-size: 11px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  margin-top: 4px;
+`;
+
 const CardValue = styled.div<{ $tone?: "bad" | "good" | "plain" }>`
   font-size: 20px;
   font-weight: 700;
@@ -361,6 +368,48 @@ export function ReconciliationPage() {
               </CardValue>
             </Card>
           </Cards>
+
+          {/* Not a variance and not period-bound: what the shelf is worth right now. It needs no
+              stocktake, so unlike every card above it shows a real figure even when hasCount is
+              false. Absent only when an older server answered. */}
+          {goods.stockValue && (
+            <>
+              <Section>{t("reconciliation.stockValueTitle", "Остаток на сегодня")}</Section>
+              <Cards>
+                <Card>
+                  <CardLabel>
+                    {t("reconciliation.stockAtCost", "Запас по себестоимости")}
+                  </CardLabel>
+                  <CardValue>
+                    {formatCurrency(Number(goods.stockValue.atCost))}
+                  </CardValue>
+                  {goods.stockValue.missingCostCount > 0 && (
+                    <CardNote>
+                      {t("reconciliation.stockMissingCost", {
+                        defaultValue:
+                          "Без учёта {{count}} товаров без себестоимости",
+                        count: goods.stockValue.missingCostCount,
+                      })}
+                    </CardNote>
+                  )}
+                </Card>
+                <Card>
+                  <CardLabel>
+                    {t("reconciliation.stockAtRetail", "Запас в розничных ценах")}
+                  </CardLabel>
+                  <CardValue>
+                    {formatCurrency(Number(goods.stockValue.atRetail))}
+                  </CardValue>
+                  <CardNote>
+                    {t("reconciliation.stockProductCount", {
+                      defaultValue: "{{count}} активных товаров",
+                      count: goods.stockValue.productCount,
+                    })}
+                  </CardNote>
+                </Card>
+              </Cards>
+            </>
+          )}
 
           <Section>{t("reconciliation.goodsTitle", "Товары — по позициям")}</Section>
           {!hasCount ? (

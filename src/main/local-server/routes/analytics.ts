@@ -170,7 +170,11 @@ export const analyticsRoutes: Route[] = [
         // with zeros and can rank as a worst seller. The period filter stays inside the subquery:
         // moving it to the outer WHERE would turn the LEFT JOIN back into an inner one and drop
         // exactly those rows.
-        prisma.$queryRaw<Array<Omit<ProductPerformanceRow, 'hasCost'> & { hasCost: number }>>`
+        prisma.$queryRaw<
+          Array<
+            Omit<ProductPerformanceRow, 'hasCost' | 'arrived'> & { hasCost: number; arrived: number }
+          >
+        >`
           SELECT p.id AS productId,
                  p.name_ru AS nameRu,
                  p.name_uz AS nameUz,
@@ -180,7 +184,14 @@ export const analyticsRoutes: Route[] = [
                  CAST(COALESCE(agg.quantity, 0) AS REAL) AS quantity,
                  CAST(COALESCE(agg.revenue, 0) AS REAL) AS revenue,
                  CAST(COALESCE(agg.quantity, 0) * COALESCE(p.cost, 0) AS REAL) AS cost,
-                 (p.cost IS NOT NULL) AS hasCost
+                 (p.cost IS NOT NULL) AS hasCost,
+                 CAST(p.stock AS REAL) AS stock,
+                 -- Was any of it received during the period? Decides whether a product that sold
+                 -- nothing may appear in the WORST list (see sellableInPeriod).
+                 EXISTS (
+                   SELECT 1 FROM inventory_arrivals ia
+                   WHERE ia.product_id = p.id AND ia.created_at >= ${from} AND ia.created_at <= ${to}
+                 ) AS arrived
           FROM products p
           LEFT JOIN categories c ON c.id = p.category_id
           LEFT JOIN (
@@ -206,7 +217,8 @@ export const analyticsRoutes: Route[] = [
         'quantity',
         'revenue',
         'cost',
-      ]).map((row) => ({ ...row, hasCost: Boolean(row.hasCost) }));
+        'stock',
+      ]).map((row) => ({ ...row, hasCost: Boolean(row.hasCost), arrived: Boolean(row.arrived) }));
       const rankedRows = Number.isInteger(categoryId)
         ? performanceRows.filter((r) => r.categoryId === categoryId)
         : performanceRows;
