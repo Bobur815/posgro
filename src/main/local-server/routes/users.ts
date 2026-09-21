@@ -114,6 +114,9 @@ export const userRoutes: Route[] = [
         data.password = await bcrypt.hash(String(body.password), 10);
       }
 
+      // Profile edits made here reach the server on the next admin sync; the pull waits for that.
+      if (Object.keys(data).some((k) => k !== 'password')) data.synced = false;
+
       return db().user.update({ where: { id: existing.id }, data, select: PUBLIC_FIELDS });
     },
   },
@@ -123,7 +126,7 @@ export const userRoutes: Route[] = [
     path: '/users/:id/activate',
     roles: ADMIN_ONLY,
     handler: async ({ params }) => {
-      await db().user.update({ where: { id: params.id }, data: { active: true } });
+      await db().user.update({ where: { id: params.id }, data: { active: true, synced: false } });
       return { success: true };
     },
   },
@@ -136,7 +139,7 @@ export const userRoutes: Route[] = [
       if (params.id === user!.id) throw badRequest('You cannot deactivate your own account');
       // Soft delete, matching the server: past receipts carry this cashier's name and must keep
       // resolving to a real row.
-      await db().user.update({ where: { id: params.id }, data: { active: false } });
+      await db().user.update({ where: { id: params.id }, data: { active: false, synced: false } });
       return { success: true };
     },
   },

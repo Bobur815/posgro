@@ -426,38 +426,56 @@ export async function syncUsers(): Promise<void> {
     );
     if (!Array.isArray(users) || users.length === 0) return;
 
-    const syncedPhones: string[] = [];
+    const keptIds = new Set<string>();
 
     for (const u of users) {
       try {
-        await prisma.user.upsert({
-          where: { phone: u.phone },
-          update: {
-            password: u.password,
-            role: u.role,
-            nameUz: u.nameUz,
-            nameRu: u.nameRu,
-            active: u.active ?? true,
-            storeId: tokenStoreId,
-            // debt/debtDueDate are deliberately absent: this till changes them all day and the
-            // server only learns on the next upload, so writing the server's copy back here
-            // would undo every payment taken since. They are set on create only (below), which
-            // is what a fresh terminal needs to inherit an existing balance.
-          },
-          create: {
-            id: u.id,
-            phone: u.phone,
-            password: u.password,
-            role: u.role,
-            nameUz: u.nameUz,
-            nameRu: u.nameRu,
-            active: u.active ?? true,
-            storeId: tokenStoreId,
-            debt: Number(u.debt ?? 0),
-            debtDueDate: u.debtDueDate ? new Date(u.debtDueDate) : null,
-          },
-        });
-        syncedPhones.push(u.phone);
+        // By id first: when a phone number is changed on the dashboard, the row here still has
+        // the old one, and looking it up by the new phone found nothing — the create that
+        // followed then died on the duplicate id, every cycle, and the user never updated.
+        // By phone second, for a user this till created before the server gave it another id.
+        const local =
+          (await prisma.user.findUnique({ where: { id: u.id } })) ??
+          (await prisma.user.findUnique({ where: { phone: u.phone } }));
+
+        if (!local) {
+          await prisma.user.create({
+            data: {
+              id: u.id,
+              phone: u.phone,
+              password: u.password,
+              role: u.role,
+              nameUz: u.nameUz,
+              nameRu: u.nameRu,
+              active: u.active ?? true,
+              storeId: tokenStoreId,
+              debt: Number(u.debt ?? 0),
+              debtDueDate: u.debtDueDate ? new Date(u.debtDueDate) : null,
+              synced: true,
+            },
+          });
+        } else if (local.synced) {
+          // The server's copy wins.
+          await prisma.user.update({
+            where: { id: local.id },
+            data: {
+              phone: u.phone,
+              password: u.password,
+              role: u.role,
+              nameUz: u.nameUz,
+              nameRu: u.nameRu,
+              active: u.active ?? true,
+              storeId: tokenStoreId,
+              // debt/debtDueDate are deliberately absent: this till changes them all day and the
+              // server only learns on the next upload, so writing the server's copy back here
+              // would undo every payment taken since. They are set on create only (above), which
+              // is what a fresh terminal needs to inherit an existing balance.
+            },
+          });
+        }
+        // else: edited here and not uploaded yet (uploads need an admin session). Left alone
+        // until it has been sent — after that the server's copy wins again.
+        keptIds.add(local?.id ?? u.id);
       } catch (userError) {
         console.error(
           `Failed to sync user phone=${u.phone}:`,
@@ -472,11 +490,27 @@ export async function syncUsers(): Promise<void> {
     // CLIENT is exempt. A nasiya customer is created at the till, by a cashier, and only reaches
     // the server on the next upload — which needs an ADMIN session and may be hours away, or
     // never on a cashier-only store. Deleting them here would take the debt with them, between
-    // one sync and the next, on the terminal that is owed the money.
-    if (tokenStoreId && syncedPhones.length > 0) {
-      await prisma.user.deleteMany({
-        where: { phone: { notIn: syncedPhones }, role: { not: 'CLIENT' } },
+    // one sync and the next, on the terminal that is owed the money. So is a user created here
+    // and not uploaded yet, for the same reason.
+    //
+    // One row at a time: a cashier with sales on this till cannot be deleted (the sales point at
+    // them), and the old single deleteMany threw on that and stopped every other removal with it.
+    // Such a user is deactivated instead, so they can no longer sign in and their receipts still
+    // resolve to a name.
+    if (tokenStoreId && keptIds.size > 0) {
+      const stale = await prisma.user.findMany({
+        where: { id: { notIn: [...keptIds] }, role: { not: 'CLIENT' }, synced: true },
+        select: { id: true, phone: true, active: true },
       });
+      for (const row of stale) {
+        try {
+          await prisma.user.delete({ where: { id: row.id } });
+        } catch {
+          if (!row.active) continue; // deactivated on an earlier cycle
+          await prisma.user.update({ where: { id: row.id }, data: { active: false } });
+          console.warn(`[syncUsers] user ${row.phone} is gone from the server but has history here — deactivated`);
+        }
+      }
     }
   } catch (error) {
     console.error(

@@ -216,6 +216,11 @@ export function setupDebtorsHandlers(): void {
       if (data.nameUz && identityEditable) update.nameUz = data.nameUz.trim();
       if (data.phone && identityEditable)
         update.phone = data.phone.replace(/\D/g, "");
+      // A customer's identity is edited here, so it has to reach the server before a pull may
+      // overwrite it. The due date rides with the balance, which is always sent.
+      if ("nameRu" in update || "nameUz" in update || "phone" in update) {
+        update.synced = false;
+      }
       if (data.debtDueDate !== undefined) {
         update.debtDueDate = data.debtDueDate
           ? new Date(data.debtDueDate)
@@ -305,6 +310,10 @@ export function setupDebtorsHandlers(): void {
    * one transaction. Cash lands in the drawer as a shift PAY_IN, because that is the only way an
    * X/Z report can account for money that arrived outside a sale. And every credit sale the
    * payment finished paying for is fiscalized now — the receipt REGOS never saw at the counter.
+   *
+   * `fiscalize: false` skips that last step: the till asks when a payment clears the whole
+   * balance, and the shop may choose not to issue the receipts. Those sales stay DEFERRED_DEBT,
+   * which no retry sweep selects, so nothing fiscalizes them later behind the cashier's back.
    */
   ipcMain.handle(
     "debtors:recordPayment",
@@ -315,6 +324,7 @@ export function setupDebtorsHandlers(): void {
         amount: number;
         paymentMethod: string;
         note?: string;
+        fiscalize?: boolean;
       },
     ) => {
       const staff = requireStaff();
@@ -376,9 +386,12 @@ export function setupDebtorsHandlers(): void {
         }
       }
 
-      // Now that they have paid for them, those receipts can be fiscalized.
-      for (const saleId of settledSales) {
-        await fiscalizeSettledSale(saleId, tender);
+      // Now that they have paid for them, those receipts can be fiscalized — unless the shop
+      // chose not to.
+      if (data.fiscalize !== false) {
+        for (const saleId of settledSales) {
+          await fiscalizeSettledSale(saleId, tender);
+        }
       }
 
       const updated = await prisma.user.findUnique({

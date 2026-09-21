@@ -83,6 +83,32 @@ const Tender = styled.button<{ $selected: boolean }>`
   font-weight: 600;
 `;
 
+/**
+ * "Fiscalize the receipts?" — asked in place of the payment row rather than in a second modal,
+ * for the same reason receipts unfold in place below: this screen is already a dialog.
+ */
+const FiscalPrompt = styled.div`
+  margin-bottom: ${({ theme }) => theme.spacing.md};
+  padding: ${({ theme }) => theme.spacing.md};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  border: 1.5px solid ${({ theme }) => theme.colors.primary};
+  background: ${({ theme }) => `${theme.colors.primary}12`};
+`;
+
+const FiscalQuestion = styled.p`
+  margin: 0 0 ${({ theme }) => theme.spacing.sm};
+  font-size: 14px;
+  font-weight: 600;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const FiscalActions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: ${({ theme }) => theme.spacing.sm};
+`;
+
 const Section = styled.h3`
   margin: 0 0 ${({ theme }) => theme.spacing.sm};
   font-size: 13px;
@@ -215,6 +241,10 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
   const [openSaleId, setOpenSaleId] = useState<string | null>(null);
   const [sales, setSales] = useState<Record<string, SaleDetail>>({});
   const [dueDate, setDueDate] = useState("");
+  /** Fiscalization is switched on for this till — the payoff question only means something then. */
+  const [fiscalEnabled, setFiscalEnabled] = useState(false);
+  /** A payment that clears the whole balance, waiting on "fiscalize or not". */
+  const [confirmPayoff, setConfirmPayoff] = useState(false);
 
   const formatCurrency = (value: number) =>
     formatCurrencyBase(value, i18n.language as "ru" | "uz");
@@ -230,6 +260,13 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    window.electronAPI.fiscal
+      .getConfig()
+      .then((cfg) => setFiscalEnabled(cfg.enabled))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const due = ledger?.debtor.debtDueDate;
@@ -270,19 +307,33 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
     }
   };
 
-  const handlePay = async () => {
+  const handlePay = () => {
     const value = Number(amount) || 0;
     if (value <= 0) {
       toast.error(t("debtors.amountRequired", "Укажите сумму"));
       return;
     }
 
+    // Paying the whole debt off closes every receipt still on the tab, so this is where the shop
+    // decides whether they get fiscalized. A partial payment keeps the old behaviour: whatever it
+    // finishes paying for is fiscalized straight away.
+    const paysOff = ledger != null && ledger.balance > 0 && value >= ledger.balance - 0.005;
+    if (fiscalEnabled && paysOff) {
+      setConfirmPayoff(true);
+      return;
+    }
+    void submitPayment(value, true);
+  };
+
+  const submitPayment = async (value: number, fiscalize: boolean) => {
+    setConfirmPayoff(false);
     setBusy(true);
     try {
       const { settledSales } = await window.electronAPI.debtors.recordPayment({
         userId: debtorId,
         amount: value,
         paymentMethod: tender,
+        fiscalize,
       });
       setAmount("");
       await load();
@@ -360,25 +411,51 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
           />
 
           <Section>{t("debtors.takePayment", "Принять оплату")}</Section>
-          <PayRow>
-            <AmountField>
-              <Input
-                value={amount}
-                inputMode="numeric"
-                placeholder={String(Math.max(0, Math.round(ledger.balance)))}
-                onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
-              />
-            </AmountField>
-            <Tender type="button" $selected={tender === "cash"} onClick={() => setTender("cash")}>
-              <Banknote size={16} /> {t("pos.cash")}
-            </Tender>
-            <Tender type="button" $selected={tender === "card"} onClick={() => setTender("card")}>
-              <CreditCard size={16} /> {t("pos.card")}
-            </Tender>
-            <Button onClick={handlePay} disabled={busy}>
-              {t("debtors.acceptPayment", "Принять")}
-            </Button>
-          </PayRow>
+          {confirmPayoff ? (
+            <FiscalPrompt>
+              <FiscalQuestion>
+                {t("debtors.payoffFiscalizeQuestion", {
+                  defaultValue: "Долг будет погашен полностью ({{amount}}). Фискализировать чеки?",
+                  amount: formatCurrency(Number(amount) || 0),
+                })}
+              </FiscalQuestion>
+              <FiscalActions>
+                <Button variant="secondary" onClick={() => setConfirmPayoff(false)} disabled={busy}>
+                  {t("common.cancel")}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => submitPayment(Number(amount) || 0, false)}
+                  disabled={busy}
+                >
+                  {t("debtors.payoffWithoutFiscal", "Без фискализации")}
+                </Button>
+                <Button onClick={() => submitPayment(Number(amount) || 0, true)} disabled={busy}>
+                  {t("debtors.payoffFiscalize", "Фискализировать")}
+                </Button>
+              </FiscalActions>
+            </FiscalPrompt>
+          ) : (
+            <PayRow>
+              <AmountField>
+                <Input
+                  value={amount}
+                  inputMode="numeric"
+                  placeholder={String(Math.max(0, Math.round(ledger.balance)))}
+                  onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
+                />
+              </AmountField>
+              <Tender type="button" $selected={tender === "cash"} onClick={() => setTender("cash")}>
+                <Banknote size={16} /> {t("pos.cash")}
+              </Tender>
+              <Tender type="button" $selected={tender === "card"} onClick={() => setTender("card")}>
+                <CreditCard size={16} /> {t("pos.card")}
+              </Tender>
+              <Button onClick={handlePay} disabled={busy}>
+                {t("debtors.acceptPayment", "Принять")}
+              </Button>
+            </PayRow>
+          )}
 
           <Section>{t("debtors.history", "История")}</Section>
           <Ledger>

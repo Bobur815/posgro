@@ -311,3 +311,18 @@ in the same release that introduced it.
 **Also:** the seed in `legacy-upgrade.test.ts` now includes a table in its *intermediate* shape,
 not only its oldest one. "Upgrades from the last release" and "upgrades from a build someone was
 running yesterday" are different starting points, and only the second one shows this class of bug.
+
+## "One till syncs, the other doesn't" — look for what only one of them sends, before topology
+
+T1 was reported as not receiving users while T2 did. I spent the first pass on the LAN satellite
+path (a satellite genuinely never pulls users) before the user said both tills were mains. The
+real cause was on the *upload* side: with an admin signed in, a till pushed every local user in
+full before pulling, the server took its stale copy, and the pull brought that copy straight back.
+The pull code alone looked correct, which is what made it easy to miss.
+
+**Rules:**
+- When two tills differ on one kind of data, ask (or check the logs for) the till's role and who
+  is signed in before exploring modes. Uploads here are gated on an ADMIN session, so "same build,
+  different behaviour" usually means a different session, not a different code path.
+- For any pulled table, read what the same cycle *uploads* for it first. A round trip that
+  overwrites the server and then pulls itself back looks exactly like "the pull does nothing".

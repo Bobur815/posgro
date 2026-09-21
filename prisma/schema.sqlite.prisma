@@ -115,6 +115,12 @@ model User {
   // When the whole balance is due, if anything was agreed. Per person, not per sale.
   debtDueDate DateTime? @map("debt_due_date")
 
+  // The server owns who a user is (name, phone, role, active); this till only sends a profile it
+  // changed itself. false = an edit made here — or a user created here — the server has not been
+  // sent yet. A row the pull wrote, or one the server has accepted, is true, and the next pull
+  // may overwrite it. The debt balance is not covered: the till owns that and always sends it.
+  synced      Boolean   @default(false)
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
