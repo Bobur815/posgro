@@ -884,6 +884,19 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
       FOREIGN KEY (user_id) REFERENCES users(id)
     )
   `;
+  // `synced` was added to the CREATE above after the table already existed on machines running a
+  // build from earlier the same day — and CREATE TABLE IF NOT EXISTS is a no-op for them, so the
+  // column never appeared and the index below died with "no such column: synced" on boot.
+  //
+  // The same trap as the `audit_logs` guard and migration 27, one level down: a column added to a
+  // CREATE TABLE only reaches databases that did not have the table yet. Adding a column to a
+  // table this file already creates ALWAYS needs its own guarded ALTER as well.
+  if (!(await columnExists(prisma, 'debt_transactions', 'synced'))) {
+    await prisma.$executeRaw`
+      ALTER TABLE debt_transactions ADD COLUMN synced INTEGER NOT NULL DEFAULT 0
+    `;
+  }
+
   await prisma.$executeRaw`
     CREATE INDEX IF NOT EXISTS idx_debt_txn_open ON debt_transactions(user_id, settled_at)
   `;

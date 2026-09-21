@@ -85,6 +85,24 @@ beforeAll(async () => {
                        payment_method, cashier_id, cashier_name, terminal_id)
     VALUES ('old-1', 'OLD-1', 250000, 0, 250000, 'cash', 'c1', 'Кассир', 'T1')
   `);
+  // A debt_transactions table as an INTERMEDIATE build left it: created, but without the column
+  // that was added to the CREATE afterwards. CREATE TABLE IF NOT EXISTS does nothing for a table
+  // that is already there, so this is the shape that broke on boot with "no such column: synced".
+  await seed.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS debt_transactions (
+      id             TEXT PRIMARY KEY,
+      user_id        TEXT NOT NULL,
+      type           TEXT NOT NULL,
+      amount         DECIMAL NOT NULL,
+      payment_method TEXT,
+      sale_id        TEXT,
+      settled_at     DATETIME,
+      due_date       DATETIME,
+      note           TEXT,
+      created_by     TEXT NOT NULL,
+      created_at     DATETIME NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
   await seed.$disconnect();
 
   await initializeDatabase();
@@ -167,6 +185,34 @@ describe('upgrading a database created by an older build', () => {
       },
     });
     expect(txn.settledAt).toBeNull();
+  });
+
+  /**
+   * The failure this actually shipped as: boot died with P2010 "no such column: synced".
+   *
+   * Neither existing guard could see it. sqlite-schema.test.ts compares the Prisma models against
+   * the text of sqlite-client.ts, where the column IS present — in a CREATE TABLE that never runs
+   * again once the table exists. And the rest of this file starts from a database old enough to
+   * have no debt_transactions at all, so the CREATE does run and the column appears.
+   *
+   * Only a database left half-built by an intermediate version shows it, which is what the seed
+   * above now sets up.
+   */
+  it('adds a column to a table an earlier build already created', async () => {
+    const prisma = getPrismaClient();
+    const rows = (await prisma.$queryRawUnsafe(
+      "SELECT name FROM pragma_table_info('debt_transactions')",
+    )) as Array<{ name: string }>;
+    expect(rows.map((r) => r.name)).toContain('synced');
+
+    // The index that threw on boot exists, and the client can write the column.
+    const user = await prisma.user.create({
+      data: { phone: '998900000009', password: 'x', role: 'CLIENT', nameUz: 'M', nameRu: 'К' },
+    });
+    const txn = await prisma.debtTransaction.create({
+      data: { userId: user.id, type: 'CHARGE', amount: 1000, createdBy: 'c1' },
+    });
+    expect(txn.synced).toBe(false);
   });
 
   /**
