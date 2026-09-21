@@ -13,7 +13,8 @@ export class UsersService {
 
   async findAll(storeId: string) {
     return this.prisma.user.findMany({
-      where: { storeId },
+      // Staff only: nasiya customers share this table but are not people who work here.
+      where: { storeId, role: { not: UserRole.CLIENT } },
       select: {
         id: true,
         storeId: true,
@@ -22,6 +23,10 @@ export class UsersService {
         nameUz: true,
         nameRu: true,
         active: true,
+        // Staff can run a tab for their own store, so what a cashier owes belongs beside their
+        // name here, the way it does on the terminal's own Users screen.
+        debt: true,
+        debtDueDate: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
@@ -29,8 +34,9 @@ export class UsersService {
   }
 
   async findAllStores() {
-    // For SUPER_ADMIN: get users across all stores
+    // For SUPER_ADMIN: get users across all stores. Staff only, as above.
     return this.prisma.user.findMany({
+      where: { role: { not: UserRole.CLIENT } },
       select: {
         id: true,
         storeId: true,
@@ -73,6 +79,13 @@ export class UsersService {
     return user;
   }
 
+  /**
+   * Everything a terminal needs to rebuild its user table, debtors included.
+   *
+   * Unlike the staff listings above this one keeps CLIENT rows: a till that is set up fresh, or
+   * reinstalled, has to know who owes the shop money. The balance rides along for the same
+   * reason — it is the only way a new terminal inherits one.
+   */
   async findAllForSync(storeId: string) {
     return this.prisma.user.findMany({
       where: { storeId },
@@ -84,15 +97,23 @@ export class UsersService {
         nameUz: true,
         nameRu: true,
         active: true,
+        debt: true,
+        debtDueDate: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
     });
   }
 
+  /**
+   * Who a phone number belongs to, for the Telegram bot's identity check.
+   *
+   * CLIENT is excluded: a debtor's phone is in this table so the shop can chase them, and it must
+   * not open a bot session that reports the store's takings to them.
+   */
   async findByPhoneAnyStore(phone: string) {
     return this.prisma.user.findFirst({
-      where: { phone, active: true },
+      where: { phone, active: true, role: { not: UserRole.CLIENT } },
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -113,11 +134,14 @@ export class UsersService {
 
     // If storeId is provided, find user within that store
     if (storeId) {
-      return this.prisma.user.findUnique({
+      const user = await this.prisma.user.findUnique({
         where: {
           storeId_phone: { storeId, phone },
         },
       });
+      // A nasiya customer is a record, not an account. Excluded at the lookup rather than at each
+      // caller, so no present or future login path can find one to compare a password against.
+      return user && user.role === UserRole.CLIENT ? null : user;
     }
 
     return null;
@@ -130,7 +154,13 @@ export class UsersService {
    */
   async findStoreAccountsByPhone(phone: string) {
     return this.prisma.user.findMany({
-      where: { phone, storeId: { not: null }, role: { not: UserRole.SUPER_ADMIN } },
+      // CLIENT is excluded for the same reason SUPER_ADMIN is handled apart: a nasiya customer
+      // is a record of who owes the shop money, not an account anyone signs in with.
+      where: {
+        phone,
+        storeId: { not: null },
+        role: { notIn: [UserRole.SUPER_ADMIN, UserRole.CLIENT] },
+      },
       include: { store: { select: { id: true, name: true, ...DASHBOARD_STORE_SELECT } } },
       orderBy: { createdAt: 'asc' },
       take: 20,
@@ -239,7 +269,20 @@ export class UsersService {
     return { success: true };
   }
 
-  async upsertBulk(users: { id: string; phone: string; password: string; nameUz: string; nameRu: string; role?: string; active?: boolean }[], storeId: string) {
+  async upsertBulk(
+    users: {
+      id: string;
+      phone: string;
+      password: string;
+      nameUz: string;
+      nameRu: string;
+      role?: string;
+      active?: boolean;
+      debt?: number;
+      debtDueDate?: string | null;
+    }[],
+    storeId: string,
+  ) {
     let created = 0;
     let updated = 0;
     const errors: string[] = [];
@@ -258,6 +301,13 @@ export class UsersService {
               nameRu: u.nameRu,
               role: (u.role as any) || existing.role,
               active: u.active ?? existing.active,
+              // The till owns the balance; this row is a mirror of it. Absent means an older
+              // terminal that does not know about nasiya, and its silence must not zero a
+              // balance another terminal reported.
+              ...(u.debt !== undefined ? { debt: u.debt } : {}),
+              ...(u.debtDueDate !== undefined
+                ? { debtDueDate: u.debtDueDate ? new Date(u.debtDueDate) : null }
+                : {}),
             },
           });
           updated++;
@@ -272,6 +322,8 @@ export class UsersService {
               nameRu: u.nameRu,
               role: (u.role as any) || 'USER',
               active: u.active ?? true,
+              debt: u.debt ?? 0,
+              debtDueDate: u.debtDueDate ? new Date(u.debtDueDate) : null,
             },
           });
           created++;

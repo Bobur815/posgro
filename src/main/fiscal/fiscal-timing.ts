@@ -95,6 +95,18 @@ export class FiscalTimer {
   private readonly startedAt = performance.now();
   private last = this.startedAt;
   private readonly phases: Array<{ name: string; ms: number }> = [];
+  private size: { positions: number; marked: number } | null = null;
+
+  /**
+   * How big this receipt is. Recorded apart from the phases because it is the leading explanation
+   * for a slow `Receipt.Sale`: REGOS verifies every DataMatrix inside that one call, so the
+   * duration only means something read against the number of marked codes it carried.
+   *
+   * Set once the positions are built; a receipt that failed earlier than that simply has no counts.
+   */
+  contents(positions: number, marked: number): void {
+    this.size = { positions, marked };
+  }
 
   phase(name: string): void {
     const now = performance.now();
@@ -116,12 +128,17 @@ export class FiscalTimer {
       receiptNumber,
       totalMs: Math.round(totalMs),
       ok,
+      positions: this.size?.positions,
+      marked: this.size?.marked,
       phases: this.phases.map((p) => ({ name: p.name, ms: Math.round(p.ms) })),
     });
     if (recent.length > MAX_RECENT) recent.shift();
 
     const breakdown = this.phases.map((p) => `${p.name}=${Math.round(p.ms)}ms`).join(' ');
-    const line = `[fiscal-timing] ${receiptNumber} ${ok ? 'ok' : 'FAILED'} total=${Math.round(totalMs)}ms ${breakdown}`;
+    // Counts go before the breakdown: a log line that gets truncated keeps the part that says what
+    // the device was asked to do, which is the half we cannot reconstruct afterwards.
+    const contents = this.size ? `pos=${this.size.positions} marked=${this.size.marked} ` : '';
+    const line = `[fiscal-timing] ${receiptNumber} ${ok ? 'ok' : 'FAILED'} total=${Math.round(totalMs)}ms ${contents}${breakdown}`;
     if (totalMs >= SLOW_TOTAL_MS || !ok) log.warn(line);
     else log.info(line);
   }

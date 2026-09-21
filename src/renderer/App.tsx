@@ -28,6 +28,7 @@ import { PrinterSettings } from "./pages/Settings/PrinterSettings";
 import { ReceiptSettings } from "./pages/Settings/ReceiptSettings";
 import { UserList } from "./pages/Users/UserList";
 import { SupplierList, SupplierDetails } from "./pages/Suppliers";
+import { DebtorList } from "./pages/Debtors/DebtorList";
 import { WeighedInventoryPage } from "./pages/Inventory/WeighedInventoryPage";
 import { ScaleSettings } from "./pages/Settings/ScaleSettings";
 import { FiscalSettings } from "./pages/Settings/FiscalSettings";
@@ -255,6 +256,17 @@ function App() {
               <ModeGuard>
                 <SupplierDetails />
               </ModeGuard>
+            </RoleGuard>
+          }
+        />
+
+        {/* Debtors — nasiya (Admin only). A cashier puts a sale on a tab from the POS screen;
+            managing balances and taking payments against them is an admin's job. */}
+        <Route
+          path="debtors"
+          element={
+            <RoleGuard allowedRoles={["ADMIN"]}>
+              <DebtorList />
             </RoleGuard>
           }
         />

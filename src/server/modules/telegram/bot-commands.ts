@@ -408,6 +408,87 @@ export function msgLogAlert(
   return `${header}\n\n${kept.join('\n')}\n\n${t(`…va yana ${dropped} ta`, `…и ещё ${dropped}`, lang)}`;
 }
 
+// ─── Shifts ───────────────────────────────────────────────────────────────────
+
+/** Date AND time: a shift is an event within a day, and two shifts can share a date. */
+function moment(d: Date | string): string {
+  return new Date(d).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+export interface ShiftOpened {
+  terminalId: string;
+  cashierName: string;
+  initialCash: number;
+  openedAt: string | Date;
+  zReportNumber: number;
+}
+
+/** A till just opened for business. HTML, like every message this bot pushes unprompted. */
+export function msgShiftOpened(s: ShiftOpened, lang?: Lang): string {
+  const title = t('🟢 <b>Smena ochildi</b>', '🟢 <b>Смена открыта</b>', lang);
+  const rows = [
+    `${t('Kassir', 'Кассир', lang)}: <b>${escapeHtml(s.cashierName)}</b>`,
+    `${t('Terminal', 'Терминал', lang)}: <code>${escapeHtml(s.terminalId)}</code>`,
+    `${t('Vaqt', 'Время', lang)}: ${moment(s.openedAt)}`,
+    `${t("Boshlang'ich kassa", 'Начальная касса', lang)}: <b>${num(s.initialCash)}</b>`,
+    `${t('Z-hisobot', 'Z-отчёт', lang)}: №${s.zReportNumber}`,
+  ];
+  return `${title}\n\n${rows.join('\n')}`;
+}
+
+export interface ShiftClosed extends ShiftOpened {
+  finalCash: number;
+  closedAt: string | Date;
+  cashSalesAmount: number;
+  cardSalesAmount: number;
+  payInTotal: number;
+  payOutTotal: number;
+  returnAmount: number;
+}
+
+/**
+ * What a shift closed with — the one message of the day an owner actually waits for.
+ *
+ * Expected cash is recomputed here from the same terms `smena.math.ts` uses rather than being
+ * read off the row, because the server stores the parts and not the total. The variance is what
+ * the message exists for, so it leads the money block and is signed explicitly: "0" and "−12 000"
+ * must not look alike at a glance.
+ */
+export function msgShiftClosed(s: ShiftClosed, lang?: Lang): string {
+  const expected =
+    s.initialCash + s.cashSalesAmount + s.payInTotal - s.payOutTotal - s.returnAmount;
+  const variance = s.finalCash - expected;
+  const icon = variance === 0 ? '✅' : variance > 0 ? '🔵' : '🔴';
+
+  const title = t('🔒 <b>Smena yopildi</b>', '🔒 <b>Смена закрыта</b>', lang);
+  const head = [
+    `${t('Kassir', 'Кассир', lang)}: <b>${escapeHtml(s.cashierName)}</b>`,
+    `${t('Terminal', 'Терминал', lang)}: <code>${escapeHtml(s.terminalId)}</code>`,
+    `${moment(s.openedAt)} — ${moment(s.closedAt)}`,
+    `${t('Z-hisobot', 'Z-отчёт', lang)}: №${s.zReportNumber}`,
+  ];
+  const money = [
+    `${t("Boshlang'ich kassa", 'Начальная касса', lang)}: ${num(s.initialCash)}`,
+    `${t('Naqd savdo', 'Продажи наличными', lang)}: ${num(s.cashSalesAmount)}`,
+    `${t('Karta/QR', 'Карта/QR', lang)}: ${num(s.cardSalesAmount)}`,
+    `${t('Kirim', 'Внесения', lang)}: ${num(s.payInTotal)}`,
+    `${t('Chiqim', 'Изъятия', lang)}: ${num(s.payOutTotal)}`,
+    `${t('Qaytarishlar', 'Возвраты', lang)}: ${num(s.returnAmount)}`,
+  ];
+  const result = [
+    `${t('Kutilgan', 'Ожидалось', lang)}: <b>${num(expected)}</b>`,
+    `${t('Sanaldi', 'Посчитано', lang)}: <b>${num(s.finalCash)}</b>`,
+    `${icon} ${t('Farq', 'Расхождение', lang)}: <b>${variance > 0 ? '+' : ''}${num(variance)}</b>`,
+  ];
+
+  return `${title}\n\n${head.join('\n')}\n\n${money.join('\n')}\n\n${result.join('\n')}`;
+}
+
 // ─── Alert settings ───────────────────────────────────────────────────────────
 
 export function msgAlertSettings(

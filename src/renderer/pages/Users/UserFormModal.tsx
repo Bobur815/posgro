@@ -263,6 +263,9 @@ export function UserFormModal({ user, onClose, onSaved }: UserFormModalProps) {
 
         <FormGroup>
           <Label>{t("users.role")}</Label>
+          {/* Staff only. A nasiya customer is created from the debtors screens, never here:
+              this form insists on a password, and a customer record is precisely one that no
+              password may open. Their debt does not depend on it — any role can run a tab. */}
           <Select
             value={formData.role}
             onChange={(e) => handleChange("role", e.target.value)}

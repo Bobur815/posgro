@@ -27,6 +27,20 @@ export interface GoodsReconciliation {
     varianceCost: Prisma.Decimal;
     varianceRetail: Prisma.Decimal;
   };
+  /**
+   * What is on the shelf right now, valued two ways.
+   *
+   * Not a variance and not tied to the period: it answers "what is my stock worth today", which
+   * is the figure an owner reconciling goods asks for next. `atCost` is understated by exactly
+   * the products with no cost price, hence `missingCostCount` alongside it — the same honesty
+   * `noCostCount` gives the profit rankings.
+   */
+  stockValue: {
+    atCost: Prisma.Decimal;
+    atRetail: Prisma.Decimal;
+    productCount: number;
+    missingCostCount: number;
+  };
   /** Reported apart from variance on purpose — this is a bug signal, not shrinkage. */
   crossCheck: {
     clean: boolean;
@@ -115,7 +129,18 @@ export class ReconciliationService {
 
     const products = await this.prisma.product.findMany({
       where: { storeId, active: true },
-      select: { id: true, nameRu: true, barcode: true, unit: true, stock: true },
+      // cost/price are for the stock-value totals below — the same "active products of this
+      // store" population the variance runs over, so the two figures can never disagree about
+      // which products count.
+      select: {
+        id: true,
+        nameRu: true,
+        barcode: true,
+        unit: true,
+        stock: true,
+        cost: true,
+        price: true,
+      },
     });
 
     const movements = await this.prisma.stockMovement.findMany({
@@ -184,6 +209,17 @@ export class ReconciliationService {
       lines.push({ ...v, productName: p.nameRu, barcode: p.barcode, unit: p.unit });
     }
 
+    // Stock on hand, valued at what it cost and at what it would sell for. A null cost adds
+    // nothing rather than zero — it is unknown, and the count says so.
+    let atCost = ZERO;
+    let atRetail = ZERO;
+    let missingCostCount = 0;
+    for (const p of products) {
+      if (p.cost === null) missingCostCount++;
+      else atCost = atCost.plus(p.stock.times(p.cost));
+      atRetail = atRetail.plus(p.stock.times(p.price));
+    }
+
     const nameById = new Map(products.map((p) => [p.id, p]));
     const driftRows = crossCheck(perpetual, recomputed).map((r) => ({
       ...r,
@@ -197,6 +233,7 @@ export class ReconciliationService {
       countId: count?.id ?? null,
       lines: lines.filter((l) => l.varianceQty !== null || !l.bookQty.isZero()),
       totals: { shortageQtyLines, surplusQtyLines, varianceCost, varianceRetail },
+      stockValue: { atCost, atRetail, productCount: products.length, missingCostCount },
       crossCheck: { clean: driftRows.length === 0, rows: driftRows },
       ledgerEnabled: this.stockMovements.enabled,
     };

@@ -314,6 +314,30 @@ class RegosVcrService {
     this.zReportOpen = true;
   }
 
+  /**
+   * How much room the applet has left, written to the log the terminal uploads.
+   *
+   * REGOS's own spelling: `AvaialableUnsendReceiptCount` is how many *more* unsent receipts the
+   * device can hold, so it falls as a backlog to the OFD builds up. That backlog is the leading
+   * suspect for `Receipt.Sale` growing slower over weeks, and it is invisible from our side
+   * otherwise. Sampled at shift open and shift close — never on the sale path, which must not
+   * grow a round-trip to a single-threaded device — so the pair brackets one shift's selling and
+   * reads as a delta.
+   *
+   * The device's own maximum is not documented, so nothing here judges the number; it is logged
+   * for its trend. Best-effort throughout: a diagnostic may not fail a shift.
+   */
+  private async logDeviceCapacity(client: RegosVcrClient, when: 'shift-open' | 'shift-close'): Promise<void> {
+    try {
+      const o = await client.getOverflowInfo();
+      log.info(
+        `[fiscal-timing] VCR capacity ${when}: unsent-receipt slots left=${o.AvaialableUnsendReceiptCount} z-report slots left=${o.AvaialableZReportCount}`,
+      );
+    } catch (e) {
+      log.info(`[fiscal-timing] VCR capacity ${when}: unavailable (${this.errText(e)})`);
+    }
+  }
+
   /** Ensure a VCR Z-report is open for a new shift (called from smena:open). Best-effort. */
   async openShift(smenaId: string): Promise<void> {
     const cfg = await this.resolveConfig();
@@ -326,6 +350,7 @@ class RegosVcrService {
       } catch (e) {
         console.error('[fiscal] openShift failed:', this.errText(e));
       }
+      await this.logDeviceCapacity(client, 'shift-open');
     });
   }
 
@@ -336,6 +361,8 @@ class RegosVcrService {
     const client = this.buildClient(cfg);
     if (!client) return;
     await this.runExclusive(async () => {
+      // Read before the close, so the open/close pair brackets exactly this shift's selling.
+      await this.logDeviceCapacity(client, 'shift-close');
       // Whatever happens next, our cached belief that a Z-report is open is no longer trustworthy.
       this.zReportOpen = false;
       try {
@@ -682,6 +709,8 @@ class RegosVcrService {
         console.log('[fiscal] payments:', JSON.stringify(payments));
       }
       timer.phase('build');
+      // What the device is about to be asked to verify, logged alongside how long it then took.
+      timer.contents(positions.length, positions.filter((p) => p.label).length);
       let result: VcrReceiptResult | null = null;
       // Straight to Receipt.Sale — no Receipt.ValidateSale pre-flight. Sale applies exactly the
       // same validation and returns the same error, so the pre-flight only doubled the round-trips

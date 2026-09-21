@@ -915,6 +915,15 @@ export function FiscalSettings() {
                           <RecentRow key={`${r.receiptNumber}-${r.at}-${i}`} $slow={!r.ok}>
                             <span>
                               #{r.receiptNumber}
+                              {/* Marked codes are verified inside REGOS's own call, so they are
+                                  the first thing to read a slow receipt against. */}
+                              {r.positions !== undefined
+                                ? ` · ${r.positions} ${t('fiscalSettings.timings.positions', 'поз.')}${
+                                    r.marked
+                                      ? ` / ${r.marked} ${t('fiscalSettings.timings.marked', 'марк.')}`
+                                      : ''
+                                  }`
+                                : ''}
                               {slowest ? ` · ${phaseLabel(slowest.name)}` : ''}
                               {r.ok ? '' : ` · ${t('fiscalSettings.failed', 'Ошибки')}`}
                             </span>

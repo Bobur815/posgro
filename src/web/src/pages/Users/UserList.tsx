@@ -10,6 +10,8 @@ import { UserFormModal } from "./UserFormModal";
 import { users as usersApi } from "../../api/client";
 import { useAuthStore } from "../../store/auth-store";
 import type { UserListItem } from "@shared/types";
+import { roleLabelKey } from "@shared/constants/roles";
+import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { Edit, UserCheck, UserX, Plus, ArrowLeft } from "lucide-react";
 import {
   MobileCard,
@@ -53,6 +55,25 @@ const Badge = styled.span<{ $active?: boolean }>`
   background-color: ${({ theme, $active }) =>
     $active ? theme.colors.success : theme.colors.error};
   color: white;
+`;
+
+/**
+ * A member of staff's own tab.
+ *
+ * Read-only here, unlike the terminal's Users screen: a payment is taken at the till. Clicking
+ * through goes to the dashboard's debtors page, which is where the history lives.
+ */
+const DebtLink = styled.button<{ $owing: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: ${({ $owing }) => ($owing ? 700 : 400)};
+  cursor: ${({ $owing }) => ($owing ? "pointer" : "default")};
+  border: 1px solid ${({ $owing, theme }) => ($owing ? theme.colors.error : "transparent")};
+  background: ${({ $owing, theme }) => ($owing ? `${theme.colors.error}14` : "transparent")};
+  color: ${({ $owing, theme }) => ($owing ? theme.colors.error : theme.colors.textSecondary)};
 `;
 
 const RoleBadge = styled.span<{ $role: string }>`
@@ -104,6 +125,8 @@ const FAB = styled.button`
 export function UserList() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const formatCurrency = (amount: number) =>
+    formatCurrencyBase(amount, i18n.language as "ru" | "uz");
   const { user: currentUser } = useAuthStore();
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -156,9 +179,36 @@ export function UserList() {
       header: t("users.role"),
       render: (user: UserListItem) => (
         <RoleBadge $role={user.role}>
-          {user.role === "ADMIN" ? t("users.admin") : t("users.cashier")}
+          {t(roleLabelKey(user.role), { defaultValue: user.role })}
         </RoleBadge>
       ),
+    },
+    {
+      key: "debt",
+      header: t("debtors.debt", "Долг"),
+      render: (user: UserListItem) => {
+        const debt = user.debt ?? 0;
+        // Negative is money paid ahead, not a debt, and must not be shown in red as one.
+        const owing = debt > 0;
+        return (
+          <DebtLink
+            type="button"
+            $owing={owing}
+            disabled={debt === 0}
+            onClick={() => debt !== 0 && navigate("/settings/debtors")}
+            title={owing ? t("debtors.title", "Должники") : undefined}
+          >
+            {debt === 0
+              ? "—"
+              : debt < 0
+                ? t("debtors.prepaid", {
+                    defaultValue: "аванс {{amount}}",
+                    amount: formatCurrency(-debt),
+                  })
+                : formatCurrency(debt)}
+          </DebtLink>
+        );
+      },
     },
     {
       key: "active",
@@ -228,9 +278,7 @@ export function UserList() {
                 label: t("users.role"),
                 value: (
                   <RoleBadge $role={user.role}>
-                    {user.role === "ADMIN"
-                      ? t("users.admin")
-                      : t("users.cashier")}
+                    {t(roleLabelKey(user.role), { defaultValue: user.role })}
                   </RoleBadge>
                 ),
               },

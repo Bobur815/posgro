@@ -439,6 +439,10 @@ export async function syncUsers(): Promise<void> {
             nameRu: u.nameRu,
             active: u.active ?? true,
             storeId: tokenStoreId,
+            // debt/debtDueDate are deliberately absent: this till changes them all day and the
+            // server only learns on the next upload, so writing the server's copy back here
+            // would undo every payment taken since. They are set on create only (below), which
+            // is what a fresh terminal needs to inherit an existing balance.
           },
           create: {
             id: u.id,
@@ -449,6 +453,8 @@ export async function syncUsers(): Promise<void> {
             nameRu: u.nameRu,
             active: u.active ?? true,
             storeId: tokenStoreId,
+            debt: Number(u.debt ?? 0),
+            debtDueDate: u.debtDueDate ? new Date(u.debtDueDate) : null,
           },
         });
         syncedPhones.push(u.phone);
@@ -461,10 +467,15 @@ export async function syncUsers(): Promise<void> {
     }
 
     // Mirror VPS: remove any local user not returned by this sync (both cross-store
-    // pollution and users deleted on the server side)
+    // pollution and users deleted on the server side).
+    //
+    // CLIENT is exempt. A nasiya customer is created at the till, by a cashier, and only reaches
+    // the server on the next upload — which needs an ADMIN session and may be hours away, or
+    // never on a cashier-only store. Deleting them here would take the debt with them, between
+    // one sync and the next, on the terminal that is owed the money.
     if (tokenStoreId && syncedPhones.length > 0) {
       await prisma.user.deleteMany({
-        where: { phone: { notIn: syncedPhones } },
+        where: { phone: { notIn: syncedPhones }, role: { not: 'CLIENT' } },
       });
     }
   } catch (error) {

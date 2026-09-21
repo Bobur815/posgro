@@ -30,6 +30,51 @@ export function serializeMarkingLabels(
   return { labels, json: labels.length ? JSON.stringify(labels) : null };
 }
 
+/** Does any of this receipt sit on a customer's tab? */
+async function isCreditSale(prisma: ReturnType<typeof getPrismaClient>, saleId: string) {
+  const sale = await prisma.sale.findUnique({
+    where: { id: saleId },
+    select: { debtAmount: true },
+  });
+  return Number(sale?.debtAmount ?? 0) > 0;
+}
+
+/**
+ * A credit sale has been paid off: issue its fiscal receipt now.
+ *
+ * `tender` becomes the sale's payment method, because that is how the money finally arrived and
+ * it is what `buildPayments()` reads to describe the receipt to REGOS. The amount does not
+ * change — the customer is paying for the whole receipt, just later.
+ *
+ * Best-effort like every other fiscal call here: if the VCR is unreachable the sale is left
+ * PENDING, which is exactly the state `processPending` sweeps, so it goes out on the next cycle
+ * or at shift close.
+ */
+export async function fiscalizeSettledSale(saleId: string, tender: string): Promise<void> {
+  const prisma = getPrismaClient();
+  try {
+    if (!(await regosVcrService.isEnabled())) return;
+
+    const sale = await prisma.sale.findUnique({
+      where: { id: saleId },
+      select: { fiscalStatus: true },
+    });
+    // Anything already fiscalized, or never deferred, is not this function's business.
+    if (sale?.fiscalStatus !== 'DEFERRED_DEBT') return;
+
+    await prisma.sale.update({
+      where: { id: saleId },
+      data: { fiscalStatus: 'PENDING', paymentMethod: tender, fiscalAttempts: 0, fiscalError: null },
+    });
+    await regosVcrService.fiscalizeSale(saleId);
+  } catch (e) {
+    console.error(
+      '[fiscal] fiscalizing a settled credit sale failed (will retry):',
+      e instanceof Error ? e.message : e,
+    );
+  }
+}
+
 /**
  * Queue the sale for fiscalization and start it now if asked.
  *
@@ -59,6 +104,12 @@ export async function settleSale(
   const prisma = getPrismaClient();
   let fiscalizing: Promise<void> | null = null;
   try {
+    // A credit sale is not fiscalized when the goods leave: the receipt is issued once the
+    // customer has actually paid for it. DEFERRED_DEBT is a status no retry sweep selects
+    // (processPending takes PENDING and FAILED), so nothing fiscalizes it behind the cashier's
+    // back — `fiscalizeSettledSale` promotes it to PENDING at the moment the last som arrives.
+    const onTab = await isCreditSale(prisma, saleId);
+
     if (await regosVcrService.isEnabled()) {
       await prisma.sale.update({
         where: { id: saleId },
@@ -66,12 +117,19 @@ export async function settleSale(
         // already empty; on an edit the contents just changed, so failures recorded against the
         // previous version no longer apply — leaving the count would let an edited sale start
         // at or over MAX_ATTEMPTS and be skipped by processPending forever.
-        data: { fiscalStatus: 'PENDING', regosLabels, fiscalAttempts: 0, fiscalError: null },
+        data: {
+          fiscalStatus: onTab ? 'DEFERRED_DEBT' : 'PENDING',
+          regosLabels,
+          fiscalAttempts: 0,
+          fiscalError: null,
+        },
       });
+
       // A UzQR sale fiscalizes NOW regardless of the checkbox: REGOS forbids reusing a
       // Payment.Create payment across receipts, so deferring would strand the payment_id and
-      // the buyer's money with it.
-      if (options.fiscalize || options.regosPaymentId) {
+      // the buyer's money with it. A credit sale is the opposite case and wins over both: there
+      // is nothing to fiscalize until it is paid for.
+      if (!onTab && (options.fiscalize || options.regosPaymentId)) {
         fiscalizing = regosVcrService.fiscalizeSale(saleId).catch((e) =>
           console.error('[fiscal] immediate fiscalize failed (will retry):', e instanceof Error ? e.message : e),
         );

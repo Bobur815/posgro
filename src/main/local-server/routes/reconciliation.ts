@@ -22,12 +22,43 @@ import type { Route } from '../router';
 
 
 
+/**
+ * Stock on hand valued at cost and at retail, over this store's active products.
+ *
+ * Mirrors `ReconciliationService.goods()`'s `stockValue` — same population (active products),
+ * same treatment of a missing cost price (counted, never valued at zero), so the dashboard reads
+ * the same figure whichever backend answered it.
+ */
+async function stockValue() {
+  const { Decimal } = getPrismaNamespace();
+  const products = await db().product.findMany({
+    where: { active: true },
+    select: { stock: true, cost: true, price: true },
+  });
+
+  let atCost = new Decimal(0);
+  let atRetail = new Decimal(0);
+  let missingCostCount = 0;
+  for (const p of products) {
+    if (p.cost === null) missingCostCount++;
+    else atCost = atCost.plus(p.stock.times(p.cost));
+    atRetail = atRetail.plus(p.stock.times(p.price));
+  }
+
+  return {
+    atCost: atCost.toString(),
+    atRetail: atRetail.toString(),
+    productCount: products.length,
+    missingCostCount,
+  };
+}
+
 export const reconciliationRoutes: Route[] = [
   {
     method: 'GET',
     path: '/reconciliation/goods',
     roles: ['ADMIN', 'SUPER_ADMIN'],
-    handler: ({ query }) => ({
+    handler: async ({ query }) => ({
       periodStart: dateParam(query.from, 'from')?.toISOString() ?? null,
       periodEnd: (endOfDayParam(query.to, 'to') ?? new Date()).toISOString(),
       countId: query.countId ?? null,
@@ -38,6 +69,10 @@ export const reconciliationRoutes: Route[] = [
         varianceCost: '0',
         varianceRetail: '0',
       },
+      // Unlike everything above, this one is real here. Valuing the shelf needs no ledger — only
+      // today's stock, cost and price — so an OFFLINE_ONLY shop gets the honest figure even
+      // though the variance table stays empty.
+      stockValue: await stockValue(),
       crossCheck: { clean: true, rows: [] },
       // The terminal keeps no movement ledger, so there is no book quantity to compare a count
       // against. Stocktake results themselves are complete — see /inventory-counts/:id.
@@ -84,9 +119,14 @@ export const reconciliationRoutes: Route[] = [
         return { tender: g.paymentMethod, amount: amount.toString(), saleCount: g._count._all };
       });
 
-      // Credit sales are not tracked yet. Kept as an explicit term rather than dropped so the
-      // formula below is already the final one when they are.
-      const newDebts = ZERO;
+      // Goods handed over on credit in this period: sold, so inside netSales, but never
+      // collected — which is exactly why the drawer is smaller than the sales figure. Mirrors
+      // MoneyService.reconcile() on the VPS.
+      const credit = await db().sale.aggregate({
+        where: { createdAt: period },
+        _sum: { debtAmount: true },
+      });
+      const newDebts = new Decimal(credit._sum.debtAmount ?? 0);
       // finalAmount is already net of discountAmount, so discounts must not come off a second
       // time — they are reported for context only.
       const expectedCollected = netSales.minus(newDebts);

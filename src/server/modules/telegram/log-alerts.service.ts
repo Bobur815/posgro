@@ -210,18 +210,9 @@ export class LogAlertsService implements OnModuleDestroy {
     if (entries.length === 0) return;
 
     try {
-      const chats = await this.prisma.telegramChat.findMany({
-        where: {
-          alerts: true,
-          OR: [
-            { storeId, role: 'ADMIN' },
-            // A SUPER_ADMIN has no store of their own, so matching on storeId would never find
-            // them. They are opted out by default (see the contact handler) precisely because
-            // switching this on subscribes them to every store in the fleet.
-            { role: 'SUPER_ADMIN' },
-          ],
-        },
-      });
+      // The audience rule lives in TelegramService, shared with the shift notifications — a
+      // second copy here would be a second thing to keep in step.
+      const chats = await this.telegram.alertChats(storeId);
       if (chats.length === 0) return;
 
       for (const chat of chats) {
@@ -255,13 +246,7 @@ export class LogAlertsService implements OnModuleDestroy {
       lang,
     );
 
-    const result = await this.telegram.sendHtml(chatId, html);
-    if (result === 'blocked') {
-      // The admin blocked the bot or deleted the chat. Retrying every minute forever helps nobody.
-      await this.prisma.telegramChat
-        .update({ where: { chatId }, data: { alerts: false } })
-        .catch(() => undefined);
-      this.logger.warn(`Chat ${chatId} blocked the bot — log alerts disabled for it`);
-    }
+    // sendAlert unsubscribes a chat that has blocked the bot — see TelegramService.
+    await this.telegram.sendAlert(chatId, html);
   }
 }

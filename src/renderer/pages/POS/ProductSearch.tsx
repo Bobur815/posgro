@@ -204,7 +204,8 @@ export function ProductSearch({ onSelect, keyboardZIndex }: ProductSearchProps) 
     { id: number; nameRu: string; nameUz: string }[]
   >([]);
   const [topSelling, setTopSelling] = useState<Product[]>([]);
-  const [keyboardOpen, setKeyboardOpen] = useState(true);
+  // Closed until the keyboard button is pressed — the panel never appears on its own.
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
   const {
     products,
     categories,

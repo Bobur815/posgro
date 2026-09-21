@@ -45,11 +45,16 @@ export async function computeSmenaStats(smenaId: string): Promise<SmenaStats> {
 
   type SalesRow = { payment_method: string; cnt: number; total: number; discounts: number };
 
-  // Sales by payment method
+  // Sales by payment method.
+  //
+  // SUM(paid_amount), not final_amount: a nasiya sale hands the goods over now and collects the
+  // money later, so only the part actually paid at the counter belongs in a drawer figure. The
+  // backfill in migration 35 set paid_amount = final_amount on every earlier receipt, so this
+  // reads identically for every sale that predates credit.
   const salesRows = (await prisma.$queryRawUnsafe(
     `SELECT payment_method,
             COUNT(*) as cnt,
-            COALESCE(SUM(final_amount), 0) as total,
+            COALESCE(SUM(paid_amount), 0) as total,
             COALESCE(SUM(discount_amount), 0) as discounts
      FROM sales
      WHERE smena_id = ?

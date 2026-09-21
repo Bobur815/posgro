@@ -417,7 +417,15 @@ ipcMain.handle('analytics:getData', async (_event, filters: {
              CAST(COALESCE(agg.quantity, 0) AS REAL) AS quantity,
              CAST(COALESCE(agg.revenue, 0) AS REAL) AS revenue,
              CAST(COALESCE(agg.quantity, 0) * COALESCE(p.cost, 0) AS REAL) AS cost,
-             (p.cost IS NOT NULL) AS hasCost
+             (p.cost IS NOT NULL) AS hasCost,
+             CAST(p.stock AS REAL) AS stock,
+             -- Was any of it received during the period? Decides whether a product that sold
+             -- nothing may appear in the WORST list (see sellableInPeriod). Indexed EXISTS on
+             -- inventory_arrivals(product_id, created_at) — no extra row fan-out.
+             EXISTS (
+               SELECT 1 FROM inventory_arrivals ia
+               WHERE ia.product_id = p.id AND ia.created_at >= ? AND ia.created_at <= ?
+             ) AS arrived
       FROM products p
       LEFT JOIN categories c ON c.id = p.category_id
       LEFT JOIN (
@@ -430,7 +438,7 @@ ipcMain.handle('analytics:getData', async (_event, filters: {
         GROUP BY si.product_id
       ) agg ON agg.product_id = p.id
       WHERE p.active = 1
-    `, startMs, endMs),
+    `, startMs, endMs, startMs, endMs),
   ]);
 
   const summaryRow = (summary as any[])[0] || {};
@@ -447,6 +455,8 @@ ipcMain.handle('analytics:getData', async (_event, filters: {
     revenue: Number(r.revenue || 0),
     cost: Number(r.cost || 0),
     hasCost: Boolean(r.hasCost),
+    stock: Number(r.stock || 0),
+    arrived: Boolean(r.arrived),
   }));
   // Narrowed BEFORE the top/bottom slice, or "best in this category" would instead mean "the
   // members of this category that made the overall top ten".

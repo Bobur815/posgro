@@ -18,6 +18,7 @@ import type { SmenaFiscalStats } from "@shared/types/smena.types";
 import { Button } from "../../components/common/Button";
 import { Modal } from "../../components/common/Modal";
 import { VirtualKeyboard } from "../../components/common/VirtualKeyboard";
+import { KeyboardToggle } from "../../components/common/VirtualKeyboardControls";
 import { useToast } from "../../context/ToastContext";
 import { amountHint } from "@shared/utils";
 import { parseSaleError } from "../POS/saleErrors";
@@ -224,6 +225,14 @@ const Label = styled.label`
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
+/** Caption on the left, the keyboard button pushed to the right edge of the field. */
+const LabelRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+`;
+
 const NumberInput = styled.input`
   padding: 10px 14px;
   border: 1px solid ${({ theme }) => theme.colors.border};
@@ -426,7 +435,10 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
     (Smena & { stats?: SmenaStats; movements?: SmenaMovement[] }) | null
   >(null);
 
+  // The panel opens from a keyboard button only. `activeField` says where keys land, never whether
+  // the panel shows — focusing an amount field must not cover the page for a hardware-keyboard user.
   const [activeField, setActiveField] = useState<ActiveField | null>(null);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   const fieldValues: Record<ActiveField, string> = {
     initialCash,
@@ -453,9 +465,18 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
     const current = fieldValues[activeField];
     const set = fieldSetters[activeField];
     if (key === "BACKSPACE") set(current.slice(0, -1));
-    else if (key === "ENTER") setActiveField(null);
+    else if (key === "ENTER") setKeyboardOpen(false);
     else set(current + key);
   }
+
+  // One panel serves every form on the page, so every keyboard button drives the same state.
+  const keyboardControls = {
+    open: keyboardOpen,
+    numeric: activeField !== "payInNote" && activeField !== "payOutNote",
+    toggle: () => setKeyboardOpen((v) => !v),
+    close: () => setKeyboardOpen(false),
+    onKeyPress: handleVirtualKey,
+  };
 
   // REGOS:VCR fiscal Z-report state (ZReport.GetInfo). Open/Close happen automatically
   // with smena open/close; these surface the fiscal shift and allow manual resync.
@@ -506,8 +527,9 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
     if (tab === "history") loadHistory();
   }, [tab, loadHistory]);
 
+  // Only worth scrolling the focused field into view when the panel is actually covering it.
   useEffect(() => {
-    if (!activeField) return;
+    if (!activeField || !keyboardOpen) return;
     const timer = setTimeout(() => {
       (document.activeElement as HTMLElement | null)?.scrollIntoView({
         behavior: "smooth",
@@ -515,7 +537,7 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
       });
     }, 80);
     return () => clearTimeout(timer);
-  }, [activeField]);
+  }, [activeField, keyboardOpen]);
 
   const smena = currentSmena;
   const stats: SmenaStats | undefined = smena?.stats;
@@ -582,6 +604,7 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
     try {
       await closeSmena(smena.id, finalCashNum);
       setShowCloseModal(false);
+      setKeyboardOpen(false);
       setFinalCash("");
       toast.success(t("smena.closedToast", "Смена закрыта"));
       onClose();
@@ -620,7 +643,10 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
                     }}
                   >
                     <Label>
-                      {t("smena.initialCash")}
+                      <LabelRow>
+                        {t("smena.initialCash")}
+                        <KeyboardToggle kb={keyboardControls} />
+                      </LabelRow>
                       <NumberInput
                         type="text"
                         inputMode="numeric"
@@ -778,7 +804,10 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
                 )}
 
                 <Card>
-                  <SectionTitle>{t("smena.movements")}</SectionTitle>
+                  <LabelRow>
+                    <SectionTitle>{t("smena.movements")}</SectionTitle>
+                    <KeyboardToggle kb={keyboardControls} />
+                  </LabelRow>
 
                   <MovementsRow>
                     <div style={{ flex: 1 }}>
@@ -1045,16 +1074,19 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
           </Card>
         )}
 
-        {activeField !== null && <div style={{ height: KEYBOARD_HEIGHT }} />}
+        {keyboardOpen && <div style={{ height: KEYBOARD_HEIGHT }} />}
 
         {showCloseModal && smena && (
           <Modal
-            onClose={() => { setShowCloseModal(false); setActiveField(null); }}
+            onClose={() => { setShowCloseModal(false); setActiveField(null); setKeyboardOpen(false); }}
             title={t("smena.confirmClose")}
           >
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <Label>
-                {t("smena.finalCash")}
+                <LabelRow>
+                  {t("smena.finalCash")}
+                  <KeyboardToggle kb={keyboardControls} />
+                </LabelRow>
                 <NumberInput
                   type="text"
                   inputMode="numeric"
@@ -1117,7 +1149,7 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
               <div
                 style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}
               >
-                <Button onClick={() => setShowCloseModal(false)}>
+                <Button onClick={() => { setShowCloseModal(false); setKeyboardOpen(false); }}>
                   {t("common.cancel", "Cancel")}
                 </Button>
                 <Button
@@ -1307,7 +1339,7 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
         </Modal>
       )}
 
-      {activeField !== null && (
+      {keyboardOpen && (
         <VirtualKeyboard
           fixed
           zIndex={1100}
@@ -1315,7 +1347,7 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
             activeField !== "payInNote" && activeField !== "payOutNote"
           }
           onKeyPress={handleVirtualKey}
-          onClose={() => setActiveField(null)}
+          onClose={() => setKeyboardOpen(false)}
         />
       )}
     </Modal>

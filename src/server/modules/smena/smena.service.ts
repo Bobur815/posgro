@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { SyncSmenaDto } from './dto/sync-smena.dto';
+import { SyncSmenaDto, ShiftOpenedDto } from './dto/sync-smena.dto';
+import { TelegramService } from '../telegram/telegram.service';
+import * as fmt from '../telegram/bot-commands';
 
 export interface SmenaSyncResult {
   synced: number;
@@ -12,7 +14,62 @@ export interface SmenaSyncResult {
 export class SmenaService {
   private readonly logger = new Logger(SmenaService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private telegram: TelegramService,
+  ) {}
+
+  /**
+   * A till just opened. Nothing is persisted: the server only ever stores CLOSED shifts, and an
+   * open one is already visible through the terminal heartbeat.
+   *
+   * Best-effort at both ends — the terminal does not await this call, and a shop that was offline
+   * at opening time simply gets no message. The close notification arrives through the normal
+   * sync regardless.
+   */
+  async notifyOpened(storeId: string, s: ShiftOpenedDto): Promise<void> {
+    await this.telegram.notifyStoreAdmins(storeId, (lang) =>
+      fmt.msgShiftOpened(
+        {
+          terminalId: s.terminalId,
+          cashierName: s.cashierName,
+          initialCash: Number(s.initialCash),
+          openedAt: s.openedAt,
+          zReportNumber: s.zReportNumber,
+        },
+        lang,
+      ),
+    );
+  }
+
+  /**
+   * Report a shift that has just been mirrored up for the FIRST time.
+   *
+   * Called only when the upsert created the row. A terminal retries a batch until the server
+   * confirms it, and `upsertOne` is idempotent by design, so notifying on every upsert would
+   * send the same shift report once per retry.
+   */
+  private async notifyClosed(storeId: string, s: SyncSmenaDto): Promise<void> {
+    await this.telegram.notifyStoreAdmins(storeId, (lang) =>
+      fmt.msgShiftClosed(
+        {
+          terminalId: s.terminalId,
+          cashierName: s.cashierName,
+          initialCash: Number(s.initialCash),
+          finalCash: Number(s.finalCash),
+          openedAt: s.openedAt,
+          closedAt: s.closedAt,
+          zReportNumber: s.zReportNumber,
+          cashSalesAmount: Number(s.cashSalesAmount),
+          cardSalesAmount: Number(s.cardSalesAmount),
+          payInTotal: Number(s.payInTotal),
+          payOutTotal: Number(s.payOutTotal),
+          returnAmount: Number(s.returnAmount),
+        },
+        lang,
+      ),
+    );
+  }
 
   /**
    * Mirror closed shifts up from a terminal.
@@ -85,6 +142,13 @@ export class SmenaService {
       syncedAt: new Date(),
     };
 
+    // Read before the upsert so "this shift is new to us" can be answered at all — afterwards
+    // the row exists either way. It is what keeps the Telegram report to one per shift.
+    const known = await this.prisma.smena.findUnique({
+      where: { id: s.id },
+      select: { id: true },
+    });
+
     // Movements are replaced wholesale rather than merged: the terminal's set is authoritative,
     // and a movement voided locally between two sync attempts has to disappear here too.
     await this.prisma.$transaction([
@@ -105,6 +169,15 @@ export class SmenaService {
         })),
       }),
     ]);
+
+    // After the shift is durable, and not awaited: the terminal is waiting on this response to
+    // mark the shift synced, and a slow Telegram must not hold that up or fail it. Caught rather
+    // than `void`ed — an unhandled rejection takes the whole API process down with it.
+    if (!known) {
+      this.notifyClosed(storeId, s).catch((err) =>
+        this.logger.error(`Shift ${s.id} closed but could not be reported`, err as Error),
+      );
+    }
   }
 
   async findAll(storeId: string, from?: Date, to?: Date) {

@@ -83,6 +83,14 @@ export type {
 
 export type { Smena, SmenaMovement, SmenaStats } from './smena.types';
 
+export type {
+  Debtor,
+  DebtTransaction,
+  DebtTransactionType,
+  DebtLedger,
+  UnpaidCreditSale,
+} from './debt.types';
+
 export type { CatalogEntry, MxikGroup } from './mxik.types';
 
 export type {

@@ -96,6 +96,24 @@ describe('FiscalTimer', () => {
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('R-1 FAILED'));
   });
 
+  it('logs what the device was asked to verify, so a duration can be read against it', () => {
+    const timer = new FiscalTimer();
+    timer.phase('build');
+    timer.contents(7, 2);
+    timer.finish('R-7', true);
+
+    expect(recentSales()[0]).toMatchObject({ positions: 7, marked: 2 });
+    // Before the phase breakdown — a truncated line keeps the half we cannot reconstruct later.
+    expect(log.info).toHaveBeenCalledWith(expect.stringMatching(/total=\d+ms pos=7 marked=2 build=/));
+  });
+
+  it('omits the counts for a receipt that failed before its positions were built', () => {
+    new FiscalTimer().finish('R-8', false);
+
+    expect(recentSales()[0].positions).toBeUndefined();
+    expect(log.warn).toHaveBeenCalledWith(expect.not.stringContaining('pos='));
+  });
+
   it('returns recent sales newest first and keeps that list bounded', () => {
     for (let i = 0; i < 60; i++) new FiscalTimer().finish(`R-${i}`, true);
 

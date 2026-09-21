@@ -62,6 +62,29 @@ beforeAll(async () => {
     INSERT INTO local_config (id, store_id, store_name, terminal_id, api_url)
     VALUES ('config', '1000', 'Legacy store', 'T1', 'https://pos.example/api')
   `);
+  // A receipt from before the nasiya split, in a `sales` table that has no paid_amount column at
+  // all — the shape every terminal in the field upgrades from.
+  await seed.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS sales (
+      id TEXT PRIMARY KEY,
+      receipt_number TEXT UNIQUE NOT NULL,
+      total_amount REAL NOT NULL,
+      discount_amount REAL DEFAULT 0,
+      final_amount REAL NOT NULL,
+      payment_method TEXT NOT NULL,
+      cashier_id TEXT NOT NULL,
+      cashier_name TEXT NOT NULL,
+      terminal_id TEXT NOT NULL,
+      synced INTEGER DEFAULT 0,
+      synced_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await seed.$executeRawUnsafe(`
+    INSERT INTO sales (id, receipt_number, total_amount, discount_amount, final_amount,
+                       payment_method, cashier_id, cashier_name, terminal_id)
+    VALUES ('old-1', 'OLD-1', 250000, 0, 250000, 'cash', 'c1', 'Кассир', 'T1')
+  `);
   await seed.$disconnect();
 
   await initializeDatabase();
@@ -86,10 +109,104 @@ describe('upgrading a database created by an older build', () => {
 
   it('creates tables added by later migrations', async () => {
     const names = await tableNames();
-    for (const table of ['inventory_counts', 'inventory_count_items', '_CategoryToSupplier']) {
+    for (const table of [
+      'inventory_counts',
+      'inventory_count_items',
+      '_CategoryToSupplier',
+      'debt_transactions',
+    ]) {
       expect(names).toContain(table);
     }
   });
+
+  /**
+   * Nasiya columns on tables that existed long before it.
+   *
+   * Written as a real INSERT rather than a pragma check because that is the failure being
+   * guarded: the generated client names every scalar it knows about, so one column missing from
+   * a terminal's database is P2022 on the next sale — no cashier can sell, on every till at once.
+   */
+  it('can write a sale and a user with the nasiya columns', async () => {
+    const prisma = getPrismaClient();
+    const user = await prisma.user.create({
+      data: {
+        phone: '998900000001',
+        password: 'x',
+        role: 'CLIENT',
+        nameUz: 'Mijoz',
+        nameRu: 'Клиент',
+        debt: 50_000,
+      },
+    });
+    expect(Number(user.debt)).toBe(50_000);
+    expect(user.debtDueDate).toBeNull();
+
+    const sale = await prisma.sale.create({
+      data: {
+        receiptNumber: 'LEGACY-1',
+        totalAmount: 100_000,
+        finalAmount: 100_000,
+        paidAmount: 30_000,
+        debtAmount: 70_000,
+        debtUserId: user.id,
+        paymentMethod: 'cash',
+        cashierId: 'c1',
+        cashierName: 'Кассир',
+        terminalId: 'T1',
+      },
+    });
+    expect(Number(sale.debtAmount)).toBe(70_000);
+
+    const txn = await prisma.debtTransaction.create({
+      data: {
+        userId: user.id,
+        type: 'CHARGE',
+        amount: 70_000,
+        saleId: sale.id,
+        createdBy: 'c1',
+      },
+    });
+    expect(txn.settledAt).toBeNull();
+  });
+
+  /**
+   * Receipts taken before the split existed were paid in full, and the backfill has to say so.
+   * Left at the column default, every historical sale would read as 0 paid and deflate any
+   * drawer figure computed from paidAmount.
+   *
+   * The backfill runs once, inside the "column did not exist" guard, and that placement matters:
+   * repeating it on every boot would rewrite exactly the sales this feature exists for — a fully
+   * credit sale legitimately has paid_amount 0 and must stay that way.
+   */
+  it('backfills paid_amount on sales that predate the split', async () => {
+    const old = await getPrismaClient().sale.findUnique({ where: { id: 'old-1' } });
+    expect(Number(old.paidAmount)).toBe(250_000);
+    expect(Number(old.debtAmount)).toBe(0);
+  });
+
+  it('leaves a fully credit sale at zero paid across a reboot', async () => {
+    const prisma = getPrismaClient();
+    await prisma.sale.create({
+      data: {
+        receiptNumber: 'CREDIT-1',
+        totalAmount: 80_000,
+        finalAmount: 80_000,
+        paidAmount: 0,
+        debtAmount: 80_000,
+        paymentMethod: 'debt',
+        cashierId: 'c1',
+        cashierName: 'Кассир',
+        terminalId: 'T1',
+      },
+    });
+    await closeDatabase();
+    await initializeDatabase();
+
+    const credit = await getPrismaClient().sale.findFirst({
+      where: { receiptNumber: 'CREDIT-1' },
+    });
+    expect(Number(credit.paidAmount)).toBe(0);
+  }, 60_000);
 
   // The failure the user actually hit: the shift panel's Z-report reads deleted sales from
   // audit_logs, and a missing table took down `smena:getCurrent` on every open.

@@ -282,7 +282,18 @@ export class AnalyticsService {
           COALESCE(agg.quantity, 0)::float AS quantity,
           COALESCE(agg.revenue, 0)::float AS revenue,
           (COALESCE(agg.quantity, 0) * COALESCE(p.cost, 0))::float AS cost,
-          (p.cost IS NOT NULL) AS "hasCost"
+          (p.cost IS NOT NULL) AS "hasCost",
+          p.stock::float AS stock,
+          -- Was any of it received during the period? Decides whether a product that sold nothing
+          -- may appear in the WORST list (see sellableInPeriod). Store-scoped like everything else
+          -- here, and an EXISTS rather than a join so a product with many arrivals stays one row.
+          EXISTS (
+            SELECT 1 FROM inventory_arrivals ia
+            WHERE ia.product_id = p.id
+              AND ia.store_id = ${storeId}
+              AND ia.created_at >= ${startDate}
+              AND ia.created_at <= ${endDate}
+          ) AS arrived
         FROM products p
         LEFT JOIN categories c ON c.id = p.category_id
         LEFT JOIN (

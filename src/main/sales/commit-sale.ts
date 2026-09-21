@@ -5,6 +5,7 @@ import { toPieces } from '../../shared/utils/pack';
 import type { Prisma, PrismaClient, Sale, SaleItem } from '../../generated/prisma-sqlite';
 import { HANDING_OFF, isWriteFrozen } from './write-freeze';
 import { sellingRefusal } from '../license/license';
+import { chargeSaleToDebt } from './debt-ledger';
 
 /**
  * The one place a sale changes stock.
@@ -53,6 +54,17 @@ export interface SaleInput {
   paymentMethod: string;
   regosPaymentId?: string | null;
   regosPaymentRrn?: string | null;
+  /**
+   * Nasiya: how much of this receipt goes on `debtUserId`'s tab instead of being paid now.
+   *
+   * Absent or 0 is an ordinary sale. Anything else is checked against the total and turned into
+   * a CHARGE on the customer's ledger — see `chargeSaleToDebt`. `paymentMethod` still names
+   * the tender that took the rest, or DEBT_TENDER when nothing was paid at all.
+   */
+  debtAmount?: number;
+  debtUserId?: string | null;
+  /** When this credit was agreed to be paid. Recorded on the charge AND as the person's date. */
+  debtDueDate?: string | null;
 }
 
 /** Who is ringing the sale up, and on which till. */
@@ -103,6 +115,28 @@ const db = (): PrismaClient => getPrismaClient() as PrismaClient;
 
 /** Generous: a long receipt is several queries a line, on a till that may also be serving others. */
 const TX_OPTIONS = { maxWait: 10_000, timeout: 20_000 };
+
+/**
+ * How a receipt divides between money taken now and money owed.
+ *
+ * Computed here rather than trusted from the caller, and clamped to the receipt: an amount larger
+ * than the total would write a negative `paidAmount` and quietly subtract from the drawer. A debt
+ * with no customer to owe it is not a debt, so it is ignored.
+ */
+function debtSplit(
+  input: Pick<SaleInput, 'debtAmount' | 'debtUserId'>,
+  finalAmount: number,
+): { paidAmount: number; debtAmount: number; debtUserId: string | null } {
+  const wanted = Number(input.debtAmount ?? 0);
+  const debtAmount =
+    input.debtUserId && wanted > 0 ? Math.min(Math.round(wanted * 100) / 100, finalAmount) : 0;
+
+  return {
+    paidAmount: finalAmount - debtAmount,
+    debtAmount,
+    debtUserId: debtAmount > 0 ? (input.debtUserId ?? null) : null,
+  };
+}
 
 let tail: Promise<unknown> = Promise.resolve();
 
@@ -240,6 +274,7 @@ async function commitInTx(tx: Tx, input: SaleInput, actor: SaleActor): Promise<C
       discountAmount,
       finalAmount: totalAmount - discountAmount,
       paymentMethod: input.paymentMethod,
+      ...debtSplit(input, totalAmount - discountAmount),
       cashierId: actor.cashierId,
       cashierName: actor.cashierName,
       terminalId: actor.terminalId,
@@ -255,6 +290,24 @@ async function commitInTx(tx: Tx, input: SaleInput, actor: SaleActor): Promise<C
   });
 
   await takeFromStock(tx, lines);
+
+  // Nasiya: the part of this receipt nobody paid for goes on the customer's tab, in the same
+  // transaction that created the sale. A sale without its charge would be goods given away.
+  if (Number(sale.debtAmount) > 0 && sale.debtUserId) {
+    const dueDate = input.debtDueDate ? new Date(input.debtDueDate) : null;
+    await chargeSaleToDebt(tx, {
+      userId: sale.debtUserId,
+      saleId: sale.id,
+      amount: Number(sale.debtAmount),
+      dueDate,
+      createdBy: actor.cashierId,
+    });
+    // The person's headline "pay everything by" date follows the latest thing they agreed to —
+    // the charge keeps its own, so a ledger entry always says what was agreed for THAT receipt.
+    if (dueDate) {
+      await tx.user.update({ where: { id: sale.debtUserId }, data: { debtDueDate: dueDate } });
+    }
+  }
 
   for (const item of input.items) {
     if (!item.preWeighedItemId) continue;
@@ -310,6 +363,7 @@ async function updateInTx(
       discountAmount,
       finalAmount: totalAmount - discountAmount,
       paymentMethod: input.paymentMethod,
+      ...debtSplit(input, totalAmount - discountAmount),
       synced: false,
       items: { create: lines },
     },

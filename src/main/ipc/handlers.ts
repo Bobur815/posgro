@@ -6,6 +6,7 @@ import { setupSalesHandlers } from "./sales-handlers";
 import { setupWeighedItemsHandlers } from "./weighed-items-handlers";
 import { setupScaleHandlers } from "./scale-handlers";
 import { setupSmenaHandlers } from "./smena-handlers";
+import { setupDebtorsHandlers } from "./debtors-handlers";
 import { setupMarkingCodesHandlers } from "./marking-codes-handlers";
 import { setupMarkingCheckHandlers } from "./marking-check-handlers";
 import { setupFiscalHandlers } from "./fiscal-handlers";
@@ -61,6 +62,7 @@ export function setupIpcHandlers(): void {
   setupSettingsHandlers();
   setupPrinterHandlers();
   setupSmenaHandlers();
+  setupDebtorsHandlers();
   setupAppHandlers();
   setupReceiptHandlers();
   setupMarkingCodesHandlers();

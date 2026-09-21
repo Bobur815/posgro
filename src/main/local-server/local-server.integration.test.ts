@@ -822,6 +822,39 @@ describe('reports', () => {
     expect(json.lines).toEqual([]);
     expect(json.crossCheck.clean).toBe(true);
   });
+
+  it('serves the debtors the dashboard reads, in the VPS shape', async () => {
+    // The dashboard's debtor page is one component against two backends. Keyed the same way the
+    // VPS answers, or an OFFLINE_ONLY shop — whose terminal IS the server — renders undefined.
+    const { status, json } = await api('GET', '/debtors');
+    expect(status).toBe(200);
+    expect(Array.isArray(json)).toBe(true);
+  });
+
+  it('answers a debtor ledger with its transactions and the sales behind them', async () => {
+    const { json: people } = await api('GET', '/debtors?withDebtOnly=false');
+    // The seed has no customers, so this also covers "nobody owes anything" without inventing one.
+    if (!Array.isArray(people) || people.length === 0) return;
+
+    const { status, json } = await api('GET', `/debtors/${people[0].id}`);
+    expect(status).toBe(200);
+    expect(Object.keys(json).sort()).toEqual(['debtor', 'sales', 'transactions']);
+  });
+
+  it('values the stock even though the ledger is unavailable', async () => {
+    // Valuing the shelf needs no movement ledger, so this is the one real figure on that
+    // response here — an OFFLINE_ONLY shop would otherwise never see it. Keyed exactly like the
+    // VPS's `stockValue`, because the dashboard reads whichever backend answered.
+    const { json } = await api('GET', '/reconciliation/goods');
+    expect(Object.keys(json.stockValue).sort()).toEqual([
+      'atCost',
+      'atRetail',
+      'missingCostCount',
+      'productCount',
+    ]);
+    expect(json.stockValue.productCount).toBeGreaterThan(0);
+    expect(Number(json.stockValue.atRetail)).toBeGreaterThan(0);
+  });
 });
 
 describe('endpoints that need the online server', () => {

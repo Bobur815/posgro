@@ -16,6 +16,7 @@ import { ConfirmDialog } from "@components/common/ConfirmDialog";
 import { useToast } from "@context/ToastContext";
 import { useAuthStore } from "../../store/auth-store";
 import { useSettingsStore } from "../../store/settings-store";
+import { roleLabelKey } from "@shared/constants/roles";
 
 /**
  * The bar above every page: which store you are in (and a switch to your others), then news,
@@ -320,12 +321,9 @@ export function TopBar() {
   if (!user) return null;
 
   const name = i18n.language === "uz" ? user.nameUz : user.nameRu;
-  const roleLabel =
-    user.role === "SUPER_ADMIN"
-      ? "Super Admin"
-      : user.role === "ADMIN"
-        ? t("users.admin")
-        : t("users.cashier");
+  // One label map for every screen — see roleLabelKey. The role itself is the fallback, so an
+  // unnamed role reads oddly rather than reading as "Cashier".
+  const roleLabel = t(roleLabelKey(user.role), { defaultValue: user.role });
   const current = stores.find((s) => s.id === user.storeId);
   const canSwitch = stores.length > 1 && !switching;
   const openLabel = (online: boolean) =>

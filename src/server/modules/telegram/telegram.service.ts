@@ -196,6 +196,59 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Who is subscribed to a store's alerts: its own admins, plus any fleet-wide subscriber who
+   * opted in. One query, in one place, because two services now fan out to this audience and a
+   * second copy of the rule is a second thing to forget.
+   */
+  async alertChats(storeId: string) {
+    return this.prisma.telegramChat.findMany({
+      where: {
+        alerts: true,
+        OR: [
+          { storeId, role: 'ADMIN' },
+          // A SUPER_ADMIN has no store of their own, so matching on storeId would never find
+          // them. They are opted out by default (see the contact handler) precisely because
+          // switching this on subscribes them to every store in the fleet.
+          { role: 'SUPER_ADMIN' },
+        ],
+      },
+    });
+  }
+
+  /**
+   * Deliver to one subscribed chat, unsubscribing it if it is gone for good.
+   *
+   * Retrying a blocked chat every minute forever helps nobody, and the flag is the only way to
+   * stop: there is no delivery receipt to go back to.
+   */
+  async sendAlert(chatId: bigint, html: string): Promise<void> {
+    const result = await this.sendHtml(chatId, html);
+    if (result !== 'blocked') return;
+    await this.prisma.telegramChat
+      .update({ where: { chatId }, data: { alerts: false } })
+      .catch(() => undefined);
+    this.logger.warn(`Chat ${chatId} blocked the bot — alerts disabled for it`);
+  }
+
+  /**
+   * Tell a store's admins something, rendered in each chat's own language.
+   *
+   * Takes a renderer rather than a finished string because the audience is bilingual — one
+   * pre-rendered message would have to pick a language for everybody. Never throws: a Telegram
+   * outage must not fail whatever business action is reporting itself here.
+   */
+  async notifyStoreAdmins(storeId: string, render: (lang: Lang) => string): Promise<void> {
+    try {
+      const chats = await this.alertChats(storeId);
+      for (const chat of chats) {
+        await this.sendAlert(chat.chatId, render(chat.lang as Lang));
+      }
+    } catch (err) {
+      this.logger.error(`Notifying admins of store ${storeId} failed`, err as Error);
+    }
+  }
+
   onModuleDestroy() {
     this.bot?.stop('SIGTERM');
   }

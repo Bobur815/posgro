@@ -925,6 +925,71 @@ export interface ReconciliationCrossCheckRow {
   drift: string;
 }
 
+/**
+ * Nasiya, as the dashboard sees it: read-only.
+ *
+ * Every debt is taken on and paid off at a till, so this dashboard only ever reports what the
+ * terminals have mirrored up. A store whose terminals are offline shows a stale balance and a
+ * short history, which is the honest answer rather than a wrong one.
+ */
+export interface DashboardDebtor {
+  id: string;
+  phone: string;
+  nameRu: string;
+  nameUz: string;
+  role: string;
+  debt: string;
+  debtDueDate: string | null;
+  createdAt: string;
+}
+
+export interface DashboardDebtTransaction {
+  id: string;
+  type: "CHARGE" | "PAYMENT" | "ADJUSTMENT";
+  amount: string;
+  paymentMethod: string | null;
+  saleId: string | null;
+  settledAt: string | null;
+  dueDate: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+/** A credit sale behind a CHARGE row, with the lines that made it up. */
+export interface DashboardDebtSale {
+  id: string;
+  receiptNumber: string;
+  finalAmount: string;
+  debtAmount: string;
+  createdAt: string;
+  items: {
+    productName: string;
+    quantity: string;
+    unitPrice: string;
+    subtotal: string;
+  }[];
+}
+
+export interface DashboardDebtorLedger {
+  debtor: DashboardDebtor;
+  transactions: DashboardDebtTransaction[];
+  sales: DashboardDebtSale[];
+}
+
+export const debtors = {
+  list: async (params?: {
+    withDebtOnly?: boolean;
+    search?: string;
+  }): Promise<DashboardDebtor[]> => {
+    const { data } = await axiosInstance.get("/debtors", { params });
+    return data;
+  },
+  get: async (id: string): Promise<DashboardDebtorLedger> => {
+    const { data } = await axiosInstance.get(`/debtors/${id}`);
+    return data;
+  },
+};
+
 export interface GoodsReconciliation {
   periodStart: string | null;
   periodEnd: string;
@@ -935,6 +1000,14 @@ export interface GoodsReconciliation {
     surplusQtyLines: number;
     varianceCost: string;
     varianceRetail: string;
+  };
+  /** Stock on hand today, valued two ways. Independent of the period and of any stocktake. */
+  stockValue?: {
+    atCost: string;
+    atRetail: string;
+    productCount: number;
+    /** Products left out of `atCost` for having no cost price, so it can be shown as partial. */
+    missingCostCount: number;
   };
   crossCheck: { clean: boolean; rows: ReconciliationCrossCheckRow[] };
   ledgerEnabled: boolean;

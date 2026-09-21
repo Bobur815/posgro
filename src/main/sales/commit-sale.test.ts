@@ -289,3 +289,82 @@ describe('drainSaleWrites', () => {
     expect(await stockOf(p.id)).toBe(4);
   });
 });
+
+/**
+ * Nasiya at the commit boundary.
+ *
+ * The split is computed in the main process, never taken from the renderer: `paidAmount` feeds
+ * every drawer and shift figure there is, so a receipt that could write its own would be a way
+ * to make money appear in a till that never held it.
+ */
+describe('selling on credit', () => {
+  async function debtor(phone: string) {
+    return getPrismaClient().user.create({
+      data: { phone, password: 'x', role: 'CLIENT', nameRu: 'Клиент', nameUz: 'Mijoz' },
+    });
+  }
+
+  it('splits the receipt and charges the rest to the customer', async () => {
+    const p = await product(5);
+    const client = await debtor('998900000101');
+
+    const { sale } = await commitSale(
+      { ...cart(line(p, 3)), debtAmount: 2000, debtUserId: client.id },
+      MAIN,
+    );
+    markSettled(sale.id);
+
+    expect(Number(sale.finalAmount)).toBe(3000);
+    expect(Number(sale.paidAmount)).toBe(1000);
+    expect(Number(sale.debtAmount)).toBe(2000);
+
+    const charge = await getPrismaClient().debtTransaction.findFirst({
+      where: { saleId: sale.id },
+    });
+    expect(Number(charge.amount)).toBe(2000);
+    expect(charge.type).toBe('CHARGE');
+    expect(charge.settledAt).toBeNull();
+
+    const after = await getPrismaClient().user.findUnique({ where: { id: client.id } });
+    expect(Number(after.debt)).toBe(2000);
+
+    // Goods leave on a credit sale exactly as on any other.
+    expect(await stockOf(p.id)).toBe(2);
+  });
+
+  it('never lets the debt exceed the receipt', async () => {
+    // Otherwise paidAmount goes negative and the shift reports less cash than the drawer holds.
+    const p = await product(5);
+    const client = await debtor('998900000102');
+
+    const { sale } = await commitSale(
+      { ...cart(line(p, 1)), debtAmount: 999_999, debtUserId: client.id },
+      MAIN,
+    );
+    markSettled(sale.id);
+
+    expect(Number(sale.debtAmount)).toBe(1000);
+    expect(Number(sale.paidAmount)).toBe(0);
+  });
+
+  it('ignores a debt with nobody to owe it', async () => {
+    const p = await product(5);
+    const { sale } = await commitSale({ ...cart(line(p, 1)), debtAmount: 500 }, MAIN);
+    markSettled(sale.id);
+
+    expect(Number(sale.debtAmount)).toBe(0);
+    expect(Number(sale.paidAmount)).toBe(1000);
+  });
+
+  it('records an ordinary sale as fully paid', async () => {
+    // The property every drawer figure rests on: paidAmount is the whole receipt unless credit
+    // was asked for. An ordinary sale must not have to know this feature exists.
+    const p = await product(5);
+    const { sale } = await commitSale(cart(line(p, 2)), MAIN);
+    markSettled(sale.id);
+
+    expect(Number(sale.paidAmount)).toBe(2000);
+    expect(Number(sale.debtAmount)).toBe(0);
+    expect(sale.debtUserId).toBeNull();
+  });
+});

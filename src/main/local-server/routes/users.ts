@@ -18,17 +18,37 @@ const PUBLIC_FIELDS = {
   nameUz: true,
   nameRu: true,
   active: true,
+  // Staff nasiya balance — the dashboard shows it next to the name, as the POS does.
+  debt: true,
+  debtDueDate: true,
   createdAt: true,
 } as const;
 
 const ADMIN_ONLY = ['ADMIN', 'SUPER_ADMIN'];
+
+/**
+ * The role a staff account may be given from here: ADMIN, or cashier for anything else.
+ *
+ * CLIENT is deliberately not reachable. A nasiya customer is created through the debtors screens,
+ * which know to give them no password anyone can use — minting one here, with a password this
+ * route insists on, would make a customer record that the login path then has to refuse.
+ */
+function staffRole(role: unknown): 'ADMIN' | 'USER' {
+  return role === 'ADMIN' ? 'ADMIN' : 'USER';
+}
 
 export const userRoutes: Route[] = [
   {
     method: 'GET',
     path: '/users',
     roles: ADMIN_ONLY,
-    handler: () => db().user.findMany({ select: PUBLIC_FIELDS, orderBy: { createdAt: 'desc' } }),
+    // Staff only: debtors are people the shop sells to, and they have their own screens.
+    handler: () =>
+      db().user.findMany({
+        where: { role: { not: 'CLIENT' } },
+        select: PUBLIC_FIELDS,
+        orderBy: { createdAt: 'desc' },
+      }),
   },
 
   {
@@ -63,7 +83,7 @@ export const userRoutes: Route[] = [
         data: {
           phone,
           password: await bcrypt.hash(password, 10),
-          role: body?.role === 'ADMIN' ? 'ADMIN' : 'USER',
+          role: staffRole(body?.role),
           nameUz: String(required(body?.nameUz, 'nameUz')),
           nameRu: String(required(body?.nameRu, 'nameRu')),
           active: body?.active ?? true,
@@ -86,7 +106,7 @@ export const userRoutes: Route[] = [
       for (const key of ['nameUz', 'nameRu', 'phone', 'active'] as const) {
         if (body?.[key] !== undefined) data[key] = body[key];
       }
-      if (body?.role !== undefined) data.role = body.role === 'ADMIN' ? 'ADMIN' : 'USER';
+      if (body?.role !== undefined) data.role = staffRole(body.role);
       if (body?.password) {
         if (String(body.password).length < 6) {
           throw badRequest('password must be at least 6 characters');
