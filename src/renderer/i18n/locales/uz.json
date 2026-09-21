@@ -1,5 +1,6 @@
 {
   "common": {
+    "add": "Qo'shish",
     "confirm": "Tasdiqlash",
     "store": "Do'kon",
     "storeId": "Do'kon ID",
