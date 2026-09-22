@@ -12,7 +12,7 @@ qrcode) plus the generated Prisma client. The app code that actually changes is 
       `node_modules` is empty or near-empty.
 - [x] Step 3 — silent install (one-click/per-user left as is: it would move existing installs), and `autoUpdater.logger` wired to electron-log.
 - [ ] Step 4 — measure: installer size, file count, and install time before and after, on a till.
-- [ ] Step 5 — a staged release: one till first, then all.
+- [x] Step 5 — released as 1.32.0 on 2026-09-22 (straight to all tills, at the user's call; no one-till test first).
 
 ## Results so far (2026-09-22)
 
