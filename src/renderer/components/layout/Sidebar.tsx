@@ -337,11 +337,14 @@ export function Sidebar() {
                     ? `${t("sync.lastSync")}: ${new Date(status.lastSyncTime).toLocaleTimeString()}`
                     : t("sync.notSynced")}
               </SyncText>
-              <SidebarSyncBtn
-                onSync={handleSyncNow}
-                size={15}
-                title={t("settings.syncNow")}
-              />
+              {/* A satellite syncs with its main by itself: status, but no button. */}
+              {!isSatellite && (
+                <SidebarSyncBtn
+                  onSync={handleSyncNow}
+                  size={15}
+                  title={t("settings.syncNow")}
+                />
+              )}
             </SyncStatus>
           )}
 

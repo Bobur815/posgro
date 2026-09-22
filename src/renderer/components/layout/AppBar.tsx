@@ -184,33 +184,21 @@ export function AppBar() {
   // one, so the button could only ever report success for work it never did, and then reload the
   // page for nothing. Gate on the explicit mode: null (not yet hydrated, or a terminal that was
   // never activated) keeps the button, matching mode-store's "default to permissive" rule.
-  // A satellite is the exception: it syncs with its main over the shop's LAN, in either mode.
+  // A satellite has no button either: it syncs with its main by itself, and a banner already says
+  // when the main is away.
   const isSatellite = useModeStore((s) => s.isSatellite);
   const offlineOnly = useModeStore((s) => s.mode) === 'OFFLINE_ONLY' && !isSatellite;
+  const showSync = !offlineOnly && !isSatellite;
 
   const handleSync = async () => {
-    // The internet is irrelevant to a satellite — its server is the main terminal on the LAN.
-    if (!isSatellite) {
-      const online = await window.electronAPI.app.isOnline();
-      if (!online) {
-        toast.error(t('errors.noInternet'));
-        return;
-      }
+    const online = await window.electronAPI.app.isOnline();
+    if (!online) {
+      toast.error(t('errors.noInternet'));
+      return;
     }
     try {
       await window.electronAPI.sync.trigger();
       await refreshStatus();
-      // A satellite's cycle does not throw when the main is away (the banner already says so),
-      // so ask the link rather than reporting a success that did not happen.
-      const link = isSatellite ? await window.electronAPI.lan.getStatus() : null;
-      if (link?.superseded) {
-        toast.error(t('errors.mainSupersededBanner'));
-        return;
-      }
-      if (link?.reachable === false) {
-        toast.error(t('errors.mainUnreachableBanner'));
-        return;
-      }
       toast.success(t('sync.syncSuccess'));
       setTimeout(() => window.location.reload(), 800);
     } catch (err) {
@@ -264,8 +252,9 @@ export function AppBar() {
         </SmenaIndicator>
       )}
 
-      {/* Sync button — hidden for an OFFLINE_ONLY store, which has nothing to sync with. */}
-      {!offlineOnly && (
+      {/* Sync button — hidden for an OFFLINE_ONLY store, which has nothing to sync with, and on a
+          satellite, which syncs with its main by itself. */}
+      {showSync && (
         <AppSyncBtn
           onSync={handleSync}
           size={17}

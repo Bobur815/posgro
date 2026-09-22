@@ -293,6 +293,23 @@ export async function deleteSale(saleId: string): Promise<true> {
   return true;
 }
 
+// ── Debtors ─────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The people a receipt can be put on the tab of — the main's, since a satellite holds no users and
+ * a credit sale committed on the main must name the main's ids. Read-only here: adding a customer
+ * is the main's to do (`debtors:create` refuses on a satellite).
+ */
+export async function listDebtors(opts: { search?: string; withDebtOnly?: boolean }): Promise<unknown[]> {
+  const q = new URLSearchParams();
+  if (opts.search?.trim()) q.set('search', opts.search.trim());
+  if (opts.withDebtOnly) q.set('withDebtOnly', 'true');
+  const query = q.toString();
+  return (
+    (await mainRequest<unknown[]>('GET', `/terminal/debtors${query ? `?${query}` : ''}`, { person: true })) ?? []
+  );
+}
+
 // ── Shifts (§5.14) ──────────────────────────────────────────────────────────────────────────────
 
 /**

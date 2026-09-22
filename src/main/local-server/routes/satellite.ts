@@ -14,6 +14,7 @@ import { findUserIdByPin, hashNewPin, usersWithPin } from '../../auth/pin';
 import { assertCanSignIn } from '../../license/license';
 import { commitSale, deleteSale, SaleRefusedError, updateSale } from '../../sales/commit-sale';
 import { settleSale } from '../../sales/settle-sale';
+import { listDebtors } from '../../sales/debtor-list';
 import {
   addShiftMovement,
   closeShift,
@@ -387,6 +388,27 @@ export const satelliteRoutes: Route[] = [
           terminalId: ctx.terminal!.terminalId,
         });
         return { deleted: true, id: sale.id, stock };
+      }),
+  },
+
+  // ── Debtors ───────────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Who a satellite can put a receipt on the tab of: this main's people, staff included — anyone
+   * can run a tab, an admin too. Read-only: a satellite cannot add or change a customer, only name
+   * one on a sale, which `/terminal/sales` then commits here.
+   */
+  {
+    method: 'GET',
+    path: '/terminal/debtors',
+    audience: 'terminal',
+    session: true,
+    duringHandoff: true,
+    handler: ({ query }) =>
+      listDebtors({
+        search: typeof query.search === 'string' ? query.search : undefined,
+        withDebtOnly: query.withDebtOnly === 'true',
+        includeStaff: true,
       }),
   },
 

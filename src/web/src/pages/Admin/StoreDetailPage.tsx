@@ -671,6 +671,12 @@ function StoreDetails({ store, onUpdated }: Props) {
               {allowedTerminals === null && extraTerminals > 0 && " — this plan is unlimited, so extras change nothing."}
             </PlanNote>
           )}
+          {prices && extraTerminals > 0 && prices.extraTerminal <= 0 && (
+            <PlanNote style={{ color: "#dc2626" }}>
+              No extra-terminal price is set, so these extras are charged 0. Set it on the
+              Subscription Plans page.
+            </PlanNote>
+          )}
           <PlanBtn
             $active
             onClick={handleTerminalsSave}

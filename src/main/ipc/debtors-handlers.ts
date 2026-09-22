@@ -5,6 +5,9 @@ import { getPrismaClient } from "../database/sqlite-client";
 import { getAppConfig } from "../config/app-config";
 import { getCurrentUser } from "./auth-handlers";
 import { assertNotSatellite } from "../lan/satellite-guard";
+import { isSatellite } from "../lan/role";
+import * as satellite from "../lan/satellite-ops";
+import { listDebtors, serializeDebtor } from "../sales/debtor-list";
 import {
   allocatePayment,
   recomputeBalance,
@@ -32,32 +35,6 @@ import { isCashTender } from "../../shared/constants";
 const ipcSafe = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
 const num = (v: unknown): number => Number(v ?? 0);
-
-/** What the renderer sees for one debtor. */
-function serializeDebtor(user: {
-  id: string;
-  phone: string;
-  nameRu: string;
-  nameUz: string;
-  role: string;
-  debt: unknown;
-  debtDueDate: Date | null;
-  active: boolean;
-  createdAt: Date;
-}) {
-  return {
-    id: user.id,
-    phone: user.phone,
-    nameRu: user.nameRu,
-    nameUz: user.nameUz,
-    // So the picker can say "Алишер (кассир)" — two people with one name, one of whom works here.
-    role: user.role,
-    debt: num(user.debt),
-    debtDueDate: user.debtDueDate,
-    isActive: user.active,
-    createdAt: user.createdAt,
-  };
-}
 
 function serializeTxn(t: {
   id: string;
@@ -98,39 +75,10 @@ export function setupDebtorsHandlers(): void {
         includeStaff?: boolean;
       },
     ) => {
+      // A satellite holds no users: the people, and the ids a credit sale must name, are the main's.
+      if (await isSatellite()) return ipcSafe(await satellite.listDebtors(opts ?? {}));
       requireStaff();
-      const prisma = getPrismaClient();
-      const search = opts?.search?.trim();
-
-      // Staff appear in two cases: when the caller is choosing who to give a tab to (the POS
-      // picker asks for them), and whenever the list is of people who actually owe money. The
-      // second is not a convenience — a role filter must never be the reason a real debt is
-      // missing from the screen that exists to show debts.
-      const includeStaff =
-        opts?.includeStaff === true || opts?.withDebtOnly === true;
-
-      const debtors = await prisma.user.findMany({
-        where: {
-          active: true,
-          ...(includeStaff ? {} : { role: "CLIENT" }),
-          ...(opts?.withDebtOnly ? { debt: { gt: 0 } } : {}),
-          // SQLite's LIKE is already case-insensitive for ASCII; Prisma's `mode: 'insensitive'` is
-          // a PostgreSQL-only option and throws here, so it is deliberately absent.
-          ...(search
-            ? {
-                OR: [
-                  { nameRu: { contains: search } },
-                  { nameUz: { contains: search } },
-                  { phone: { contains: search } },
-                ],
-              }
-            : {}),
-        },
-        orderBy: [{ debt: "desc" }, { nameRu: "asc" }],
-        take: 200,
-      });
-
-      return ipcSafe(debtors.map(serializeDebtor));
+      return ipcSafe(await listDebtors(opts ?? {}));
     },
   );
 

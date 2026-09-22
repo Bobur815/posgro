@@ -191,6 +191,7 @@ describe('who may call', () => {
     ['POST', '/terminal/sales'],
     ['POST', '/terminal/smena/open'],
     ['GET', '/terminal/smena/current'],
+    ['GET', '/terminal/debtors'],
   ];
 
   it('refuses a dashboard login on every satellite route', async () => {
@@ -424,6 +425,53 @@ describe('selling from a satellite', () => {
     const own = await call('DELETE', '/terminal/sales/sat-sale-1', { device: t2, session: t2Session });
     expect(own.status).toBe(200);
     expect(await stockOf(productId)).toBe(before + 2);
+  });
+
+  // A satellite holds no users: it picks who owes from the main's people, and the sale names them.
+  describe('on credit', () => {
+    let clientId = '';
+
+    beforeAll(async () => {
+      const client = await getPrismaClient().user.create({
+        data: {
+          id: 'user-client-nodira',
+          phone: '998901112233',
+          password: await bcrypt.hash('never-used', 4),
+          role: 'CLIENT',
+          nameUz: 'Nodira',
+          nameRu: 'Нодира',
+        },
+      });
+      clientId = client.id;
+    });
+
+    it('lists the main’s people, staff included, and no password hash', async () => {
+      const res = await call('GET', '/terminal/debtors', { device: t2, session: t2Session });
+      expect(res.status).toBe(200);
+      const ids = res.json.map((d: { id: string }) => d.id);
+      expect(ids).toEqual(expect.arrayContaining([clientId, 'user-cashier']));
+      for (const person of res.json) expect(person).not.toHaveProperty('password');
+    });
+
+    it('searches them by name or phone', async () => {
+      const byName = await call('GET', '/terminal/debtors?search=Нодира', { device: t2, session: t2Session });
+      expect(byName.json.map((d: { id: string }) => d.id)).toEqual([clientId]);
+      const byPhone = await call('GET', '/terminal/debtors?search=1112233', { device: t2, session: t2Session });
+      expect(byPhone.json.map((d: { id: string }) => d.id)).toEqual([clientId]);
+    });
+
+    it('puts a satellite’s sale on the tab of the person it names', async () => {
+      const res = await call('POST', '/terminal/sales', {
+        device: t2,
+        session: t2Session,
+        body: cart(BARCODES.water, 1, { id: 'sat-credit-1', debtUserId: clientId, debtAmount: 5000 }),
+      });
+      expect(res.status).toBe(201);
+      expect(res.json.sale).toMatchObject({ id: 'sat-credit-1', terminalId: 'T2', debtUserId: clientId });
+      expect(Number(res.json.sale.debtAmount)).toBe(5000);
+      const owed = await getPrismaClient().user.findUnique({ where: { id: clientId }, select: { debt: true } });
+      expect(Number(owed!.debt)).toBe(5000);
+    });
   });
 
   it('closes its own shift and no other till’s', async () => {

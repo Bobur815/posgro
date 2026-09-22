@@ -24,6 +24,10 @@ jest.mock('./auth-handlers', () => ({
   getCurrentUser: () => ({ id: 'u-staff', role: 'USER' }),
 }));
 jest.mock('../lan/satellite-guard', () => ({ assertNotSatellite: async () => undefined }));
+let onSatellite = false;
+jest.mock('../lan/role', () => ({ isSatellite: async () => onSatellite }));
+const mainDebtors = jest.fn(async (_opts: unknown) => [{ id: 'main-user', nameRu: 'Нодира' }]);
+jest.mock('../lan/satellite-ops', () => ({ listDebtors: (opts: unknown) => mainDebtors(opts) }));
 jest.mock('../sales/debt-ledger', () => ({
   allocatePayment: jest.fn(async () => []),
   recomputeBalance: jest.fn(async () => 0),
@@ -62,9 +66,20 @@ const whereOf = () =>
 beforeEach(() => {
   jest.clearAllMocks();
   handlers.clear();
+  onSatellite = false;
 });
 
 describe('who can be given a tab', () => {
+  // A satellite holds no users; the ids a credit sale committed on the main must name are the main's.
+  it('asks the main on a satellite, and reads nothing of its own', async () => {
+    onSatellite = true;
+    const rows = await list()(null, { search: 'Нод', includeStaff: true });
+
+    expect(rows).toEqual([{ id: 'main-user', nameRu: 'Нодира' }]);
+    expect(mainDebtors).toHaveBeenCalledWith({ search: 'Нод', includeStaff: true });
+    expect(prismaMock.user.findMany).not.toHaveBeenCalled();
+  });
+
   it('lists customers only by default', async () => {
     // The debtors page's "show all" means "every customer", not "every person on the till" —
     // listing the whole staff there is noise when the job is chasing debts.
