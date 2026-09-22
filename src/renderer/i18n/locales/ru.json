@@ -1235,7 +1235,13 @@
       "type": "Выберите файл изображения (PNG, JPEG и т.д.)",
       "tooLarge": "Изображение слишком большое — выберите файл поменьше",
       "decode": "Не удалось прочитать изображение"
-    }
+    },
+    "showOnReceipt": "Показывать на чеке",
+    "showStoreName": "Название магазина",
+    "showStoreAddress": "Адрес магазина",
+    "showStorePhone": "Телефон магазина",
+    "showStoreStir": "ИНН (STIR) магазина",
+    "showPayment": "Способ оплаты"
   },
   "printer": {
     "availablePrinters": "Доступные принтеры",

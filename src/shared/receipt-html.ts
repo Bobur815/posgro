@@ -54,6 +54,31 @@ export interface ReceiptSettings {
   receipt_logo_bottom?: string;
   /** Bottom image width as a percentage of the paper width (e.g. "50") */
   receipt_logo_bottom_size?: string;
+  /**
+   * What the receipt shows, ticked in Receipt settings. "false" hides it; anything else — and a
+   * key never saved, as on every till before these existed — shows it, so nothing changes until
+   * someone unticks a box.
+   */
+  receipt_show_store_name?: string;
+  receipt_show_store_address?: string;
+  receipt_show_store_phone?: string;
+  receipt_show_store_stir?: string;
+  receipt_show_payment?: string;
+}
+
+/** The receipt parts that can be switched off, by their settings key. */
+export const RECEIPT_SHOW_KEYS = [
+  'receipt_show_store_name',
+  'receipt_show_store_address',
+  'receipt_show_store_phone',
+  'receipt_show_store_stir',
+  'receipt_show_payment',
+] as const;
+export type ReceiptShowKey = (typeof RECEIPT_SHOW_KEYS)[number];
+
+/** Whether the receipt shows this part: only an explicit "false" hides it. */
+export function receiptShows(settings: Partial<ReceiptSettings>, key: ReceiptShowKey): boolean {
+  return settings[key] !== 'false';
 }
 
 const labels: Record<string, Record<string, string>> = {
@@ -316,10 +341,10 @@ export function buildReceiptHTML(
 <body>
   ${logoHTML(settings, "top")}
   <div class="center">
-    ${settings.store_name ? `<div class="brand">${escapeHtml(settings.store_name)}</div>` : ""}
-    ${settings.store_address ? `<div class="sub">${escapeHtml(settings.store_address)}</div>` : ""}
-    ${settings.store_phone ? `<div class="sub">${escapeHtml(formatPhone(settings.store_phone))}</div>` : ""}
-    ${settings.store_stir ? `<div class="sub">STIR: ${escapeHtml(settings.store_stir)}</div>` : ""}
+    ${settings.store_name && receiptShows(settings, "receipt_show_store_name") ? `<div class="brand">${escapeHtml(settings.store_name)}</div>` : ""}
+    ${settings.store_address && receiptShows(settings, "receipt_show_store_address") ? `<div class="sub">${escapeHtml(settings.store_address)}</div>` : ""}
+    ${settings.store_phone && receiptShows(settings, "receipt_show_store_phone") ? `<div class="sub">${escapeHtml(formatPhone(settings.store_phone))}</div>` : ""}
+    ${settings.store_stir && receiptShows(settings, "receipt_show_store_stir") ? `<div class="sub">STIR: ${escapeHtml(settings.store_stir)}</div>` : ""}
     ${settings.receipt_header ? `<div class="sub">${escapeHtml(settings.receipt_header)}</div>` : ""}
   </div>
 
@@ -352,10 +377,10 @@ export function buildReceiptHTML(
     <span>${l.total}</span><span class="dots">.....................................................</span>
     <span>${fmt(grandTotal, cur)}</span>
   </div>
-  <div class="total-row">
+  ${receiptShows(settings, "receipt_show_payment") ? `<div class="total-row">
     <span>${l.payment}</span><span class="dots">.....................................................</span>
     <span>${paymentLabel}</span>
-  </div>
+  </div>` : ""}
 
   <hr>
 
@@ -390,7 +415,7 @@ export function buildTestReceiptHTML(settings: ReceiptSettings): string {
     <hr class="double">
     <div style="margin: 8px 0;">${l.testMessage}</div>
     <div class="sub">${l.date}: ${dateStr} ${timeStr}</div>
-    ${settings.store_name ? `<div class="sub" style="margin-top: 4px;">${escapeHtml(settings.store_name)}</div>` : ""}
+    ${settings.store_name && receiptShows(settings, "receipt_show_store_name") ? `<div class="sub" style="margin-top: 4px;">${escapeHtml(settings.store_name)}</div>` : ""}
     <hr class="double">
   </div>
   ${logoHTML(settings, "bottom")}

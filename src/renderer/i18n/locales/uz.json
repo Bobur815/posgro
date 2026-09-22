@@ -1224,7 +1224,13 @@
       "type": "Rasm faylini tanlang (PNG, JPEG va h.k.)",
       "tooLarge": "Rasm juda katta — kichikroq fayl tanlang",
       "decode": "Rasmni o'qib bo'lmadi"
-    }
+    },
+    "showOnReceipt": "Chekda ko'rsatish",
+    "showStoreName": "Do'kon nomi",
+    "showStoreAddress": "Do'kon manzili",
+    "showStorePhone": "Do'kon telefoni",
+    "showStoreStir": "Do'kon STIR raqami",
+    "showPayment": "To'lov turi"
   },
   "printer": {
     "availablePrinters": "Mavjud printerlar",

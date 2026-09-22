@@ -5,6 +5,7 @@ import { getPrismaClient } from "../database/sqlite-client";
 import {
   buildReceiptHTML,
   buildTestReceiptHTML,
+  RECEIPT_SHOW_KEYS,
 } from "../../shared/receipt-html";
 import type { ReceiptData, ReceiptSettings } from "../../shared/receipt-html";
 import { printPriceTagsTSPL } from "./tspl-printer";
@@ -114,6 +115,7 @@ async function loadReceiptSettings(): Promise<ReceiptSettings> {
           "receipt_logo_top_size",
           "receipt_logo_bottom",
           "receipt_logo_bottom_size",
+          ...RECEIPT_SHOW_KEYS,
         ],
       },
     },
@@ -142,6 +144,8 @@ async function loadReceiptSettings(): Promise<ReceiptSettings> {
     receipt_logo_top_size: map.receipt_logo_top_size || "50",
     receipt_logo_bottom: map.receipt_logo_bottom || "",
     receipt_logo_bottom_size: map.receipt_logo_bottom_size || "50",
+    // Unset means shown (receiptShows), so these pass through as saved.
+    ...Object.fromEntries(RECEIPT_SHOW_KEYS.map((k) => [k, map[k] ?? "true"])),
   };
 }
 
