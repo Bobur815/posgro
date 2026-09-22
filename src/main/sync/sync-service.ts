@@ -17,10 +17,9 @@ import { getServerToken, clearServerToken } from './queue-manager';
 import { shouldUploadMasterData, syncTarget } from './sync-policy';
 import { syncWithMain } from '../lan/main-sync';
 import { MainLinkError } from '../lan/main-link';
-import { syncLocalServerWithMode } from '../local-server';
 import { flushLogs } from '../logger';
 import { isWriteFrozen } from '../sales/write-freeze';
-import { acceptLicense } from '../license/license';
+import { pullStoreConfig } from './store-config';
 
 function decodeTokenStoreId(token: string): string | null | undefined {
   try {
@@ -290,82 +289,11 @@ export class SyncService {
     });
   }
 
-  // Fetches server-controlled config keys (e.g. AI token limit) from VPS.
-  // The VPS should expose GET /store-config returning { ai_token_limit_daily: number }.
-  // Silently skips if the endpoint is unavailable.
+  // Server-controlled config (license, mode, override password, AI limit): see store-config.ts,
+  // which the login path and the terminal-role panel also call — an OFFLINE_ONLY till never
+  // gets here.
   private async syncStoreConfig(): Promise<void> {
-    const config = getAppConfig();
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      const token = getServerToken();
-      const response = await fetch(`${config.vpsApiUrl}/store-config`, {
-        signal: controller.signal,
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      clearTimeout(timeoutId);
-      if (!response.ok) return;
-
-      const data = await response.json() as Record<string, unknown>;
-      const prisma = getPrismaClient();
-
-      // The store's signed license, renewed every cycle (src/main/license/). Taken only when it is
-      // genuine, this store's and newer than the one held.
-      if (typeof data.license === 'string') await acceptLicense(data.license);
-
-      if (typeof data.ai_token_limit_daily === 'number') {
-        await prisma.systemSetting.upsert({
-          where: { key: 'ai_token_limit_daily' },
-          update: { value: String(data.ai_token_limit_daily) },
-          create: { key: 'ai_token_limit_daily', value: String(data.ai_token_limit_daily) },
-        });
-      }
-
-      // Refresh the cached operating mode. This is what makes the super admin's toggle reach a
-      // live terminal within one sync cycle — no rebuild, and flipping it back is the rollback.
-      // Only write fields the server actually sent, so an older server can't silently unlock a
-      // terminal by omitting them.
-      const modeUpdate: {
-        mode?: string;
-        posAdminLocked?: boolean;
-        superAdminPassword?: string | null;
-      } = {};
-      if (data.mode === 'OFFLINE_ONLY' || data.mode === 'ONLINE') {
-        modeUpdate.mode = data.mode;
-      }
-      if (typeof data.pos_admin_locked === 'boolean') {
-        modeUpdate.posAdminLocked = data.pos_admin_locked;
-      }
-      // The manager-override password, so changing it in the dashboard reaches a live terminal
-      // within one cycle instead of waiting for setup to be re-run. Keyed on the field being
-      // present rather than truthy: an explicit null is the super admin clearing the override,
-      // which must take effect, while an older server omits the key entirely and changes nothing.
-      if ('super_admin_password_hash' in data) {
-        const hash = data.super_admin_password_hash;
-        modeUpdate.superAdminPassword = typeof hash === 'string' && hash ? hash : null;
-      }
-      if (Object.keys(modeUpdate).length > 0) {
-        await prisma.localConfig.update({ where: { id: 'config' }, data: modeUpdate });
-        // Only the mode fields reach the renderer. The password hash stays in the main process —
-        // the renderer never needs it (it asks main to verify) and sending it would put it in a
-        // browser context, which is exactly what fetching it in main was meant to avoid.
-        this.notifyRenderer('config:modeChanged', {
-          ...(modeUpdate.mode !== undefined ? { mode: modeUpdate.mode } : {}),
-          ...(modeUpdate.posAdminLocked !== undefined
-            ? { posAdminLocked: modeUpdate.posAdminLocked }
-            : {}),
-        });
-        // A store switched to OFFLINE_ONLY gains its own LAN dashboard, and one switched back
-        // loses it — within the same cycle the mode itself lands, so neither needs a restart.
-        if (modeUpdate.mode) {
-          void syncLocalServerWithMode().catch((err) =>
-            console.error('[local-server] mode change failed:', err),
-          );
-        }
-      }
-    } catch {
-      // Offline or endpoint not yet implemented — use cached limit
-    }
+    await pullStoreConfig((channel, data) => this.notifyRenderer(channel, data));
   }
 
   private async uploadLogs(): Promise<void> {
