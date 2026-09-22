@@ -163,6 +163,7 @@
     }
   },
   "pos": {
+    "debt": "Долг",
     "clearCartConfirm": "Вы уверены, что хотите очистить корзину?",
     "fiscalUnsent": "Не фискализировано чеков: {{count}}",
     "fiscalUnsentHint": "Открыть историю продаж для фискализации",
@@ -759,7 +760,8 @@
     "rankScope": "Из {{total}} активных товаров. Не продавалось ни разу: {{neverSold}}.",
     "rankNoCost": "Без себестоимости — не учитывается в прибыли: {{count}}.",
     "allCategories": "Все категории",
-    "otherCategories": "Прочие"
+    "otherCategories": "Прочие",
+    "onDebt": "в долг"
   },
   "users": {
     "title": "Пользователи",

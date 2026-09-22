@@ -456,7 +456,9 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
                       )}
                     </SaleInfo>
                     <Amount>{formatCurrency(sale.finalAmount)}</Amount>
-                    {!isSatellite && (sale.fiscalStatus === 'FAILED' || sale.fiscalStatus === 'PENDING') && (
+                    {/* On a satellite too: its main's device fiscalizes (fiscal:retrySale). Refunds
+                        and duplicates below stay the main's. */}
+                    {(sale.fiscalStatus === 'FAILED' || sale.fiscalStatus === 'PENDING') && (
                       <FiscalizeButton
                         onClick={(e) => handleFiscalize(sale, e)}
                         disabled={fiscalizingId === sale.id}

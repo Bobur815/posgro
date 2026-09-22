@@ -103,6 +103,12 @@ const StatSubtext = styled.div`
   margin-top: ${({ theme }) => theme.spacing.xs};
 `;
 
+/** The part of the revenue put on tabs, shown under the total it was taken out of. */
+const DebtSubtext = styled(StatSubtext)`
+  color: ${({ theme }) => theme.colors.error};
+  font-weight: 600;
+`;
+
 const TableCard = styled.div`
   background-color: ${({ theme }) => theme.colors.surface};
   border-radius: ${({ theme }) => theme.borderRadius};
@@ -165,6 +171,7 @@ const TENDER_ICONS: Record<string, string> = {
   cash: "💵",
   card: "💳",
   uzqr: "🔳",
+  debt: "💰",
 };
 
 const PaymentBadge = styled.span<{ $method: string }>`
@@ -174,7 +181,8 @@ const PaymentBadge = styled.span<{ $method: string }>`
   font-size: 12px;
   padding: 2px 8px;
   border-radius: 12px;
-  background-color: ${({ theme, $method }) => tenderColor(theme, $method) + "20"};
+  background-color: ${({ theme, $method }) =>
+    tenderColor(theme, $method) + "20"};
   color: ${({ theme, $method }) => tenderColor(theme, $method)};
   font-weight: 500;
 `;
@@ -251,9 +259,7 @@ export function ReceiptsSummary() {
   const todayStr = new Date().toISOString().split("T")[0];
   const [startDate, setStartDate] = useState(todayStr);
   const [endDate, setEndDate] = useState(todayStr);
-  const [paymentFilter, setPaymentFilter] = useState<"all" | SaleTender>(
-    "all",
-  );
+  const [paymentFilter, setPaymentFilter] = useState<"all" | SaleTender>("all");
   const [terminalId, setTerminalId] = useState("");
   const [knownTerminals, setKnownTerminals] = useState<string[]>([]);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -297,6 +303,12 @@ export function ReceiptsSummary() {
       (sum, s) => sum + Number(s.finalAmount),
       0,
     );
+    // Nasiya: what went on customers' tabs is not money the shop has yet, so the revenue card
+    // shows it taken out, and says how much.
+    const totalDebt = filteredSales.reduce(
+      (sum, s) => sum + (Number(s.debtAmount) || 0),
+      0,
+    );
     const totalItems = filteredSales.reduce(
       (sum, s) => sum + s.items.length,
       0,
@@ -319,6 +331,7 @@ export function ReceiptsSummary() {
     return {
       totalSales: filteredSales.length,
       totalRevenue,
+      totalDebt,
       totalItems,
       cashSales,
       cardSales,
@@ -418,10 +431,16 @@ export function ReceiptsSummary() {
 
           <StatCard>
             <StatLabel>{t("reports.totalRevenue")}</StatLabel>
-            <StatValue>{formatCurrency(summary.totalRevenue)}</StatValue>
+            <StatValue>{formatCurrency(summary.totalRevenue - summary.totalDebt)}</StatValue>
             <StatSubtext>
               {startDate === endDate ? startDate : `${startDate} – ${endDate}`}
             </StatSubtext>
+            {summary.totalDebt > 0 && (
+              <DebtSubtext>
+                {TENDER_ICONS.debt} −{formatCurrency(summary.totalDebt)}{" "}
+                {t("reports.onDebt", "в долг")}
+              </DebtSubtext>
+            )}
           </StatCard>
 
           <StatCard>

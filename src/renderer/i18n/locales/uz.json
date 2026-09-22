@@ -163,6 +163,7 @@
     }
   },
   "pos": {
+    "debt": "Qarz",
     "clearCartConfirm": "Savatni tozalash istaysizmi?",
     "fiscalUnsent": "Fiskallashtirilmagan cheklar: {{count}}",
     "fiscalUnsentHint": "Fiskallashtirish uchun sotuvlar tarixini ochish",
@@ -747,7 +748,8 @@
     "rankScope": "{{total}} ta faol mahsulotdan. Umuman sotilmagan: {{neverSold}} ta.",
     "rankNoCost": "Tannarxi yo'q — foydada hisobga olinmaydi: {{count}} ta.",
     "allCategories": "Barcha kategoriyalar",
-    "otherCategories": "Boshqalar"
+    "otherCategories": "Boshqalar",
+    "onDebt": "qarzga"
   },
   "users": {
     "title": "Foydalanuvchilar",

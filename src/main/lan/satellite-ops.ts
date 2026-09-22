@@ -5,6 +5,7 @@ import { openCashDrawer, printReceipt } from '../printer/thermal-printer';
 import { printZXReport } from '../printer/smena-report-printer';
 import { currentShift, shiftHistory } from '../sales/shifts';
 import type { AuthUser } from '../../shared/types/user.types';
+import { FISCAL_FIELDS } from './fiscal-fields';
 import {
   MainLinkError,
   SESSION_USER_KEY,
@@ -291,6 +292,32 @@ export async function deleteSale(saleId: string): Promise<true> {
   await forgetSale(saleId);
   await applyStock(reply?.stock ?? []);
   return true;
+}
+
+// ── Fiscalizing ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Send one of this till's receipts to the OFD again, through the main — the fiscal device is
+ * there. The main's answer carries the receipt's new fiscal state, copied onto the copy kept
+ * here so the history's badge and button follow at once.
+ */
+export async function retryFiscal(saleId: string): Promise<{ ok: boolean; error?: string }> {
+  const reply = await mainRequest<{ ok: boolean; error?: string; fiscal?: Record<string, unknown> | null }>(
+    'POST',
+    `/terminal/sales/${encodeURIComponent(saleId)}/fiscalize`,
+    { person: true, timeoutMs: SALE_TIMEOUT_MS },
+  );
+  if (reply?.fiscal) {
+    const data = Object.fromEntries(
+      Object.keys(FISCAL_FIELDS)
+        .filter((k) => k in reply.fiscal!)
+        .map((k) => [k, k === 'regosFiscalAt' && reply.fiscal![k] ? new Date(String(reply.fiscal![k])) : reply.fiscal![k]]),
+    );
+    await db()
+      .sale.updateMany({ where: { id: saleId }, data })
+      .catch((e: unknown) => console.error('[satellite] could not update the kept receipt:', e));
+  }
+  return { ok: Boolean(reply?.ok), ...(reply?.error ? { error: reply.error } : {}) };
 }
 
 // ── Debtors ─────────────────────────────────────────────────────────────────────────────────────

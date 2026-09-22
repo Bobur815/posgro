@@ -33,6 +33,7 @@ import {
   shiftReport,
 } from '../../sales/shifts';
 import { regosVcrService } from '../../fiscal/regos-vcr-service';
+import { FISCAL_FIELDS } from '../../lan/fiscal-fields';
 import { LOCAL_ONLY_SETTINGS } from '../../sync/local-only-settings';
 import { log } from '../../logger';
 
@@ -370,6 +371,25 @@ export const satelliteRoutes: Route[] = [
         const settled = await db().sale.findUnique({ where: { id: sale.id }, include: { items: true } });
         return { sale: settled, stock, replayed };
       }),
+  },
+
+  /**
+   * Send one of this satellite's receipts to the OFD again — it failed, or is still pending. The
+   * fiscal device is this main's, so the satellite asks here; any cashier may, as at the main.
+   * Only the satellite's own receipts: its history lists nothing else.
+   */
+  {
+    method: 'POST',
+    path: '/terminal/sales/:id/fiscalize',
+    audience: 'terminal',
+    session: true,
+    handler: async (ctx) => {
+      const sale = await db().sale.findUnique({ where: { id: ctx.params.id }, select: { terminalId: true } });
+      if (!sale || sale.terminalId !== ctx.terminal!.terminalId) throw notFound('Sale not found');
+      const result = await regosVcrService.retrySale(ctx.params.id);
+      const fiscal = await db().sale.findUnique({ where: { id: ctx.params.id }, select: FISCAL_FIELDS });
+      return { ...result, fiscal };
+    },
   },
 
   {

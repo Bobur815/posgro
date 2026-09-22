@@ -427,6 +427,25 @@ describe('selling from a satellite', () => {
     expect(await stockOf(productId)).toBe(before + 2);
   });
 
+  // The fiscal device is the main's: a satellite asks it to send one of its own receipts again.
+  it('fiscalizes a satellite’s own receipt on the main, and answers with its fiscal state', async () => {
+    const sale = await call('POST', '/terminal/sales', {
+      device: t2,
+      session: t2Session,
+      body: cart(BARCODES.water, 1, { id: 'sat-fisc-1' }),
+    });
+    expect(sale.status).toBe(201);
+    const res = await call('POST', '/terminal/sales/sat-fisc-1/fiscalize', { device: t2, session: t2Session });
+    expect(res.status).toBe(201);
+    expect(res.json).toHaveProperty('ok');
+    expect(res.json.fiscal).toHaveProperty('fiscalStatus');
+  });
+
+  it('refuses to fiscalize a receipt another till rang up', async () => {
+    const res = await call('POST', '/terminal/sales/sat-fisc-1/fiscalize', { device: t3, session: t3Session });
+    expect(res.status).toBe(404);
+  });
+
   // A satellite holds no users: it picks who owes from the main's people, and the sale names them.
   describe('on credit', () => {
     let clientId = '';

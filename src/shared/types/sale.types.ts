@@ -20,6 +20,8 @@ export interface Sale {
   margin?: number;
   // REGOS:VCR fiscalization
   fiscalStatus?: string | null; // PENDING | FISCALIZED | FAILED | DISABLED
+  /** Nasiya: the part of finalAmount put on a customer's tab, not paid at the counter. */
+  debtAmount?: number | string | null;
   fiscalError?: string | null;
   regosReceiptNo?: string | null;
   regosQrCodeUrl?: string | null;
