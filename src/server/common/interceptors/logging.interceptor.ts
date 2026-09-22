@@ -8,6 +8,8 @@ import {
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 
+const SENSITIVE_FIELD = /password|secret|token|pin|license/i;
+
 const TASHKENT_LOCALE = 'uz-UZ';
 const TASHKENT_TZ = 'Asia/Tashkent';
 
@@ -57,10 +59,11 @@ export class LoggingInterceptor implements NestInterceptor {
 
     const sanitized = { ...body };
 
-    // Remove sensitive fields from logs
-    const sensitiveFields = ['password', 'token', 'secret'];
-    for (const field of sensitiveFields) {
-      if (sanitized[field]) {
+    // Remove sensitive fields from logs — by pattern, not exact name: `superAdminPassword`,
+    // `currentPassword`, `newPassword` and a presented `license` all went out in plain text when
+    // only `password` itself was matched.
+    for (const field of Object.keys(sanitized)) {
+      if (SENSITIVE_FIELD.test(field) && sanitized[field]) {
         sanitized[field] = '[REDACTED]';
       }
     }
