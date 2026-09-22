@@ -213,6 +213,7 @@ export async function printReceipt(saleId: string): Promise<boolean> {
     discountAmount: Number(sale.discountAmount),
     finalAmount: Number(sale.finalAmount),
     paymentMethod: sale.paymentMethod,
+    debtAmount: Number(sale.debtAmount ?? 0),
     fiscalReceiptNumber: fiscalReceiptNo || undefined,
     fiscalMark,
     fiscalQrBase64,

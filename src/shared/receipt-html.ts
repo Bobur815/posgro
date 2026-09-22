@@ -25,6 +25,11 @@ export interface ReceiptData {
   discountAmount: number;
   finalAmount: number;
   paymentMethod: string;
+  /**
+   * Nasiya: the part of finalAmount put on the customer's tab. A receipt fully on credit is also
+   * stored with paymentMethod "debt"; a part-paid one keeps the tender that took the money.
+   */
+  debtAmount?: number;
   /** Fiscal receipt number (REGOS:VCR) — replaces internal receipt number when set */
   fiscalReceiptNumber?: string;
   /** Fiscal mark (OFD URL `s` param) shown above QR code */
@@ -96,6 +101,8 @@ const labels: Record<string, Record<string, string>> = {
     card: "Карта",
     uzqr: "UzQR",
     mixed: "Смешанная",
+    debt: "Долг",
+    paidNow: "Оплачено",
     currency: "сум",
     thankYou: "Спасибо за покупку!",
     testTitle: "ТЕСТОВАЯ ПЕЧАТЬ",
@@ -118,6 +125,8 @@ const labels: Record<string, Record<string, string>> = {
     card: "Karta",
     uzqr: "UzQR",
     mixed: "Aralash",
+    debt: "Qarz",
+    paidNow: "To'landi",
     currency: "so'm",
     thankYou: "Xaridingiz uchun rahmat!",
     testTitle: "TEST CHOP ETISH",
@@ -273,14 +282,21 @@ export function buildReceiptHTML(
     },
   );
 
-  const paymentLabel =
+  const tenderLabel =
     sale.paymentMethod === "cash"
       ? l.cash
       : sale.paymentMethod === "card"
         ? l.card
         : sale.paymentMethod === "uzqr"
           ? l.uzqr
-          : l.mixed;
+          : sale.paymentMethod === "debt"
+            ? l.debt
+            : l.mixed;
+  // What went on the customer's tab: all of it ("debt"), or the rest of a part-paid receipt.
+  const debtAmount =
+    sale.paymentMethod === "debt" ? sale.finalAmount : Math.max(0, Number(sale.debtAmount) || 0);
+  const partPaid = sale.paymentMethod !== "debt" && debtAmount > 0;
+  const paymentLabel = partPaid ? `${tenderLabel} + ${l.debt}` : tenderLabel;
 
   const taxAsDiscount = settings.tax_rate_as_discount === "true" && taxRate > 0;
 
@@ -380,7 +396,15 @@ export function buildReceiptHTML(
   ${receiptShows(settings, "receipt_show_payment") ? `<div class="total-row">
     <span>${l.payment}</span><span class="dots">.....................................................</span>
     <span>${paymentLabel}</span>
-  </div>` : ""}
+  </div>${partPaid ? `
+  <div class="total-row">
+    <span>${l.paidNow}</span><span class="dots">.....................................................</span>
+    <span>${fmt(sale.finalAmount - debtAmount, cur)}</span>
+  </div>` : ""}${debtAmount > 0 ? `
+  <div class="total-row">
+    <span>${l.debt}</span><span class="dots">.....................................................</span>
+    <span>${fmt(debtAmount, cur)}</span>
+  </div>` : ""}` : ""}
 
   <hr>
 
