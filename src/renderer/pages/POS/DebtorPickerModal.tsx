@@ -12,7 +12,6 @@ import { formatCurrency } from "@shared/utils";
 import { isUzPhoneComplete } from "@shared/utils/phone";
 import { roleLabelKey, USER_ROLES } from "@shared/constants";
 import type { Debtor } from "@shared/types";
-import { useModeStore } from "../../store";
 
 /**
  * Put part or all of a sale on someone's tab.
@@ -192,8 +191,6 @@ export function DebtorPickerModal({ total, onConfirm, onCancel }: Props) {
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [busy, setBusy] = useState(false);
-  // A satellite picks from the main's people and cannot add one: customers are the main's to keep.
-  const isSatellite = useModeStore((s) => s.isSatellite);
 
   useEffect(() => {
     let alive = true;
@@ -271,15 +268,13 @@ export function DebtorPickerModal({ total, onConfirm, onCancel }: Props) {
             placeholder={t("debtors.searchPlaceholder", "Имя или телефон")}
           />
         </SearchWrap>
-        {!isSatellite && (
-          <Button variant="secondary" onClick={() => setAdding((v) => !v)}>
-            {adding ? <X size={16} /> : <Plus size={16} />}
-            {adding ? t("common.cancel") : t("common.add", "Добавить")}
-          </Button>
-        )}
+        <Button variant="secondary" onClick={() => setAdding((v) => !v)}>
+          {adding ? <X size={16} /> : <Plus size={16} />}
+          {adding ? t("common.cancel") : t("common.add", "Добавить")}
+        </Button>
       </Bar>
 
-      {adding && !isSatellite && (
+      {adding && (
         <AddForm>
           <Input
             label={t("debtors.name", "Имя")}

@@ -294,20 +294,62 @@ export async function deleteSale(saleId: string): Promise<true> {
 }
 
 // ── Debtors ─────────────────────────────────────────────────────────────────────────────────────
+//
+// A satellite holds no users, so its customers, their payments and their history are the main's —
+// and a credit sale committed on the main must name the main's ids. Everything here goes there;
+// the main checks the person's session and role (`/terminal/debtors…`).
 
-/**
- * The people a receipt can be put on the tab of — the main's, since a satellite holds no users and
- * a credit sale committed on the main must name the main's ids. Read-only here: adding a customer
- * is the main's to do (`debtors:create` refuses on a satellite).
- */
-export async function listDebtors(opts: { search?: string; withDebtOnly?: boolean }): Promise<unknown[]> {
+const debtorPath = (userId: string, rest = '') => `/terminal/debtors/${encodeURIComponent(userId)}${rest}`;
+
+export async function listDebtors(opts: {
+  search?: string;
+  withDebtOnly?: boolean;
+  includeStaff?: boolean;
+}): Promise<unknown[]> {
   const q = new URLSearchParams();
   if (opts.search?.trim()) q.set('search', opts.search.trim());
   if (opts.withDebtOnly) q.set('withDebtOnly', 'true');
+  if (opts.includeStaff) q.set('includeStaff', 'true');
   const query = q.toString();
   return (
     (await mainRequest<unknown[]>('GET', `/terminal/debtors${query ? `?${query}` : ''}`, { person: true })) ?? []
   );
+}
+
+export function createDebtor(data: unknown): Promise<unknown> {
+  return mainRequest('POST', '/terminal/debtors', { person: true, body: data });
+}
+
+export function updateDebtor(userId: string, data: unknown): Promise<unknown> {
+  return mainRequest('PATCH', debtorPath(userId), { person: true, body: data });
+}
+
+export function debtorLedger(userId: string): Promise<unknown> {
+  return mainRequest('GET', debtorPath(userId, '/ledger'), { person: true });
+}
+
+export function unpaidSales(userId: string): Promise<unknown> {
+  return mainRequest('GET', debtorPath(userId, '/unpaid-sales'), { person: true });
+}
+
+export function debtorSale(userId: string, saleId: string): Promise<unknown> {
+  return mainRequest('GET', debtorPath(userId, `/sales/${encodeURIComponent(saleId)}`), { person: true });
+}
+
+/**
+ * Not repeated on its own after a lost answer: a payment is not idempotent, and paying twice is
+ * worse than the cashier seeing an error and checking the balance.
+ */
+export function recordDebtPayment(data: { userId: string }): Promise<{ settledSales: string[] }> {
+  return mainRequest('POST', debtorPath(data.userId, '/payments'), {
+    person: true,
+    body: data,
+    timeoutMs: SALE_TIMEOUT_MS,
+  });
+}
+
+export function adjustDebt(data: { userId: string }): Promise<unknown> {
+  return mainRequest('POST', debtorPath(data.userId, '/adjustments'), { person: true, body: data });
 }
 
 // ── Shifts (§5.14) ──────────────────────────────────────────────────────────────────────────────

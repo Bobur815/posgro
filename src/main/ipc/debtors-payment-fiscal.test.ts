@@ -26,6 +26,8 @@ jest.mock('../database/sqlite-client', () => ({ getPrismaClient: () => prismaMoc
 jest.mock('../config/app-config', () => ({ getAppConfig: () => ({ terminalId: 'T1' }) }));
 jest.mock('./auth-handlers', () => ({ getCurrentUser: () => ({ id: 'u-staff', role: 'USER' }) }));
 jest.mock('../lan/satellite-guard', () => ({ assertNotSatellite: async () => undefined }));
+// Not a satellite: these payments are this till's own (a satellite's go to its main).
+jest.mock('../lan/role', () => ({ isSatellite: async () => false }));
 jest.mock('../sales/debt-ledger', () => ({
   allocatePayment: jest.fn(async () => ['sale-1', 'sale-2']),
   recomputeBalance: jest.fn(async () => 0),

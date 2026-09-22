@@ -188,6 +188,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getLedger: (userId: string) => ipcRenderer.invoke("debtors:getLedger", userId),
     getUnpaidSales: (userId: string) =>
       ipcRenderer.invoke("debtors:getUnpaidSales", userId),
+    getSale: (userId: string, saleId: string) =>
+      ipcRenderer.invoke("debtors:getSale", userId, saleId),
     recordPayment: (data: unknown) =>
       ipcRenderer.invoke("debtors:recordPayment", data),
     adjust: (data: unknown) => ipcRenderer.invoke("debtors:adjust", data),
@@ -707,6 +709,8 @@ declare global {
         update: (id: string, data: unknown) => Promise<Debtor>;
         getLedger: (userId: string) => Promise<DebtLedger>;
         getUnpaidSales: (userId: string) => Promise<UnpaidCreditSale[]>;
+        /** One receipt on this person's tab, with its lines — on a satellite, from the main. */
+        getSale: (userId: string, saleId: string) => Promise<unknown>;
         recordPayment: (data: unknown) => Promise<{ debtor: Debtor; settledSales: string[] }>;
         adjust: (data: unknown) => Promise<Debtor>;
       };

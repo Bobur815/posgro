@@ -446,7 +446,8 @@ describe('selling from a satellite', () => {
     });
 
     it('lists the main’s people, staff included, and no password hash', async () => {
-      const res = await call('GET', '/terminal/debtors', { device: t2, session: t2Session });
+      // As the POS picker asks: staff included, since anyone can run a tab.
+      const res = await call('GET', '/terminal/debtors?includeStaff=true', { device: t2, session: t2Session });
       expect(res.status).toBe(200);
       const ids = res.json.map((d: { id: string }) => d.id);
       expect(ids).toEqual(expect.arrayContaining([clientId, 'user-cashier']));
@@ -471,6 +472,72 @@ describe('selling from a satellite', () => {
       expect(Number(res.json.sale.debtAmount)).toBe(5000);
       const owed = await getPrismaClient().user.findUnique({ where: { id: clientId }, select: { debt: true } });
       expect(Number(owed!.debt)).toBe(5000);
+    });
+
+    it('adds a customer to the main’s book, and refuses a phone already taken', async () => {
+      const res = await call('POST', '/terminal/debtors', {
+        device: t2,
+        session: t2Session,
+        body: { nameRu: 'Бахром', phone: '998904445566' },
+      });
+      expect(res.status).toBe(201);
+      expect(res.json).toMatchObject({ nameRu: 'Бахром', role: 'CLIENT', debt: 0 });
+      expect(await getPrismaClient().user.findUnique({ where: { phone: '998904445566' } })).not.toBeNull();
+
+      const again = await call('POST', '/terminal/debtors', {
+        device: t2,
+        session: t2Session,
+        body: { nameRu: 'Другой', phone: '998904445566' },
+      });
+      expect(again.status).toBe(400);
+      expect(again.json.message).toBe('debtors.errors.phone_taken');
+    });
+
+    it('shows the history, and a receipt on the tab with its lines', async () => {
+      const ledger = await call('GET', `/terminal/debtors/${clientId}/ledger`, { device: t2, session: t2Session });
+      expect(ledger.status).toBe(200);
+      expect(ledger.json).toMatchObject({ balance: 5000, ledgerBalance: 5000, fiscalEnabled: false });
+      expect(ledger.json.transactions[0]).toMatchObject({ type: 'CHARGE', saleId: 'sat-credit-1' });
+
+      const sale = await call('GET', `/terminal/debtors/${clientId}/sales/sat-credit-1`, { device: t2, session: t2Session });
+      expect(sale.status).toBe(200);
+      expect(sale.json.items).toHaveLength(1);
+    });
+
+    // Not a way to read any receipt by id: only one on that person's tab.
+    it('refuses a receipt that is not on the person’s tab', async () => {
+      const res = await call('GET', `/terminal/debtors/${clientId}/sales/sat-sale-1`, { device: t2, session: t2Session });
+      expect(res.status).toBe(404);
+    });
+
+    it('takes a cash payment into the satellite’s own shift, and clears the receipt', async () => {
+      const res = await call('POST', `/terminal/debtors/${clientId}/payments`, {
+        device: t2,
+        session: t2Session,
+        body: { amount: 5000, paymentMethod: 'cash' },
+      });
+      expect(res.status).toBe(201);
+      expect(res.json.debtor.debt).toBe(0);
+      expect(res.json.settledSales).toEqual(['sat-credit-1']);
+
+      const shift = await getPrismaClient().smena.findFirst({ where: { terminalId: 'T2', status: 'OPEN' } });
+      const payIns = await getPrismaClient().smenaMovement.findMany({ where: { smenaId: shift!.id, type: 'PAY_IN' } });
+      expect(payIns.map((m: { amount: unknown }) => Number(m.amount))).toContain(5000);
+    });
+
+    it('lets only an admin edit a debtor or correct a balance', async () => {
+      const edit = await call('PATCH', `/terminal/debtors/${clientId}`, {
+        device: t2,
+        session: t2Session,
+        body: { debtDueDate: '2026-12-01' },
+      });
+      expect(edit.status).toBe(403);
+      const adjust = await call('POST', `/terminal/debtors/${clientId}/adjustments`, {
+        device: t2,
+        session: t2Session,
+        body: { amount: -100 },
+      });
+      expect(adjust.status).toBe(403);
     });
   });
 

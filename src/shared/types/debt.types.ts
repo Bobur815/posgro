@@ -48,6 +48,11 @@ export interface DebtLedger {
   /** The same figure re-derived from the rows — shown beside it so the screen can check itself. */
   ledgerBalance: number;
   transactions: DebtTransaction[];
+  /**
+   * Whether a payment fiscalizes what it pays off — by the device of the terminal that keeps the
+   * book, which for a satellite is its main. Absent from a build before satellites kept debts.
+   */
+  fiscalEnabled?: boolean;
 }
 
 /** A credit sale this person has not finished paying for. */

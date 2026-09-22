@@ -288,7 +288,9 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
     setOpenSaleId(saleId);
     if (sales[saleId]) return;
     try {
-      const sale = (await window.electronAPI.sales.getById(saleId)) as SaleDetail | null;
+      // Through the debtor's own book: on a satellite a receipt rung up elsewhere is only on the
+      // main, and this asks it.
+      const sale = (await window.electronAPI.debtors.getSale(debtorId, saleId)) as SaleDetail | null;
       if (sale) setSales((prev) => ({ ...prev, [saleId]: sale }));
     } catch {
       // A receipt that has since been deleted simply stays unopened; the ledger row is the
@@ -318,7 +320,8 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
     // decides whether they get fiscalized. A partial payment keeps the old behaviour: whatever it
     // finishes paying for is fiscalized straight away.
     const paysOff = ledger != null && ledger.balance > 0 && value >= ledger.balance - 0.005;
-    if (fiscalEnabled && paysOff) {
+    // The book's own device decides — on a satellite, its main's.
+    if ((ledger?.fiscalEnabled ?? fiscalEnabled) && paysOff) {
       setConfirmPayoff(true);
       return;
     }
