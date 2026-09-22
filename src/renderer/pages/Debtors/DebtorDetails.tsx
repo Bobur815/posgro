@@ -9,6 +9,7 @@ import { DateInput } from "../../components/common/DateInput";
 import { useToast } from "../../context/ToastContext";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import type { DebtLedger, DebtTransaction } from "@shared/types";
+import { useAuthStore } from "../../store/auth-store";
 
 /**
  * One debtor: what they owe, how it got there, and taking money off it.
@@ -241,6 +242,8 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
   const [openSaleId, setOpenSaleId] = useState<string | null>(null);
   const [sales, setSales] = useState<Record<string, SaleDetail>>({});
   const [dueDate, setDueDate] = useState("");
+  // A cashier takes payments; changing when a debt is due is an admin's (debtors:update).
+  const isAdmin = useAuthStore((s) => s.user?.role === "ADMIN");
   /** Fiscalization is switched on for this till — the payoff question only means something then. */
   const [fiscalEnabled, setFiscalEnabled] = useState(false);
   /** A payment that clears the whole balance, waiting on "fiscalize or not". */
@@ -406,12 +409,14 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
             </Drift>
           )}
 
-          <DateInput
-            label={t("debtors.dueDateOptional", "Срок оплаты (необязательно)")}
-            value={dueDate}
-            onChange={saveDueDate}
-            style={{ marginBottom: 16 }}
-          />
+          {isAdmin && (
+            <DateInput
+              label={t("debtors.dueDateOptional", "Срок оплаты (необязательно)")}
+              value={dueDate}
+              onChange={saveDueDate}
+              style={{ marginBottom: 16 }}
+            />
+          )}
 
           <Section>{t("debtors.takePayment", "Принять оплату")}</Section>
           {confirmPayoff ? (

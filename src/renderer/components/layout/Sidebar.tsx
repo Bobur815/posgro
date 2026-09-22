@@ -319,10 +319,17 @@ export function Sidebar() {
           )}
 
           {!isAdmin && (
-            <NavSection>
-              <SectionTitle>{t("nav.settings")}</SectionTitle>
-              {renderNavItem("/settings/user", User, t("nav.userSettings"))}
-            </NavSection>
+            <>
+              <NavSection>
+                <SectionTitle>{t("nav.management")}</SectionTitle>
+                {renderNavItem("/debtors", HandCoins, t("debtors.title"))}
+              </NavSection>
+              <NavSection>
+                <SectionTitle>{t("nav.settings")}</SectionTitle>
+                {renderNavItem("/settings/user", User, t("nav.userSettings"))}
+                {renderNavItem("/settings/app-update", Download, t("settings.appUpdate"))}
+              </NavSection>
+            </>
           )}
         </Nav>
 

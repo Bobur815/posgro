@@ -21,6 +21,20 @@ module.exports = {
   // sqlite-client.ts requires the client by its app.asar path and Electron redirects to here.
   asarUnpack: ['src/generated/prisma-sqlite/**/*'],
 
+  // Electron's build-time switches (https://www.electronjs.org/docs/latest/tutorial/fuses). A till
+  // runs the license checks in its main process, so nobody at the counter should be able to get
+  // inside it: no --inspect debugger, no ELECTRON_RUN_AS_NODE to use POSGRO.exe as a plain Node,
+  // no NODE_OPTIONS to preload code. And the exe only loads its own app.asar, checked against the
+  // hash baked in at build time, so an edited archive does not start. The app forks no Node process
+  // (printing spawns powershell), which is what makes runAsNode safe to turn off.
+  electronFuses: {
+    runAsNode: false,
+    enableNodeOptionsEnvironmentVariable: false,
+    enableNodeCliInspectArguments: false,
+    enableEmbeddedAsarIntegrityValidation: true,
+    onlyLoadAppFromAsar: true,
+  },
+
   files: [
     'dist-electron/**/*',
     'dist-renderer/**/*',

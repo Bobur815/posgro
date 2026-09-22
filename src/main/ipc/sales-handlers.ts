@@ -17,6 +17,9 @@ import {
 } from '../../server/modules/analytics/analytics.ranking';
 import type { Sale, SaleItem as PrismaSaleItem } from '../../generated/prisma-sqlite';
 
+/** Receipts not yet on the OFD — any cashier may see and send one (the POS "not fiscalized" list). */
+const AWAITING_FISCAL: readonly string[] = ['FAILED', 'PENDING'];
+
 function ipcSafe<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
@@ -98,9 +101,11 @@ export function setupSalesHandlers(): void {
 
     const where: Record<string, unknown> = {};
 
-    // Non-admin users can only see their own sales
+    // Non-admin users see their own sales — and every receipt still waiting to be fiscalized,
+    // whoever rang it up: the till's "not fiscalized" badge counts the whole store, and any
+    // cashier may send one. Editing or deleting stays with its own cashier (assertMayTouch).
     if (currentUser.role !== 'ADMIN') {
-      where.cashierId = currentUser.id;
+      where.OR = [{ cashierId: currentUser.id }, { fiscalStatus: { in: [...AWAITING_FISCAL] } }];
     }
 
     if (filters?.startDate) {
@@ -162,8 +167,12 @@ export function setupSalesHandlers(): void {
       throw new Error('Sale not found');
     }
 
-    // Non-admin users can only see their own sales
-    if (currentUser.role !== 'ADMIN' && sale.cashierId !== currentUser.id) {
+    // Non-admin users see their own sales, and any still waiting to be fiscalized (as above).
+    if (
+      currentUser.role !== 'ADMIN' &&
+      sale.cashierId !== currentUser.id &&
+      !AWAITING_FISCAL.includes(sale.fiscalStatus)
+    ) {
       throw new Error('Unauthorized');
     }
 
