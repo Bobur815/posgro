@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseGuards, HttpException, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsArray, ValidateNested, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -8,6 +8,10 @@ import { StoreGuard } from '../../common/guards/store.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CurrentStore } from '../../common/decorators/current-store.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
+import { BalanceService } from '../billing/balance.service';
+
+/** A translatable key, shown by both scan screens (POS and web). */
+export const BALANCE_NEGATIVE = 'receiptScan.balanceNegative';
 
 class ScanInvoiceDto {
   @IsString()
@@ -37,6 +41,7 @@ export class InvoiceScannerController {
   constructor(
     private readonly scannerService: InvoiceScannerService,
     private readonly prisma: PrismaService,
+    private readonly balance: BalanceService,
   ) {}
 
   @Get('plan')
@@ -69,6 +74,12 @@ export class InvoiceScannerController {
 
     const plan = store?.aiPlan ?? 'free';
 
+    // One balance pays for the subscription and for paid scans: once it is spent — or in debt for
+    // the subscription — a paid scan waits for a top-up rather than digging the debt deeper.
+    if (plan === 'paid' && store && Number(store.balance) <= 0) {
+      throw new HttpException(BALANCE_NEGATIVE, HttpStatus.PAYMENT_REQUIRED);
+    }
+
     const result = plan === 'paid'
       ? await this.scannerService.scanPaid(body.imageBase64, body.mimeType)
       : await this.scannerService.scanFree(body.imageBase64, body.mimeType);
@@ -78,12 +89,12 @@ export class InvoiceScannerController {
     if (plan === 'paid' && storeId) {
       const UZS_PER_USD = 12_700;
       const chargedUzs = Math.round((result.cost_usd ?? 0) * 1.3 * UZS_PER_USD);
-      const updated = await this.prisma.store.update({
-        where: { id: storeId },
-        data: { balance: { decrement: chargedUzs } },
-        select: { balance: true },
+      const balanceUzs = await this.balance.apply(storeId, {
+        type: 'AI_SCAN',
+        amount: -chargedUzs,
+        note: 'Invoice scan',
       });
-      return { ...result, charged_uzs: chargedUzs, balance_uzs: Number(updated.balance) };
+      return { ...result, charged_uzs: chargedUzs, balance_uzs: balanceUzs };
     }
 
     return result;

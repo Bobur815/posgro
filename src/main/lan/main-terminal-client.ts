@@ -116,6 +116,7 @@ export function pairingErrorKey(err: unknown): string {
     const { status, message } = err as PairingRefused;
     if (status === 403 && /too many attempts/i.test(message)) return 'settings.pairingThrottled';
     if (status === 403 && /not a main/i.test(message)) return 'settings.mainTerminal_not_a_main';
+    if (status === 403 && /terminal slot/i.test(message)) return 'settings.pairingNoTerminalSlot';
     if (status === 403) return 'settings.pairingCodeWrong';
     if (status === 400 && /belongs to the main/i.test(message)) return 'settings.pairingIdIsMain';
   }

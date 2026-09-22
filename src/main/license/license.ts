@@ -3,6 +3,7 @@ import { getPrismaClient } from '../database/sqlite-client';
 import { getAppConfig } from '../config/app-config';
 import { getServerToken } from '../sync/queue-manager';
 import {
+  holdsSeat,
   licenseState,
   publicKeyFrom,
   readLicense,
@@ -63,6 +64,42 @@ async function thisStoreId(): Promise<string | null> {
   return (await localConfig())?.storeId || getAppConfig().storeId || null;
 }
 
+async function thisTerminalId(): Promise<string> {
+  const config = (await localConfig()) as { terminalId?: string | null } | null;
+  return config?.terminalId || getAppConfig().terminalId;
+}
+
+/**
+ * The terminals this till speaks for when it asks for a license: itself and, on a main, the
+ * satellites paired with it — they never reach the server, so the main registers them for their
+ * slots. `also` is a satellite about to pair, asked for before it has a row.
+ */
+export async function terminalClaim(also?: string): Promise<{ terminalId: string; satellites: string[] }> {
+  let paired: Array<{ terminalId: string }> = [];
+  try {
+    paired = await getPrismaClient().pairedTerminal.findMany({
+      select: { terminalId: true },
+      orderBy: { pairedAt: 'asc' },
+    });
+  } catch {
+    // Naming the satellites is a courtesy to the server's count; a license is worth more.
+  }
+  const satellites = paired.map((p) => p.terminalId);
+  if (also && !satellites.includes(also)) satellites.push(also);
+  return { terminalId: await thisTerminalId(), satellites };
+}
+
+/** The same claim as a query string, for GET /store-config and /store-config/subscription. */
+export async function terminalClaimQuery(claim?: {
+  terminalId: string;
+  satellites: string[];
+}): Promise<string> {
+  const { terminalId, satellites } = claim ?? (await terminalClaim());
+  const q = new URLSearchParams({ terminal_id: terminalId });
+  if (satellites.length) q.set('satellites', satellites.join(','));
+  return `?${q.toString()}`;
+}
+
 /** The license held, if it is genuine and this store's. */
 export async function heldLicense(): Promise<LicensePayload | null> {
   if (held !== undefined) return held;
@@ -103,16 +140,17 @@ export async function acceptLicense(token: unknown): Promise<boolean> {
  * works for a till whose token lapsed long ago — then, for a till that holds none yet, through
  * /store-config with the stored sign-in token. Returns whether a newer license was taken.
  */
-export async function refreshLicense(): Promise<boolean> {
+export async function refreshLicense(alsoSatellite?: string): Promise<boolean> {
   const prisma = getPrismaClient();
   const apiUrl = (await localConfig())?.apiUrl || getAppConfig().vpsApiUrl;
   try {
+    const claim = await terminalClaim(alsoSatellite);
     const row = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEY } });
     if (row?.value) {
       const res = await fetch(`${apiUrl}/licenses/renew`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ license: row.value }),
+        body: JSON.stringify({ license: row.value, ...claim }),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
       if (res.ok) return acceptLicense(((await res.json()) as { license?: unknown }).license);
@@ -123,7 +161,7 @@ export async function refreshLicense(): Promise<boolean> {
       (await prisma.systemSetting.findUnique({ where: { key: 'server_token' } }))?.value ??
       null;
     if (!token) return false;
-    const res = await fetch(`${apiUrl}/store-config`, {
+    const res = await fetch(`${apiUrl}/store-config${await terminalClaimQuery(claim)}`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
@@ -137,8 +175,12 @@ export async function refreshLicense(): Promise<boolean> {
   }
 }
 
-/** Where this till stands now, by its license and the trusted clock. */
-export async function licenseStatus(): Promise<TillLicenseStatus> {
+/**
+ * Where a till stands now, by its license and the trusted clock: this one by default, a satellite
+ * by its id (the main holds the license for both), or — with null — the store alone, for what is
+ * not any one till's, such as the web dashboard.
+ */
+export async function licenseStatus(terminalId?: string | null): Promise<TillLicenseStatus> {
   const now = await clock.trustedNow();
   const clockBehind = clock.systemBehindBy(now) > clock.CLOCK_BEHIND_LIMIT_MS;
   const license = await heldLicense();
@@ -156,21 +198,56 @@ export async function licenseStatus(): Promise<TillLicenseStatus> {
       clockBehind,
       canSignIn: works,
       canSell: works && !clockBehind,
+      terminals: null,
+      seated: true,
     };
   }
 
-  const { state, daysLeft } = licenseState(license, now);
-  const works = state !== 'blocked' && state !== 'checkin-required';
+  const judged = licenseState(license, now);
+  const id = terminalId === undefined ? await thisTerminalId() : terminalId;
+  const seated = id === null || holdsSeat(license, id);
+  // Paying, or checking in, comes first: a slot alone would not let this till work.
+  const storeWorks = judged.state !== 'blocked' && judged.state !== 'checkin-required';
+  const state: TillLicenseState = storeWorks && !seated ? 'terminal-limit' : judged.state;
+  const works = storeWorks && seated;
   return {
     state,
-    daysLeft,
+    daysLeft: judged.daysLeft,
     plan: license.plan,
     expiresAt: license.expiresAt,
     blockAt: license.blockAt,
     clockBehind,
     canSignIn: works,
     canSell: works && !clockBehind,
+    terminals: license.terminals ?? null,
+    seated,
   };
+}
+
+/**
+ * Whether a satellite may pair with this main, by the store's terminal slots. Online, the server
+ * decides: the satellite is claimed with a license renewal, and the fresh license says whether it
+ * got a slot. Offline, the last license is counted against: every terminal it seats, this main,
+ * and the satellites already paired all take one. Re-pairing a till already paired is always
+ * allowed — it already has its place.
+ */
+export async function mayPair(terminalId: string): Promise<boolean> {
+  const prisma = getPrismaClient();
+  if (await prisma.pairedTerminal.findUnique({ where: { terminalId } }).catch(() => null)) return true;
+  const renewed = await refreshLicense(terminalId);
+  const license = await heldLicense();
+  if (!license?.seats || license.terminals === undefined) return true;
+  if (renewed) return holdsSeat(license, terminalId);
+  const { terminalId: main, satellites } = await terminalClaim();
+  const taken = new Set([...license.seats, main, ...satellites]);
+  return taken.has(terminalId) || taken.size < license.terminals;
+}
+
+/** The `auth.errors.*` key for a till that may not sign in, by its state. */
+function signInRefusal(state: TillLicenseState): string {
+  if (state === 'blocked') return 'auth.errors.subscription_blocked';
+  if (state === 'terminal-limit') return 'auth.errors.terminal_limit';
+  return 'auth.errors.license_checkin_required';
 }
 
 /**
@@ -178,26 +255,21 @@ export async function licenseStatus(): Promise<TillLicenseStatus> {
  * store may have paid since the license was last renewed — so paying is enough to get back in.
  * Throws an `auth.errors.*` key the login screens translate.
  */
-export async function assertCanSignIn(): Promise<void> {
-  let status = await licenseStatus();
+export async function assertCanSignIn(terminalId?: string | null): Promise<void> {
+  let status = await licenseStatus(terminalId);
   if (!status.canSignIn) {
     await refreshLicense();
-    status = await licenseStatus();
+    status = await licenseStatus(terminalId);
   }
-  if (!status.canSignIn) {
-    throw new Error(
-      status.state === 'blocked'
-        ? 'auth.errors.subscription_blocked'
-        : 'auth.errors.license_checkin_required',
-    );
-  }
+  if (!status.canSignIn) throw new Error(signInRefusal(status.state));
 }
 
-/** Why this till may not sell or open a shift right now, or null when it may. */
-export async function sellingRefusal(): Promise<SaleRefusal | null> {
-  const status = await licenseStatus();
+/** Why a till (this one by default) may not sell or open a shift right now, or null when it may. */
+export async function sellingRefusal(terminalId?: string): Promise<SaleRefusal | null> {
+  const status = await licenseStatus(terminalId);
   if (status.canSell) return null;
   if (status.state === 'blocked') return { code: 'SUBSCRIPTION_BLOCKED' };
+  if (status.state === 'terminal-limit') return { code: 'TERMINAL_LIMIT' };
   if (!status.canSignIn) return { code: 'LICENSE_CHECKIN_REQUIRED' };
   return { code: 'CLOCK_BEHIND' };
 }

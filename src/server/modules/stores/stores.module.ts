@@ -5,9 +5,10 @@ import { StoresService } from './stores.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { SiteConfigModule } from '../site-config/site-config.module';
 import { LicensesModule } from '../licenses/licenses.module';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
-  imports: [PrismaModule, SiteConfigModule, LicensesModule],
+  imports: [PrismaModule, SiteConfigModule, LicensesModule, BillingModule],
   controllers: [StoresController, StoreConfigController],
   providers: [StoresService],
   exports: [StoresService],

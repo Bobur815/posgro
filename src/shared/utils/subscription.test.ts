@@ -1,7 +1,13 @@
 import {
   DAY_MS,
+  DEFAULT_PLAN_TERMINALS,
+  addMonth,
+  monthlyFee,
+  renewedExpiry,
   DEFAULT_SUBSCRIPTION_RULES,
+  normalizePlanTerminals,
   normalizeSubscriptionRules,
+  terminalAllowance,
   subscriptionStatus,
   type SubscriptionFacts,
 } from './subscription';
@@ -127,5 +133,104 @@ describe('normalizeSubscriptionRules', () => {
 
   it('reads numbers saved as strings', () => {
     expect(normalizeSubscriptionRules({ trialDays: '10' }).trialDays).toBe(10);
+  });
+});
+
+describe('terminalAllowance', () => {
+  it("is the plan's own terminals plus the extra ones bought", () => {
+    expect(terminalAllowance('STARTER', 0)).toBe(1);
+    expect(terminalAllowance('STARTER', 2)).toBe(3);
+    expect(terminalAllowance('PRO', 1)).toBe(4);
+    expect(terminalAllowance('TRIAL', null)).toBe(1);
+  });
+
+  it('is unlimited for an unlimited plan, extras or not', () => {
+    expect(terminalAllowance('VIP', 0)).toBeNull();
+    expect(terminalAllowance('VIP', 5)).toBeNull();
+  });
+
+  // Whether such a store may work at all is subscriptionStatus's question.
+  it('does not limit a store with no plan, or one this build does not know', () => {
+    expect(terminalAllowance(null, 3)).toBeNull();
+    expect(terminalAllowance('', 0)).toBeNull();
+    expect(terminalAllowance('ENTERPRISE', 0)).toBeNull();
+  });
+
+  it('reads the limits the super admin set', () => {
+    const limits = { ...DEFAULT_PLAN_TERMINALS, STARTER: 2, VIP: 10 };
+    expect(terminalAllowance('STARTER', 1, limits)).toBe(3);
+    expect(terminalAllowance('VIP', 0, limits)).toBe(10);
+  });
+
+  it('never counts negative extras', () => {
+    expect(terminalAllowance('STARTER', -4)).toBe(1);
+  });
+});
+
+describe('normalizePlanTerminals', () => {
+  it('fills in defaults for anything missing or unreadable', () => {
+    expect(normalizePlanTerminals(null)).toEqual(DEFAULT_PLAN_TERMINALS);
+    expect(normalizePlanTerminals({ PRO: 'lots', STARTER: undefined })).toEqual(DEFAULT_PLAN_TERMINALS);
+  });
+
+  it('keeps null (and a cleared field) as unlimited', () => {
+    expect(normalizePlanTerminals({ PRO: null, STARTER: '' })).toMatchObject({ PRO: null, STARTER: null });
+  });
+
+  it('rounds and bounds a number — a plan always includes at least one terminal', () => {
+    expect(normalizePlanTerminals({ STARTER: 0, PRO: 2.6, TRIAL: '4', VIP: 5000 })).toEqual({
+      TRIAL: 4,
+      STARTER: 1,
+      PRO: 3,
+      VIP: 999,
+    });
+  });
+});
+
+describe('monthlyFee', () => {
+  const prices = { starter: 150_000, pro: 300_000, extraTerminal: 50_000 };
+
+  it("is the plan's price plus each extra terminal", () => {
+    expect(monthlyFee('STARTER', 0, prices)).toBe(150_000);
+    expect(monthlyFee('STARTER', 2, prices)).toBe(250_000);
+    expect(monthlyFee('PRO', 1, prices)).toBe(350_000);
+  });
+
+  it('bills neither TRIAL, VIP nor a store without a plan', () => {
+    expect(monthlyFee('TRIAL', 0, prices)).toBeNull();
+    expect(monthlyFee('VIP', 3, prices)).toBeNull();
+    expect(monthlyFee(null, 0, prices)).toBeNull();
+    expect(monthlyFee('ENTERPRISE', 0, prices)).toBeNull();
+  });
+
+  it('never goes below zero, and ignores negative extras', () => {
+    expect(monthlyFee('STARTER', -3, prices)).toBe(150_000);
+    expect(monthlyFee('STARTER', 0, { ...prices, starter: -1 })).toBe(0);
+  });
+});
+
+describe('addMonth', () => {
+  it('moves one calendar month, keeping the time of day', () => {
+    expect(addMonth('2026-09-22T10:30:00.000Z').toISOString()).toBe('2026-10-22T10:30:00.000Z');
+    expect(addMonth('2026-12-15T00:00:00.000Z').toISOString()).toBe('2027-01-15T00:00:00.000Z');
+  });
+
+  it('holds a day the next month lacks to its last day', () => {
+    expect(addMonth('2026-01-31T08:00:00.000Z').toISOString()).toBe('2026-02-28T08:00:00.000Z');
+    expect(addMonth('2028-01-31T08:00:00.000Z').toISOString()).toBe('2028-02-29T08:00:00.000Z');
+    expect(addMonth('2026-08-31T08:00:00.000Z').toISOString()).toBe('2026-09-30T08:00:00.000Z');
+  });
+});
+
+describe('renewedExpiry', () => {
+  const expired = '2026-09-10T00:00:00.000Z';
+  const now = Date.parse('2026-09-20T12:00:00.000Z');
+
+  it('counts from the old expiry when paid in the grace days — the store used them', () => {
+    expect(renewedExpiry(expired, 'grace', now).toISOString()).toBe('2026-10-10T00:00:00.000Z');
+  });
+
+  it('counts from the payment once the store was blocked', () => {
+    expect(renewedExpiry(expired, 'blocked', now).toISOString()).toBe('2026-10-20T12:00:00.000Z');
   });
 });

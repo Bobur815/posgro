@@ -1,49 +1,41 @@
 import React, { useEffect, useState } from "react";
 import styled from "styled-components";
-import { X } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
+import { RefreshCw } from "lucide-react";
 import { stores, StoreRecord, StoreMode } from "../../api/client";
+import { StoreBreadcrumb } from "./StoreBreadcrumb";
 import { UzbekPhoneInput } from "@components/common/UzbekPhoneInput";
 import { phoneToDigits, normalizeUzPhone } from "@shared/utils/phone";
 
-const Overlay = styled.div`
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-`;
+const Page = styled.div`
+  padding: 32px;
+  max-width: 720px;
 
-const Modal = styled.div`
-  background: ${({ theme }) => theme.colors.surface};
-  border-radius: 10px;
-  width: 100%;
-  max-width: 480px;
-  padding: 24px;
-`;
-
-const ModalHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-`;
-
-const ModalTitle = styled.h2`
-  margin: 0;
-  font-size: 18px;
-  color: ${({ theme }) => theme.colors.text};
-`;
-
-const CloseBtn = styled.button`
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: ${({ theme }) => theme.colors.textSecondary};
-  &:hover {
-    color: ${({ theme }) => theme.colors.text};
+  @media (max-width: 600px) {
+    padding: 16px;
   }
+`;
+
+const Header = styled.div`
+  margin-bottom: 24px;
+`;
+
+const Card = styled.div`
+  background: ${({ theme }) => theme.colors.surface};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: 10px;
+  padding: 24px;
+
+  @media (max-width: 600px) {
+    padding: 16px;
+  }
+`;
+
+const Loading = styled.div`
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
 const Field = styled.div`
@@ -136,13 +128,65 @@ const ErrorMsg = styled.div`
   margin-top: 12px;
 `;
 
-interface Props {
-  store: StoreRecord | null;
-  onClose: () => void;
-  onSaved: () => void;
+/**
+ * Create a store (/admin/stores/new) or edit one (/admin/stores/:id/edit). Loads the store by the
+ * id in the URL, so a reload or a shared link opens the same form.
+ */
+export function StoreFormPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [store, setStore] = useState<StoreRecord | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    setLoadError(null);
+    stores
+      .getById(id)
+      .then(setStore)
+      .catch((e: Error) => setLoadError(e.message));
+  }, [id]);
+
+  if (!id) {
+    return (
+      <StoreForm
+        store={null}
+        onDone={(saved) => navigate(`/admin/stores/${saved.id}`)}
+        onCancel={() => navigate("/admin/stores")}
+      />
+    );
+  }
+
+  return store ? (
+    <StoreForm
+      store={store}
+      onDone={() => navigate(`/admin/stores/${id}`)}
+      onCancel={() => navigate(`/admin/stores/${id}`)}
+    />
+  ) : (
+    <Page>
+      <Header>
+        <StoreBreadcrumb items={[{ label: "…" }, { label: "Edit" }]} />
+      </Header>
+      {loadError ? (
+        <ErrorMsg>{loadError}</ErrorMsg>
+      ) : (
+        <Loading>
+          <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} />
+          Loading…
+        </Loading>
+      )}
+    </Page>
+  );
 }
 
-export function StoreFormModal({ store, onClose, onSaved }: Props) {
+interface FormProps {
+  store: StoreRecord | null;
+  onDone: (saved: StoreRecord) => void;
+  onCancel: () => void;
+}
+
+function StoreForm({ store, onDone, onCancel }: FormProps) {
   const isNew = store === null;
   const [name, setName] = useState(store?.name ?? "");
   const [address, setAddress] = useState(store?.address ?? "");
@@ -197,13 +241,8 @@ export function StoreFormModal({ store, onClose, onSaved }: Props) {
             ? { superAdminPassword }
             : {}),
       };
-      if (isNew) {
-        await stores.create(payload);
-      } else {
-        await stores.update(store.id, payload);
-      }
-      onSaved();
-      onClose();
+      const saved = isNew ? await stores.create(payload) : await stores.update(store.id, payload);
+      onDone(saved);
     } catch (e: any) {
       setError(e?.response?.data?.message ?? (e as Error).message);
     } finally {
@@ -212,15 +251,18 @@ export function StoreFormModal({ store, onClose, onSaved }: Props) {
   };
 
   return (
-    <Overlay onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <Modal>
-        <ModalHeader>
-          <ModalTitle>{isNew ? "New Store" : "Edit Store"}</ModalTitle>
-          <CloseBtn onClick={onClose}>
-            <X size={18} />
-          </CloseBtn>
-        </ModalHeader>
+    <Page>
+      <Header>
+        <StoreBreadcrumb
+          items={
+            isNew
+              ? [{ label: "Create" }]
+              : [{ label: store.name, to: `/admin/stores/${store.id}` }, { label: "Edit" }]
+          }
+        />
+      </Header>
 
+      <Card>
         <form onSubmit={handleSubmit}>
           <Field>
             <Label>Store name *</Label>
@@ -316,7 +358,7 @@ export function StoreFormModal({ store, onClose, onSaved }: Props) {
           {error && <ErrorMsg>{error}</ErrorMsg>}
 
           <FooterActions>
-            <Btn type="button" onClick={onClose}>
+            <Btn type="button" onClick={onCancel}>
               Cancel
             </Btn>
             <Btn type="submit" $primary disabled={saving}>
@@ -324,7 +366,7 @@ export function StoreFormModal({ store, onClose, onSaved }: Props) {
             </Btn>
           </FooterActions>
         </form>
-      </Modal>
-    </Overlay>
+      </Card>
+    </Page>
   );
 }

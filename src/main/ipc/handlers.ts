@@ -1047,6 +1047,9 @@ function setupReceiptHandlers(): void {
       if (!response.ok) {
         const errorBody = await response.text();
         console.error("Invoice scan API error:", response.status, errorBody);
+        // 402: the store balance is spent (it pays the subscription too). The server sends the
+        // i18n key the scan screen shows.
+        if (response.status === 402) throw new Error("receiptScan.balanceNegative");
         throw new Error(`API error: ${response.status}`);
       }
 

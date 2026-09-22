@@ -22,6 +22,8 @@ import { DebtorsPage } from './pages/Settings/DebtorsPage';
 import { UserSettings } from './pages/Settings/UserSettings';
 import { DevicesPage } from './pages/Settings/DevicesPage';
 import { StoreList } from './pages/Admin/StoreList';
+import { StoreDetailPage } from './pages/Admin/StoreDetailPage';
+import { StoreFormPage } from './pages/Admin/StoreFormPage';
 import { LogsPage } from './pages/Admin/LogsPage';
 import { LoginBannerPage } from './pages/Admin/LoginBannerPage';
 import { SubscriptionPlansPage } from './pages/Admin/SubscriptionPlansPage';
@@ -115,6 +117,9 @@ export function App() {
 
           {/* Super Admin */}
           <Route path="admin/stores" element={<PrivateRoute superAdminOnly><StoreList /></PrivateRoute>} />
+          <Route path="admin/stores/new" element={<PrivateRoute superAdminOnly><StoreFormPage /></PrivateRoute>} />
+          <Route path="admin/stores/:id" element={<PrivateRoute superAdminOnly><StoreDetailPage /></PrivateRoute>} />
+          <Route path="admin/stores/:id/edit" element={<PrivateRoute superAdminOnly><StoreFormPage /></PrivateRoute>} />
           <Route path="admin/logs" element={<PrivateRoute superAdminOnly><LogsPage /></PrivateRoute>} />
           <Route path="admin/login-banner" element={<PrivateRoute superAdminOnly><LoginBannerPage /></PrivateRoute>} />
           <Route path="admin/subscription-plans" element={<PrivateRoute superAdminOnly><SubscriptionPlansPage /></PrivateRoute>} />

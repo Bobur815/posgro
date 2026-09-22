@@ -6,7 +6,11 @@ import {
   findBarcodeMatch,
   type MxikPackage,
 } from "@shared/utils";
-import type { SubscriptionRules, SubscriptionState } from "@shared/utils/subscription";
+import type {
+  PlanTerminals,
+  SubscriptionRules,
+  SubscriptionState,
+} from "@shared/utils/subscription";
 import type { LandingPlan, LandingContact } from "@shared/types/landing.types";
 
 export interface DeviceSession {
@@ -560,6 +564,8 @@ export interface StoreRecord {
   subscriptionRequired: boolean;
   /** For a store already expired the day enforcement shipped: its grace counts from here. */
   subscriptionGraceFrom: string | null;
+  /** Terminals bought on top of the plan's own (`terminalAllowance`, shared/utils/subscription). */
+  extraTerminals: number;
   scheduledDeleteAt: string | null;
   mode: StoreMode;
   posAdminLocked: boolean;
@@ -567,7 +573,44 @@ export interface StoreRecord {
   hasSuperAdminPassword: boolean;
   createdAt: string;
   updatedAt: string;
-  _count?: { users: number; products: number; sales: number; terminalHeartbeats: number };
+  _count?: {
+    users: number;
+    products: number;
+    sales: number;
+    terminalHeartbeats: number;
+    /** Terminals registered for the store's slots — "used" against its allowance. */
+    terminals?: number;
+  };
+}
+
+/** One movement of a store's balance. */
+export interface BalanceTransaction {
+  id: string;
+  type: "TOPUP" | "SUBSCRIPTION" | "AI_SCAN" | "ADJUSTMENT";
+  /** Signed, UZS: positive in, negative out. */
+  amount: number;
+  balanceAfter: number;
+  /** SUBSCRIPTION: the start of the month it paid for. */
+  periodStart: string | null;
+  note: string | null;
+  createdById: string | null;
+  createdAt: string;
+}
+
+/** When the subscription is next charged from the balance, and what is owed. */
+export interface NextCharge {
+  at: string;
+  amountUzs: number;
+  /** Charged and not covered: to pay before the month renews. */
+  owedUzs: number;
+  balanceUzs: number;
+}
+
+/** A terminal holding (or waiting for) one of a store's slots. Slots go earliest first. */
+export interface StoreTerminal {
+  terminalId: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
 }
 
 export interface StoreStats {
@@ -615,6 +658,7 @@ export const stores = {
       aiPlan: string;
       subscriptionPlan: string;
       subscriptionExpiresAt: string | null;
+      extraTerminals: number;
       mode: StoreMode;
       posAdminLocked: boolean;
       /** Plaintext; the server hashes it. Omit to leave unchanged, "" to clear. */
@@ -640,8 +684,30 @@ export const stores = {
     const { data } = await axiosInstance.put(`/stores/${id}/deactivate`);
     return data;
   },
-  addCredits: async (id: string, amount: number): Promise<{ success: boolean; balance: number }> => {
-    const { data } = await axiosInstance.post(`/stores/${id}/credits`, { amount });
+  listTerminals: async (id: string): Promise<StoreTerminal[]> => {
+    const { data } = await axiosInstance.get(`/stores/${id}/terminals`);
+    return data;
+  },
+  /** Free a terminal's slot; the next one waiting takes it at its next license renewal. */
+  removeTerminal: async (id: string, terminalId: string): Promise<{ success: boolean }> => {
+    const { data } = await axiosInstance.delete(
+      `/stores/${id}/terminals/${encodeURIComponent(terminalId)}`,
+    );
+    return data;
+  },
+  /** Top up the balance. It pays the subscription too: a covered overdue month renews at once. */
+  addCredits: async (
+    id: string,
+    amount: number,
+    note?: string,
+  ): Promise<{ success: boolean; balance: number; billing: string }> => {
+    const { data } = await axiosInstance.post(`/stores/${id}/credits`, { amount, note });
+    return data;
+  },
+  getBilling: async (
+    id: string,
+  ): Promise<{ nextCharge: NextCharge | null; transactions: BalanceTransaction[] }> => {
+    const { data } = await axiosInstance.get(`/stores/${id}/billing`);
     return data;
   },
 };
@@ -714,7 +780,12 @@ export interface SubscriptionPlanPrices {
   starter: number;
   pro: number;
   vip: number;
+  /** A month of one terminal beyond the plan's own. */
+  extraTerminal: number;
 }
+
+/** How many terminals each plan includes; null is unlimited. */
+export type { PlanTerminals };
 
 /** How stores pay for their subscription — shown on every POS login screen. */
 export interface SubscriptionPayment {
@@ -757,6 +828,14 @@ export const siteConfig = {
   },
   setSubscriptionPlans: async (prices: SubscriptionPlanPrices): Promise<SubscriptionPlanPrices> => {
     const { data } = await axiosInstance.put('/site-config/subscription-plans', prices);
+    return data;
+  },
+  getPlanTerminals: async (): Promise<PlanTerminals> => {
+    const { data } = await axiosInstance.get('/site-config/subscription-terminals');
+    return data;
+  },
+  setPlanTerminals: async (terminals: PlanTerminals): Promise<PlanTerminals> => {
+    const { data } = await axiosInstance.put('/site-config/subscription-terminals', terminals);
     return data;
   },
   getSubscriptionPayment: async (): Promise<SubscriptionPayment> => {
@@ -877,6 +956,24 @@ export interface StoreSubscription {
   /** Self-service pay link with this store's ID filled in, or "" when none is configured. */
   paymentUrl: string;
   supportPhone: string;
+  /** Null from a server before terminal limits — and from a till's local server, which has none. */
+  terminals: StoreTerminalUsage | null;
+  /** The next monthly charge from the balance; null for a plan that is not billed. */
+  nextCharge: { at: string; amountUzs: number; owedUzs: number } | null;
+  /** Null from a till's local server. */
+  balanceUzs: number | null;
+}
+
+/** The store's terminals against its plan. */
+export interface StoreTerminalUsage {
+  /** How many it may run; null is unlimited. */
+  allowed: number | null;
+  /** How many have registered. Above `allowed`, the newest are refused. */
+  used: number;
+  /** The plan's own, before extras; null is unlimited. */
+  included: number | null;
+  extra: number;
+  extraPriceUzs: number;
 }
 
 export const storeConfig = {
@@ -892,6 +989,23 @@ export const storeConfig = {
       daysLeft: data.days_left ?? null,
       paymentUrl: data.payment?.payment_url ?? '',
       supportPhone: data.payment?.support_phone ?? '',
+      terminals: data.terminals
+        ? {
+            allowed: data.terminals.allowed ?? null,
+            used: data.terminals.used ?? 0,
+            included: data.terminals.included ?? null,
+            extra: data.terminals.extra ?? 0,
+            extraPriceUzs: data.terminals.extra_price_uzs ?? 0,
+          }
+        : null,
+      nextCharge: data.next_charge
+        ? {
+            at: data.next_charge.at,
+            amountUzs: data.next_charge.amount_uzs ?? 0,
+            owedUzs: data.next_charge.owed_uzs ?? 0,
+          }
+        : null,
+      balanceUzs: typeof data.balance_uzs === 'number' ? data.balance_uzs : null,
     };
   },
 };

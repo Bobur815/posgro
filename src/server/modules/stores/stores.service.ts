@@ -12,6 +12,8 @@ import { UserRole } from "@prisma/client";
 import { normalizeUzPhone } from "../../../shared/utils/phone";
 import { DAY_MS, TRIAL_PLAN } from "../../../shared/utils/subscription";
 import { SiteConfigService } from "../site-config/site-config.service";
+import { BalanceService } from "../billing/balance.service";
+import { BillingService } from "../billing/billing.service";
 
 /**
  * Exactly the columns a store may be read back as.
@@ -34,6 +36,7 @@ const STORE_FIELDS = {
   subscriptionExpiresAt: true,
   subscriptionRequired: true,
   subscriptionGraceFrom: true,
+  extraTerminals: true,
   settings: true,
   scheduledDeleteAt: true,
   mode: true,
@@ -49,6 +52,8 @@ const STORE_COUNTS = {
       products: true,
       sales: true,
       terminalHeartbeats: true,
+      // Terminals registered for the store's slots — "used" against terminalAllowance().
+      terminals: true,
     },
   },
 } as const;
@@ -80,6 +85,8 @@ export class StoresService {
   constructor(
     private prisma: PrismaService,
     private siteConfig: SiteConfigService,
+    private balance: BalanceService,
+    private billing: BillingService,
   ) {}
 
   async findAll() {
@@ -291,6 +298,7 @@ export class StoresService {
         data.subscriptionGraceFrom = null;
       }
     }
+    if (updateStoreDto.extraTerminals !== undefined) data.extraTerminals = updateStoreDto.extraTerminals;
     if (updateStoreDto.mode !== undefined) data.mode = updateStoreDto.mode;
     if (updateStoreDto.posAdminLocked !== undefined)
       data.posAdminLocked = updateStoreDto.posAdminLocked;
@@ -384,16 +392,56 @@ export class StoresService {
     return { success: true };
   }
 
-  async addCredits(id: string, amount: number) {
+  /**
+   * The terminals registered for a store's slots, earliest first — the order slots go in, so the
+   * first `allowance` of them are the ones that hold one.
+   */
+  async listTerminals(id: string) {
     await this.findById(id);
-
-    const updated = await this.prisma.store.update({
-      where: { id },
-      data: { balance: { increment: amount } },
-      select: { id: true, balance: true },
+    const rows = await this.prisma.storeTerminal.findMany({
+      where: { storeId: id },
+      orderBy: [{ firstSeenAt: 'asc' }, { terminalId: 'asc' }],
+      select: { terminalId: true, firstSeenAt: true, lastSeenAt: true },
     });
+    return rows.map((r) => ({
+      terminalId: r.terminalId,
+      firstSeenAt: r.firstSeenAt.toISOString(),
+      lastSeenAt: r.lastSeenAt.toISOString(),
+    }));
+  }
 
-    return { success: true, balance: Number(updated.balance) };
+  /**
+   * Free a terminal's slot — a PC retired or replaced under a new id. The next terminal waiting
+   * takes it at its next license renewal; a till still running under this id registers again, as
+   * the newest.
+   */
+  async removeTerminal(id: string, terminalId: string) {
+    await this.findById(id);
+    const { count } = await this.prisma.storeTerminal.deleteMany({ where: { storeId: id, terminalId } });
+    if (count === 0) throw new NotFoundException('Terminal not found');
+    return { success: true };
+  }
+
+  /**
+   * Top up a store's balance. It pays the subscription too, so a top-up that clears a charged but
+   * unpaid month renews it at once (BillingService.bill) rather than at the next billing run.
+   */
+  async addCredits(id: string, amount: number, createdById?: string | null, note?: string | null) {
+    await this.findById(id);
+    await this.balance.apply(id, { type: 'TOPUP', amount, createdById, note: note || null });
+    const billing = await this.billing.bill(id, 'topup');
+    const { balance } = await this.findById(id);
+    return { success: true, balance: Number(balance), billing };
+  }
+
+  /** The store's billing: its next charge, and the balance ledger latest first. */
+  async getBilling(id: string) {
+    await this.findById(id);
+    const [nextCharge, transactions] = await Promise.all([
+      this.billing.nextCharge(id),
+      this.balance.history(id),
+    ]);
+    return { nextCharge, transactions };
   }
 
   async getStats(id: string) {

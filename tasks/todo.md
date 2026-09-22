@@ -1,3 +1,245 @@
+# Subscription billed from the store balance; store screens as pages (2026-09-22) — built on `dev`, not yet committed
+
+Decided with the user:
+- At the due date (`subscriptionExpiresAt`) the monthly fee is taken from `Store.balance`, even if
+  that makes it negative.
+- **Renew only when paid.** If the balance is still ≥ 0 after the charge, the plan renews for a
+  month at once. If it went negative, the expiry date stays: the usual grace days run, then the
+  store is blocked. A top-up that brings the balance back to ≥ 0 renews the month and lifts the
+  block.
+- **One shared balance.** Top-ups go in; subscription fees and AI scans come out. A negative
+  balance also stops paid AI scanning.
+
+## Billing rules (defaults — say if any is wrong)
+
+- **Fee** = the plan's monthly price + `extraTerminals` × the extra-terminal price, at the moment
+  of charging (Subscription Plans page).
+- **Billed:** STARTER and PRO. **Not billed:** TRIAL, which just runs out as today, and VIP (a
+  one-time price, no expiry). A store with no plan, or a plan without a date, is not billed either.
+- **Renewal length:** one calendar month from the period's start (Sep 22 → Oct 22).
+- **Renewal on a late top-up:**
+  - Paid during grace: the store kept working, so the new month counts from the old expiry date.
+  - Paid after the block: the new month counts from the payment, so the store is not billed for
+    days it could not use.
+- **Once per period.** Each period is charged once, keyed on (store, period start) in a unique
+  ledger row. So an overlapping job run, a restart or a second server process cannot charge twice.
+  A store in debt is not charged again for later months: its expiry stays put until it pays.
+- **A super admin setting a plan or date by hand** still works as today and starts the next period
+  from that date.
+
+## Shape
+
+- **New PG model `BalanceTransaction`** — the ledger the balance never had:
+  - fields: storeId, `type` (TOPUP | SUBSCRIPTION | AI_SCAN | ADJUSTMENT), signed `amount`
+    Decimal(12,4), `balanceAfter`, `periodStart` (SUBSCRIPTION only), `note`, `createdById`,
+    `createdAt`;
+  - `@@unique([storeId, type, periodStart])` is the charge-once guard;
+  - every write to `Store.balance` (top-up, fee, AI scan) goes through one service, in one
+    transaction with its ledger row.
+- **`BillingService`** (server), `@Cron` every 15 minutes:
+  - finds STARTER/PRO stores whose expiry has passed and whose current period is uncharged;
+  - charges each one, then renews if the balance is still ≥ 0;
+  - `addCredits` then calls `settle(store)`, which renews a charged-but-unpaid period once the
+    balance is ≥ 0 again.
+- **Pure helpers** in `shared/utils/subscription.ts`: `monthlyFee(plan, extras, prices)` and
+  `nextPeriod(expiresAt)`. These are unit-tested, and the dashboard shows the same numbers the
+  job charges.
+- **AI scan:** a paid-tier scan is refused while the balance is ≤ 0 (new key
+  `invoice.errors.balance_negative`). The charge is recorded in the ledger.
+
+## Steps
+
+### Server (no version bump)
+- [x] PG migration (additive): `balance_transactions` table. No backfill: history starts today.
+- [x] `BalanceService` (apply amount + ledger row, atomic), then `BillingService` (cron,
+      charge, renew, settle).
+- [x] `addCredits` and the AI scan go through `BalanceService`. AI scans are refused while the
+      balance is ≤ 0.
+- [x] `GET /stores/:id/balance-transactions` (super admin). The next charge (date + amount) is
+      added to `/stores/:id` and `/store-config/subscription`.
+- [x] Tests: fee math, charge once, renew when covered, stay when not, settle on top-up (during
+      grace vs after the block), no charge for TRIAL/VIP/no date, AI refusal.
+
+### Web — store screens become pages
+- [x] Routes: `/admin/stores/new` (create), `/admin/stores/:id` (details),
+      `/admin/stores/:id/edit` (edit).
+- [x] `StoreDetailModal.tsx` → `StoreDetailPage.tsx`, and `StoreFormModal.tsx` →
+      `StoreFormPage.tsx`. They load the store by id, so a reload or a shared link works.
+- [x] Breadcrumb title in place of `<Title>Stores</Title>`: **Stores › Create**,
+      **Stores › [store name]**, **Stores › [store name] › Edit**. "Stores" links back to the list.
+- [x] `StoreList` navigates instead of opening modals.
+- [x] Details page: balance, next charge (date + amount), and the ledger (latest first).
+
+### Client-facing
+- [x] Web `SystemSettings`: the balance is shown always (today only on the paid AI tier), plus
+      "next charge: X so'm on DATE".
+- [x] POS subscription dialog (`TerminalAccessBar`): the same next-charge row, cached for
+      offline. ru/uz strings.
+
+### Rollout
+- [x] **Before merging to `main`:** a read-only check of production STARTER/PRO stores — their
+      balance against their first fee. Store balances today hold AI credit only, so a paying store
+      with 0 balance goes negative at its next due date, and is blocked after grace unless it is
+      topped up first.
+- [ ] Staging: shorten a store's expiry to minutes, then watch a charge, a renewal, a negative
+      balance, and a top-up settling it.
+
+## Review
+
+- **Where it went:**
+  - `modules/billing/`: `BalanceService` (balance + ledger row in one transaction) and
+    `BillingService` (the 15-minute job, `bill(store, 'job' | 'topup')`, `nextCharge`).
+  - `addCredits` tops up, then bills. The AI scan goes through the ledger and answers 402
+    `receiptScan.balanceNegative` at a balance ≤ 0. POS and web show that message.
+  - `GET /stores/:id/billing` returns the next charge and the ledger.
+    `/store-config/subscription` now carries `next_charge`.
+- **Store pages:**
+  - `StoreDetailModal.tsx` → `StoreDetailPage.tsx` and `StoreFormModal.tsx` →
+    `StoreFormPage.tsx` (git mv), with a shared `StoreBreadcrumb`.
+  - Routes `/admin/stores/new`, `/:id`, `/:id/edit`.
+  - Create lands on the new store's page; Edit and Cancel go back to it.
+- **Beyond the plan:** a store the job finds already blocked and never charged — say, expired
+  before billing shipped — is not billed by the job. Its next top-up bills it and renews it from
+  the payment.
+- **Production check (read-only, 2026-09-22):**
+  - Prices: STARTER 100 000, PRO 150 000, no extra-terminal price yet.
+  - The only STARTER/PRO store is 1000 "Mock store" (expired 2026-06-30, balance 0). It is already
+    blocked, so the job skips it. No paying store will be charged unexpectedly.
+- **Staging, once deployed:**
+  - 1000 "Mock store" (STARTER, expired 2026-09-22 00:00, balance 150 000) is charged 100 000 on
+    the first run and renews to 2026-10-22.
+  - 1001 "yangi asr 2" (PRO, 2026-10-12, balance 0) goes to −150 000 on 12 Oct.
+- **Verified:**
+  - jest 71 suites / 1005 tests green. New: billing 18, AI-scan gate 4, fee/month/renewal helpers
+    7, POS next-charge 1.
+  - Server, app and web type-check clean; eslint 0 errors.
+  - Pages not yet looked at in a browser: that needs the new server endpoints, so staging.
+
+# Offline-only till never learns a super-admin password set after setup (2026-09-22)
+
+**Report:** a second PC for Mock store 1000 (staging, OFFLINE_ONLY) says "set the super-admin
+password on the panel" when it tries to pair, although it is set there. Removing it changes
+nothing either.
+
+**Cause:** the hash reaches a till from GET /store-config at setup, and afterwards only from
+`syncStoreConfig()` in the sync loop, which an OFFLINE_ONLY store never runs (`syncTarget` →
+`none`). A password sign-in got a fresh token but only refreshed the subscription cache. So the
+till kept whatever it had at setup, forever.
+
+**Staging evidence (read-only):** store 1000 is OFFLINE_ONLY with a password set. Only T1 ever sent
+logs or heartbeats, and only T1 called /store-config today. Production store 1000 has no password
+and no activity from store 1000.
+
+- [x] `sync/store-config.ts#pullStoreConfig` — the old `syncStoreConfig` body. It falls back to
+      the kept token and never runs on a satellite. The sync loop calls it as before.
+- [x] Called after a password sign-in that got a token, and from `auth:hasSuperAdminPassword`
+      when none is cached, so opening the role panel asks once before saying "none".
+- [x] Tests: `store-config.test.ts` (8).
+- [x] Found on the way: `LoggingInterceptor` redacted only `password`, so the staging API log
+      holds `superAdminPassword` in plain text. It now redacts by pattern. Tested.
+- [ ] The second PC runs an installed build without this. Until it gets one, re-run its setup
+      wizard against staging (the wizard reads the hash).
+
+# Terminal limits per plan, with paid extra terminals (2026-09-22) — built on `dev`, not yet committed
+
+Decided with the user:
+- Every plan includes some terminals; the super admin edits them on the Subscription Plans page.
+  Defaults: TRIAL 1 · STARTER 1 · PRO 3 · VIP unlimited.
+- The super admin can add paid extra terminals to any store. The price is one global number,
+  e.g. 50,000 UZS per extra terminal per month, set next to the plan prices.
+- Hard limit. Tills already in use keep working, and the super admin can free a slot.
+- The client sees "terminals used / allowed" in the POS subscription dialog
+  (`TerminalAccessBar`) and in web `SystemSettings`.
+
+## Shape
+
+- **Allowance** = the plan's included terminals + `Store.extraTerminals`; null means unlimited.
+  Computed by one pure function in `src/shared/utils/subscription.ts` and used by the server,
+  the web dashboard and the POS.
+- **Registry**: new PG model `StoreTerminal` (storeId, terminalId, firstSeenAt, lastSeenAt,
+  `@@unique([storeId, terminalId])`). A terminal holds a slot while it has a row. Rows go to the
+  earliest `firstSeenAt` first, so after a downgrade the newest tills are the ones refused.
+- **Enforcement travels in the signed license**, which the till already trusts offline. Add
+  optional fields `terminals` (the allowance) and `seat` (whether this terminal has a slot).
+  **`LICENSE_VERSION` stays at 1**: old tills check `v === 1` and ignore unknown fields. A new
+  till reading a license from an old server treats a missing field as unlimited/seated.
+- The server gets no interceptor backstop. The POS JWT carries no terminal ID, and refusing a
+  sales upload would lose data. An over-limit till refuses to sell by itself, from its license.
+
+## Steps
+
+### Server (no version bump)
+- [x] PG migration, additive only: `stores.extra_terminals INT DEFAULT 0` + `store_terminals`.
+      Backfill the registry from `terminal_heartbeats` and distinct `sales.terminal_id`, so
+      every till in the field keeps its slot. Generate it with `migrate diff` (no local PG).
+- [x] Site config: `subscription_terminals` JSON {TRIAL, STARTER, PRO, VIP} and
+      `subscription_price_extra_terminal`. Extend the plan GET/PUT DTOs and normalize the values.
+- [x] `terminalAllowance(plan, extra, limits)` + tests in `shared/utils/subscription.ts`.
+- [x] Licenses: `/licenses/renew` and `GET /store-config` accept `terminalId` (a main also sends
+      its paired satellite IDs). Register the terminal if a slot is free, otherwise sign with
+      `seat: false`. Old tills that send no ID are signed as today.
+- [x] `/store-config/subscription`: add `terminals_allowed`, `terminals_used`,
+      `extra_terminals`, `extra_terminal_price`.
+- [x] `UpdateStoreDto.extraTerminals` (int ≥ 0). Super-admin endpoints to list a store's
+      registered terminals and free one (`DELETE /stores/:id/terminals/:terminalId`).
+- [x] Tests: allowance, seat assignment (a free slot, the limit reached, re-registering an
+      existing ID, a downgrade), and the DTO.
+
+### POS (src/main, src/renderer)
+- [x] License fetch sends `terminalId` and satellite IDs. `licenseStatus()` gets
+      `canSell: false` + reason `terminal-limit` when `seat === false`.
+- [x] LAN pairing on the main refuses a new satellite when the allowance is reached. It asks
+      the server when online, and uses the license snapshot when offline.
+      New `PairingRefused` message key.
+- [x] Subscription dialog in `TerminalAccessBar`: a "Terminals: 2 / 3" (or "unlimited") row,
+      cached with the rest for offline. Login-screen message for `terminal-limit`.
+- [x] ru/uz strings. Tests next to `license.test.ts` and `pairing.test.ts`.
+
+### Web
+- [x] `SubscriptionPlansPage`: a "terminals included" input per plan + the extra-terminal price.
+- [x] `StoreDetailModal`: an extra-terminals stepper, the allowance, the monthly total
+      (plan + extras × price), and the registered terminals with last seen + "Free slot".
+- [x] `SystemSettings`: a terminals row "used / allowed" in the subscription card. The tariff
+      info modal shows each plan's included terminals and the extra price.
+
+### Rollout
+- [x] Before merging to `main`: a read-only query of production for stores whose registered
+      terminals exceed their new allowance. Decide per store: grant extras or ask them to pay.
+      Otherwise, the day the release lands, their newest tills stop selling.
+- [ ] Staging: migrate, then prove on a real till that a second terminal is refused on STARTER,
+      accepted after +1 extra, and accepted again after "Free slot".
+- [ ] Version bump only at deploy (memory: version-bump-at-deploy).
+
+## Decided
+- A PC swap: the new PC under the **same** terminal ID reuses its slot automatically. Under a
+  new ID it needs a "Free slot" first. Confirmed by the user.
+- Rollout: stores over their new limit get extras or pay, decided per store. Confirmed by the user.
+
+## Review
+
+- **Where it went:**
+  - License: `terminals`/`seats` in `shared/utils/license.ts`, still `v: 1`.
+  - Seating: `LicensesService.seating/register`. Every till that asks is recorded, and seats are
+    the earliest N by `firstSeenAt`. So a till refused today moves up when a slot frees, and
+    junk IDs sent with a copied license can only queue behind real ones, never take a seat.
+  - Till: `licenseStatus(terminalId)` → state `terminal-limit`. `null` means the store alone
+    (the local web dashboard login). Satellites are judged by their own ID on the main.
+    `mayPair()` asks the server with the candidate named, or counts offline.
+- **Departure from the plan:** satellites are judged by the seats list in the main's license
+  rather than by a separate count, so one mechanism covers mains, standalones and satellites.
+- **Production check (read-only, 2026-09-22):** nobody is over. 1234 "Yangi asr market" runs
+  T1–T4 on VIP (unlimited), and 1000 "Mock store" runs T1 on STARTER (1).
+- **Offline-only stores:** the web settings page shows no terminals row there. The till's local
+  server has no subscription data, the same as the plan row.
+- **Verified:** jest 67 suites / 965 tests green. New tests cover shared allowance and license
+  seats, server seating (free slot, full, extra bought, slot freed, re-claim keeps its place,
+  downgrade, main ahead of satellites, unlimited, old till), and till refusals (sign-in, sale,
+  shift, satellite by ID, dashboard exempt, blocked outranks, pairing online and offline). A red
+  run with the seat check switched off failed 2 tests. Server, app and web type-check clean;
+  eslint 0 errors.
+- **Not yet done:** a live run on staging (needs a push to `dev`, which runs the migration on
+  `posgro_staging`).
+
 # Nasiya, round two: dashboard, phone input, due dates, receipt details (2026-09-21)
 
 - [x] Staff debts on the dashboard's user list (both backends)

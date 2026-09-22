@@ -868,6 +868,8 @@ export function ReceiptScanModal({
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("ANTHROPIC_API_KEY_NOT_SET")) {
         setError(t("receiptScan.apiKeyNotSet"));
+      } else if (message.includes("receiptScan.balanceNegative")) {
+        setError(t("receiptScan.balanceNegative"));
       } else {
         setError(t("receiptScan.scanError") + ": " + message);
       }

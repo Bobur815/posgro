@@ -15,7 +15,7 @@ jest.mock('../logger', () => ({
   log: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 jest.mock('../config/app-config', () => ({
-  getAppConfig: () => ({ vpsApiUrl: 'https://vps.example/api' }),
+  getAppConfig: () => ({ vpsApiUrl: 'https://vps.example/api', terminalId: 'T1' }),
 }));
 
 let inMemoryToken: string | null = null;
@@ -26,6 +26,9 @@ let localConfigMode: string | null = null;
 const prismaMock = {
   localConfig: {
     findUnique: jest.fn(async () => ({ mode: localConfigMode })),
+  },
+  pairedTerminal: {
+    findMany: jest.fn(async () => [{ terminalId: 'T2' }]),
   },
   systemSetting: {
     findUnique: jest.fn<Promise<{ value: string } | null>, [{ where: { key: string } }]>(),
@@ -57,6 +60,8 @@ const SERVER_BODY = {
   subscription_expires_at: '2026-12-31T00:00:00.000Z',
   ai_plan: 'paid',
   balance_uzs: 250000,
+  terminals: { allowed: 2, used: 3, included: 1, extra: 1, extra_price_uzs: 50000 },
+  next_charge: { at: '2026-10-22T12:00:00.000Z', amount_uzs: 200000, owed_uzs: 0 },
   payment: {
     qr_payload: '00020101',
     payment_url: 'https://pay.example/store-1000',
@@ -134,6 +139,39 @@ describe('a successful read', () => {
 
     const written = JSON.parse(prismaMock.systemSetting.upsert.mock.calls[0][0].update.value);
     expect(written).toMatchObject({ storeId: 'store-1000', storeName: 'Продуктовый №7' });
+  });
+
+  // Naming the till (and a main's satellites) is what registers them for the store's slots.
+  it('names this till and its satellites to the server', async () => {
+    await getHandler()();
+
+    const [url] = (global.fetch as jest.Mock).mock.calls[0];
+    expect(url).toBe('https://vps.example/api/store-config/subscription?terminal_id=T1&satellites=T2');
+  });
+
+  it('returns the terminals against the plan, and caches them for offline', async () => {
+    const result = await getHandler()();
+
+    const terminals = { allowed: 2, used: 3, included: 1, extra: 1, extraPriceUzs: 50000 };
+    expect(result.terminals).toEqual(terminals);
+    const written = JSON.parse(prismaMock.systemSetting.upsert.mock.calls[0][0].update.value);
+    expect(written.terminals).toEqual(terminals);
+  });
+
+  it('returns the next charge from the balance, and caches it for offline', async () => {
+    const result = await getHandler()();
+
+    const nextCharge = { at: '2026-10-22T12:00:00.000Z', amountUzs: 200000, owedUzs: 0 };
+    expect(result.nextCharge).toEqual(nextCharge);
+    const written = JSON.parse(prismaMock.systemSetting.upsert.mock.calls[0][0].update.value);
+    expect(written.nextCharge).toEqual(nextCharge);
+  });
+
+  it('says nothing about terminals for a server from before them', async () => {
+    const { terminals: _omitted, ...older } = SERVER_BODY;
+    global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => older })) as unknown as typeof fetch;
+
+    expect((await getHandler()()).terminals).toBeNull();
   });
 
   it('sends the persisted token when no login has armed one this session', async () => {

@@ -50,7 +50,7 @@ function build(accounts: Account[], rules: SubscriptionRules = DEFAULT_SUBSCRIPT
   };
   const siteConfig = { getSubscriptionRules: jest.fn(async () => rules) };
   return {
-    service: new StoresService(prisma as never, siteConfig as never),
+    service: new StoresService(prisma as never, siteConfig as never, {} as never, {} as never),
     created,
     updated,
     tx,

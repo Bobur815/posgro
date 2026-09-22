@@ -69,7 +69,8 @@
       "store_inactive": "Do'kon o'chirilgan, shuning uchun boshqaruv paneliga kirib bo'lmaydi. Ishni tiklash uchun qo'llab-quvvatlash xizmatiga murojaat qiling.",
       "store_offline_only": "Bu do'kon oflayn rejimda ishlaydi: barcha ma'lumotlar serverda emas, terminalning o'zida saqlanadi. Boshqaruv panelini terminalning o'zidan oching — telefoningizni xuddi shu Wi-Fi tarmog'iga ulab, uning kirish ekranidagi QR-kodni skanerlang.",
       "subscription_blocked": "Do'kon obunasi to'lanmagan, shuning uchun do'kon ishi to'xtatilgan. Obunani to'lang — u uzaytirilishi bilanoq kirish ochiladi.",
-      "license_checkin_required": "Kassa server bilan juda uzoq vaqt bog'lanmadi, shuning uchun ish to'xtatildi. Uni internetga ulang va «Tekshirish» tugmasini bosing — litsenziya tekshirilgach, ish davom etadi."
+      "license_checkin_required": "Kassa server bilan juda uzoq vaqt bog'lanmadi, shuning uchun ish to'xtatildi. Uni internetga ulang va «Tekshirish» tugmasini bosing — litsenziya tekshirilgach, ish davom etadi.",
+      "terminal_limit": "Do'kon tarifida ushbu kassa uchun bo'sh joy yo'q. Qo'shimcha terminal sotib oling yoki eski kassaning joyini bo'shating — qo'llab-quvvatlash xizmatiga murojaat qiling."
     },
     "serverSettings": "Server sozlamalari",
     "storeId": "Store ID",
@@ -955,7 +956,8 @@
       "pendingDiscard": "Topshirishni bekor qilish",
       "pendingFinished": "Topshirish yakunlanmoqda. Qayta ishga tushirilmoqda…",
       "pendingDiscarded": "Topshirish bekor qilindi. Qayta ishga tushirilmoqda…"
-    }
+    },
+    "pairingNoTerminalSlot": "Do'kon tarifida yana bitta kassa uchun bo'sh joy yo'q. Qo'llab-quvvatlash xizmati orqali qo'shimcha terminal sotib oling va qayta urinib ko'ring."
   },
   "topBar": {
     "organizations": "Tashkilotlar",
@@ -1293,7 +1295,8 @@
     "pasteImage": "yoki rasmni joylashtiring (Ctrl+V)",
     "detectedSupplier": "Aniqlangan yetkazib beruvchi",
     "arrivalsFailed": "Ba'zi kirimlarni yaratib bo'lmadi",
-    "tokenLimitExceeded": "Kunlik AI token limiti tugadi. Limit ertaga yangilanadi."
+    "tokenLimitExceeded": "Kunlik AI token limiti tugadi. Limit ertaga yangilanadi.",
+    "balanceNegative": "Do'kon balansi tugadi. Nakladnoylarni AI bilan qayta skanerlash uchun uni to'ldiring."
   },
   "aiSettings": {
     "title": "AI — Hisob-faktura tanish",
@@ -1342,7 +1345,19 @@
     "bannerTrialWarning": "Bepul sinov muddati {{date}} kuni tugaydi — {{count}} kun qoldi. Ishni davom ettirish uchun tarifni tanlang va uni to'lang.",
     "bannerGrace": "Do'kon obunasi {{date}} kuni tugagan. {{blockDate}} gacha to'lang — shundan so'ng do'kon boshqaruv panelida va kassalarda bloklanadi.",
     "blockedTitle": "Do'kon bloklangan",
-    "callSupport": "Qo'llab-quvvatlash telefoni: {{phone}}"
+    "callSupport": "Qo'llab-quvvatlash telefoni: {{phone}}",
+    "terminals": "Terminallar",
+    "terminalsUsed": "{{used}} / {{allowed}}",
+    "terminalsUnlimited": "{{used}} · cheklovsiz",
+    "terminalsDetail": "Tarifda: {{included}}, qo'shimcha: {{extra}}.",
+    "terminalsExtraPrice": "Qo'shimcha terminal — oyiga {{price}}.",
+    "terminalsOver": "Kassalar tarif ruxsat berganidan ko'p: yangilari ishlay olmaydi.",
+    "terminalsInfo": "Tarifdagi terminallar: {{count}}",
+    "terminalsInfoUnlimited": "Terminallar: cheklovsiz",
+    "terminalsInfoExtra": "Qo'shimcha terminal: {{price}} so'm/oy",
+    "nextCharge": "Keyingi to'lov",
+    "nextChargeValue": "{{amount}} · {{date}}",
+    "owed": "Balans minusga tushdi: qarz {{amount}}. Balansni to'ldiring — oy darhol uzaytiriladi. Ungacha imtiyozli kunlar o'tadi, so'ng do'kon bloklanadi."
   },
   "license": {
     "clockBehind": "Bu kompyuterdagi sana va vaqt orqada qolgan. Windows'da to'g'ri sana va vaqtni o'rnating — ungacha savdo qilib bo'lmaydi, aks holda cheklarga noto'g'ri sana yoziladi.",
@@ -1352,7 +1367,10 @@
     "checkNow": "Tekshirish",
     "checking": "Tekshirilmoqda…",
     "notYet": "Server hali to'lovni tasdiqlamadi. Agar to'lagan bo'lsangiz, qo'llab-quvvatlash xizmatiga qo'ng'iroq qiling yoki keyinroq urinib ko'ring.",
-    "notYetCheckin": "Server bilan bog'lanib bo'lmadi. Internet aloqasini tekshiring va qayta urinib ko'ring."
+    "notYetCheckin": "Server bilan bog'lanib bo'lmadi. Internet aloqasini tekshiring va qayta urinib ko'ring.",
+    "terminalLimitTitle": "Terminallar chegarasi",
+    "terminalLimitHint": "Tarif bo'yicha terminallar: {{count}}.",
+    "notYetTerminal": "Server hali bu kassaga joy ajratmadi. Agar qo'shimcha terminal sotib olgan bo'lsangiz, qo'llab-quvvatlash xizmatiga qo'ng'iroq qiling yoki keyinroq urinib ko'ring."
   },
   "smena": {
     "viewDetails": "Batafsil",

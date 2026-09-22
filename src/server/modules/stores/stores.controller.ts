@@ -131,15 +131,42 @@ export class StoresController {
     return this.storesService.resetAdminUser(id, body.phone);
   }
 
+  @Get(':id/terminals')
+  @ApiOperation({ summary: 'Terminals registered for the store\x27s slots, earliest first (Super Admin only)' })
+  @ApiParam({ name: 'id', description: 'Store ID' })
+  async listTerminals(@Param('id') id: string) {
+    return this.storesService.listTerminals(id);
+  }
+
+  @Delete(':id/terminals/:terminalId')
+  @ApiOperation({ summary: 'Free a terminal\x27s slot (Super Admin only)' })
+  @ApiParam({ name: 'id', description: 'Store ID' })
+  @ApiParam({ name: 'terminalId', description: 'Terminal ID, e.g. T2' })
+  async removeTerminal(@Param('id') id: string, @Param('terminalId') terminalId: string) {
+    return this.storesService.removeTerminal(id, terminalId);
+  }
+
   @Post(':id/credits')
   @ApiOperation({ summary: 'Add AI credit balance to a store (Super Admin only)' })
   @ApiParam({ name: 'id', description: 'Store ID' })
   @ApiResponse({ status: 201, description: 'Credits added, returns new balance' })
-  async addCredits(@Param('id') id: string, @Body() body: { amount: number }) {
+  async addCredits(
+    @Param('id') id: string,
+    @Body() body: { amount: number; note?: string },
+    @CurrentUser() user: { id?: string } | undefined,
+  ) {
     const amount = Number(body.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new BadRequestException('amount must be a positive number');
     }
-    return this.storesService.addCredits(id, amount);
+    const note = typeof body.note === 'string' ? body.note.trim().slice(0, 200) : null;
+    return this.storesService.addCredits(id, amount, user?.id ?? null, note);
+  }
+
+  @Get(':id/billing')
+  @ApiOperation({ summary: 'Next subscription charge and the balance ledger (Super Admin only)' })
+  @ApiParam({ name: 'id', description: 'Store ID' })
+  async getBilling(@Param('id') id: string) {
+    return this.storesService.getBilling(id);
   }
 }

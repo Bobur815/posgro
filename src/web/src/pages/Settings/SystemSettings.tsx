@@ -10,7 +10,11 @@ import {
   stores as storesApi,
   siteConfig as siteConfigApi,
   auth as authApi,
+  storeConfig as storeConfigApi,
+  type PlanTerminals,
   type StoreRecord,
+  type StoreTerminalUsage,
+  type StoreSubscription as StoreSubscriptionInfo,
   type SubscriptionPlanPrices,
 } from "../../api/client";
 import { useNavigate } from "react-router-dom";
@@ -94,6 +98,15 @@ const StatValue = styled.span`
   font-weight: 600;
   font-size: 14px;
   color: ${({ theme }) => theme.colors.text};
+`;
+const TerminalsValue = styled(StatValue)<{ $warn?: boolean }>`
+  color: ${({ theme, $warn }) => ($warn ? theme.colors.error : theme.colors.text)};
+`;
+const TerminalsHint = styled.p`
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: ${({ theme }) => theme.colors.textSecondary};
 `;
 const TariffRow = styled.div`
   display: flex;
@@ -189,6 +202,20 @@ const BalanceValue = styled.span`
   font-weight: 700;
   color: ${({ theme }) => theme.colors.text};
 `;
+
+/** How many terminals a plan includes, on its card in the tariff info. */
+function PlanInfoTerminals({ plan, limits }: { plan: keyof PlanTerminals; limits: PlanTerminals }) {
+  const { t } = useTranslation();
+  const count = limits[plan];
+  return (
+    <PlanInfoDesc>
+      {count === null
+        ? t("subscription.terminalsInfoUnlimited")
+        : t("subscription.terminalsInfo", { count })}
+    </PlanInfoDesc>
+  );
+}
+
 export function SystemSettings() {
   const { t } = useTranslation();
 
@@ -211,6 +238,15 @@ export function SystemSettings() {
   const [subscriptionPrices, setSubscriptionPrices] = useState<SubscriptionPlanPrices | null>(null);
   const [storeLoading, setStoreLoading] = useState(false);
   const [showTariffInfo, setShowTariffInfo] = useState(false);
+  const [terminals, setTerminals] = useState<StoreTerminalUsage | null>(null);
+  const [nextCharge, setNextCharge] = useState<StoreSubscriptionInfo["nextCharge"]>(null);
+  // The VPS's balance, which pays the subscription — shown whatever the AI tier.
+  const [storeBalanceUzs, setStoreBalanceUzs] = useState<number | null>(null);
+  const [planTerminals, setPlanTerminals] = useState<PlanTerminals | null>(null);
+
+  const shownBalance = storeBalanceUzs ?? balanceUzs;
+  const terminalsOver =
+    !!terminals && terminals.allowed !== null && terminals.used > terminals.allowed;
 
   const navigate = useNavigate();
   useEffect(() => {
@@ -262,6 +298,20 @@ export function SystemSettings() {
       ]);
       setStoreRecord(record);
       setSubscriptionPrices(prices);
+      // Terminals are the VPS's to count. A till's own server (an offline-only store) has no
+      // such endpoint, and the row is simply left out there.
+      storeConfigApi
+        .getSubscription()
+        .then((s) => {
+          setTerminals(s.terminals);
+          setNextCharge(s.nextCharge);
+          setStoreBalanceUzs(s.balanceUzs);
+        })
+        .catch(() => setTerminals(null));
+      siteConfigApi
+        .getPlanTerminals()
+        .then(setPlanTerminals)
+        .catch(() => setPlanTerminals(null));
     } catch (error) {
       console.error("Failed to load store:", error);
     } finally {
@@ -418,18 +468,65 @@ export function SystemSettings() {
             <StatValue>{t("subscription.perpetual")}</StatValue>
           </StatRow>
         )}
+
+        {terminals && (
+          <>
+            <StatRow>
+              <StatLabel>{t("subscription.terminals")}</StatLabel>
+              <TerminalsValue $warn={terminalsOver}>
+                {terminals.allowed === null
+                  ? t("subscription.terminalsUnlimited", { used: terminals.used })
+                  : t("subscription.terminalsUsed", {
+                      used: terminals.used,
+                      allowed: terminals.allowed,
+                    })}
+              </TerminalsValue>
+            </StatRow>
+            {terminals.allowed !== null && (
+              <TerminalsHint>
+                {t("subscription.terminalsDetail", {
+                  included: terminals.included ?? 0,
+                  extra: terminals.extra,
+                })}{" "}
+                {terminals.extraPriceUzs > 0 &&
+                  t("subscription.terminalsExtraPrice", {
+                    price: `${terminals.extraPriceUzs.toLocaleString("ru-UZ")} so'm`,
+                  })}
+                {terminalsOver && <> {t("subscription.terminalsOver")}</>}
+              </TerminalsHint>
+            )}
+          </>
+        )}
       </Section>
 
       <Section>
         <SectionTitle>{t("subscription.storeBalanceTitle")}</SectionTitle>
         <StatRow>
           <StatLabel>{t("subscription.storeBalance")}</StatLabel>
-          <BalanceValue>
-            {balanceUzs !== null
-              ? `${balanceUzs.toLocaleString("ru-UZ", { maximumFractionDigits: 0 })} so'm`
+          <BalanceValue style={shownBalance !== null && shownBalance < 0 ? { color: "#dc2626" } : undefined}>
+            {shownBalance !== null
+              ? `${shownBalance.toLocaleString("ru-UZ", { maximumFractionDigits: 0 })} so'm`
               : "—"}
           </BalanceValue>
         </StatRow>
+        {nextCharge && (
+          <StatRow>
+            <StatLabel>{t("subscription.nextCharge")}</StatLabel>
+            <StatValue>
+              {t("subscription.nextChargeValue", {
+                amount: `${nextCharge.amountUzs.toLocaleString("ru-UZ")} so'm`,
+                date: new Date(nextCharge.at).toLocaleDateString(),
+              })}
+            </StatValue>
+          </StatRow>
+        )}
+        {nextCharge && nextCharge.owedUzs > 0 && (
+          <TerminalsHint style={{ color: "#dc2626" }}>
+            {t("subscription.owed", {
+              amount: `${nextCharge.owedUzs.toLocaleString("ru-UZ")} so'm`,
+            })}
+          </TerminalsHint>
+        )}
         <Actions style={{ marginTop: "8px" }}>
           <Button
             onClick={loadPlan}
@@ -464,6 +561,7 @@ export function SystemSettings() {
                   {subscriptionPrices.starter.toLocaleString("ru-UZ")} {t("subscription.pricePerMonth")}
                 </PlanInfoPrice>
               )}
+              {planTerminals && <PlanInfoTerminals plan="STARTER" limits={planTerminals} />}
             </PlanInfoCard>
             <PlanInfoCard $plan="PRO">
               <PlanInfoName>{t("subscription.infoProTitle")}</PlanInfoName>
@@ -473,6 +571,7 @@ export function SystemSettings() {
                   {subscriptionPrices.pro.toLocaleString("ru-UZ")} {t("subscription.pricePerMonth")}
                 </PlanInfoPrice>
               )}
+              {planTerminals && <PlanInfoTerminals plan="PRO" limits={planTerminals} />}
             </PlanInfoCard>
             <PlanInfoCard $plan="VIP">
               <PlanInfoName>{t("subscription.infoVipTitle")}</PlanInfoName>
@@ -482,7 +581,15 @@ export function SystemSettings() {
                   {subscriptionPrices.vip.toLocaleString("ru-UZ")} {t("subscription.pricePerMonth")}
                 </PlanInfoPrice>
               )}
+              {planTerminals && <PlanInfoTerminals plan="VIP" limits={planTerminals} />}
             </PlanInfoCard>
+            {subscriptionPrices && subscriptionPrices.extraTerminal > 0 && (
+              <PlanInfoPrice>
+                {t("subscription.terminalsInfoExtra", {
+                  price: subscriptionPrices.extraTerminal.toLocaleString("ru-UZ"),
+                })}
+              </PlanInfoPrice>
+            )}
           </ModalBox>
         </ModalOverlay>
       )}

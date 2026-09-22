@@ -3,9 +3,14 @@ import styled from "styled-components";
 import { RefreshCw, Save } from "lucide-react";
 import { siteConfig, SubscriptionPlanPrices, SubscriptionPayment } from "../../api/client";
 import {
+  DEFAULT_PLAN_TERMINALS,
   DEFAULT_SUBSCRIPTION_RULES,
+  PLANS as PLAN_IDS,
   SUBSCRIPTION_RULE_LIMITS,
+  TERMINAL_LIMITS,
+  normalizePlanTerminals,
   normalizeSubscriptionRules,
+  type PlanTerminals,
   type SubscriptionRules,
 } from "@shared/utils/subscription";
 
@@ -212,7 +217,13 @@ const PLANS = [
 ];
 
 export function SubscriptionPlansPage() {
-  const [prices, setPrices] = useState<SubscriptionPlanPrices>({ starter: 0, pro: 0, vip: 0 });
+  const [prices, setPrices] = useState<SubscriptionPlanPrices>({
+    starter: 0,
+    pro: 0,
+    vip: 0,
+    extraTerminal: 0,
+  });
+  const [terminals, setTerminals] = useState<PlanTerminals>(DEFAULT_PLAN_TERMINALS);
   const [payment, setPayment] = useState<SubscriptionPayment>({
     qrPayload: "",
     paymentUrl: "",
@@ -229,6 +240,7 @@ export function SubscriptionPlansPage() {
       siteConfig.getSubscriptionPlans().then(setPrices),
       siteConfig.getSubscriptionPayment().then(setPayment),
       siteConfig.getSubscriptionRules().then(setRules),
+      siteConfig.getPlanTerminals().then(setTerminals),
     ])
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -244,6 +256,7 @@ export function SubscriptionPlansPage() {
       await siteConfig.setSubscriptionPlans(prices);
       await siteConfig.setSubscriptionPayment(payment);
       setRules(await siteConfig.setSubscriptionRules(normalizeSubscriptionRules(rules)));
+      setTerminals(await siteConfig.setPlanTerminals(normalizePlanTerminals(terminals)));
       setSuccess(true);
     } catch (e) {
       setError((e as Error).message);
@@ -288,6 +301,72 @@ export function SubscriptionPlansPage() {
               </Card>
             ))}
           </Grid>
+
+          <Section>
+            <SectionTitle>Terminals</SectionTitle>
+            <Subtitle style={{ marginBottom: 24 }}>
+              How many tills each plan includes. A store can buy more on its own screen (Extra
+              terminals), each at the price below. A till beyond its store's allowance cannot sign
+              in or sell; tills already registered keep their slots, earliest first.
+            </Subtitle>
+
+            <Card>
+              <RulesGrid>
+                {PLAN_IDS.map((plan) => {
+                  const unlimited = terminals[plan] === null;
+                  return (
+                    <Field key={plan}>
+                      <Label>{plan} — terminals included</Label>
+                      <Input
+                        type="number"
+                        step="1"
+                        min={TERMINAL_LIMITS.included.min}
+                        max={TERMINAL_LIMITS.included.max}
+                        value={unlimited ? "" : (terminals[plan] ?? "")}
+                        placeholder="Unlimited"
+                        disabled={unlimited}
+                        onChange={(e) =>
+                          setTerminals((t) => ({ ...t, [plan]: Number(e.target.value) }))
+                        }
+                        onFocus={(e) => e.target.select()}
+                      />
+                      <CheckRow>
+                        <input
+                          type="checkbox"
+                          checked={unlimited}
+                          onChange={(e) =>
+                            setTerminals((t) => ({
+                              ...t,
+                              [plan]: e.target.checked ? null : (DEFAULT_PLAN_TERMINALS[plan] ?? 1),
+                            }))
+                          }
+                        />
+                        Unlimited
+                      </CheckRow>
+                    </Field>
+                  );
+                })}
+              </RulesGrid>
+
+              <Field style={{ marginTop: 16 }}>
+                <Label>Extra terminal — monthly price (UZS)</Label>
+                <Input
+                  type="number"
+                  step="1000"
+                  min={0}
+                  value={prices.extraTerminal}
+                  onChange={(e) =>
+                    setPrices((prev) => ({ ...prev, extraTerminal: Number(e.target.value) }))
+                  }
+                  onFocus={(e) => e.target.select()}
+                />
+                <FieldHint>
+                  Per terminal beyond the plan's own, e.g. 50 000. Shown to the store on its POS
+                  subscription dialog and its dashboard settings.
+                </FieldHint>
+              </Field>
+            </Card>
+          </Section>
 
           <Section>
             <SectionTitle>Payment Details</SectionTitle>

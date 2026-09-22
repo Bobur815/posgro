@@ -16,6 +16,8 @@ const SATELLITE_STATUS: TillLicenseStatus = {
   clockBehind: false,
   canSignIn: true,
   canSell: true,
+  terminals: null,
+  seated: true,
 };
 
 export function setupLicenseHandlers(): void {

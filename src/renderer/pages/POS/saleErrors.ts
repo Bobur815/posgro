@@ -68,6 +68,9 @@ export function parseSaleError(
     if (parsed.code === "SUBSCRIPTION_BLOCKED") {
       return t("auth.errors.subscription_blocked");
     }
+    if (parsed.code === "TERMINAL_LIMIT") {
+      return t("auth.errors.terminal_limit");
+    }
     if (parsed.code === "LICENSE_CHECKIN_REQUIRED") {
       return t("auth.errors.license_checkin_required");
     }

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import styled from "styled-components";
+import { useNavigate } from "react-router-dom";
 import {
   Plus,
   RefreshCw,
@@ -18,8 +19,6 @@ import {
   subscriptionStatus,
   type SubscriptionRules,
 } from "@shared/utils/subscription";
-import { StoreFormModal } from "./StoreFormModal";
-import { StoreDetailModal } from "./StoreDetailModal";
 
 const Page = styled.div`
   padding: 32px;
@@ -216,8 +215,7 @@ export function StoreList() {
   const [list, setList] = useState<StoreRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [formStore, setFormStore] = useState<StoreRecord | null | "new">(null);
-  const [detailStore, setDetailStore] = useState<StoreRecord | null>(null);
+  const navigate = useNavigate();
   const [rules, setRules] = useState<SubscriptionRules>(DEFAULT_SUBSCRIPTION_RULES);
 
   useEffect(() => {
@@ -233,8 +231,6 @@ export function StoreList() {
     try {
       const data = await stores.getAll();
       setList(data);
-      // An open details screen shows the store as just saved, not as it was when opened.
-      setDetailStore((open) => (open && data.find((s) => s.id === open.id)) || open);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -292,7 +288,7 @@ export function StoreList() {
             <RefreshCw size={16} />
             Refresh
           </Btn>
-          <Btn $variant="primary" onClick={() => setFormStore("new")}>
+          <Btn $variant="primary" onClick={() => navigate("/admin/stores/new")}>
             <Plus size={16} />
             New Store
           </Btn>
@@ -382,11 +378,11 @@ export function StoreList() {
                   <RowActions>
                     <IconBtn
                       title="Stats / AI plan"
-                      onClick={() => setDetailStore(store)}
+                      onClick={() => navigate(`/admin/stores/${store.id}`)}
                     >
                       <BarChart2 size={17} />
                     </IconBtn>
-                    <IconBtn title="Edit" onClick={() => setFormStore(store)}>
+                    <IconBtn title="Edit" onClick={() => navigate(`/admin/stores/${store.id}/edit`)}>
                       <Pencil size={17} />
                     </IconBtn>
                     {store.scheduledDeleteAt ? (
@@ -427,21 +423,6 @@ export function StoreList() {
         </tbody>
       </Table>
 
-      {formStore !== null && (
-        <StoreFormModal
-          store={formStore === "new" ? null : formStore}
-          onClose={() => setFormStore(null)}
-          onSaved={load}
-        />
-      )}
-
-      {detailStore !== null && (
-        <StoreDetailModal
-          store={detailStore}
-          onClose={() => setDetailStore(null)}
-          onUpdated={load}
-        />
-      )}
     </Page>
   );
 }

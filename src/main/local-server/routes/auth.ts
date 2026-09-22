@@ -22,7 +22,8 @@ export const authRoutes: Route[] = [
       // An OFFLINE_ONLY store's web dashboard is this till's — blocked along with it. The web login
       // page knows the key and shows how to pay.
       try {
-        await assertCanSignIn();
+        // The store alone: the dashboard is not any one till's, so it has no terminal slot.
+        await assertCanSignIn(null);
       } catch (e) {
         throw forbidden(e instanceof Error ? e.message : 'auth.errors.subscription_blocked');
       }

@@ -1,4 +1,16 @@
-import { IsString, IsOptional, IsObject, IsBoolean, IsIn, MaxLength, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsObject,
+  IsBoolean,
+  IsIn,
+  IsInt,
+  Min,
+  Max,
+  MaxLength,
+  IsDateString,
+} from 'class-validator';
+import { TERMINAL_LIMITS } from '../../../../shared/utils/subscription';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { StoreSettingsDto } from './create-store.dto';
 
@@ -42,6 +54,13 @@ export class UpdateStoreDto {
   @IsOptional()
   @IsDateString()
   subscriptionExpiresAt?: string;
+
+  @ApiPropertyOptional({ example: 1, description: 'Terminals bought on top of the plan\x27s own' })
+  @IsOptional()
+  @IsInt()
+  @Min(TERMINAL_LIMITS.extra.min)
+  @Max(TERMINAL_LIMITS.extra.max)
+  extraTerminals?: number;
 
   @ApiPropertyOptional({ enum: ['OFFLINE_ONLY', 'ONLINE'], description: 'Operating mode' })
   @IsOptional()

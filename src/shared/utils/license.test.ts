@@ -1,5 +1,6 @@
 import { generateKeyPairSync } from 'crypto';
 import {
+  holdsSeat,
   licensePayload,
   licenseState,
   privateKeyFrom,
@@ -107,6 +108,42 @@ describe('licenseState', () => {
     const license = licensePayload('1', subscriptionStatus(facts, rules, NOW), NOW, 60);
     for (let d = 0; d <= 10; d += 0.5) {
       expect(licenseState(license, days(d)).state).toBe(subscriptionStatus(facts, rules, days(d)).state);
+    }
+  });
+});
+
+describe('terminal slots in a license', () => {
+  const { priv, pub } = keyPair();
+  const seated = licensePayload('1000', subscriptionStatus({ plan: 'STARTER', expiresAt: new Date(days(30)) }, rules, NOW), NOW, 14, {
+    terminals: 1,
+    seats: ['T1'],
+  });
+
+  it('carries the allowance and the seats, signed', () => {
+    expect(readLicense(signLicense(seated, priv), pub)).toMatchObject({ terminals: 1, seats: ['T1'] });
+  });
+
+  it('seats only the terminals it names', () => {
+    expect(holdsSeat(seated, 'T1')).toBe(true);
+    expect(holdsSeat(seated, 'T2')).toBe(false);
+  });
+
+  // A license from a server before terminal limits, or for an unlimited plan.
+  it('seats every terminal when it names none', () => {
+    const unlimited = pro(10);
+    expect(unlimited).not.toHaveProperty('seats');
+    expect(readLicense(signLicense(unlimited, priv), pub)).not.toBeNull();
+    expect(holdsSeat(unlimited, 'T7')).toBe(true);
+  });
+
+  it('stays version 1, so a till from before still reads it', () => {
+    expect(seated.v).toBe(1);
+  });
+
+  it('rejects seats that are not a list of ids', () => {
+    for (const bad of [{ seats: 'T1' }, { seats: [1] }, { terminals: -1 }, { terminals: '2' }]) {
+      const token = signLicense({ ...seated, ...bad } as never, priv);
+      expect(readLicense(token, pub)).toBeNull();
     }
   });
 });
