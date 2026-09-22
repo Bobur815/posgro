@@ -5,6 +5,7 @@ import { openCashDrawer, printReceipt } from '../printer/thermal-printer';
 import { printZXReport } from '../printer/smena-report-printer';
 import { currentShift, shiftHistory } from '../sales/shifts';
 import type { AuthUser } from '../../shared/types/user.types';
+import { FISCAL_FIELDS } from './fiscal-fields';
 import {
   MainLinkError,
   SESSION_USER_KEY,
@@ -291,6 +292,91 @@ export async function deleteSale(saleId: string): Promise<true> {
   await forgetSale(saleId);
   await applyStock(reply?.stock ?? []);
   return true;
+}
+
+// ── Fiscalizing ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Send one of this till's receipts to the OFD again, through the main — the fiscal device is
+ * there. The main's answer carries the receipt's new fiscal state, copied onto the copy kept
+ * here so the history's badge and button follow at once.
+ */
+export async function retryFiscal(saleId: string): Promise<{ ok: boolean; error?: string }> {
+  const reply = await mainRequest<{ ok: boolean; error?: string; fiscal?: Record<string, unknown> | null }>(
+    'POST',
+    `/terminal/sales/${encodeURIComponent(saleId)}/fiscalize`,
+    { person: true, timeoutMs: SALE_TIMEOUT_MS },
+  );
+  if (reply?.fiscal) {
+    const data = Object.fromEntries(
+      Object.keys(FISCAL_FIELDS)
+        .filter((k) => k in reply.fiscal!)
+        .map((k) => [k, k === 'regosFiscalAt' && reply.fiscal![k] ? new Date(String(reply.fiscal![k])) : reply.fiscal![k]]),
+    );
+    await db()
+      .sale.updateMany({ where: { id: saleId }, data })
+      .catch((e: unknown) => console.error('[satellite] could not update the kept receipt:', e));
+  }
+  return { ok: Boolean(reply?.ok), ...(reply?.error ? { error: reply.error } : {}) };
+}
+
+// ── Debtors ─────────────────────────────────────────────────────────────────────────────────────
+//
+// A satellite holds no users, so its customers, their payments and their history are the main's —
+// and a credit sale committed on the main must name the main's ids. Everything here goes there;
+// the main checks the person's session and role (`/terminal/debtors…`).
+
+const debtorPath = (userId: string, rest = '') => `/terminal/debtors/${encodeURIComponent(userId)}${rest}`;
+
+export async function listDebtors(opts: {
+  search?: string;
+  withDebtOnly?: boolean;
+  includeStaff?: boolean;
+}): Promise<unknown[]> {
+  const q = new URLSearchParams();
+  if (opts.search?.trim()) q.set('search', opts.search.trim());
+  if (opts.withDebtOnly) q.set('withDebtOnly', 'true');
+  if (opts.includeStaff) q.set('includeStaff', 'true');
+  const query = q.toString();
+  return (
+    (await mainRequest<unknown[]>('GET', `/terminal/debtors${query ? `?${query}` : ''}`, { person: true })) ?? []
+  );
+}
+
+export function createDebtor(data: unknown): Promise<unknown> {
+  return mainRequest('POST', '/terminal/debtors', { person: true, body: data });
+}
+
+export function updateDebtor(userId: string, data: unknown): Promise<unknown> {
+  return mainRequest('PATCH', debtorPath(userId), { person: true, body: data });
+}
+
+export function debtorLedger(userId: string): Promise<unknown> {
+  return mainRequest('GET', debtorPath(userId, '/ledger'), { person: true });
+}
+
+export function unpaidSales(userId: string): Promise<unknown> {
+  return mainRequest('GET', debtorPath(userId, '/unpaid-sales'), { person: true });
+}
+
+export function debtorSale(userId: string, saleId: string): Promise<unknown> {
+  return mainRequest('GET', debtorPath(userId, `/sales/${encodeURIComponent(saleId)}`), { person: true });
+}
+
+/**
+ * Not repeated on its own after a lost answer: a payment is not idempotent, and paying twice is
+ * worse than the cashier seeing an error and checking the balance.
+ */
+export function recordDebtPayment(data: { userId: string }): Promise<{ settledSales: string[] }> {
+  return mainRequest('POST', debtorPath(data.userId, '/payments'), {
+    person: true,
+    body: data,
+    timeoutMs: SALE_TIMEOUT_MS,
+  });
+}
+
+export function adjustDebt(data: { userId: string }): Promise<unknown> {
+  return mainRequest('POST', debtorPath(data.userId, '/adjustments'), { person: true, body: data });
 }
 
 // ── Shifts (§5.14) ──────────────────────────────────────────────────────────────────────────────

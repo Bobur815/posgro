@@ -4,6 +4,7 @@ import { badRequest, forbidden, notFound, unauthorized, type Route } from '../ro
 import { AttemptThrottle } from '../../ipc/override-throttle';
 import { generateDeviceSecret, redeemPairingCode } from '../pairing';
 import { signTerminalToken } from '../auth';
+import { mayPair } from '../../license/license';
 
 /**
  * A six-digit code is only safe with something in front of it. bcrypt does not help here — the
@@ -97,6 +98,13 @@ export const terminalRoutes: Route[] = [
         throw forbidden('Pairing code is wrong or has expired');
       }
       pairingThrottle.reset();
+
+      // Every till takes one of the store's terminal slots, a satellite too — or pairing would be
+      // the way around the plan's limit. Checked after the code, so a stranger on the wifi cannot
+      // use it to learn anything about the store.
+      if (!(await mayPair(terminalId))) {
+        throw forbidden('No free terminal slot on the store plan');
+      }
 
       const secret = generateDeviceSecret();
       const secretHash = await bcrypt.hash(secret, 10);

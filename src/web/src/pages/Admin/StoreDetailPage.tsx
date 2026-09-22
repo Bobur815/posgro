@@ -1,57 +1,110 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import styled from "styled-components";
-import { X, RefreshCw } from "lucide-react";
-import { stores, siteConfig, StoreRecord, StoreStats } from "../../api/client";
+import { useNavigate, useParams } from "react-router-dom";
+import { Pencil, RefreshCw } from "lucide-react";
+import {
+  stores,
+  siteConfig,
+  StoreRecord,
+  StoreStats,
+  type BalanceTransaction,
+  type NextCharge,
+  type PlanTerminals,
+  type StoreTerminal,
+  type SubscriptionPlanPrices,
+} from "../../api/client";
 import { formatPhone } from "@shared/utils/phone";
 import {
+  DEFAULT_PLAN_TERMINALS,
   DEFAULT_SUBSCRIPTION_RULES,
+  TERMINAL_LIMITS,
+  terminalAllowance,
   storeSubscriptionFacts,
   subscriptionStatus,
   type SubscriptionRules,
   type SubscriptionState,
 } from "@shared/utils/subscription";
+import { StoreBreadcrumb } from "./StoreBreadcrumb";
 
-const Overlay = styled.div`
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-`;
+const Page = styled.div`
+  padding: 32px;
+  max-width: 900px;
 
-const Modal = styled.div`
-  background: ${({ theme }) => theme.colors.surface};
-  border-radius: 10px;
-  width: 100%;
-  max-width: 540px;
-  padding: 24px;
-  max-height: 90vh;
-  overflow-y: auto;
-`;
-
-const ModalHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-`;
-
-const ModalTitle = styled.h2`
-  margin: 0;
-  font-size: 18px;
-  color: ${({ theme }) => theme.colors.text};
-`;
-
-const CloseBtn = styled.button`
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: ${({ theme }) => theme.colors.textSecondary};
-  &:hover {
-    color: ${({ theme }) => theme.colors.text};
+  @media (max-width: 600px) {
+    padding: 16px;
   }
+`;
+
+const Header = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+`;
+
+const Subtitle = styled.div`
+  font-size: 14px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  margin: 4px 0 16px;
+`;
+
+const HeaderActions = styled.div`
+  display: flex;
+  gap: 10px;
+`;
+
+const HeaderBtn = styled.button<{ $primary?: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid
+    ${({ $primary, theme }) => ($primary ? theme.colors.primary : theme.colors.border)};
+  background: ${({ $primary, theme }) => ($primary ? theme.colors.primary : "transparent")};
+  color: ${({ $primary, theme }) => ($primary ? "#fff" : theme.colors.text)};
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const Ledger = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 12px;
+
+  th,
+  td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid ${({ theme }) => theme.colors.border};
+  }
+  th {
+    color: ${({ theme }) => theme.colors.textSecondary};
+    font-weight: 600;
+  }
+  td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+`;
+
+const LedgerScroll = styled.div`
+  overflow-x: auto;
+`;
+
+const Amount = styled.span<{ $in: boolean }>`
+  color: ${({ $in, theme }) => ($in ? theme.colors.success ?? "#16a34a" : theme.colors.error)};
+  font-weight: 600;
 `;
 
 const SectionTitle = styled.h3`
@@ -179,13 +232,71 @@ const ErrorMsg = styled.div`
   margin-top: 8px;
 `;
 
+const uzs = (n: number) => `${Math.round(n).toLocaleString("ru-UZ")} so'm`;
+
+const LEDGER_LABEL: Record<BalanceTransaction["type"], string> = {
+  TOPUP: "Top-up",
+  SUBSCRIPTION: "Subscription",
+  AI_SCAN: "AI scan",
+  ADJUSTMENT: "Adjustment",
+};
+
+/**
+ * One store (/admin/stores/:id). Loads it by the id in the URL, so a reload or a shared link opens
+ * the same store.
+ */
+export function StoreDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [store, setStore] = useState<StoreRecord | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    if (!id) return;
+    setError(null);
+    stores
+      .getById(id)
+      .then(setStore)
+      .catch((e: Error) => setError(e.message));
+  }, [id]);
+
+  useEffect(load, [load]);
+
+  return (
+    <Page>
+      <Header>
+        <StoreBreadcrumb items={[{ label: store?.name ?? "…" }]} />
+        {store && (
+          <HeaderActions>
+            <HeaderBtn type="button" onClick={load}>
+              <RefreshCw size={16} />
+              Refresh
+            </HeaderBtn>
+            <HeaderBtn type="button" $primary onClick={() => navigate(`/admin/stores/${store.id}/edit`)}>
+              <Pencil size={16} />
+              Edit
+            </HeaderBtn>
+          </HeaderActions>
+        )}
+      </Header>
+      {store?.address && <Subtitle>{store.address}</Subtitle>}
+      {error && <ErrorMsg>{error}</ErrorMsg>}
+      {!store && !error && (
+        <div style={{ display: "flex", gap: 8, color: "#6b7280", fontSize: 14, marginTop: 16 }}>
+          <RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }} /> Loading…
+        </div>
+      )}
+      {store && <StoreDetails store={store} onUpdated={load} />}
+    </Page>
+  );
+}
+
 interface Props {
   store: StoreRecord;
-  onClose: () => void;
   onUpdated: () => void;
 }
 
-export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
+function StoreDetails({ store, onUpdated }: Props) {
   const [stats, setStats] = useState<StoreStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
 
@@ -210,8 +321,90 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
       .catch(() => {});
   }, []);
 
+  // Terminals: the plan's own (site config) plus the extras bought here, and who holds a slot.
+  const [extraTerminals, setExtraTerminals] = useState(store.extraTerminals ?? 0);
+  const [planTerminals, setPlanTerminals] = useState<PlanTerminals>(DEFAULT_PLAN_TERMINALS);
+  const [prices, setPrices] = useState<SubscriptionPlanPrices | null>(null);
+  const [terminalList, setTerminalList] = useState<StoreTerminal[] | null>(null);
+  const [savingTerminals, setSavingTerminals] = useState(false);
+  const [terminalsError, setTerminalsError] = useState<string | null>(null);
+
+  const loadTerminals = () => {
+    stores
+      .listTerminals(store.id)
+      .then(setTerminalList)
+      .catch(() => setTerminalList(null));
+  };
+
+  useEffect(() => {
+    siteConfig.getPlanTerminals().then(setPlanTerminals).catch(() => {});
+    siteConfig.getSubscriptionPlans().then(setPrices).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setExtraTerminals(store.extraTerminals ?? 0);
+    loadTerminals();
+  }, [store]);
+
+  // Judged on the plan picked above, so choosing a plan previews what it would allow.
+  const includedTerminals = currentSubPlan ? terminalAllowance(currentSubPlan, 0, planTerminals) : null;
+  const allowedTerminals = currentSubPlan
+    ? terminalAllowance(currentSubPlan, extraTerminals, planTerminals)
+    : null;
+  const planPrice =
+    prices && currentSubPlan && currentSubPlan !== "TRIAL"
+      ? prices[currentSubPlan.toLowerCase() as "starter" | "pro" | "vip"]
+      : 0;
+  const extrasPrice = (prices?.extraTerminal ?? 0) * extraTerminals;
+
+  const handleTerminalsSave = async () => {
+    setSavingTerminals(true);
+    setTerminalsError(null);
+    try {
+      await stores.update(store.id, { extraTerminals });
+      onUpdated();
+    } catch (e) {
+      setTerminalsError((e as Error).message);
+    } finally {
+      setSavingTerminals(false);
+    }
+  };
+
+  const handleFreeSlot = async (terminalId: string) => {
+    if (
+      !window.confirm(
+        `Free ${terminalId}'s slot? The next terminal waiting takes it. If ${terminalId} is still in use, it registers again as the newest.`,
+      )
+    ) {
+      return;
+    }
+    setTerminalsError(null);
+    try {
+      await stores.removeTerminal(store.id, terminalId);
+      loadTerminals();
+      onUpdated();
+    } catch (e) {
+      setTerminalsError((e as Error).message);
+    }
+  };
+
   // Where the saved plan and date stand today — the same rule the server blocks by.
   const subStatus = subscriptionStatus(storeSubscriptionFacts(store), rules);
+
+  // Balance: it pays the subscription and AI scans. The next charge and the ledger come with it.
+  const [nextCharge, setNextCharge] = useState<NextCharge | null>(null);
+  const [ledger, setLedger] = useState<BalanceTransaction[] | null>(null);
+  const [creditNote, setCreditNote] = useState("");
+  const loadBilling = () => {
+    stores
+      .getBilling(store.id)
+      .then((b) => {
+        setNextCharge(b.nextCharge);
+        setLedger(b.transactions);
+      })
+      .catch(() => setLedger(null));
+  };
+  useEffect(loadBilling, [store]);
 
   // Credit top-up
   const [creditAmount, setCreditAmount] = useState("");
@@ -277,8 +470,10 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
     setAddingCredit(true);
     setCreditError(null);
     try {
-      await stores.addCredits(store.id, amount);
+      await stores.addCredits(store.id, amount, creditNote.trim() || undefined);
       setCreditAmount("");
+      setCreditNote("");
+      loadBilling();
       loadStats();
       onUpdated();
     } catch (e) {
@@ -289,24 +484,10 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
   };
 
   const revenue = stats?.stats.totalRevenue ?? 0;
-  const balance = stats?.store.balance ?? 0;
+  const balance = nextCharge?.balanceUzs ?? ledger?.[0]?.balanceAfter ?? stats?.store.balance ?? 0;
 
   return (
-    <Overlay onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <Modal>
-        <ModalHeader>
-          <div>
-            <ModalTitle>{store.name}</ModalTitle>
-            {store.address && (
-              <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
-                {store.address}
-              </div>
-            )}
-          </div>
-          <CloseBtn onClick={onClose}>
-            <X size={18} />
-          </CloseBtn>
-        </ModalHeader>
+    <>
 
         {/* Stats */}
         <SectionTitle>Statistics</SectionTitle>
@@ -445,6 +626,95 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
           {subError && <ErrorMsg>{subError}</ErrorMsg>}
         </PlanCard>
 
+        {/* Terminals */}
+        <SectionTitle>Terminals</SectionTitle>
+        <PlanCard $pro={allowedTerminals === null || extraTerminals > 0}>
+          <PlanRow>
+            <PlanLabel>Included in {currentSubPlan ?? "plan"}</PlanLabel>
+            <PlanBadge>{includedTerminals ?? "Unlimited"}</PlanBadge>
+          </PlanRow>
+          <PlanRow>
+            <PlanLabel>Extra terminals</PlanLabel>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <PlanBtn
+                type="button"
+                style={{ flex: "none", padding: "4px 12px" }}
+                disabled={savingTerminals || extraTerminals <= TERMINAL_LIMITS.extra.min}
+                onClick={() => setExtraTerminals((n) => Math.max(TERMINAL_LIMITS.extra.min, n - 1))}
+              >
+                −
+              </PlanBtn>
+              <strong style={{ minWidth: 24, textAlign: "center" }}>{extraTerminals}</strong>
+              <PlanBtn
+                type="button"
+                style={{ flex: "none", padding: "4px 12px" }}
+                disabled={savingTerminals || extraTerminals >= TERMINAL_LIMITS.extra.max}
+                onClick={() => setExtraTerminals((n) => Math.min(TERMINAL_LIMITS.extra.max, n + 1))}
+              >
+                +
+              </PlanBtn>
+            </div>
+          </PlanRow>
+          <PlanRow>
+            <PlanLabel>Allowed / registered</PlanLabel>
+            <PlanBadge
+              $pro={allowedTerminals === null || (terminalList?.length ?? 0) <= allowedTerminals}
+            >
+              {allowedTerminals ?? "∞"} / {terminalList?.length ?? "…"}
+            </PlanBadge>
+          </PlanRow>
+          {prices && (
+            <PlanNote>
+              {currentSubPlan === "VIP"
+                ? `Extras: ${extraTerminals} × ${prices.extraTerminal.toLocaleString("ru-UZ")} = ${extrasPrice.toLocaleString("ru-UZ")} so'm/month`
+                : `Monthly: ${planPrice.toLocaleString("ru-UZ")} + ${extraTerminals} × ${prices.extraTerminal.toLocaleString("ru-UZ")} = ${(planPrice + extrasPrice).toLocaleString("ru-UZ")} so'm`}
+              {allowedTerminals === null && extraTerminals > 0 && " — this plan is unlimited, so extras change nothing."}
+            </PlanNote>
+          )}
+          {prices && extraTerminals > 0 && prices.extraTerminal <= 0 && (
+            <PlanNote style={{ color: "#dc2626" }}>
+              No extra-terminal price is set, so these extras are charged 0. Set it on the
+              Subscription Plans page.
+            </PlanNote>
+          )}
+          <PlanBtn
+            $active
+            onClick={handleTerminalsSave}
+            disabled={savingTerminals || extraTerminals === (store.extraTerminals ?? 0)}
+            style={{ flex: "none", width: "100%", marginBottom: 12 }}
+          >
+            {savingTerminals ? "Saving…" : "Save Terminals"}
+          </PlanBtn>
+
+          {terminalList && terminalList.length === 0 && (
+            <PlanNote>No terminal has registered yet — a till registers when it next renews its license.</PlanNote>
+          )}
+          {terminalList?.map((t, i) => {
+            const holds = allowedTerminals === null || i < allowedTerminals;
+            return (
+              <PlanRow key={t.terminalId}>
+                <div>
+                  <strong>{t.terminalId}</strong>{" "}
+                  <StateBadge $color={holds ? "#16a34a" : "#dc2626"}>
+                    {holds ? "Has a slot" : "Waiting"}
+                  </StateBadge>
+                  <div style={{ fontSize: 12, color: "#6b7280" }}>
+                    First seen {moment(t.firstSeenAt)} · last {moment(t.lastSeenAt)}
+                  </div>
+                </div>
+                <PlanBtn
+                  type="button"
+                  style={{ flex: "none", padding: "4px 10px", fontSize: 12 }}
+                  onClick={() => handleFreeSlot(t.terminalId)}
+                >
+                  Free slot
+                </PlanBtn>
+              </PlanRow>
+            );
+          })}
+          {terminalsError && <ErrorMsg>{terminalsError}</ErrorMsg>}
+        </PlanCard>
+
         {/* AI Invoice Scanning Plan */}
         <SectionTitle>AI Invoice Scanning</SectionTitle>
         <PlanCard $pro={currentAiPlan === "paid"}>
@@ -488,18 +758,44 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
           {aiPlanError && <ErrorMsg>{aiPlanError}</ErrorMsg>}
         </PlanCard>
 
-        {/* Balance (AI credit top-up) */}
-        <SectionTitle>AI Credit Balance</SectionTitle>
-        <PlanCard>
+        {/* Balance — pays the subscription and paid AI scans */}
+        <SectionTitle>Balance</SectionTitle>
+        <PlanCard $pro={balance >= 0}>
           <PlanRow>
-            <PlanLabel>Current Balance</PlanLabel>
-            <PlanBadge $pro={balance > 0}>
-              {balance.toLocaleString("ru-UZ", { maximumFractionDigits: 0 })} so'm
-            </PlanBadge>
+            <PlanLabel>Current balance</PlanLabel>
+            <StateBadge $color={balance < 0 ? "#dc2626" : balance > 0 ? "#16a34a" : "#6b7280"}>
+              {uzs(balance)}
+            </StateBadge>
           </PlanRow>
+          {nextCharge ? (
+            <>
+              <PlanRow>
+                <PlanLabel>Next charge</PlanLabel>
+                <strong>
+                  {uzs(nextCharge.amountUzs)} · {moment(nextCharge.at)}
+                </strong>
+              </PlanRow>
+              {nextCharge.owedUzs > 0 && (
+                <PlanNote style={{ color: "#dc2626" }}>
+                  The last charge left the balance negative: {uzs(nextCharge.owedUzs)} is owed.
+                  The month renews as soon as a top-up covers it; until then the grace days run,
+                  then the store is blocked.
+                </PlanNote>
+              )}
+            </>
+          ) : (
+            <PlanNote>
+              {currentSubPlan === "VIP"
+                ? "VIP is not billed monthly."
+                : currentSubPlan === "TRIAL"
+                  ? "TRIAL is free; it simply runs out."
+                  : "Not billed: give the store a STARTER or PRO plan with an expiry date."}
+            </PlanNote>
+          )}
           <PlanNote style={{ marginBottom: 12 }}>
-            When a client transfers payment (card, cash, etc.), enter the
-            amount in UZS to top up their credit balance.
+            The subscription is charged from here on its expiry date — into the negative if need
+            be — and paid AI scans too. When a client transfers payment (card, cash, etc.), enter
+            the amount in UZS.
           </PlanNote>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <input
@@ -529,7 +825,66 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
               {addingCredit ? "Adding…" : "Add Credit"}
             </PlanBtn>
           </div>
+          <input
+            type="text"
+            maxLength={200}
+            placeholder="Note (optional) — e.g. Click payment #1234"
+            value={creditNote}
+            onChange={(e) => setCreditNote(e.target.value)}
+            style={{
+              width: "100%",
+              marginTop: 8,
+              padding: "8px 10px",
+              border: "1px solid #d1d5db",
+              borderRadius: 6,
+              fontSize: 14,
+              background: "transparent",
+              color: "inherit",
+              boxSizing: "border-box",
+            }}
+          />
           {creditError && <ErrorMsg style={{ marginTop: 6 }}>{creditError}</ErrorMsg>}
+
+          {ledger && ledger.length > 0 && (
+            <LedgerScroll>
+              <Ledger>
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>What</th>
+                    <th className="num">Amount</th>
+                    <th className="num">Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledger.map((row) => (
+                    <tr key={row.id}>
+                      <td>{moment(row.createdAt)}</td>
+                      <td>
+                        {LEDGER_LABEL[row.type] ?? row.type}
+                        {row.type === "SUBSCRIPTION" && row.periodStart && (
+                          <> — from {new Date(row.periodStart).toLocaleDateString()}</>
+                        )}
+                        {row.note && (
+                          <div style={{ fontSize: 12, color: "#6b7280" }}>{row.note}</div>
+                        )}
+                      </td>
+                      <td className="num">
+                        <Amount $in={row.amount >= 0}>
+                          {row.amount >= 0 ? "+" : "−"}
+                          {uzs(Math.abs(row.amount))}
+                        </Amount>
+                      </td>
+                      <td className="num">{uzs(row.balanceAfter)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Ledger>
+            </LedgerScroll>
+          )}
+          {ledger && ledger.length === 0 && (
+            <PlanNote style={{ marginTop: 12 }}>No balance movements yet.</PlanNote>
+          )}
         </PlanCard>
 
         {/* Info */}
@@ -549,7 +904,6 @@ export function StoreDetailModal({ store, onClose, onUpdated }: Props) {
             {new Date(store.createdAt).toLocaleDateString()}
           </div>
         </div>
-      </Modal>
-    </Overlay>
+    </>
   );
 }

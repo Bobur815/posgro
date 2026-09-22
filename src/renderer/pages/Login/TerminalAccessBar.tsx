@@ -322,6 +322,10 @@ export function TerminalAccessBar() {
   const expired =
     !!subscription?.expiresAt &&
     new Date(subscription.expiresAt).getTime() < Date.now();
+  const terminalsOver =
+    !!subscription?.terminals &&
+    subscription.terminals.allowed !== null &&
+    subscription.terminals.used > subscription.terminals.allowed;
 
   // Nothing to pay with until the operator has configured a QR payload or a pay link, so the
   // button stays disabled rather than opening an empty dialog.
@@ -532,6 +536,48 @@ export function TerminalAccessBar() {
                   </InfoValue>
                 </InfoRow>
 
+                {/* How many tills the plan allows, against how many have registered. Over the
+                    limit, the newest are refused until a slot is freed or bought. */}
+                <InfoRow>
+                  <InfoLabel>{t("subscription.terminals")}</InfoLabel>
+                  <InfoValue
+                    $muted={!subscription?.terminals}
+                    $warn={terminalsOver}
+                  >
+                    {!subscription?.terminals
+                      ? "—"
+                      : subscription.terminals.allowed === null
+                        ? t("subscription.terminalsUnlimited", {
+                            used: subscription.terminals.used,
+                          })
+                        : t("subscription.terminalsUsed", {
+                            used: subscription.terminals.used,
+                            allowed: subscription.terminals.allowed,
+                          })}
+                  </InfoValue>
+                </InfoRow>
+                {subscription?.terminals && subscription.terminals.allowed !== null && (
+                  <Hint style={{ marginTop: 0 }}>
+                    {t("subscription.terminalsDetail", {
+                      included: subscription.terminals.included ?? 0,
+                      extra: subscription.terminals.extra,
+                    })}{" "}
+                    {subscription.terminals.extraPriceUzs > 0 &&
+                      t("subscription.terminalsExtraPrice", {
+                        price: formatCurrency(
+                          subscription.terminals.extraPriceUzs,
+                          i18n.language === "uz" ? "uz" : "ru",
+                        ),
+                      })}
+                    {terminalsOver && (
+                      <>
+                        {" "}
+                        {t("subscription.terminalsOver")}
+                      </>
+                    )}
+                  </Hint>
+                )}
+
                 <InfoRow>
                   <InfoLabel>{t("subscription.aiPlan")}</InfoLabel>
                   <InfoValue>
@@ -543,7 +589,10 @@ export function TerminalAccessBar() {
 
                 <InfoRow>
                   <InfoLabel>{t("subscription.storeBalance")}</InfoLabel>
-                  <InfoValue $muted={subscription?.balanceUzs == null}>
+                  <InfoValue
+                    $muted={subscription?.balanceUzs == null}
+                    $warn={(subscription?.balanceUzs ?? 0) < 0}
+                  >
                     {subscription?.balanceUzs == null
                       ? "—"
                       : formatCurrency(
@@ -552,6 +601,32 @@ export function TerminalAccessBar() {
                         )}
                   </InfoValue>
                 </InfoRow>
+
+                {/* The subscription is paid from the balance above: when, and how much. */}
+                {subscription?.nextCharge && (
+                  <InfoRow>
+                    <InfoLabel>{t("subscription.nextCharge")}</InfoLabel>
+                    <InfoValue>
+                      {t("subscription.nextChargeValue", {
+                        amount: formatCurrency(
+                          subscription.nextCharge.amountUzs,
+                          i18n.language === "uz" ? "uz" : "ru",
+                        ),
+                        date: formatExpiry(subscription.nextCharge.at, i18n.language) ?? "",
+                      })}
+                    </InfoValue>
+                  </InfoRow>
+                )}
+                {subscription?.nextCharge && subscription.nextCharge.owedUzs > 0 && (
+                  <Hint style={{ marginTop: 0 }}>
+                    {t("subscription.owed", {
+                      amount: formatCurrency(
+                        subscription.nextCharge.owedUzs,
+                        i18n.language === "uz" ? "uz" : "ru",
+                      ),
+                    })}
+                  </Hint>
+                )}
 
                 {/* Say so rather than passing off a cached snapshot as the live state — and say
                     WHICH failure it was, because each one has a different fix. Dashes with no

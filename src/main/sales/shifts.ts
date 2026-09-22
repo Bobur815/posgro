@@ -162,7 +162,7 @@ export function openShift(
     const prisma = getPrismaClient();
 
     // No new shift on a blocked till — shared with the satellite route, so theirs too.
-    const refusal = await sellingRefusal();
+    const refusal = await sellingRefusal(terminalId);
     if (refusal) throw new SaleRefusedError(refusal);
 
     const existing = await prisma.smena.findFirst({ where: { terminalId, status: 'OPEN' } });

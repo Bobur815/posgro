@@ -141,6 +141,61 @@ export function subscriptionStatus(
   return { state: 'blocked', ...dated, daysLeft: 0 };
 }
 
+// ── Terminals ──────────────────────────────────────────────────────────────────────────────────
+
+export const PLANS = ['TRIAL', 'STARTER', 'PRO', 'VIP'] as const;
+export type Plan = (typeof PLANS)[number];
+
+/**
+ * How many terminals each plan includes (site config `subscription_terminals`), set by the super
+ * admin. Null is unlimited.
+ */
+export type PlanTerminals = Record<Plan, number | null>;
+
+export const DEFAULT_PLAN_TERMINALS: PlanTerminals = { TRIAL: 1, STARTER: 1, PRO: 3, VIP: null };
+
+/** Bounds for a plan's included terminals and for a store's extra ones. */
+export const TERMINAL_LIMITS = { included: { min: 1, max: 999 }, extra: { min: 0, max: 999 } } as const;
+
+/**
+ * Plan terminals as saved, made whole: a missing or unreadable value takes its default, null (or
+ * an empty string, from a cleared field) stays unlimited, and a number is held to its bounds.
+ */
+export function normalizePlanTerminals(
+  input: Partial<Record<Plan, unknown>> | null | undefined,
+): PlanTerminals {
+  const src = input ?? {};
+  const { min, max } = TERMINAL_LIMITS.included;
+  const out = { ...DEFAULT_PLAN_TERMINALS };
+  for (const plan of PLANS) {
+    const raw = src[plan];
+    if (raw === null || raw === '') {
+      out[plan] = null;
+      continue;
+    }
+    const value = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN;
+    if (Number.isFinite(value)) out[plan] = Math.min(max, Math.max(min, Math.round(value)));
+  }
+  return out;
+}
+
+/**
+ * How many terminals a store may run: its plan's own plus the extra ones bought, or null for no
+ * limit. A store with no plan — or one this build does not know — is not limited here: whether it
+ * may work at all is `subscriptionStatus`'s question, not this one's.
+ */
+export function terminalAllowance(
+  plan: string | null | undefined,
+  extraTerminals: number | null | undefined,
+  planTerminals: PlanTerminals = DEFAULT_PLAN_TERMINALS,
+): number | null {
+  const key = plan?.trim() as Plan | undefined;
+  if (!key || !(PLANS as readonly string[]).includes(key)) return null;
+  const included = planTerminals[key];
+  if (included === null) return null;
+  return included + Math.max(0, Math.round(extraTerminals ?? 0));
+}
+
 /** A store row's subscription columns, by their Prisma names, as the facts the rule reads. */
 export function storeSubscriptionFacts(store: {
   subscriptionPlan?: string | null;
@@ -154,4 +209,60 @@ export function storeSubscriptionFacts(store: {
     graceFrom: store.subscriptionGraceFrom,
     required: store.subscriptionRequired,
   };
+}
+
+// ── Billing ────────────────────────────────────────────────────────────────────────────────────
+
+/** Plans billed monthly from the store balance. TRIAL runs out; VIP was bought outright. */
+export const BILLED_PLANS: readonly string[] = ['STARTER', 'PRO'];
+
+/** The prices a fee is made of (site config `subscription_price_*`), in UZS. */
+export interface FeePrices {
+  starter: number;
+  pro: number;
+  extraTerminal: number;
+}
+
+/**
+ * A month of this plan with these extra terminals, in UZS — or null when the plan is not billed.
+ * The dashboard shows this and the billing job charges it, so both read the same number.
+ */
+export function monthlyFee(
+  plan: string | null | undefined,
+  extraTerminals: number | null | undefined,
+  prices: FeePrices,
+): number | null {
+  const key = plan?.trim();
+  if (!key || !BILLED_PLANS.includes(key)) return null;
+  const base = key === 'PRO' ? prices.pro : prices.starter;
+  const extras = Math.max(0, Math.round(extraTerminals ?? 0));
+  return Math.max(0, Math.round(base + extras * prices.extraTerminal));
+}
+
+/**
+ * One calendar month on, at the same time of day: 22 Sep → 22 Oct. A day the next month lacks is
+ * held to its last day (31 Jan → 28 Feb), rather than spilling into the month after.
+ */
+export function addMonth(from: Date | string): Date {
+  const d = new Date(from);
+  const day = d.getUTCDate();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + 1);
+  const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day, lastDay));
+  return d;
+}
+
+/**
+ * The new expiry date once an overdue period is paid for. Paid while the store still worked — in
+ * its warning or grace days — the month counts from the old expiry, as the store used those days.
+ * Paid after the block, it counts from the payment: the store is not billed for days it could not
+ * use.
+ */
+export function renewedExpiry(
+  expiresAt: Date | string,
+  state: SubscriptionState,
+  now: Date | number = Date.now(),
+): Date {
+  return state === 'blocked' ? addMonth(new Date(now)) : addMonth(expiresAt);
 }

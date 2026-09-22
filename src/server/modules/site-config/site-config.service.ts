@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
+  normalizePlanTerminals,
   normalizeSubscriptionRules,
+  type PlanTerminals,
   type SubscriptionRules,
 } from '../../../shared/utils/subscription';
 import {
@@ -21,6 +23,8 @@ export interface SubscriptionPlanPrices {
   starter: number;
   pro: number;
   vip: number;
+  /** A month of one terminal beyond the plan's own (`Store.extraTerminals`). */
+  extraTerminal: number;
 }
 
 /**
@@ -42,6 +46,8 @@ const BANNER_KEY = 'login_banner';
 const WEB_BANNER_KEY = 'web_login_banner';
 const PAYMENT_KEY = 'subscription_payment';
 const RULES_KEY = 'subscription_rules';
+/** How many terminals each plan includes (shared/utils/subscription.ts#terminalAllowance). */
+const PLAN_TERMINALS_KEY = 'subscription_terminals';
 /**
  * Landing-page content edited from the dashboard (tasks/DOMAIN_MIGRATION_POSGRO.md §9.1).
  * `landing_plans` holds presentation ONLY — the prices stay in `subscription_price_*`, which the
@@ -57,7 +63,13 @@ const LANDING_CONTACT_KEY = 'landing_contact';
  */
 const RULES_CACHE_MS = 60_000;
 const DEFAULT: LoginBanner = { imageUrl: '', title: '', subtitle: '' };
-const DEFAULT_PRICES: SubscriptionPlanPrices = { starter: 0, pro: 0, vip: 0 };
+const DEFAULT_PRICES: SubscriptionPlanPrices = { starter: 0, pro: 0, vip: 0, extraTerminal: 0 };
+const PRICE_KEYS: Record<keyof SubscriptionPlanPrices, string> = {
+  starter: 'subscription_price_starter',
+  pro: 'subscription_price_pro',
+  vip: 'subscription_price_vip',
+  extraTerminal: 'subscription_price_extra_terminal',
+};
 const DEFAULT_PAYMENT: SubscriptionPayment = { qrPayload: '', paymentUrl: '', supportPhone: '' };
 
 function parseBanner(value: string): LoginBanner {
@@ -108,22 +120,29 @@ export class SiteConfigService {
 
   async getSubscriptionPlans(): Promise<SubscriptionPlanPrices> {
     const rows = await this.prisma.siteConfig.findMany({
-      where: { key: { in: ['subscription_price_starter', 'subscription_price_pro', 'subscription_price_vip'] } },
+      where: { key: { in: Object.values(PRICE_KEYS) } },
     });
     const map = Object.fromEntries(rows.map((r) => [r.key, Number(r.value)]));
+    const price = (k: keyof SubscriptionPlanPrices) =>
+      Number.isFinite(map[PRICE_KEYS[k]]) ? map[PRICE_KEYS[k]] : DEFAULT_PRICES[k];
     return {
-      starter: map['subscription_price_starter'] ?? DEFAULT_PRICES.starter,
-      pro: map['subscription_price_pro'] ?? DEFAULT_PRICES.pro,
-      vip: map['subscription_price_vip'] ?? DEFAULT_PRICES.vip,
+      starter: price('starter'),
+      pro: price('pro'),
+      vip: price('vip'),
+      extraTerminal: price('extraTerminal'),
     };
   }
 
-  async setSubscriptionPlans(prices: SubscriptionPlanPrices): Promise<SubscriptionPlanPrices> {
-    const entries: Array<{ key: string; value: string }> = [
-      { key: 'subscription_price_starter', value: String(Math.round(prices.starter)) },
-      { key: 'subscription_price_pro', value: String(Math.round(prices.pro)) },
-      { key: 'subscription_price_vip', value: String(Math.round(prices.vip)) },
-    ];
+  /**
+   * Save the prices sent. A client from before extra terminals sends no `extraTerminal`; that
+   * price is then left as it is rather than reset.
+   */
+  async setSubscriptionPlans(
+    prices: Omit<SubscriptionPlanPrices, 'extraTerminal'> & { extraTerminal?: number },
+  ): Promise<SubscriptionPlanPrices> {
+    const entries = (Object.keys(PRICE_KEYS) as Array<keyof SubscriptionPlanPrices>)
+      .filter((k) => typeof prices[k] === 'number')
+      .map((k) => ({ key: PRICE_KEYS[k], value: String(Math.round(prices[k] as number)) }));
     await Promise.all(
       entries.map((e) =>
         this.prisma.siteConfig.upsert({
@@ -133,7 +152,38 @@ export class SiteConfigService {
         }),
       ),
     );
-    return prices;
+    return this.getSubscriptionPlans();
+  }
+
+  private planTerminalsCache: { terminals: PlanTerminals; at: number } | null = null;
+
+  /**
+   * How many terminals each plan includes, defaults until saved. Cached like the rules: every
+   * license a till renews reads it.
+   */
+  async getPlanTerminals(): Promise<PlanTerminals> {
+    if (this.planTerminalsCache && Date.now() - this.planTerminalsCache.at < RULES_CACHE_MS) {
+      return this.planTerminalsCache.terminals;
+    }
+    const row = await this.prisma.siteConfig.findUnique({ where: { key: PLAN_TERMINALS_KEY } });
+    const saved = row ? safeParse(row.value) : null;
+    const terminals = normalizePlanTerminals(
+      saved && typeof saved === 'object' ? (saved as Record<string, unknown>) : null,
+    );
+    this.planTerminalsCache = { terminals, at: Date.now() };
+    return terminals;
+  }
+
+  async setPlanTerminals(input: Partial<Record<keyof PlanTerminals, unknown>>): Promise<PlanTerminals> {
+    const terminals = normalizePlanTerminals(input);
+    const value = JSON.stringify(terminals);
+    await this.prisma.siteConfig.upsert({
+      where: { key: PLAN_TERMINALS_KEY },
+      update: { value },
+      create: { key: PLAN_TERMINALS_KEY, value },
+    });
+    this.planTerminalsCache = { terminals, at: Date.now() };
+    return terminals;
   }
 
   async getSubscriptionPayment(): Promise<SubscriptionPayment> {

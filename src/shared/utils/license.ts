@@ -25,6 +25,19 @@ export interface LicensePayload {
   issuedAt: string;
   /** The till must reach the server again by then, even in a store that never syncs. */
   checkinBy: string;
+  /**
+   * How many terminals the store may run, and which hold a slot as of signing — the earliest to
+   * have claimed one. Both absent when nothing limits it (an unlimited plan, or a server from
+   * before terminal limits), which reads as every till holding one. Optional rather than a new
+   * LICENSE_VERSION: a till from before checks `v === 1` and ignores what it does not know.
+   */
+  terminals?: number;
+  seats?: string[];
+}
+
+/** Whether `terminalId` holds one of the store's slots by this license. */
+export function holdsSeat(license: Pick<LicensePayload, 'seats'>, terminalId: string): boolean {
+  return !license.seats || license.seats.includes(terminalId);
 }
 
 /** Where a till stands by its license: the subscription states, plus overdue for a check-in. */
@@ -74,7 +87,10 @@ function isLicensePayload(p: unknown): p is LicensePayload {
     isDateOrNull(o.warnFrom) &&
     isDateOrNull(o.blockAt) &&
     isDate(o.issuedAt) &&
-    isDate(o.checkinBy)
+    isDate(o.checkinBy) &&
+    (o.terminals === undefined || (typeof o.terminals === 'number' && o.terminals >= 0)) &&
+    (o.seats === undefined ||
+      (Array.isArray(o.seats) && o.seats.every((id) => typeof id === 'string')))
   );
 }
 
@@ -84,6 +100,7 @@ export function licensePayload(
   status: SubscriptionStatus,
   issuedAt: number,
   checkinDays: number,
+  seating?: { terminals: number; seats: string[] } | null,
 ): LicensePayload {
   const at = new Date(issuedAt).toISOString();
   // Blocked with no dates — a new store with no plan — is blocked from the moment of signing.
@@ -98,6 +115,7 @@ export function licensePayload(
     ...dates,
     issuedAt: at,
     checkinBy: new Date(issuedAt + checkinDays * DAY_MS).toISOString(),
+    ...(seating ? { terminals: seating.terminals, seats: seating.seats } : {}),
   };
 }
 

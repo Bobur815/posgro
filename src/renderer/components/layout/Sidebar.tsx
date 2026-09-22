@@ -319,10 +319,17 @@ export function Sidebar() {
           )}
 
           {!isAdmin && (
-            <NavSection>
-              <SectionTitle>{t("nav.settings")}</SectionTitle>
-              {renderNavItem("/settings/user", User, t("nav.userSettings"))}
-            </NavSection>
+            <>
+              <NavSection>
+                <SectionTitle>{t("nav.management")}</SectionTitle>
+                {renderNavItem("/debtors", HandCoins, t("debtors.title"))}
+              </NavSection>
+              <NavSection>
+                <SectionTitle>{t("nav.settings")}</SectionTitle>
+                {renderNavItem("/settings/user", User, t("nav.userSettings"))}
+                {renderNavItem("/settings/app-update", Download, t("settings.appUpdate"))}
+              </NavSection>
+            </>
           )}
         </Nav>
 
@@ -337,11 +344,14 @@ export function Sidebar() {
                     ? `${t("sync.lastSync")}: ${new Date(status.lastSyncTime).toLocaleTimeString()}`
                     : t("sync.notSynced")}
               </SyncText>
-              <SidebarSyncBtn
-                onSync={handleSyncNow}
-                size={15}
-                title={t("settings.syncNow")}
-              />
+              {/* A satellite syncs with its main by itself: status, but no button. */}
+              {!isSatellite && (
+                <SidebarSyncBtn
+                  onSync={handleSyncNow}
+                  size={15}
+                  title={t("settings.syncNow")}
+                />
+              )}
             </SyncStatus>
           )}
 

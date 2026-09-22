@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { autoUpdater, UpdateInfo, ProgressInfo, CancellationToken } from 'electron-updater';
+import { log } from '../logger';
 
 let activeCancellationToken: CancellationToken | null = null;
 
@@ -11,6 +12,9 @@ export function setupAutoUpdater(mainWindow: BrowserWindow): void {
   });
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
+  // Into the app's own log, which tills upload: whether a download was differential (blockmap) or
+  // the whole installer, and why an update failed, are otherwise invisible.
+  autoUpdater.logger = log;
 
   const send = (channel: string, data?: unknown) => {
     if (!mainWindow.isDestroyed()) {
@@ -77,13 +81,14 @@ export function setupAutoUpdater(mainWindow: BrowserWindow): void {
   });
 
   ipcMain.handle('updater:quitAndInstall', () => {
-    // Give the renderer a moment to paint its "installing" overlay before the
-    // window is destroyed, then run the NSIS installer with its progress UI
-    // visible (isSilent=false) so the user sees the update happening.
+    // Give the renderer a moment to paint its "installing" overlay before the window is destroyed,
+    // then install silently and start the app again (isSilent, isForceRunAfter). With the app one
+    // archive instead of ~24,000 files the install takes seconds, and a silent update keeps the
+    // folder the shop first installed to — no wizard for a cashier to click through.
     setTimeout(() => {
       // Destroy the window directly to bypass the close-confirmation interceptor.
       mainWindow.destroy();
-      autoUpdater.quitAndInstall(false, true);
+      autoUpdater.quitAndInstall(true, true);
     }, 600);
   });
 }

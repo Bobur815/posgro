@@ -5,7 +5,7 @@ import { Modal } from '../../components/common/Modal';
 import { useSales } from '../../hooks/useSales';
 import type { Sale } from '@shared/types/sale.types';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
-import { UZQR_BRAND_COLOR, SALE_TENDER_I18N_KEYS, type SaleTender } from '@shared/constants';
+import { UZQR_BRAND_COLOR, SALE_TENDER_I18N_KEYS, DEBT_TENDER, type SaleTender } from '@shared/constants';
 import { ChevronDown, ChevronRight, Pencil, Printer, Trash2, ShieldCheck, ShieldAlert, RotateCcw, Copy } from 'lucide-react';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../context/ToastContext';
@@ -115,6 +115,8 @@ const Time = styled.span`
 /** Green = money in the till, house blue = bank card, navy = the UzQR brand. */
 function tenderColor(theme: DefaultTheme, method?: string) {
   if (method === 'uzqr') return UZQR_BRAND_COLOR;
+  // Money the shop has not got yet — red, as in the daily summary.
+  if (method === DEBT_TENDER) return theme.colors.error;
   return method === 'card' ? theme.colors.primary : theme.colors.success;
 }
 
@@ -436,8 +438,16 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
                       <ReceiptNum>#{sale.receiptNumber}</ReceiptNum>
                       <Time>{formatTime(sale.createdAt)}</Time>
                       <Badge $method={sale.paymentMethod}>
-                        {t(SALE_TENDER_I18N_KEYS[sale.paymentMethod as SaleTender] ?? 'pos.cash')}
+                        {sale.paymentMethod === DEBT_TENDER
+                          ? `💰 ${t('pos.debt')}`
+                          : t(SALE_TENDER_I18N_KEYS[sale.paymentMethod as SaleTender] ?? 'pos.cash')}
                       </Badge>
+                      {/* Part-paid on credit: the tender above took the money, this is the rest. */}
+                      {sale.paymentMethod !== DEBT_TENDER && Number(sale.debtAmount) > 0 && (
+                        <Badge $method={DEBT_TENDER}>
+                          💰 {t('pos.debt')} {formatCurrency(Number(sale.debtAmount))}
+                        </Badge>
+                      )}
                       {sale.fiscalStatus === 'FISCALIZED' && (
                         sale.refunded ? (
                           <RefundedBadge>
@@ -456,7 +466,9 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
                       )}
                     </SaleInfo>
                     <Amount>{formatCurrency(sale.finalAmount)}</Amount>
-                    {!isSatellite && (sale.fiscalStatus === 'FAILED' || sale.fiscalStatus === 'PENDING') && (
+                    {/* On a satellite too: its main's device fiscalizes (fiscal:retrySale). Refunds
+                        and duplicates below stay the main's. */}
+                    {(sale.fiscalStatus === 'FAILED' || sale.fiscalStatus === 'PENDING') && (
                       <FiscalizeButton
                         onClick={(e) => handleFiscalize(sale, e)}
                         disabled={fiscalizingId === sale.id}

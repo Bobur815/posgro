@@ -57,6 +57,13 @@ export interface StoreSubscription {
   expiresAt: string | null;
   aiPlan: string;
   balanceUzs: number | null;
+  /** Null from a server before terminal limits, or before the first live read. */
+  terminals: StoreTerminalUsage | null;
+  /**
+   * The next monthly charge from the balance, and what is owed if the last one left it negative.
+   * Null for a plan that is not billed, or from a server before billing.
+   */
+  nextCharge: { at: string; amountUzs: number; owedUzs: number } | null;
   payment: SubscriptionPaymentInfo;
   /** True when this is a cached snapshot rather than a live read. `reason` says why. */
   stale: boolean;
@@ -68,6 +75,19 @@ export interface StoreSubscription {
    * a password, check the connection, or call support.
    */
   reason?: SubscriptionFailureReason;
+}
+
+/** A store's terminals against its plan, as GET /store-config/subscription reports them. */
+export interface StoreTerminalUsage {
+  /** How many it may run; null is unlimited. */
+  allowed: number | null;
+  /** How many have registered. Above `allowed`, the newest are refused. */
+  used: number;
+  /** The plan's own, before extras; null is unlimited. */
+  included: number | null;
+  extra: number;
+  /** A month of one extra terminal, in UZS. */
+  extraPriceUzs: number;
 }
 
 /** Why `subscription:get` fell back to the cache. */
@@ -105,7 +125,9 @@ export type TillLicenseState =
   | 'grace'
   | 'blocked'
   | 'checkin-required'
-  | 'unlicensed';
+  | 'unlicensed'
+  /** The store is fine, but this till holds none of its terminal slots. */
+  | 'terminal-limit';
 
 export interface TillLicenseStatus {
   state: TillLicenseState;
@@ -118,4 +140,8 @@ export interface TillLicenseStatus {
   clockBehind: boolean;
   canSignIn: boolean;
   canSell: boolean;
+  /** How many terminals the store may run by the license; null is unlimited (or not known). */
+  terminals: number | null;
+  /** Whether this till holds one of them. */
+  seated: boolean;
 }

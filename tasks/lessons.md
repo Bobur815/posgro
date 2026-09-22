@@ -326,3 +326,15 @@ The pull code alone looked correct, which is what made it easy to miss.
   different behaviour" usually means a different session, not a different code path.
 - For any pulled table, read what the same cycle *uploads* for it first. A round trip that
   overwrites the server and then pulls itself back looks exactly like "the pull does nothing".
+
+## A test build started without `--user-data-dir` runs against the real till
+
+Testing the `runAsNode` fuse, I launched a packaged test build with only `ELECTRON_RUN_AS_NODE=1`
+and forgot `--user-data-dir`. The fuse held, so the exe started as the app, in this PC's real
+profile: it opened the real `pos-1000.db` and read the fiscal service's Z-report state before I
+stopped it about 3 seconds later. Nothing was written beyond the idempotent schema check, but only
+because it was stopped in time. A sync cycle or the license refresh would have come next.
+
+**Rule:** every launch of a test build passes `--user-data-dir=<scratch>`, and a negative test
+most of all — its point is that something *unexpected* happens, which includes the app simply
+starting.

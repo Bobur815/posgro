@@ -37,6 +37,7 @@ import {
   acceptLicense,
   assertCanSignIn,
   licenseStatus,
+  mayPair,
   sellingRefusal,
   UNLICENSED_ALLOWANCE_MS,
 } from './license';
@@ -251,5 +252,114 @@ describe('what a till may do', () => {
     wall = T0;
     await expect(assertCanSignIn()).resolves.toBeUndefined();
     expect(await sellingRefusal()).toEqual({ code: 'CLOCK_BEHIND' });
+  });
+});
+
+describe('terminal slots', () => {
+  /** A STARTER license for `terminals` tills, seating these. */
+  function seated(seats: string[], terminals = seats.length, { expiresInDays = 30, issuedAt = wall } = {}) {
+    const facts = { plan: 'STARTER', expiresAt: new Date(issuedAt + expiresInDays * DAY_MS) };
+    const status = subscriptionStatus(facts, DEFAULT_SUBSCRIPTION_RULES, issuedAt);
+    return signLicense(licensePayload(STORE, status, issuedAt, 14, { terminals, seats }), SERVER.priv);
+  }
+  const cashier = { id: 'u1', nameRu: 'Кассир' };
+  const sale = (terminalId: string) =>
+    commitSale({ items: [], paymentMethod: 'CASH' }, { terminalId, cashierId: 'u1', cashierName: 'Кассир' });
+
+  afterEach(async () => {
+    await getPrismaClient().pairedTerminal.deleteMany({});
+    global.fetch = jest.fn(async () => {
+      throw new Error('offline');
+    }) as never;
+  });
+
+  it('lets a till that holds a slot work, and says how many the store has', async () => {
+    await acceptLicense(seated(['T1'], 1));
+    expect(await licenseStatus()).toMatchObject({ state: 'active', seated: true, terminals: 1, canSell: true });
+    expect(await sellingRefusal()).toBeNull();
+  });
+
+  it('refuses sign-in, sales and shifts on a till with no slot', async () => {
+    await acceptLicense(seated(['T0'], 1));
+    expect(await licenseStatus()).toMatchObject({
+      state: 'terminal-limit',
+      seated: false,
+      canSignIn: false,
+      canSell: false,
+    });
+    await expect(assertCanSignIn()).rejects.toThrow('auth.errors.terminal_limit');
+    await expect(sale('T1')).rejects.toMatchObject({ refusal: { code: 'TERMINAL_LIMIT' } });
+    await expect(openShift('T1', cashier, 0)).rejects.toMatchObject({ refusal: { code: 'TERMINAL_LIMIT' } });
+    expect(await getPrismaClient().smena.count()).toBe(0);
+  });
+
+  // The main holds the license for its satellites and judges each by its own id.
+  it('judges a satellite by its own id', async () => {
+    await acceptLicense(seated(['T1'], 1));
+    expect(await sellingRefusal('T1')).toBeNull();
+    await expect(assertCanSignIn('T2')).rejects.toThrow('auth.errors.terminal_limit');
+    await expect(sale('T2')).rejects.toMatchObject({ refusal: { code: 'TERMINAL_LIMIT' } });
+  });
+
+  // The web dashboard is the store's, not any one till's.
+  it('asks nothing of a slot for the store alone', async () => {
+    await acceptLicense(seated(['T0'], 1));
+    await expect(assertCanSignIn(null)).resolves.toBeUndefined();
+  });
+
+  it('says blocked rather than terminal-limit when the store is not paid for', async () => {
+    await acceptLicense(seated(['T0'], 1, { expiresInDays: -30 }));
+    expect((await licenseStatus()).state).toBe('blocked');
+  });
+
+  // A license from before terminal limits, or for an unlimited plan, names no seats.
+  it('seats every till by a license that names none', async () => {
+    await acceptLicense(license('PRO', 30));
+    expect(await licenseStatus()).toMatchObject({ seated: true, terminals: null });
+    expect(await sellingRefusal('T9')).toBeNull();
+  });
+
+  describe('pairing a satellite', () => {
+    const pair = async (terminalId: string) =>
+      getPrismaClient().pairedTerminal.create({ data: { terminalId, secretHash: 'x' } });
+
+    it('offline, counts the main and the satellites already paired against the last license', async () => {
+      await acceptLicense(seated(['T1'], 2));
+      expect(await mayPair('T2')).toBe(true);
+      await pair('T2');
+      expect(await mayPair('T3')).toBe(false);
+      // Re-pairing a till already paired keeps its place.
+      expect(await mayPair('T2')).toBe(true);
+    });
+
+    it('online, asks the server with the satellite named, and takes its answer', async () => {
+      await acceptLicense(seated(['T1'], 2));
+      pass(1000);
+      const calls: Array<{ satellites: string[] }> = [];
+      global.fetch = jest.fn(async (_url: string, init: { body: string }) => {
+        calls.push(JSON.parse(init.body));
+        return { ok: true, json: async () => ({ license: seated(['T1'], 1) }) };
+      }) as never;
+
+      expect(await mayPair('T5')).toBe(false);
+      expect(calls[0]).toMatchObject({ terminalId: 'T1', satellites: ['T5'] });
+    });
+
+    it('online, pairs a satellite the server gave a slot', async () => {
+      await acceptLicense(seated(['T1'], 2));
+      pass(1000);
+      global.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({ license: seated(['T1', 'T5'], 2) }),
+      })) as never;
+      expect(await mayPair('T5')).toBe(true);
+    });
+
+    it('pairs anything under a license with no limit', async () => {
+      await acceptLicense(license('PRO', 30));
+      await pair('T2');
+      await pair('T3');
+      expect(await mayPair('T4')).toBe(true);
+    });
   });
 });

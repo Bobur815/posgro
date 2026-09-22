@@ -9,6 +9,7 @@ import { DateInput } from "../../components/common/DateInput";
 import { useToast } from "../../context/ToastContext";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import type { DebtLedger, DebtTransaction } from "@shared/types";
+import { useAuthStore } from "../../store/auth-store";
 
 /**
  * One debtor: what they owe, how it got there, and taking money off it.
@@ -241,6 +242,8 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
   const [openSaleId, setOpenSaleId] = useState<string | null>(null);
   const [sales, setSales] = useState<Record<string, SaleDetail>>({});
   const [dueDate, setDueDate] = useState("");
+  // A cashier takes payments; changing when a debt is due is an admin's (debtors:update).
+  const isAdmin = useAuthStore((s) => s.user?.role === "ADMIN");
   /** Fiscalization is switched on for this till — the payoff question only means something then. */
   const [fiscalEnabled, setFiscalEnabled] = useState(false);
   /** A payment that clears the whole balance, waiting on "fiscalize or not". */
@@ -288,7 +291,9 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
     setOpenSaleId(saleId);
     if (sales[saleId]) return;
     try {
-      const sale = (await window.electronAPI.sales.getById(saleId)) as SaleDetail | null;
+      // Through the debtor's own book: on a satellite a receipt rung up elsewhere is only on the
+      // main, and this asks it.
+      const sale = (await window.electronAPI.debtors.getSale(debtorId, saleId)) as SaleDetail | null;
       if (sale) setSales((prev) => ({ ...prev, [saleId]: sale }));
     } catch {
       // A receipt that has since been deleted simply stays unopened; the ledger row is the
@@ -318,7 +323,8 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
     // decides whether they get fiscalized. A partial payment keeps the old behaviour: whatever it
     // finishes paying for is fiscalized straight away.
     const paysOff = ledger != null && ledger.balance > 0 && value >= ledger.balance - 0.005;
-    if (fiscalEnabled && paysOff) {
+    // The book's own device decides — on a satellite, its main's.
+    if ((ledger?.fiscalEnabled ?? fiscalEnabled) && paysOff) {
       setConfirmPayoff(true);
       return;
     }
@@ -403,12 +409,14 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
             </Drift>
           )}
 
-          <DateInput
-            label={t("debtors.dueDateOptional", "Срок оплаты (необязательно)")}
-            value={dueDate}
-            onChange={saveDueDate}
-            style={{ marginBottom: 16 }}
-          />
+          {isAdmin && (
+            <DateInput
+              label={t("debtors.dueDateOptional", "Срок оплаты (необязательно)")}
+              value={dueDate}
+              onChange={saveDueDate}
+              style={{ marginBottom: 16 }}
+            />
+          )}
 
           <Section>{t("debtors.takePayment", "Принять оплату")}</Section>
           {confirmPayoff ? (

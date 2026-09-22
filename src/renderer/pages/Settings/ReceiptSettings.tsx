@@ -6,7 +6,12 @@ import { ArrowLeft, ImagePlus, Trash2 } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
-import { buildSampleReceiptHTML } from '../../../shared/receipt-html';
+import {
+  buildSampleReceiptHTML,
+  RECEIPT_SHOW_KEYS,
+  receiptShows,
+  type ReceiptShowKey,
+} from '../../../shared/receipt-html';
 import type { ReceiptSettings as ReceiptSettingsType } from '../../../shared/receipt-html';
 import { useToast } from '../../context/ToastContext';
 import { useVirtualKeyboard } from '../../hooks/useVirtualKeyboard';
@@ -83,6 +88,36 @@ const StoreInfo = styled.div`
   padding: ${({ theme }) => theme.spacing.sm};
   background: ${({ theme }) => theme.colors.background};
   border-radius: ${({ theme }) => theme.borderRadius};
+`;
+
+const ShowGroupTitle = styled.div`
+  font-size: 14px;
+  font-weight: 600;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const ShowRow = styled.label`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.sm};
+  font-size: 14px;
+  color: ${({ theme }) => theme.colors.text};
+  cursor: pointer;
+
+  input {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+`;
+
+/** The store's own value beside its tick, so it is clear what the tick shows or hides. */
+const ShowValue = styled.span`
+  color: ${({ theme }) => theme.colors.textSecondary};
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 `;
 
 const PreviewContainer = styled.div`
@@ -267,6 +302,8 @@ export function ReceiptSettings() {
     receipt_logo_bottom_size: '50',
   });
   const [loading, setLoading] = useState(true);
+  const toggleShow = (key: ReceiptShowKey, on: boolean) =>
+    setSettings((prev) => ({ ...prev, [key]: on ? 'true' : 'false' }));
   const [saving, setSaving] = useState(false);
 
   // On-screen keyboard for the free-text receipt fields. The paper width and language are selects,
@@ -294,6 +331,8 @@ export function ReceiptSettings() {
           receipt_logo_top_size: all.receipt_logo_top_size || '50',
           receipt_logo_bottom: all.receipt_logo_bottom || '',
           receipt_logo_bottom_size: all.receipt_logo_bottom_size || '50',
+          // Never saved means shown, as on the receipt itself (receiptShows).
+          ...Object.fromEntries(RECEIPT_SHOW_KEYS.map((k) => [k, all[k] ?? 'true'])),
         });
       } catch (err) {
         console.error('Failed to load receipt settings:', err);
@@ -328,6 +367,9 @@ export function ReceiptSettings() {
         'receipt_logo_bottom_size',
         settings.receipt_logo_bottom_size || '50'
       );
+      for (const key of RECEIPT_SHOW_KEYS) {
+        await window.electronAPI.settings.set(key, receiptShows(settings, key) ? 'true' : 'false');
+      }
       showToast(t('common.saved'), 'success');
     } catch (err) {
       console.error('Failed to save receipt settings:', err);
@@ -431,15 +473,29 @@ export function ReceiptSettings() {
               }
             />
 
-            <StoreInfo>
-              {settings.store_name && <div><strong>{settings.store_name}</strong></div>}
-              {settings.store_address && <div>{settings.store_address}</div>}
-              {settings.store_phone && <div>{settings.store_phone}</div>}
-              {settings.store_stir && <div>STIR: {settings.store_stir}</div>}
-              {!settings.store_name && !settings.store_address && (
-                <div>{t('receipt.storeInfoHint')}</div>
-              )}
-            </StoreInfo>
+            <ShowGroupTitle>{t('receipt.showOnReceipt')}</ShowGroupTitle>
+            {(
+              [
+                ['receipt_show_store_name', t('receipt.showStoreName'), settings.store_name],
+                ['receipt_show_store_address', t('receipt.showStoreAddress'), settings.store_address],
+                ['receipt_show_store_phone', t('receipt.showStorePhone'), settings.store_phone],
+                ['receipt_show_store_stir', t('receipt.showStoreStir'), settings.store_stir],
+                ['receipt_show_payment', t('receipt.showPayment'), ''],
+              ] as Array<[ReceiptShowKey, string, string | undefined]>
+            ).map(([key, label, value]) => (
+              <ShowRow key={key}>
+                <input
+                  type="checkbox"
+                  checked={receiptShows(settings, key)}
+                  onChange={(e) => toggleShow(key, e.target.checked)}
+                />
+                <span>{label}</span>
+                {value && <ShowValue>— {value}</ShowValue>}
+              </ShowRow>
+            ))}
+            {!settings.store_name && !settings.store_address && (
+              <StoreInfo>{t('receipt.storeInfoHint')}</StoreInfo>
+            )}
 
             <Actions>
               <Button type="submit" disabled={saving}>

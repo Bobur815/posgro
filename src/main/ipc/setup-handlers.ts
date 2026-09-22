@@ -4,7 +4,7 @@ import { probeApiUrl } from '../config/api-url-probe';
 import { getPrismaClient, writeStoreBootstrap, closeDatabase, initializeDatabase } from '../database/sqlite-client';
 import { setServerToken } from '../sync/queue-manager';
 import { seedLocalDatabase } from '../database/seed';
-import { acceptLicense } from '../license/license';
+import { acceptLicense, terminalClaimQuery } from '../license/license';
 
 interface SetupCompleteData {
   storeId: string;
@@ -45,7 +45,8 @@ async function fetchSuperAdminPassword(
   prisma: ReturnType<typeof getPrismaClient>,
 ): Promise<void> {
   try {
-    const response = await fetch(`${serverUrl}/store-config`, {
+    // Naming the new till registers it for one of the store's terminal slots.
+    const response = await fetch(`${serverUrl}/store-config${await terminalClaimQuery()}`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(8000),
     });

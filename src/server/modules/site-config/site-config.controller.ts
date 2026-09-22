@@ -15,6 +15,8 @@ import {
 import { Type } from 'class-transformer';
 import {
   SUBSCRIPTION_RULE_LIMITS as LIMITS,
+  TERMINAL_LIMITS,
+  type PlanTerminals,
   type SubscriptionRules,
 } from '../../../shared/utils/subscription';
 import {
@@ -57,6 +59,20 @@ class SubscriptionPlanPricesDto {
   @IsNumber() @Min(0) starter!: number;
   @IsNumber() @Min(0) pro!: number;
   @IsNumber() @Min(0) vip!: number;
+  /** Optional: a dashboard from before extra terminals does not send it. */
+  @IsOptional() @IsNumber() @Min(0) extraTerminal?: number;
+}
+
+/** Terminals each plan includes; null is unlimited. */
+class PlanTerminalsDto {
+  @IsOptional() @IsInt() @Min(TERMINAL_LIMITS.included.min) @Max(TERMINAL_LIMITS.included.max)
+  TRIAL!: number | null;
+  @IsOptional() @IsInt() @Min(TERMINAL_LIMITS.included.min) @Max(TERMINAL_LIMITS.included.max)
+  STARTER!: number | null;
+  @IsOptional() @IsInt() @Min(TERMINAL_LIMITS.included.min) @Max(TERMINAL_LIMITS.included.max)
+  PRO!: number | null;
+  @IsOptional() @IsInt() @Min(TERMINAL_LIMITS.included.min) @Max(TERMINAL_LIMITS.included.max)
+  VIP!: number | null;
 }
 
 class SubscriptionPaymentDto {
@@ -174,6 +190,21 @@ export class SiteConfigController {
   @ApiOperation({ summary: 'Set subscription plan prices (super admin only)' })
   setSubscriptionPlans(@Body() dto: SubscriptionPlanPricesDto): Promise<SubscriptionPlanPrices> {
     return this.siteConfigService.setSubscriptionPlans(dto);
+  }
+
+  @Get('subscription-terminals')
+  @ApiOperation({ summary: 'How many terminals each plan includes; null is unlimited (public)' })
+  getPlanTerminals(): Promise<PlanTerminals> {
+    return this.siteConfigService.getPlanTerminals();
+  }
+
+  @Put('subscription-terminals')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Set how many terminals each plan includes (super admin only)' })
+  setPlanTerminals(@Body() dto: PlanTerminalsDto): Promise<PlanTerminals> {
+    return this.siteConfigService.setPlanTerminals(dto);
   }
 
   @Get('subscription-payment')

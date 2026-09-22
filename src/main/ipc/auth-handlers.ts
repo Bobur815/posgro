@@ -310,6 +310,14 @@ export function setupAuthHandlers(): void {
       void refreshSubscriptionCache().catch(() => {
         /* already logged, and a stale snapshot is the designed fallback */
       });
+      // And the store config — the super-admin password above all. An OFFLINE_ONLY till never
+      // syncs, so a sign-in is its one chance to hear of a password set on the dashboard since
+      // setup (sync/store-config.ts). Lazily imported: that module reaches the LAN server.
+      void import('../sync/store-config')
+        .then(({ pullStoreConfig }) => pullStoreConfig())
+        .catch(() => {
+          /* offline: the cached config stands */
+        });
     }
 
     // Set current user
@@ -738,7 +746,17 @@ export function setupAuthHandlers(): void {
   ipcMain.handle('auth:hasSuperAdminPassword', async () => {
     const prisma = getPrismaClient();
     const config = await prisma.localConfig.findUnique({ where: { id: 'config' } });
-    return Boolean(config?.superAdminPassword);
+    if (config?.superAdminPassword) return true;
+    // None cached. An OFFLINE_ONLY till only hears of one set after its setup by asking, so ask
+    // once with the credential it holds before saying there is none (sync/store-config.ts).
+    try {
+      const { pullStoreConfig } = await import('../sync/store-config');
+      if (!(await pullStoreConfig())) return false;
+    } catch {
+      return false;
+    }
+    const fresh = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+    return Boolean(fresh?.superAdminPassword);
   });
 
   /**

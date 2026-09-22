@@ -15,6 +15,16 @@ import { assertCanSignIn } from '../../license/license';
 import { commitSale, deleteSale, SaleRefusedError, updateSale } from '../../sales/commit-sale';
 import { settleSale } from '../../sales/settle-sale';
 import {
+  adjustDebt,
+  createDebtor,
+  debtorLedger,
+  debtorSale,
+  listDebtors,
+  recordDebtPayment,
+  unpaidSales,
+  updateDebtor,
+} from '../../sales/debtors';
+import {
   addShiftMovement,
   closeShift,
   currentShift,
@@ -23,6 +33,7 @@ import {
   shiftReport,
 } from '../../sales/shifts';
 import { regosVcrService } from '../../fiscal/regos-vcr-service';
+import { FISCAL_FIELDS } from '../../lan/fiscal-fields';
 import { LOCAL_ONLY_SETTINGS } from '../../sync/local-only-settings';
 import { log } from '../../logger';
 
@@ -144,12 +155,34 @@ function person(ctx: RequestContext) {
   return ctx.session!;
 }
 
-/** A blocked store's main lets nobody in at its satellites either — it holds the store's license. */
-async function refuseBlockedStore(): Promise<void> {
+/**
+ * A blocked store's main lets nobody in at its satellites either — it holds the store's license.
+ * Nor at a satellite holding none of the store's terminal slots.
+ */
+async function refuseBlockedStore(terminalId: string): Promise<void> {
   try {
-    await assertCanSignIn();
+    await assertCanSignIn(terminalId);
   } catch (e) {
     throw forbidden(e instanceof Error ? e.message : 'auth.errors.subscription_blocked');
+  }
+}
+
+/** Editing a debtor or correcting a balance is an admin's, at a satellite as here. */
+function requireAdminAt(ctx: RequestContext) {
+  const who = person(ctx);
+  if (who.role !== 'ADMIN') throw forbidden('Unauthorized');
+  return who;
+}
+
+/** A debtor operation's own refusals (`debtors.errors.*`) as answers the satellite can show. */
+async function debtorAnswer<T>(run: () => T | Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : '';
+    if (message === 'debtors.errors.not_found') throw notFound(message);
+    if (message.startsWith('debtors.errors.')) throw badRequest(message);
+    throw e;
   }
 }
 
@@ -170,7 +203,7 @@ export const satelliteRoutes: Route[] = [
     handler: async ({ body, terminal }) => {
       const phone = String(required(body?.phone, 'phone'));
       const password = String(required(body?.password, 'password'));
-      await refuseBlockedStore();
+      await refuseBlockedStore(terminal!.terminalId);
       try {
         const user = await authenticate(phone, password);
         return sessionFor(user, terminal!.terminalId);
@@ -215,7 +248,7 @@ export const satelliteRoutes: Route[] = [
       }
 
       const pin = String(body?.pin ?? '');
-      await refuseBlockedStore();
+      await refuseBlockedStore(terminalId);
       // Nobody having a PIN is a different answer from a wrong one: the satellite's login screen
       // uses it to fall back to phone + password instead of showing an error.
       if ((await usersWithPin(db())).length === 0) {
@@ -340,6 +373,25 @@ export const satelliteRoutes: Route[] = [
       }),
   },
 
+  /**
+   * Send one of this satellite's receipts to the OFD again — it failed, or is still pending. The
+   * fiscal device is this main's, so the satellite asks here; any cashier may, as at the main.
+   * Only the satellite's own receipts: its history lists nothing else.
+   */
+  {
+    method: 'POST',
+    path: '/terminal/sales/:id/fiscalize',
+    audience: 'terminal',
+    session: true,
+    handler: async (ctx) => {
+      const sale = await db().sale.findUnique({ where: { id: ctx.params.id }, select: { terminalId: true } });
+      if (!sale || sale.terminalId !== ctx.terminal!.terminalId) throw notFound('Sale not found');
+      const result = await regosVcrService.retrySale(ctx.params.id);
+      const fiscal = await db().sale.findUnique({ where: { id: ctx.params.id }, select: FISCAL_FIELDS });
+      return { ...result, fiscal };
+    },
+  },
+
   {
     method: 'PUT',
     path: '/terminal/sales/:id',
@@ -384,6 +436,96 @@ export const satelliteRoutes: Route[] = [
           terminalId: ctx.terminal!.terminalId,
         });
         return { deleted: true, id: sale.id, stock };
+      }),
+  },
+
+  // ── Debtors ───────────────────────────────────────────────────────────────────────────────────
+  //
+  // A satellite's nasiya, kept here: its database holds no users. The same code as this main's own
+  // screens (sales/debtors.ts), with the person at the satellite as the one acting — staff for most
+  // of it, an admin to edit a debtor or correct a balance — and cash paid there going into that
+  // satellite's own shift. Writes are refused during a handoff, like a sale.
+
+  {
+    method: 'GET',
+    path: '/terminal/debtors',
+    audience: 'terminal',
+    session: true,
+    duringHandoff: true,
+    handler: ({ query }) =>
+      debtorAnswer(() =>
+        listDebtors({
+          search: typeof query.search === 'string' ? query.search : undefined,
+          withDebtOnly: query.withDebtOnly === 'true',
+          includeStaff: query.includeStaff === 'true',
+        }),
+      ),
+  },
+  {
+    method: 'POST',
+    path: '/terminal/debtors',
+    audience: 'terminal',
+    session: true,
+    handler: ({ body }) => debtorAnswer(() => createDebtor(body ?? {})),
+  },
+  {
+    method: 'PATCH',
+    path: '/terminal/debtors/:id',
+    audience: 'terminal',
+    session: true,
+    handler: (ctx) =>
+      debtorAnswer(() => {
+        requireAdminAt(ctx);
+        return updateDebtor(ctx.params.id, ctx.body ?? {});
+      }),
+  },
+  {
+    method: 'GET',
+    path: '/terminal/debtors/:id/ledger',
+    audience: 'terminal',
+    session: true,
+    duringHandoff: true,
+    handler: ({ params }) => debtorAnswer(() => debtorLedger(params.id)),
+  },
+  {
+    method: 'GET',
+    path: '/terminal/debtors/:id/unpaid-sales',
+    audience: 'terminal',
+    session: true,
+    duringHandoff: true,
+    handler: ({ params }) => debtorAnswer(() => unpaidSales(params.id)),
+  },
+  {
+    method: 'GET',
+    path: '/terminal/debtors/:id/sales/:saleId',
+    audience: 'terminal',
+    session: true,
+    duringHandoff: true,
+    handler: ({ params }) => debtorAnswer(() => debtorSale(params.id, params.saleId)),
+  },
+  {
+    method: 'POST',
+    path: '/terminal/debtors/:id/payments',
+    audience: 'terminal',
+    session: true,
+    handler: (ctx) =>
+      debtorAnswer(() =>
+        recordDebtPayment(
+          { ...(ctx.body ?? {}), userId: ctx.params.id },
+          person(ctx).id,
+          ctx.terminal!.terminalId,
+        ),
+      ),
+  },
+  {
+    method: 'POST',
+    path: '/terminal/debtors/:id/adjustments',
+    audience: 'terminal',
+    session: true,
+    handler: (ctx) =>
+      debtorAnswer(() => {
+        const admin = requireAdminAt(ctx);
+        return adjustDebt({ ...(ctx.body ?? {}), userId: ctx.params.id }, admin.id);
       }),
   },
 

@@ -11,9 +11,9 @@ import type {
 
 /**
  * In place of the PIN pad and the password form when the till's license lets nobody in: the store
- * is blocked for its subscription, or the till is overdue to check in with the server. It says
- * which, shows how to pay, and "Check payment" asks the server at once — paying is all it takes to
- * get back in.
+ * is blocked for its subscription, the till holds none of the store's terminal slots, or it is
+ * overdue to check in with the server. It says which, shows how to pay, and "Check payment" asks
+ * the server at once — paying (or a slot bought or freed) is all it takes to get back in.
  */
 
 const Panel = styled.div`
@@ -90,12 +90,15 @@ export function LicenseBlockPanel({ status, onStatus }: Props) {
   const { t } = useTranslation();
   const toast = useToast();
   const blocked = status.state === 'blocked';
+  const noSlot = status.state === 'terminal-limit';
+  // Both are fixed by paying: the plan, or an extra terminal on it.
+  const payable = blocked || noSlot;
   const [payment, setPayment] = useState<StoreSubscription['payment'] | null>(null);
   const [checking, setChecking] = useState(false);
 
   // How to pay: the same details as the subscription dialog, cached, so they show offline too.
   useEffect(() => {
-    if (!blocked) return;
+    if (!payable) return;
     let alive = true;
     window.electronAPI.subscription
       .get()
@@ -106,14 +109,18 @@ export function LicenseBlockPanel({ status, onStatus }: Props) {
     return () => {
       alive = false;
     };
-  }, [blocked]);
+  }, [payable]);
 
   const check = async () => {
     setChecking(true);
     try {
       const next = await window.electronAPI.license.refresh();
       onStatus(next);
-      if (!next.canSignIn) toast.error(t(blocked ? 'license.notYet' : 'license.notYetCheckin'));
+      if (!next.canSignIn) {
+        toast.error(
+          t(blocked ? 'license.notYet' : noSlot ? 'license.notYetTerminal' : 'license.notYetCheckin'),
+        );
+      }
     } catch {
       toast.error(t('license.notYetCheckin'));
     } finally {
@@ -126,12 +133,27 @@ export function LicenseBlockPanel({ status, onStatus }: Props) {
       <Icon>
         <Lock size={28} />
       </Icon>
-      <Title>{blocked ? t('subscription.blockedTitle') : t('license.checkinTitle')}</Title>
+      <Title>
+        {blocked
+          ? t('subscription.blockedTitle')
+          : noSlot
+            ? t('license.terminalLimitTitle')
+            : t('license.checkinTitle')}
+      </Title>
       <Text>
-        {t(blocked ? 'auth.errors.subscription_blocked' : 'auth.errors.license_checkin_required')}
+        {t(
+          blocked
+            ? 'auth.errors.subscription_blocked'
+            : noSlot
+              ? 'auth.errors.terminal_limit'
+              : 'auth.errors.license_checkin_required',
+        )}
       </Text>
+      {noSlot && status.terminals !== null && (
+        <Hint>{t('license.terminalLimitHint', { count: status.terminals })}</Hint>
+      )}
 
-      {blocked && payment?.qrDataUrl && (
+      {payable && payment?.qrDataUrl && (
         <>
           <Hint>{t('subscription.payScanHint')}</Hint>
           <QrFrame>
@@ -139,7 +161,7 @@ export function LicenseBlockPanel({ status, onStatus }: Props) {
           </QrFrame>
         </>
       )}
-      {blocked && payment?.paymentUrl && (
+      {payable && payment?.paymentUrl && (
         <LinkButton
           type="button"
           onClick={() => void window.electronAPI.subscription.openPaymentLink(payment.paymentUrl)}
@@ -148,14 +170,14 @@ export function LicenseBlockPanel({ status, onStatus }: Props) {
           {t('subscription.payOnline')}
         </LinkButton>
       )}
-      {blocked && payment?.supportPhone && (
+      {payable && payment?.supportPhone && (
         <Hint>{t('subscription.callSupport', { phone: payment.supportPhone })}</Hint>
       )}
 
       <Button onClick={check} disabled={checking} fullWidth>
         {checking
           ? t('license.checking')
-          : t(blocked ? 'license.checkPayment' : 'license.checkNow')}
+          : t(payable ? 'license.checkPayment' : 'license.checkNow')}
       </Button>
     </Panel>
   );

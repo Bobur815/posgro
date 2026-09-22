@@ -73,6 +73,7 @@ export function licenseNotice(
     iso ? new Date(iso).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' }) : '';
 
   if (status.state === 'blocked') return { text: t('auth.errors.subscription_blocked'), urgent: true };
+  if (status.state === 'terminal-limit') return { text: t('auth.errors.terminal_limit'), urgent: true };
   if (status.state === 'checkin-required') {
     return { text: t('auth.errors.license_checkin_required'), urgent: true };
   }

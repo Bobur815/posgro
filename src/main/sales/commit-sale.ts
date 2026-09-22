@@ -198,14 +198,14 @@ export async function drainSaleWrites(settleWithinMs = 10_000): Promise<void> {
  * store is blocked is refused too. Here rather than in each caller: this till's IPC and every
  * satellite's LAN route come through, so a satellite is held to its main's license.
  */
-async function refuseUnlicensedSale(): Promise<void> {
-  const refusal = await sellingRefusal();
+async function refuseUnlicensedSale(terminalId?: string): Promise<void> {
+  const refusal = await sellingRefusal(terminalId);
   if (refusal) throw new SaleRefusedError(refusal);
 }
 
 export function commitSale(input: SaleInput, actor: SaleActor): Promise<CommitResult> {
   return serially(async () => {
-    await refuseUnlicensedSale();
+    await refuseUnlicensedSale(actor.terminalId);
     const result = await db().$transaction((tx) => commitInTx(tx, input, actor), TX_OPTIONS);
     // Recorded inside the queue's turn, so a drain that comes after this commit sees it. A replay
     // wrote nothing, and its caller does not settle it again.
@@ -220,7 +220,7 @@ export function updateSale(
   requester: SaleRequester,
 ): Promise<{ sale: SaleWithItems; stock: StockAfter[] }> {
   return serially(async () => {
-    await refuseUnlicensedSale();
+    await refuseUnlicensedSale(requester.terminalId);
     const result = await db().$transaction(
       (tx) => updateInTx(tx, saleId, input, requester),
       TX_OPTIONS,

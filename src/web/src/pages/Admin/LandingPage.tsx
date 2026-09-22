@@ -240,7 +240,7 @@ export function LandingPage() {
   const [plans, setPlans] = useState<LandingPlan[]>(
     LANDING_PLAN_IDS.map((id, i) => emptyLandingPlan(id, i)),
   );
-  const [prices, setPrices] = useState<SubscriptionPlanPrices>({ starter: 0, pro: 0, vip: 0 });
+  const [prices, setPrices] = useState<SubscriptionPlanPrices>({ starter: 0, pro: 0, vip: 0, extraTerminal: 0 });
   const [contact, setContact] = useState<LandingContact>(DEFAULT_LANDING_CONTACT);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

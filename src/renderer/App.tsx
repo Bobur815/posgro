@@ -260,16 +260,10 @@ function App() {
           }
         />
 
-        {/* Debtors — nasiya (Admin only). A cashier puts a sale on a tab from the POS screen;
-            managing balances and taking payments against them is an admin's job. */}
-        <Route
-          path="debtors"
-          element={
-            <RoleGuard allowedRoles={["ADMIN"]}>
-              <DebtorList />
-            </RoleGuard>
-          }
-        />
+        {/* Debtors — nasiya. Every signed-in person: a cashier takes payments against a tab as well
+            as putting a sale on one. Editing a due date or correcting a balance stays an admin's —
+            the handlers check that, and the page hides what a cashier may not do. */}
+        <Route path="debtors" element={<DebtorList />} />
 
         {/* Weighed Inventory (Admin only) */}
         <Route
@@ -281,15 +275,8 @@ function App() {
           }
         />
 
-        {/* App Update (Admin only) */}
-        <Route
-          path="settings/app-update"
-          element={
-            <RoleGuard allowedRoles={["ADMIN"]}>
-              <AppUpdatePage />
-            </RoleGuard>
-          }
-        />
+        {/* App Update — every signed-in person: whoever is at the till can install an update. */}
+        <Route path="settings/app-update" element={<AppUpdatePage />} />
       </Route>
 
       {/* Catch all - redirect to home */}

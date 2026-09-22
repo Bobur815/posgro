@@ -131,9 +131,9 @@ export async function verifyCirculation(code: string): Promise<CirculationVerify
  * a yes/no for the sale guard — this surfaces every field asl-belgisi returns (dates, package type,
  * issuer) plus a diagnosable failure reason, so staff can tell "code is bad" from "we couldn't ask".
  *
- * NOTE: this deliberately goes through the VPS proxy rather than calling xtrace directly. The POS
- * is packaged with `asar: false`, so an API key bundled into the app would be readable on every
- * terminal; the key stays on the server.
+ * NOTE: this deliberately goes through the VPS proxy rather than calling xtrace directly. Anything
+ * shipped in the POS is readable on every terminal (app.asar is an archive, not encryption), so an
+ * API key bundled into the app would be too; the key stays on the server.
  */
 export async function verifyMarkingCodeDetails(rawCode: string): Promise<MarkingCodeLookup> {
   const code = normalizeDataMatrix(rawCode);
@@ -195,7 +195,7 @@ export async function getMarkingApiKeyStatus(): Promise<MarkingApiKeyResult> {
 
 /**
  * Rotate the registry key. The key is sent to the VPS and stored there, per store — never written
- * to the terminal, because the POS ships with `asar: false` and anything on disk is readable.
+ * to the terminal, because anything on a terminal's disk is readable (app.asar included).
  * The server probes the key against xtrace before saving, so `ok: true` means it actually works.
  */
 export async function setMarkingApiKey(key: string): Promise<MarkingApiKeyResult> {

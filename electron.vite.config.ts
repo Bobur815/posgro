@@ -34,6 +34,12 @@ export default defineConfig(({ mode }) => {
   main: {
     build: {
       outDir: 'dist-electron/main',
+      // Bundle the few npm packages the main process uses (bcryptjs, electron-updater, …) into
+      // index.js rather than loading them from node_modules. The package then ships no
+      // node_modules at all (electron-builder.config.js), which is what makes an update install
+      // in seconds: the one package.json lists the server's and web's dependencies too, and all
+      // of them used to be copied — about 24,000 files the till never loaded.
+      externalizeDeps: false,
       rollupOptions: {
         input: resolve(__dirname, 'src/main/index.ts'),
       },
@@ -44,6 +50,7 @@ export default defineConfig(({ mode }) => {
   preload: {
     build: {
       outDir: 'dist-electron/preload',
+      externalizeDeps: false,
       rollupOptions: {
         input: resolve(__dirname, 'src/main/preload.ts'),
       },

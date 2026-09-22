@@ -4,6 +4,7 @@ import { stats, recentSales, reset } from "../fiscal/fiscal-timing";
 import type { RegosVcrConfigInput } from "../../shared/types/fiscal.types";
 import { assertNotSatellite } from "../lan/satellite-guard";
 import { isSatellite } from "../lan/role";
+import * as satellite from "../lan/satellite-ops";
 
 /**
  * Actions that drive the VCR. On a satellite there is none — it is a local service on the main (LAN
@@ -48,9 +49,9 @@ export function setupFiscalHandlers(): void {
     return true;
   });
 
-  ipcMain.handle(
-    "fiscal:retrySale",
-    mainOnly(async (_event, saleId: string) => regosVcrService.retrySale(saleId)),
+  // On a satellite the main's device does it (lan/satellite-ops.ts#retryFiscal).
+  ipcMain.handle("fiscal:retrySale", async (_event, saleId: string) =>
+    (await isSatellite()) ? satellite.retryFiscal(saleId) : regosVcrService.retrySale(saleId),
   );
 
   // Read-only: reconstruct the exact Receipt.Sale payload sent to REGOS:VCR for a receipt,

@@ -4,9 +4,10 @@ import { getAppConfig } from '../config/app-config';
 import { getServerToken } from '../sync/queue-manager';
 import { getPrismaClient } from '../database/sqlite-client';
 import { log } from '../logger';
-import { acceptLicense } from '../license/license';
+import { acceptLicense, terminalClaimQuery } from '../license/license';
 import type {
   StoreSubscription,
+  StoreTerminalUsage,
   SubscriptionFailureReason,
 } from '../../shared/types/store.types';
 
@@ -30,6 +31,16 @@ interface SubscriptionResponse {
   subscription_expires_at: string | null;
   ai_plan: string;
   balance_uzs: number | null;
+  /** Absent from a server before billing; null for a plan that is not billed. */
+  next_charge?: { at: string; amount_uzs: number; owed_uzs: number } | null;
+  /** Absent from a server before terminal limits. */
+  terminals?: {
+    allowed: number | null;
+    used: number;
+    included: number | null;
+    extra: number;
+    extra_price_uzs: number;
+  };
   /** The store's signed license — the same one GET /store-config carries. */
   license?: string | null;
   payment: {
@@ -47,6 +58,10 @@ interface CachedSubscription {
   expiresAt: string | null;
   aiPlan: string;
   balanceUzs: number | null;
+  /** Absent from a cache written before terminal limits. */
+  terminals?: StoreTerminalUsage | null;
+  /** Absent from a cache written before billing. */
+  nextCharge?: StoreSubscription['nextCharge'];
   qrDataUrl: string | null;
   paymentUrl: string;
   supportPhone: string;
@@ -85,6 +100,8 @@ function toResult(
     expiresAt: cached.expiresAt,
     aiPlan: cached.aiPlan,
     balanceUzs: cached.balanceUzs,
+    terminals: cached.terminals ?? null,
+    nextCharge: cached.nextCharge ?? null,
     payment: {
       qrDataUrl: cached.qrDataUrl,
       paymentUrl: cached.paymentUrl,
@@ -102,6 +119,7 @@ const EMPTY: CachedSubscription = {
   expiresAt: null,
   aiPlan: 'free',
   balanceUzs: null,
+  terminals: null,
   qrDataUrl: null,
   paymentUrl: '',
   supportPhone: '',
@@ -151,7 +169,7 @@ export async function refreshSubscriptionCache(): Promise<StoreSubscription> {
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     let response: Response;
     try {
-      response = await fetch(`${config.vpsApiUrl}/store-config/subscription`, {
+      response = await fetch(`${config.vpsApiUrl}/store-config/subscription${await terminalClaimQuery()}`, {
         signal: controller.signal,
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -174,6 +192,22 @@ export async function refreshSubscriptionCache(): Promise<StoreSubscription> {
       expiresAt: data.subscription_expires_at ?? null,
       aiPlan: data.ai_plan ?? 'free',
       balanceUzs: typeof data.balance_uzs === 'number' ? data.balance_uzs : null,
+      terminals: data.terminals
+        ? {
+            allowed: data.terminals.allowed ?? null,
+            used: data.terminals.used ?? 0,
+            included: data.terminals.included ?? null,
+            extra: data.terminals.extra ?? 0,
+            extraPriceUzs: data.terminals.extra_price_uzs ?? 0,
+          }
+        : null,
+      nextCharge: data.next_charge
+        ? {
+            at: data.next_charge.at,
+            amountUzs: data.next_charge.amount_uzs ?? 0,
+            owedUzs: data.next_charge.owed_uzs ?? 0,
+          }
+        : null,
       qrDataUrl: await renderQr(data.payment?.qr_payload ?? ''),
       paymentUrl: data.payment?.payment_url ?? '',
       supportPhone: data.payment?.support_phone ?? '',

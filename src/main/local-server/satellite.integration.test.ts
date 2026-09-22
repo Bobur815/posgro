@@ -191,6 +191,7 @@ describe('who may call', () => {
     ['POST', '/terminal/sales'],
     ['POST', '/terminal/smena/open'],
     ['GET', '/terminal/smena/current'],
+    ['GET', '/terminal/debtors'],
   ];
 
   it('refuses a dashboard login on every satellite route', async () => {
@@ -424,6 +425,139 @@ describe('selling from a satellite', () => {
     const own = await call('DELETE', '/terminal/sales/sat-sale-1', { device: t2, session: t2Session });
     expect(own.status).toBe(200);
     expect(await stockOf(productId)).toBe(before + 2);
+  });
+
+  // The fiscal device is the main's: a satellite asks it to send one of its own receipts again.
+  it('fiscalizes a satellite’s own receipt on the main, and answers with its fiscal state', async () => {
+    const sale = await call('POST', '/terminal/sales', {
+      device: t2,
+      session: t2Session,
+      body: cart(BARCODES.water, 1, { id: 'sat-fisc-1' }),
+    });
+    expect(sale.status).toBe(201);
+    const res = await call('POST', '/terminal/sales/sat-fisc-1/fiscalize', { device: t2, session: t2Session });
+    expect(res.status).toBe(201);
+    expect(res.json).toHaveProperty('ok');
+    expect(res.json.fiscal).toHaveProperty('fiscalStatus');
+  });
+
+  it('refuses to fiscalize a receipt another till rang up', async () => {
+    const res = await call('POST', '/terminal/sales/sat-fisc-1/fiscalize', { device: t3, session: t3Session });
+    expect(res.status).toBe(404);
+  });
+
+  // A satellite holds no users: it picks who owes from the main's people, and the sale names them.
+  describe('on credit', () => {
+    let clientId = '';
+
+    beforeAll(async () => {
+      const client = await getPrismaClient().user.create({
+        data: {
+          id: 'user-client-nodira',
+          phone: '998901112233',
+          password: await bcrypt.hash('never-used', 4),
+          role: 'CLIENT',
+          nameUz: 'Nodira',
+          nameRu: 'Нодира',
+        },
+      });
+      clientId = client.id;
+    });
+
+    it('lists the main’s people, staff included, and no password hash', async () => {
+      // As the POS picker asks: staff included, since anyone can run a tab.
+      const res = await call('GET', '/terminal/debtors?includeStaff=true', { device: t2, session: t2Session });
+      expect(res.status).toBe(200);
+      const ids = res.json.map((d: { id: string }) => d.id);
+      expect(ids).toEqual(expect.arrayContaining([clientId, 'user-cashier']));
+      for (const person of res.json) expect(person).not.toHaveProperty('password');
+    });
+
+    it('searches them by name or phone', async () => {
+      const byName = await call('GET', '/terminal/debtors?search=Нодира', { device: t2, session: t2Session });
+      expect(byName.json.map((d: { id: string }) => d.id)).toEqual([clientId]);
+      const byPhone = await call('GET', '/terminal/debtors?search=1112233', { device: t2, session: t2Session });
+      expect(byPhone.json.map((d: { id: string }) => d.id)).toEqual([clientId]);
+    });
+
+    it('puts a satellite’s sale on the tab of the person it names', async () => {
+      const res = await call('POST', '/terminal/sales', {
+        device: t2,
+        session: t2Session,
+        body: cart(BARCODES.water, 1, { id: 'sat-credit-1', debtUserId: clientId, debtAmount: 5000 }),
+      });
+      expect(res.status).toBe(201);
+      expect(res.json.sale).toMatchObject({ id: 'sat-credit-1', terminalId: 'T2', debtUserId: clientId });
+      expect(Number(res.json.sale.debtAmount)).toBe(5000);
+      const owed = await getPrismaClient().user.findUnique({ where: { id: clientId }, select: { debt: true } });
+      expect(Number(owed!.debt)).toBe(5000);
+    });
+
+    it('adds a customer to the main’s book, and refuses a phone already taken', async () => {
+      const res = await call('POST', '/terminal/debtors', {
+        device: t2,
+        session: t2Session,
+        body: { nameRu: 'Бахром', phone: '998904445566' },
+      });
+      expect(res.status).toBe(201);
+      expect(res.json).toMatchObject({ nameRu: 'Бахром', role: 'CLIENT', debt: 0 });
+      expect(await getPrismaClient().user.findUnique({ where: { phone: '998904445566' } })).not.toBeNull();
+
+      const again = await call('POST', '/terminal/debtors', {
+        device: t2,
+        session: t2Session,
+        body: { nameRu: 'Другой', phone: '998904445566' },
+      });
+      expect(again.status).toBe(400);
+      expect(again.json.message).toBe('debtors.errors.phone_taken');
+    });
+
+    it('shows the history, and a receipt on the tab with its lines', async () => {
+      const ledger = await call('GET', `/terminal/debtors/${clientId}/ledger`, { device: t2, session: t2Session });
+      expect(ledger.status).toBe(200);
+      expect(ledger.json).toMatchObject({ balance: 5000, ledgerBalance: 5000, fiscalEnabled: false });
+      expect(ledger.json.transactions[0]).toMatchObject({ type: 'CHARGE', saleId: 'sat-credit-1' });
+
+      const sale = await call('GET', `/terminal/debtors/${clientId}/sales/sat-credit-1`, { device: t2, session: t2Session });
+      expect(sale.status).toBe(200);
+      expect(sale.json.items).toHaveLength(1);
+    });
+
+    // Not a way to read any receipt by id: only one on that person's tab.
+    it('refuses a receipt that is not on the person’s tab', async () => {
+      const res = await call('GET', `/terminal/debtors/${clientId}/sales/sat-sale-1`, { device: t2, session: t2Session });
+      expect(res.status).toBe(404);
+    });
+
+    it('takes a cash payment into the satellite’s own shift, and clears the receipt', async () => {
+      const res = await call('POST', `/terminal/debtors/${clientId}/payments`, {
+        device: t2,
+        session: t2Session,
+        body: { amount: 5000, paymentMethod: 'cash' },
+      });
+      expect(res.status).toBe(201);
+      expect(res.json.debtor.debt).toBe(0);
+      expect(res.json.settledSales).toEqual(['sat-credit-1']);
+
+      const shift = await getPrismaClient().smena.findFirst({ where: { terminalId: 'T2', status: 'OPEN' } });
+      const payIns = await getPrismaClient().smenaMovement.findMany({ where: { smenaId: shift!.id, type: 'PAY_IN' } });
+      expect(payIns.map((m: { amount: unknown }) => Number(m.amount))).toContain(5000);
+    });
+
+    it('lets only an admin edit a debtor or correct a balance', async () => {
+      const edit = await call('PATCH', `/terminal/debtors/${clientId}`, {
+        device: t2,
+        session: t2Session,
+        body: { debtDueDate: '2026-12-01' },
+      });
+      expect(edit.status).toBe(403);
+      const adjust = await call('POST', `/terminal/debtors/${clientId}/adjustments`, {
+        device: t2,
+        session: t2Session,
+        body: { amount: -100 },
+      });
+      expect(adjust.status).toBe(403);
+    });
   });
 
   it('closes its own shift and no other till’s', async () => {
