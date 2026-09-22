@@ -105,3 +105,4 @@ src/generated/
 /expand-category-groups.sql
 /outliers-to-recategorise.csv
 /products-022-not-napitki.csv
+dist-asar-test/

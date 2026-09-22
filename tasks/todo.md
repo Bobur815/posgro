@@ -1,3 +1,46 @@
+# Faster POS updates — option A: slim package, asar, silent install (2026-09-22)
+
+Measured on the 1.31.1 build: every update rewrites 611 MB / ~24,000 files. 23,893 of those files
+are `resources/app/node_modules` (253 MB), of which the main process loads only 7 packages
+(bcryptjs, date-fns, electron-log, electron-squirrel-startup, electron-updater, jsonwebtoken,
+qrcode) plus the generated Prisma client. The app code that actually changes is about 7 MB.
+
+- [x] **Step 1 — asar test build:** `asar: true` + `asarUnpack` for the Prisma client. An
+      unpacked build into `dist-asar-test`. Check the window, setup wizard, database, LAN
+      dashboard and printing all still work. CLAUDE.md says ES modules could not load from asar.
+- [x] Step 2 — ship only runtime dependencies: bundle the 7 into the main build, so the packaged
+      `node_modules` is empty or near-empty.
+- [x] Step 3 — silent install (one-click/per-user left as is: it would move existing installs), and `autoUpdater.logger` wired to electron-log.
+- [ ] Step 4 — measure: installer size, file count, and install time before and after, on a till.
+- [ ] Step 5 — a staged release: one till first, then all.
+
+## Results so far (2026-09-22)
+
+- The asar build works on Electron 40, run with a scratch profile:
+  - the renderer's ES modules and the preload API;
+  - Prisma creating and writing the database (engine loaded from `app.asar.unpacked`);
+  - license and subscription IPC;
+  - `fs/promises.stat` and `createReadStream` inside the archive, which is what the LAN
+    dashboard uses;
+  - the bundled electron-updater (asked the production feed: not-available);
+  - bcryptjs, jsonwebtoken and qrcode, called through real IPC;
+  - electron-log writing.
+- Receipt printing was not exercised (no printer here): check it on the till.
+
+| | 1.31.1 | slim asar |
+|---|---|---|
+| App on disk | 611 MB / 24,049 files | 359 MB / 137 files |
+| app folder | 280 MB / 23,925 files | app.asar 8.9 MB + 20 MB unpacked Prisma |
+| Installer | 154 MB | 106 MB |
+| Copy the app folder | 60.1 s | 0.9 s |
+| Delete the app folder | 56.5 s | 0.0 s |
+
+- **One-time cost:** the first update from an old build still has to delete the old ~24,000
+  files, so that one install is as slow as today. Every update after it is fast.
+- **Found on the way:** a packaged till accepts `--inspect`. Anyone at a till can attach a
+  debugger to the main process, where the license checks run. Electron's fuses
+  (`EnableNodeCliInspectArguments`, `RunAsNode`) should be switched off in a follow-up.
+
 # Subscription billed from the store balance; store screens as pages (2026-09-22) — built on `dev`, not yet committed
 
 Decided with the user:

@@ -77,7 +77,8 @@ export function getLocalServerStatus(): LocalServerStatus {
 }
 
 /**
- * Where the built SPA lives. `asar: false`, so it is a plain directory in both dev and prod.
+ * Where the built SPA lives: a plain directory in dev, and inside app.asar in a packaged build —
+ * Node's fs, which static-files.ts uses, reads through the archive transparently.
  *
  * `dist-web`, not `dist/web`: electron-builder excludes its own output directory (`dist`) from
  * the package, so `npm run build:web` stages a copy alongside `dist-renderer`.

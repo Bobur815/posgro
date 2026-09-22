@@ -13,7 +13,13 @@ module.exports = {
     buildResources: 'build'
   },
 
-  asar: false,
+  // One archive instead of thousands of loose files: an update copies (and Windows Defender scans)
+  // a handful of files rather than ~24,000. Tested on Electron 40 (2026-09-22): the renderer's ES
+  // modules, the preload, Prisma and the LAN dashboard's static files all load from inside it.
+  asar: true,
+  // Native code cannot be loaded from inside an archive: Prisma's query engine is a .node DLL.
+  // sqlite-client.ts requires the client by its app.asar path and Electron redirects to here.
+  asarUnpack: ['src/generated/prisma-sqlite/**/*'],
 
   files: [
     'dist-electron/**/*',
@@ -24,7 +30,11 @@ module.exports = {
     // directory, which electron-builder excludes from `files`.
     'dist-web/**/*',
     'src/generated/prisma-sqlite/**/*',
-    'build/icons/**/*'
+    'build/icons/**/*',
+    // Everything the main process needs is bundled into dist-electron (electron.vite.config.ts),
+    // and the generated Prisma client carries its own runtime. Without this, electron-builder
+    // copies every production dependency in package.json — the server's and web's included.
+    '!node_modules/**/*'
   ],
 
   extraResources: [

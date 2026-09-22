@@ -96,7 +96,12 @@ Renderer (React) → hooks → ipc-client.ts → preload.ts (contextBridge) → 
 - **i18n:** `s016623009rc/renderer/i18n/locales/ru.json` + `uz.json`; bilingual DB fields use `nameRu`/`nameUz`
 
 ## Electron Build Notes
-- `asar: false` in `electron-builder.config.js` — Chromium ES modules can't load from `.asar`
+- `asar: true` with `asarUnpack` for the Prisma client (its query engine is a native `.node`).
+  The old "ES modules can't load from asar" no longer holds on Electron 40 (tested 2026-09-22).
+- The package ships **no `node_modules`**: electron-vite bundles the main process's npm packages
+  (`externalizeDeps: false`) and `files` excludes `node_modules`. A main-process dependency
+  that cannot be bundled (native, or loaded by path at runtime) must be added back explicitly,
+  e.g. with `asarUnpack` — otherwise it is simply missing on a till.
 - SQLite Prisma client at `src/generated/prisma-sqlite/` is **not** committed — `src/generated/` is
   gitignored. `prebuild:pos` regenerates it (npm runs that automatically before `build:pos`), and
   the result is bundled. A fresh clone has no client until something generates one, so run
