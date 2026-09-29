@@ -106,3 +106,9 @@ src/generated/
 /outliers-to-recategorise.csv
 /products-022-not-napitki.csv
 dist-asar-test/
+# Claude Code (personal, not shared)
+.claude/settings.local.json
+CLAUDE.local.md
+# Hero video: raw footage and scripts/encode-hero.sh output (uploaded from the dashboard)
+assets/raw/
+assets/out/

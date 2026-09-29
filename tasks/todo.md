@@ -1,3 +1,97 @@
+# Landing hero background video (2026-09-29) — implemented
+
+Spec: `tasks/HERO_VIDEO.md`. Steps 1–5 and 7 done; step 6 (nginx) proposed, not applied.
+
+## Step 0 findings
+- Stack: `src/landing` = Vite 5 + React 18 + TypeScript (strict) + styled-components 6 + lucide-react.
+  Own `package.json` (`dev` :5176, `build` = `tsc --noEmit && vite build` → `dist/landing`, `preview`).
+- Styling: styled-components, theme from `@theme/themes` (POS theme, read-only), light/dark toggle
+  (`useThemeMode`), brand gradient in `styles/brand.ts`. Hero = `components/sections/Hero.tsx`.
+- i18n: own small dictionary in `src/i18n.ts` (uz/ru), `useLanding().t(key)`. Not react-i18next.
+- Static assets: no `public/` dir yet (Vite default `src/landing/public` → served at `/`); base `/`.
+  Build assets are hashed under `/assets/`.
+- Deploy: built inside the API Docker image (Dockerfile) → `scripts/deploy/production.sh` copies
+  `dist/landing` to `/var/www/posgro-landing` → nginx `nginx/sites/posgro.uz.conf` (static, `try_files`).
+- **posgro.uz is not live on the VPS yet**: apex A → 45.138.159.4 (old hosting); the VPS has only the
+  bootstrap stub (HTTP 503), no cert, not in `sites-live.txt`.
+- **Staging has no landing at all**: no `dev.posgro.uz` block in `nginx/sites-staging/`, and
+  `scripts/deploy/staging.sh` does not publish `dist/landing`. There is no `nginx.staging.conf`.
+- POS build: `build:pos` builds only `src/web` + `stage-web-for-pos.mjs`; neither references landing.
+  The electron-builder config could not be read (guard hook blocks it) — confirm manually.
+- Range/206: the VPS nginx (1.24) returns `206` + `Accept-Ranges: bytes` (verified on web.posgro.uz).
+  nginx's static module supports Range by default, so `/var/www/posgro-landing` will too; not testable
+  on posgro.uz until the host is live.
+- Root `npm run lint` = `eslint src` → covers `src/landing`.
+- Not present: `assets/raw/hero-raw.mov`. ffmpeg now installed locally (libx264, libvpx-vp9, libwebp).
+
+## Answers (2026-09-29)
+- Video is uploaded from the super-admin page `src/web/src/pages/Admin/LandingPage.tsx` (overrides
+  the spec's "src/web frozen"), encoded per the user's ffmpeg recipe. Sample:
+  `~/Downloads/istockphoto-2174930201-640_adpp_is.mp4` — 768×432, 25 fps, 17.5 s, 1.7 MB.
+- No staging for the landing. Video: full width, behind the transparent header. White text on the
+  dark overlay in both themes is OK. posgro.uz will be proxied through Cloudflare.
+
+## Existing pieces to reuse
+- `POST /api/site-config/upload-image` (SUPER_ADMIN, multer disk storage → `UPLOADS_DIR`/`uploads`).
+- `./uploads` is bind-mounted into the API container (`/app/uploads`) and served by nginx straight
+  from disk (`/home/bobur/posgro/uploads/`) — works with the API down, Range supported.
+- `SiteConfig` is a key/value table → a new key needs no migration.
+- VPS: 3 cores, 7.8 GB RAM, load ~0.3, shared with a live store and other projects.
+
+## Decisions (2026-09-29, second round)
+1. Encode **locally** (`scripts/encode-hero.sh`), upload the finished files. No ffmpeg on the server.
+2. **No slow motion** in the script — done by hand in an editor before encoding.
+3. Serve from **`https://posgro.uz/media/`** (same origin, Cloudflare-cached).
+4. Add `LandingHeroVideo` to `src/shared/types/landing.types.ts` — additive only.
+5. The loop crossfade is **always on** — in the encode script (the server no longer encodes).
+6. Defaults: output ≤ 15 s; each uploaded file ≤ 10 MB (fits the existing 25 MB nginx cap on
+   api.posgro.uz — no nginx change there).
+7. Branch: `feat/landing-hero-video` off `refactor/landing-split` → merge into `dev` → push → stop.
+
+## Plan v3 — approved
+- [x] 1. `scripts/encode-hero.sh <input>` (bash, `set -euo pipefail`), user's recipe:
+      - ffprobe duration/width; trim to 15 s; **0.5 s crossfade of the end into the start**
+        (`split` → `trim` → `xfade=fade`), so the last frame flows into the first
+      - scale to `min(source, 1920)` wide, never upscale; `fps=24`; `-an`
+      - `hero.webm` (VP9 `-crf 34 -b:v 0`), `hero.mp4` (x264 `-crf 28 -preset slow -profile:v high
+        -pix_fmt yuv420p -movflags +faststart`), `hero-mobile.mp4` (`min(source,1280)`, `-crf 30`)
+      - `hero-poster.jpg` + `.webp` from the looped output at 1 s, quality stepped down until < 150 KB
+      - writes to `assets/out/`, prints sizes, warns if a video > 3 MB. `.gitignore`: `assets/raw/`,
+        `assets/out/`.
+- [x] 2. Shared: `LandingHeroVideo { version, webm, mp4, mobileMp4, posterJpg, posterWebp }` (file
+      names) + `normalizeLandingHeroVideo()` (null when incomplete).
+- [x] 3. Server `site-config` (existing module, existing multer pattern):
+      - `POST landing-hero-video` (SUPER_ADMIN, multipart fields `webm`, `mp4`, `mobileMp4`,
+        `posterJpg`, `posterWebp`; all required; ≤ 10 MB each; type checked by magic bytes, not the
+        client's mimetype) → `uploads/landing/hero-<timestamp>-<field>.<ext>`; also copies the poster
+        to the stable alias `uploads/landing/hero-poster.{webp,jpg}`; saves key `landing_hero_video`;
+        keeps current + previous version, deletes older; `AuditLog` row.
+      - `DELETE landing-hero-video` (SUPER_ADMIN) → key cleared, files of that version removed, audit.
+      - `GET landing-hero-video` public (same footing as the other landing GETs) → object or `null`.
+      - Unit tests (`*.spec.ts`): magic-byte check, normalizer, version pruning.
+- [x] 4. `src/web` LandingPage: "Hero video" card — five file inputs, upload with progress,
+      current video preview + sizes, Remove button. English, like the rest of that page.
+- [x] 5. Landing:
+      - `hooks/useHeroVideoAllowed.ts` — false on `prefers-reduced-motion: reduce`, `saveData`, or
+        `effectiveType` 2g/3g; reacts to changes; local `NetworkInformation` type, no `any`
+      - `useSiteContent` also fetches `landing-hero-video` (fallback `null`)
+      - `components/sections/HeroVideo.tsx` — `<video autoPlay muted loop playsInline
+        preload="metadata" poster aria-hidden>`; sources in order: mobile mp4
+        `media="(max-width: 768px)"`, webm, mp4; poster-only `<img>` when not allowed;
+        IntersectionObserver pause/resume
+      - `Hero.tsx` — full width, fixed height (`min(100svh, 760px)` desktop / 560px mobile), pulled
+        up behind the sticky header, overlay `rgba(0,0,0,.5)`, white text in both themes; fallback
+        with no video / API down: dark brand gradient
+      - header at the top of the page: white text over the hero; normal colours once scrolled
+      - `index.html`: `<link rel="preload" as="image" href="/media/hero-poster.webp" fetchpriority="high">`
+      - `vite.config.ts` dev proxy `/media` → `https://api.posgro.uz/uploads/landing`
+- [ ] 6. nginx diff for `nginx/sites/posgro.uz.conf` — **shown, not applied**:
+      `location /media/` → alias `uploads/landing/`; versioned `hero-<ts>-*` → `max-age=31536000,
+      immutable`; `hero-poster.*` alias → `max-age=300`; `/.well-known/acme-challenge/` in the 443 block.
+- [x] 7. Gates: landing + web builds, root lint, server tests + `/check`, `git diff --stat` shows nothing
+      under frozen paths, manual checks report (iOS Safari autoplay, reduced motion, Data Saver, URLs).
+      One commit per concern → `dev`, push, stop.
+
 # Faster POS updates — option A: slim package, asar, silent install (2026-09-22)
 
 Measured on the 1.31.1 build: every update rewrites 611 MB / ~24,000 files. 23,893 of those files

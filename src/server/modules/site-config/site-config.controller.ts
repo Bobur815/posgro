@@ -1,4 +1,16 @@
-import { Controller, Get, Put, Post, Body, UseGuards, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Put,
+  Post,
+  Delete,
+  Body,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  UploadedFiles,
+  BadRequestException,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import {
   IsString,
@@ -21,11 +33,14 @@ import {
 } from '../../../shared/utils/subscription';
 import {
   LANDING_PLAN_IDS,
+  LANDING_HERO_VIDEO_FILES,
   type LandingPlanId,
   type LandingPlan,
   type LandingContact,
+  type LandingHeroVideo,
+  type LandingHeroVideoFile,
 } from '../../../shared/types/landing.types';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { diskStorage } = require('multer') as { diskStorage: (opts: any) => any };
 import { extname, join } from 'path';
@@ -36,6 +51,11 @@ import {
   SubscriptionPlanPrices,
   SubscriptionPayment,
 } from './site-config.service';
+import {
+  LandingHeroVideoService,
+  HERO_FILE_MAX_BYTES,
+  type HeroUpload,
+} from './landing-hero-video.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -145,7 +165,10 @@ class SubscriptionRulesDto implements SubscriptionRules {
 @ApiTags('site-config')
 @Controller('site-config')
 export class SiteConfigController {
-  constructor(private readonly siteConfigService: SiteConfigService) {}
+  constructor(
+    private readonly siteConfigService: SiteConfigService,
+    private readonly heroVideoService: LandingHeroVideoService,
+  ) {}
 
   @Get('login-banner')
   @ApiOperation({ summary: 'Get the POS terminal login screen banner (public)' })
@@ -278,6 +301,52 @@ export class SiteConfigController {
   @ApiOperation({ summary: 'Set landing page contact details (super admin only)' })
   setLandingContact(@Body() dto: LandingContactDto): Promise<LandingContact> {
     return this.siteConfigService.setLandingContact(dto);
+  }
+
+  /**
+   * The landing hero's background video — five finished files from scripts/encode-hero.sh.
+   * GET is public like the other landing GETs; null means "no video" and the page shows its
+   * gradient. The files themselves are served by nginx from disk (posgro.uz/media/), not by this API.
+   */
+  @Get('landing-hero-video')
+  @ApiOperation({ summary: 'Get the landing hero background video file names, or null (public)' })
+  getLandingHeroVideo(): Promise<LandingHeroVideo | null> {
+    return this.heroVideoService.get();
+  }
+
+  @Post('landing-hero-video')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Upload the landing hero video: webm, mp4, mobileMp4, posterJpg, posterWebp (super admin only)' })
+  @UseInterceptors(
+    // Memory storage: every file is type-checked by content before anything touches the disk.
+    FileFieldsInterceptor(
+      LANDING_HERO_VIDEO_FILES.map((name) => ({ name, maxCount: 1 })),
+      { limits: { fileSize: HERO_FILE_MAX_BYTES, files: LANDING_HERO_VIDEO_FILES.length } },
+    ),
+  )
+  setLandingHeroVideo(
+    @UploadedFiles() files: Partial<Record<LandingHeroVideoFile, HeroUpload[]>> | undefined,
+  ): Promise<LandingHeroVideo> {
+    const first = (field: LandingHeroVideoFile) => files?.[field]?.[0];
+    return this.heroVideoService.set({
+      webm: first('webm'),
+      mp4: first('mp4'),
+      mobileMp4: first('mobileMp4'),
+      posterJpg: first('posterJpg'),
+      posterWebp: first('posterWebp'),
+    });
+  }
+
+  @Delete('landing-hero-video')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Remove the landing hero video (super admin only)' })
+  async removeLandingHeroVideo(): Promise<{ removed: true }> {
+    await this.heroVideoService.remove();
+    return { removed: true };
   }
 
   @Post('upload-image')
