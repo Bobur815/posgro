@@ -19,6 +19,6 @@ api.posgro.uz
 web.posgro.uz
 panel.posgro.uz
 
-# posgro.uz is NOT here yet: its apex A record still points at the old hosting
-# (45.138.159.4), so HTTP-01 cannot validate and no certificate exists. It stays a
-# stub until the apex moves to the POS VPS — the last step of the migration.
+# Apex moved to this VPS (Cloudflare-proxied) on 2026-09-29; certificate for posgro.uz +
+# www.posgro.uz issued with certbot --webroot the same day.
+posgro.uz
