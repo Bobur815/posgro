@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/posgro-icon.svg" type="image/svg+xml" />
     <meta name="description" content="POSGRO — do'kon uchun kassa dasturi. Internetsiz ishlaydi, fiskal chek, markirovka va tarozi qo'llab-quvvatlanadi." />
     <meta property="og:title" content="POSGRO — do'kon avtomatizatsiyasi" />
     <meta property="og:description" content="Internetsiz ishlaydigan kassa dasturi. Fiskal chek, markirovkali mahsulotlar, tarozi va ombor." />
@@ -10,6 +12,20 @@
     <!-- The hero poster is the LCP element: fetch it before any script runs. A fixed alias of the
          current upload (see LandingHeroVideoService); 404s harmlessly when no video is set. -->
     <link rel="preload" as="image" href="/media/hero-poster.webp" type="image/webp" fetchpriority="high" />
+    <!-- Google Analytics 4. Only on the real site, so vite dev and previews don't pollute the stats.
+         Async and after the poster preload, so it never competes with the LCP image. -->
+    <script>
+      if (location.hostname === "posgro.uz" || location.hostname === "www.posgro.uz") {
+        var ga = document.createElement("script");
+        ga.async = true;
+        ga.src = "https://www.googletagmanager.com/gtag/js?id=G-XYYBHHK6BB";
+        document.head.appendChild(ga);
+        window.dataLayer = window.dataLayer || [];
+        window.gtag = function () { dataLayer.push(arguments); };
+        gtag("js", new Date());
+        gtag("config", "G-XYYBHHK6BB");
+      }
+    </script>
     <title>POSGRO — do'kon uchun kassa dasturi</title>
   </head>
   <body>

@@ -17,7 +17,7 @@
 # Never upscales: a 768-wide source stays 768 wide, because stretching it only adds bytes.
 set -euo pipefail
 
-MAX_SECONDS=15
+MAX_SECONDS=60
 CROSSFADE=0.5
 FPS=24
 POSTER_MAX_BYTES=$((150 * 1024))
