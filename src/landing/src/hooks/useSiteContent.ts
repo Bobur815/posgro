@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import type { LandingPlan, LandingContact } from "@shared/types/landing.types";
+import {
+  normalizeLandingHeroVideo,
+  type LandingPlan,
+  type LandingContact,
+  type LandingHeroVideo,
+} from "@shared/types/landing.types";
 import { getJson } from "../api/siteConfig";
 import {
   FALLBACK_PLANS,
@@ -16,6 +21,8 @@ export function useSiteContent() {
   const [plans, setPlans] = useState<LandingPlan[]>(FALLBACK_PLANS);
   const [prices, setPrices] = useState<Prices>(FALLBACK_PRICES);
   const [contact, setContact] = useState<LandingContact>(FALLBACK_CONTACT);
+  // No baked-in fallback: without the config the hero keeps its poster or gradient.
+  const [heroVideo, setHeroVideo] = useState<LandingHeroVideo | null>(null);
 
   useEffect(() => {
     // Live content replaces the baked copy when it arrives. A failure leaves what is rendered.
@@ -24,9 +31,12 @@ export function useSiteContent() {
     );
     getJson("/site-config/subscription-plans", FALLBACK_PRICES).then(setPrices);
     getJson("/site-config/landing-contact", FALLBACK_CONTACT).then(setContact);
+    getJson<unknown>("/site-config/landing-hero-video", null).then((v) =>
+      setHeroVideo(normalizeLandingHeroVideo(v)),
+    );
   }, []);
 
   const telegram = contact.socials.find((s) => s.platform === "telegram")?.url;
 
-  return { plans, prices, contact, telegram };
+  return { plans, prices, contact, telegram, heroVideo };
 }

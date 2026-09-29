@@ -1,21 +1,13 @@
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 import { LogIn, Moon, Sun } from "lucide-react";
 import { useLanding } from "../../context/LandingContext";
 import { DASHBOARD_URL } from "../../config";
 import { gradient } from "../../styles/brand";
+import { useScrollTrigger } from "../../hooks/useScrollTrigger";
 import { IconBtn } from "../common/Buttons";
 
-const Bar = styled.header`
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 24px;
-  background: ${({ theme }) => theme.colors.surface};
-  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
-`;
+/** Fixed, so the hero can pull itself up under the bar by exactly this much. */
+export const HEADER_H = 66;
 
 const Brand = styled.a`
   display: flex;
@@ -74,11 +66,53 @@ const LoginBtn = styled.a<{ $dark: boolean }>`
   }
 `;
 
+/**
+ * Transparent over the hero, with white text — the hero is always dark (video under an overlay, or
+ * its gradient). A frosted surface with the theme's colours once the page scrolls under it.
+ */
+const Bar = styled.header<{ $scrolled: boolean }>`
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: ${HEADER_H}px;
+  padding: 0 24px;
+  border-bottom: 1px solid
+    ${({ $scrolled, theme }) => ($scrolled ? theme.colors.border : "transparent")};
+  background: ${({ $scrolled, theme }) =>
+    $scrolled
+      ? `color-mix(in oklab, ${theme.colors.surface} 72%, transparent)`
+      : "transparent"};
+  backdrop-filter: ${({ $scrolled }) => ($scrolled ? "blur(10px)" : "none")};
+  -webkit-backdrop-filter: ${({ $scrolled }) => ($scrolled ? "blur(10px)" : "none")};
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease,
+    backdrop-filter 200ms ease;
+
+  ${({ $scrolled }) =>
+    !$scrolled &&
+    css`
+      ${Brand}, ${NavLink}, ${IconBtn} {
+        color: #fff;
+      }
+      ${NavLink}:hover {
+        color: rgba(255, 255, 255, 0.75);
+      }
+      ${IconBtn} {
+        border-color: rgba(255, 255, 255, 0.4);
+      }
+    `}
+`;
+
 export function Header() {
   const { t, ru, toggleLang, dark, toggleDark } = useLanding();
+  const scrolled = useScrollTrigger(10);
 
   return (
-    <Bar>
+    <Bar $scrolled={scrolled}>
       <Brand href="/">
         <Mark $dark={dark}>PG</Mark>
         POSGRO

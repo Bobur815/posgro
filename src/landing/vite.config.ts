@@ -24,6 +24,13 @@ export default defineConfig({
     port: 5176,
     proxy: {
       '/api': { target: 'https://dev.api.posgro.uz', changeOrigin: true },
+      // Prod serves the hero video from the uploads dir as /media/ (nginx/sites/posgro.uz.conf).
+      // The config the page reads comes from api.posgro.uz (config.ts), so the files do too.
+      '/media': {
+        target: 'https://api.posgro.uz',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/media/, '/uploads/landing'),
+      },
     },
   },
   build: {

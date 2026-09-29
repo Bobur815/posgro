@@ -31,7 +31,7 @@ const Main = styled.main`
 
 function Page() {
   const { dark } = useLanding();
-  const { plans, prices, contact, telegram } = useSiteContent();
+  const { plans, prices, contact, telegram, heroVideo } = useSiteContent();
   const theme: Theme = dark ? darkTheme : lightTheme;
 
   return (
@@ -40,8 +40,8 @@ function Page() {
       {/* --surface feeds the featured card's gradient border, which needs the solid colour twice. */}
       <div style={{ ["--surface" as string]: theme.colors.surface }}>
         <Header />
+        <Hero video={heroVideo} />
         <Main>
-          <Hero />
           <Features />
           <Pricing plans={plans} prices={prices} telegram={telegram} />
           <Contact contact={contact} />
