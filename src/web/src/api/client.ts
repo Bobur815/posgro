@@ -11,7 +11,14 @@ import type {
   SubscriptionRules,
   SubscriptionState,
 } from "@shared/utils/subscription";
-import type { LandingPlan, LandingContact } from "@shared/types/landing.types";
+import {
+  LANDING_HERO_VIDEO_FILES,
+  normalizeLandingHeroVideo,
+  type LandingPlan,
+  type LandingContact,
+  type LandingHeroVideo,
+  type LandingHeroVideoFile,
+} from "@shared/types/landing.types";
 
 export interface DeviceSession {
   id: string;
@@ -866,6 +873,30 @@ export const siteConfig = {
   setLandingContact: async (contact: LandingContact): Promise<LandingContact> => {
     const { data } = await axiosInstance.put('/site-config/landing-contact', contact);
     return data;
+  },
+  /** The hero's background video, or null. File names are relative to `/uploads/landing/`. */
+  getLandingHeroVideo: async (): Promise<LandingHeroVideo | null> => {
+    const { data } = await axiosInstance.get('/site-config/landing-hero-video');
+    return normalizeLandingHeroVideo(data);
+  },
+  /** All five files at once, from scripts/encode-hero.sh. Up to 24 MB (nginx caps a body at 25M). */
+  setLandingHeroVideo: async (
+    files: Record<LandingHeroVideoFile, File>,
+    onProgress?: (percent: number) => void,
+  ): Promise<LandingHeroVideo> => {
+    const form = new FormData();
+    for (const field of LANDING_HERO_VIDEO_FILES) form.append(field, files[field]);
+    const { data } = await axiosInstance.post('/site-config/landing-hero-video', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 0,
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100));
+      },
+    });
+    return data;
+  },
+  removeLandingHeroVideo: async (): Promise<void> => {
+    await axiosInstance.delete('/site-config/landing-hero-video');
   },
   /** Trial, warning, grace and check-in days — super admin only. */
   getSubscriptionRules: async (): Promise<SubscriptionRules> => {
