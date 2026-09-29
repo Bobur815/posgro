@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from "react";
 import styled from "styled-components";
-import { RefreshCw, Save, Plus, Trash2 } from "lucide-react";
+import { RefreshCw, Save, Plus, Trash2, Upload } from "lucide-react";
 import {
   siteConfig,
   type SubscriptionPlanPrices,
 } from "../../api/client";
 import {
   LANDING_PLAN_IDS,
+  LANDING_HERO_VIDEO_FILES,
   KNOWN_SOCIAL_PLATFORMS,
   DEFAULT_LANDING_CONTACT,
   emptyLandingPlan,
   type LandingPlan,
   type LandingPlanId,
   type LandingContact,
+  type LandingHeroVideo,
+  type LandingHeroVideoFile,
 } from "@shared/types/landing.types";
 
 /**
@@ -235,6 +238,156 @@ const PLAN_ACCENTS: Record<LandingPlanId, string> = {
 /** Bullets are edited as one per line — a repeater for a short list is more clicks, not less. */
 const toLines = (list: string[]) => list.join("\n");
 const fromLines = (text: string) => text.split("\n");
+
+/** What each upload slot expects: the file scripts/encode-hero.sh writes for it. */
+const HERO_SLOTS: Record<LandingHeroVideoFile, { file: string; accept: string }> = {
+  webm: { file: "hero.webm", accept: "video/webm" },
+  mp4: { file: "hero.mp4", accept: "video/mp4" },
+  mobileMp4: { file: "hero-mobile.mp4", accept: "video/mp4" },
+  posterJpg: { file: "hero-poster.jpg", accept: "image/jpeg" },
+  posterWebp: { file: "hero-poster.webp", accept: "image/webp" },
+};
+
+const HERO_FILE_MAX_MB = 10;
+/** All five go in one request, and nginx on web/api.posgro.uz caps a body at 25M. */
+const HERO_TOTAL_MAX_MB = 24;
+
+const kb = (bytes: number) => `${Math.round(bytes / 1024)} KB`;
+
+/**
+ * The hero's background video. Uploads straight away with its own button — five files are one
+ * unit, and a half-replaced video would be worse than either version, so it does not wait for the
+ * page's Save. Files are encoded locally (scripts/encode-hero.sh); the server only stores them.
+ */
+function HeroVideoCard() {
+  const [current, setCurrent] = useState<LandingHeroVideo | null>(null);
+  const [picked, setPicked] = useState<Partial<Record<LandingHeroVideoFile, File>>>({});
+  const [progress, setProgress] = useState<number | null>(null);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    siteConfig.getLandingHeroVideo().then(setCurrent).catch(() => {});
+  }, []);
+
+  const complete = LANDING_HERO_VIDEO_FILES.every((f) => picked[f]);
+  const tooBig = LANDING_HERO_VIDEO_FILES.find(
+    (f) => (picked[f]?.size ?? 0) > HERO_FILE_MAX_MB * 1024 * 1024,
+  );
+  const totalBytes = LANDING_HERO_VIDEO_FILES.reduce((sum, f) => sum + (picked[f]?.size ?? 0), 0);
+  const overTotal = totalBytes > HERO_TOTAL_MAX_MB * 1024 * 1024;
+  const busy = progress !== null;
+
+  const upload = async () => {
+    if (!complete) return;
+    setMessage(null);
+    setProgress(0);
+    try {
+      setCurrent(
+        await siteConfig.setLandingHeroVideo(
+          picked as Record<LandingHeroVideoFile, File>,
+          setProgress,
+        ),
+      );
+      setPicked({});
+      setMessage({ ok: true, text: "Uploaded. Visitors see it on their next page load." });
+    } catch (e) {
+      setMessage({ ok: false, text: (e as Error).message });
+    } finally {
+      setProgress(null);
+    }
+  };
+
+  const remove = async () => {
+    setMessage(null);
+    try {
+      await siteConfig.removeLandingHeroVideo();
+      setCurrent(null);
+      setMessage({ ok: true, text: "Removed. The hero shows its gradient background." });
+    } catch (e) {
+      setMessage({ ok: false, text: (e as Error).message });
+    }
+  };
+
+  return (
+    <Section>
+      <SectionTitle>Hero video</SectionTitle>
+      <Subtitle style={{ marginBottom: 20 }}>
+        Background of the top section on posgro.uz. Encode the clip with{" "}
+        <code>scripts/encode-hero.sh</code> and upload all five files it writes. Visitors with
+        reduced motion or Data Saver see the poster instead.
+      </Subtitle>
+
+      <Card>
+        {current ? (
+          <Field>
+            <Label>Current</Label>
+            <video
+              src={`/uploads/landing/${current.mp4}`}
+              poster={`/uploads/landing/${current.posterJpg}`}
+              muted
+              loop
+              autoPlay
+              playsInline
+              style={{ width: "100%", maxHeight: 320, borderRadius: 8, objectFit: "cover" }}
+            />
+            <FieldHint>
+              Uploaded {new Date(current.version).toLocaleString()}.
+            </FieldHint>
+          </Field>
+        ) : (
+          <FieldHint style={{ marginBottom: 18 }}>
+            No video — the hero shows its gradient background.
+          </FieldHint>
+        )}
+
+        <TwoCol>
+          {LANDING_HERO_VIDEO_FILES.map((field) => (
+            <Field key={field}>
+              <Label>{HERO_SLOTS[field].file}</Label>
+              <Input
+                type="file"
+                accept={HERO_SLOTS[field].accept}
+                disabled={busy}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  setPicked((prev) => ({ ...prev, [field]: file }));
+                }}
+              />
+              {picked[field] && <FieldHint>{kb(picked[field]!.size)}</FieldHint>}
+            </Field>
+          ))}
+        </TwoCol>
+
+        {tooBig && (
+          <ErrorMsg style={{ marginTop: 0, marginBottom: 12 }}>
+            {HERO_SLOTS[tooBig].file} is over {HERO_FILE_MAX_MB} MB — re-encode it.
+          </ErrorMsg>
+        )}
+        {!tooBig && overTotal && (
+          <ErrorMsg style={{ marginTop: 0, marginBottom: 12 }}>
+            The five files add up to {kb(totalBytes)}, over {HERO_TOTAL_MAX_MB} MB — re-encode smaller.
+          </ErrorMsg>
+        )}
+
+        <Row>
+          <SaveBtn onClick={upload} disabled={!complete || !!tooBig || overTotal || busy}>
+            <Upload size={16} />
+            {busy ? `Uploading… ${progress}%` : "Upload"}
+          </SaveBtn>
+          {current && (
+            <AddBtn onClick={remove} disabled={busy}>
+              <Trash2 size={14} />
+              Remove video
+            </AddBtn>
+          )}
+        </Row>
+
+        {message &&
+          (message.ok ? <SuccessMsg>{message.text}</SuccessMsg> : <ErrorMsg>{message.text}</ErrorMsg>)}
+      </Card>
+    </Section>
+  );
+}
 
 export function LandingPage() {
   const [plans, setPlans] = useState<LandingPlan[]>(
@@ -571,6 +724,8 @@ export function LandingPage() {
 
           {success && <SuccessMsg>Saved.</SuccessMsg>}
           {error && <ErrorMsg>{error}</ErrorMsg>}
+
+          <HeroVideoCard />
         </>
       )}
     </Page>
