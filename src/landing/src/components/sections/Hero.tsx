@@ -37,7 +37,7 @@ const Overlay = styled.div`
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(74, 73, 73, 0.8);
   pointer-events: none;
 `;
 
