@@ -154,6 +154,49 @@ export function normalizeLandingPlans(input: unknown): LandingPlan[] {
   return plans.sort((a, b) => a.order - b.order || LANDING_PLAN_IDS.indexOf(a.id) - LANDING_PLAN_IDS.indexOf(b.id));
 }
 
+/**
+ * The hero's background video. Encoded locally by scripts/encode-hero.sh and uploaded from the
+ * super-admin dashboard as five finished files; the server only stores them.
+ *
+ * Values are bare file names inside `uploads/landing/`, which nginx serves on posgro.uz under
+ * `/media/`. Each upload gets new names (`hero-<version>-…`), so the files can be cached forever.
+ * The posters are also copied to the fixed names in HERO_POSTER_ALIAS, which the landing's
+ * index.html preloads before any script has run.
+ */
+export interface LandingHeroVideo {
+  /** Upload timestamp (ms), also the file-name prefix. */
+  version: number;
+  webm: string;
+  mp4: string;
+  mobileMp4: string;
+  posterJpg: string;
+  posterWebp: string;
+}
+
+export const LANDING_HERO_VIDEO_FILES = ['webm', 'mp4', 'mobileMp4', 'posterJpg', 'posterWebp'] as const;
+export type LandingHeroVideoFile = (typeof LANDING_HERO_VIDEO_FILES)[number];
+
+export const HERO_POSTER_ALIAS = { webp: 'hero-poster.webp', jpg: 'hero-poster.jpg' } as const;
+
+/** A plain file name — no path, no traversal — as the server writes them. */
+const SAFE_FILE_NAME = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
+
+/** Stored value → a complete video, or null. A half-configured video renders as no video. */
+export function normalizeLandingHeroVideo(input: unknown): LandingHeroVideo | null {
+  if (!input || typeof input !== 'object') return null;
+  const raw = input as Record<string, unknown>;
+  const version = Number(raw.version);
+  if (!Number.isFinite(version) || version <= 0) return null;
+
+  const files = {} as Record<LandingHeroVideoFile, string>;
+  for (const key of LANDING_HERO_VIDEO_FILES) {
+    const name = str(raw[key]);
+    if (!SAFE_FILE_NAME.test(name)) return null;
+    files[key] = name;
+  }
+  return { version, ...files };
+}
+
 /** Coerce stored contact details, dropping entries too incomplete to render. */
 export function normalizeLandingContact(input: unknown): LandingContact {
   const raw = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
