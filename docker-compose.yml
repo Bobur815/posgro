@@ -47,6 +47,11 @@ services:
       NODE_ENV: "production"
       PORT: "3001"
       RUN_MIGRATIONS: "true"
+      # Landing request form (/api/leads) and News readers (/api/news). Set here, not in .env:
+      # .env is rewritten on every deploy from the shared, write-only secrets.ENV_FILE, and which
+      # features are live belongs in version control. Set "false" to switch one off.
+      LEADS_ENABLED: "true"
+      NEWS_ENABLED: "true"
       # Drivers, tools and manuals uploaded from the dashboard and served on panel.posgro.uz.
       DOWNLOADS_DIR: "/app/downloads"
       # Read-only view of the installer feed, so the portal reports the same version the
