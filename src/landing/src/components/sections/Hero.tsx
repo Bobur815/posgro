@@ -1,10 +1,12 @@
+import { useState } from "react";
 import styled from "styled-components";
-import { Download, LogIn } from "lucide-react";
+import { Download, Send } from "lucide-react";
 import type { LandingHeroVideo } from "@shared/types/landing.types";
 import { useLanding } from "../../context/LandingContext";
-import { DASHBOARD_URL, PANEL_URL } from "../../config";
+import { PANEL_URL } from "../../config";
 import { gradientOnDark, HERO_FALLBACK } from "../../styles/brand";
 import { PrimaryCta, SecondaryCta } from "../common/Buttons";
+import { LeadModal } from "../common/LeadModal";
 import { HEADER_H } from "../layout/Header";
 import { HeroVideo } from "./HeroVideo";
 
@@ -81,27 +83,36 @@ const CtaRow = styled.div`
 
 export function Hero({ video }: { video: LandingHeroVideo | null }) {
   const { t } = useLanding();
+  const [leadOpen, setLeadOpen] = useState(false);
 
   return (
-    <Wrap>
-      <HeroVideo video={video} />
-      <Overlay />
-      <Content>
-        <H1>
-          <Accent>POSGRO</Accent> — {t("hero.title")}
-        </H1>
-        <Lede>{t("hero.lede")}</Lede>
-        <CtaRow>
-          <PrimaryCta href={DASHBOARD_URL}>
-            <LogIn size={18} />
-            {t("hero.cta")}
-          </PrimaryCta>
-          <SecondaryCta href={PANEL_URL}>
-            <Download size={18} />
-            {t("hero.download")}
-          </SecondaryCta>
-        </CtaRow>
-      </Content>
-    </Wrap>
+    <>
+      <Wrap>
+        <HeroVideo video={video} />
+        <Overlay />
+        <Content>
+          <H1>
+            <Accent>POSGRO</Accent> — {t("hero.title")}
+          </H1>
+          <Lede>{t("hero.lede")}</Lede>
+          <CtaRow>
+            <PrimaryCta
+              as="button"
+              type="button"
+              onClick={() => setLeadOpen(true)}
+            >
+              <Send size={18} />
+              {t("hero.cta")}
+            </PrimaryCta>
+            <SecondaryCta href={PANEL_URL}>
+              <Download size={18} />
+              {t("hero.download")}
+            </SecondaryCta>
+          </CtaRow>
+        </Content>
+      </Wrap>
+      {/* Outside Wrap: the dialog would inherit its centred white text. */}
+      <LeadModal open={leadOpen} onClose={() => setLeadOpen(false)} />
+    </>
   );
 }
