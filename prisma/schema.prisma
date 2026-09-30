@@ -918,3 +918,30 @@ model TelegramChat {
   @@index([storeId, role])
   @@map("telegram_chats")
 }
+
+// ==================== LANDING LEADS ====================
+
+/// A "So'rov qoldiring" request from the posgro.uz hero form — a shop owner asking to be called.
+///
+/// Not tied to a Store: the whole point is that the shop is not a customer yet. `storeType` and
+/// `status` are plain strings validated in the DTO rather than enums, so adding a value later is
+/// a code change, not a migration.
+model LeadRequest {
+  id        String  @id @default(cuid())
+  fullName  String  @map("full_name")
+  /// Normalised to `+998XXXXXXXXX`.
+  phone     String
+  storeName String  @map("store_name")
+  storeType String  @map("store_type") // GROCERY | SUPERMARKET | MINIMARKET | PHARMACY | HOUSEHOLD | OTHER
+  /// The landing's language when the form was sent — which language to call back in.
+  lang      String  @default("uz") // uz | ru
+  status    String  @default("NEW") // NEW | CONTACTED | CONVERTED | REJECTED
+  note      String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// The super admin list: newest first, optionally filtered by status.
+  @@index([status, createdAt(sort: Desc)])
+  @@map("lead_requests")
+}
