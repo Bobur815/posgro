@@ -39,6 +39,10 @@ services:
       # workflows rewrite .env from the same shared secrets.ENV_FILE, so a value added there
       # would switch production on too. This file is staging-only, so the flag cannot leak.
       RECONCILIATION_LEDGER_ENABLED: "true"
+      # Landing request form (/api/leads) and News (/api/news readers), on for staging only, same
+      # reason as the ledger flag. Production turns them on in docker-compose.yml when ready.
+      LEADS_ENABLED: "true"
+      NEWS_ENABLED: "true"
       # Same reason, sharper consequence: two processes long-polling one bot token get 409
       # Conflict from Telegram and the bot flaps between them. Staging therefore stays silent
       # unless given a token of its own — the empty default trips the `if (!token)` guard in
