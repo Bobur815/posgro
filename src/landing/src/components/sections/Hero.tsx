@@ -3,14 +3,15 @@ import { Download, LogIn } from "lucide-react";
 import type { LandingHeroVideo } from "@shared/types/landing.types";
 import { useLanding } from "../../context/LandingContext";
 import { DASHBOARD_URL, PANEL_URL } from "../../config";
-import { gradient, HERO_FALLBACK } from "../../styles/brand";
+import { gradientOnDark, HERO_FALLBACK } from "../../styles/brand";
 import { PrimaryCta, SecondaryCta } from "../common/Buttons";
 import { HEADER_H } from "../layout/Header";
 import { HeroVideo } from "./HeroVideo";
 
 /**
- * Full width, pulled up under the transparent sticky header. The height never depends on the
- * video or the network, so nothing shifts when the poster or the video arrives.
+ * Full width, pulled up under the floating sticky header (the video shows around its sides). The
+ * height never depends on the video or the network, so nothing shifts when the poster or the video
+ * arrives.
  */
 const Wrap = styled.section`
   position: relative;
@@ -32,12 +33,12 @@ const Wrap = styled.section`
   }
 `;
 
-/** Keeps white text readable over any frame, in both themes. */
+/** Keeps white text readable over any frame. */
 const Overlay = styled.div`
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: rgba(74, 73, 73, 0.8);
+  background: rgba(12, 12, 12, 0.8);
   pointer-events: none;
 `;
 
@@ -55,9 +56,9 @@ const H1 = styled.h1`
   text-shadow: 0 2px 16px rgba(0, 0, 0, 0.35);
 `;
 
-/** Always the dark-mode (light) gradient: the text sits on the dark overlay in both themes. */
+/** The paler brand pair: the text sits on the hero's dark overlay. */
 const Accent = styled.span`
-  ${gradient(true)}
+  ${gradientOnDark}
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -79,7 +80,7 @@ const CtaRow = styled.div`
 `;
 
 export function Hero({ video }: { video: LandingHeroVideo | null }) {
-  const { t, dark } = useLanding();
+  const { t } = useLanding();
 
   return (
     <Wrap>
@@ -91,7 +92,7 @@ export function Hero({ video }: { video: LandingHeroVideo | null }) {
         </H1>
         <Lede>{t("hero.lede")}</Lede>
         <CtaRow>
-          <PrimaryCta $dark={dark} href={DASHBOARD_URL}>
+          <PrimaryCta href={DASHBOARD_URL}>
             <LogIn size={18} />
             {t("hero.cta")}
           </PrimaryCta>

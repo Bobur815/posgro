@@ -1,7 +1,7 @@
 import React from "react";
 import styled, { ThemeProvider } from "styled-components";
-import { lightTheme, darkTheme, type Theme } from "@theme/themes";
-import { LandingProvider, useLanding } from "./context/LandingContext";
+import { lightTheme as theme } from "@theme/themes";
+import { LandingProvider } from "./context/LandingContext";
 import { useSiteContent } from "./hooks/useSiteContent";
 import { GlobalStyle } from "./styles/GlobalStyle";
 import { Header } from "./components/layout/Header";
@@ -30,9 +30,7 @@ const Main = styled.main`
 `;
 
 function Page() {
-  const { dark } = useLanding();
   const { plans, prices, contact, telegram, heroVideo } = useSiteContent();
-  const theme: Theme = dark ? darkTheme : lightTheme;
 
   return (
     <ThemeProvider theme={theme}>

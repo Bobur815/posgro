@@ -60,7 +60,6 @@ const STRINGS = {
     'footer.download': 'Yuklab olish',
     'footer.rights': 'Barcha huquqlar himoyalangan.',
 
-    'theme.toggle': 'Mavzuni almashtirish',
     'lang.toggle': 'Tilni almashtirish',
   },
   ru: {
@@ -113,7 +112,6 @@ const STRINGS = {
     'footer.download': 'Скачать',
     'footer.rights': 'Все права защищены.',
 
-    'theme.toggle': 'Переключить тему',
     'lang.toggle': 'Переключить язык',
   },
 } as const;
