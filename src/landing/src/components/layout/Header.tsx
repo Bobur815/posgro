@@ -4,6 +4,7 @@ import { useLanding } from "../../context/LandingContext";
 import { DASHBOARD_URL } from "../../config";
 import { gradient, INFO } from "../../styles/brand";
 import { useHideOnScroll } from "../../hooks/useHideOnScroll";
+import { linkTo, matchRoute, usePathname } from "../../router";
 import { IconBtn } from "../common/Buttons";
 
 /** Fixed, so the hero can pull itself up under the bar by exactly this much. */
@@ -128,16 +129,22 @@ const Bar = styled.header<{ $hidden: boolean }>`
 export function Header() {
   const { t, ru, toggleLang } = useLanding();
   const hidden = useHideOnScroll(HEADER_H);
+  // Section anchors only exist on the home page; from /news they go home first (a normal load).
+  const home = matchRoute(usePathname()).page === "home";
+  const section = (id: string) => (home ? `#${id}` : `/#${id}`);
 
   return (
     <Bar $hidden={hidden}>
-      <Brand href="/">
+      <Brand href="/" onClick={home ? undefined : linkTo("/")}>
         <Mark>PG</Mark>
         POSGRO
       </Brand>
-      <NavLink href="#features">{t("nav.features")}</NavLink>
-      <NavLink href="#pricing">{t("nav.pricing")}</NavLink>
-      <NavLink href="#contact">{t("nav.contact")}</NavLink>
+      <NavLink href={section("features")}>{t("nav.features")}</NavLink>
+      <NavLink href={section("pricing")}>{t("nav.pricing")}</NavLink>
+      <NavLink href="/news" onClick={linkTo("/news")}>
+        {t("nav.blog")}
+      </NavLink>
+      <NavLink href={section("contact")}>{t("nav.contact")}</NavLink>
       <IconBtn onClick={toggleLang} title={t("lang.toggle")}>
         {ru ? "RU" : "UZ"}
       </IconBtn>

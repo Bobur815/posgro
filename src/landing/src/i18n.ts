@@ -14,6 +14,7 @@ const STRINGS = {
     'nav.features': 'Imkoniyatlar',
     'nav.pricing': 'Tariflar',
     'nav.contact': 'Aloqa',
+    'nav.blog': 'Blog',
     'nav.login': 'Kirish',
 
     'hero.title': "Do'koningiz uchun kassa dasturi",
@@ -89,6 +90,16 @@ const STRINGS = {
     'contact.hours': 'Ish vaqti',
     'contact.write': 'Telegramda yozish',
 
+    'news.title': 'Yangiliklar',
+    'news.lede': "POSGRO yangiliklari, yangi imkoniyatlar va ulardan foydalanish bo'yicha qo'llanmalar.",
+    'news.details': 'Batafsil',
+    'news.back': 'Barcha yangiliklar',
+    'news.empty': "Hozircha yangiliklar yo'q.",
+    'news.loadMore': "Yana ko'rsatish",
+    'news.loadError': "Yangiliklarni yuklab bo'lmadi. Keyinroq qayta urinib ko'ring.",
+    'news.notFound': 'Bunday yangilik topilmadi.',
+    'news.close': 'Yopish',
+
     'footer.dashboard': 'Boshqaruv paneli',
     'footer.download': 'Yuklab olish',
     'footer.rights': 'Barcha huquqlar himoyalangan.',
@@ -99,6 +110,7 @@ const STRINGS = {
     'nav.features': 'Возможности',
     'nav.pricing': 'Тарифы',
     'nav.contact': 'Контакты',
+    'nav.blog': 'Блог',
     'nav.login': 'Войти',
 
     'hero.title': 'Кассовая программа для вашего магазина',
@@ -173,6 +185,16 @@ const STRINGS = {
     'contact.phone': 'Телефон',
     'contact.hours': 'Время работы',
     'contact.write': 'Написать в Telegram',
+
+    'news.title': 'Новости',
+    'news.lede': 'Новости POSGRO, новые возможности и инструкции, как ими пользоваться.',
+    'news.details': 'Подробнее',
+    'news.back': 'Все новости',
+    'news.empty': 'Пока новостей нет.',
+    'news.loadMore': 'Показать ещё',
+    'news.loadError': 'Не удалось загрузить новости. Попробуйте позже.',
+    'news.notFound': 'Такой новости нет.',
+    'news.close': 'Закрыть',
 
     'footer.dashboard': 'Панель управления',
     'footer.download': 'Скачать',
