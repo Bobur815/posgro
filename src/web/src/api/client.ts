@@ -19,6 +19,14 @@ import {
   type LandingHeroVideo,
   type LandingHeroVideoFile,
 } from "@shared/types/landing.types";
+import type {
+  NewsAdminRow,
+  NewsArticle,
+  NewsAudience,
+  NewsBlock,
+  NewsPage,
+  NewsStatus,
+} from "../components/news/types";
 
 export interface DeviceSession {
   id: string;
@@ -1457,6 +1465,61 @@ export const leads = {
   },
   update: async (id: string, patch: { status?: LeadStatus; note?: string }): Promise<Lead> => {
     const { data } = await axiosInstance.patch(`/leads/${id}`, patch);
+    return data;
+  },
+};
+
+// ─── News ─────────────────────────────────────────────────────────────────────
+
+/** The editor's payload — see CreateNewsDto / UpdateNewsDto in src/server/modules/news. */
+export interface NewsInput {
+  slug?: string;
+  titleUz: string;
+  titleRu: string;
+  excerptUz: string | null;
+  excerptRu: string | null;
+  coverUrl: string | null;
+  body: NewsBlock[];
+  status: NewsStatus;
+  audience: NewsAudience;
+}
+
+export const news = {
+  /** Signed-in readers: public and customers-only posts. */
+  feed: async (page = 1, limit = 12): Promise<NewsPage> => {
+    const { data } = await axiosInstance.get('/news/feed', { params: { page, limit } });
+    return data;
+  },
+  article: async (slug: string): Promise<NewsArticle> => {
+    const { data } = await axiosInstance.get(`/news/feed/${encodeURIComponent(slug)}`);
+    return data;
+  },
+  // Super admin
+  adminList: async (): Promise<NewsAdminRow[]> => {
+    const { data } = await axiosInstance.get('/news/admin/all');
+    return data;
+  },
+  adminGet: async (id: string): Promise<NewsArticle & { status: NewsStatus }> => {
+    const { data } = await axiosInstance.get(`/news/admin/${id}`);
+    return data;
+  },
+  create: async (input: NewsInput): Promise<NewsArticle> => {
+    const { data } = await axiosInstance.post('/news', input);
+    return data;
+  },
+  update: async (id: string, input: Partial<NewsInput>): Promise<NewsArticle> => {
+    const { data } = await axiosInstance.patch(`/news/${id}`, input);
+    return data;
+  },
+  remove: async (id: string): Promise<void> => {
+    await axiosInstance.delete(`/news/${id}`);
+  },
+  uploadImage: async (file: File): Promise<{ url: string }> => {
+    const form = new FormData();
+    form.append('file', file);
+    const { data } = await axiosInstance.post('/news/upload-image', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return data;
   },
 };

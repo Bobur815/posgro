@@ -35,6 +35,17 @@
     "exit": "Chiqish",
     "continue": "Davom etish"
   },
+  "news": {
+    "title": "Yangiliklar",
+    "details": "Batafsil",
+    "back": "Barcha yangiliklar",
+    "empty": "Hozircha yangiliklar yo‘q.",
+    "loadMore": "Yana ko‘rsatish",
+    "loadError": "Yangiliklarni yuklab bo‘lmadi.",
+    "notFound": "Bunday yangilik topilmadi.",
+    "close": "Yopish",
+    "unread": "yangi xabar bor"
+  },
   "auth": {
     "rememberMe": "Meni eslab qol",
     "showPassword": "Parolni ko'rsatish",
