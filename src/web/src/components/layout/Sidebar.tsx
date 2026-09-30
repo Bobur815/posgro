@@ -20,6 +20,7 @@ import {
   CreditCard,
   Globe,
   DownloadCloud,
+  Inbox,
   Scale,
   type LucideIcon,
 } from "lucide-react";
@@ -392,6 +393,7 @@ export function Sidebar() {
             <NavSection>
               <SectionTitle $collapsed={isCollapsed}>Super Admin</SectionTitle>
               {renderNavItem("/admin/stores", Store, "Stores")}
+              {renderNavItem("/admin/leads", Inbox, "Leads")}
               {renderNavItem("/admin/logs", ScrollText, "Logs")}
               {renderNavItem("/admin/login-banner", Image, "Login Banner")}
               {renderNavItem(

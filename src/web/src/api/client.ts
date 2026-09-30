@@ -1431,3 +1431,32 @@ export const api = {
   mxik,
   aslBelgisi,
 };
+
+// ─── Landing leads (super admin) ─────────────────────────────────────────────
+
+export type LeadStatus = 'NEW' | 'CONTACTED' | 'CONVERTED' | 'REJECTED';
+
+/** A "So'rov qoldiring" request from posgro.uz — see src/server/modules/leads. */
+export interface Lead {
+  id: string;
+  fullName: string;
+  phone: string;
+  storeName: string;
+  storeType: string;
+  lang: 'uz' | 'ru';
+  status: LeadStatus;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const leads = {
+  list: async (status?: LeadStatus): Promise<Lead[]> => {
+    const { data } = await axiosInstance.get('/leads', { params: status ? { status } : {} });
+    return data;
+  },
+  update: async (id: string, patch: { status?: LeadStatus; note?: string }): Promise<Lead> => {
+    const { data } = await axiosInstance.patch(`/leads/${id}`, patch);
+    return data;
+  },
+};
