@@ -918,3 +918,63 @@ model TelegramChat {
   @@index([storeId, role])
   @@map("telegram_chats")
 }
+
+// ==================== LANDING LEADS ====================
+
+/// A "So'rov qoldiring" request from the posgro.uz hero form — a shop owner asking to be called.
+///
+/// Not tied to a Store: the whole point is that the shop is not a customer yet. `storeType` and
+/// `status` are plain strings validated in the DTO rather than enums, so adding a value later is
+/// a code change, not a migration.
+model LeadRequest {
+  id        String  @id @default(cuid())
+  fullName  String  @map("full_name")
+  /// Normalised to `+998XXXXXXXXX`.
+  phone     String
+  storeName String  @map("store_name")
+  storeType String  @map("store_type") // GROCERY | SUPERMARKET | MINIMARKET | PHARMACY | HOUSEHOLD | OTHER
+  /// The landing's language when the form was sent — which language to call back in.
+  lang      String  @default("uz") // uz | ru
+  status    String  @default("NEW") // NEW | CONTACTED | CONVERTED | REJECTED
+  note      String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// The super admin list: newest first, optionally filtered by status.
+  @@index([status, createdAt(sort: Desc)])
+  @@map("lead_requests")
+}
+
+// ==================== NEWS ====================
+
+/// A post in "Yangiliklar / Новости" — written in the super admin dashboard, read on posgro.uz/news
+/// and behind the dashboard's news button. Often a how-to for a new feature, so the body is an
+/// ordered list of blocks (heading, paragraph, image, list, callout), each carrying both languages
+/// side by side. JSON rather than rows: a post is always read and written whole.
+model NewsPost {
+  id          String    @id @default(cuid())
+  /// The URL segment: posgro.uz/news/<slug>.
+  slug        String    @unique
+  titleUz     String    @map("title_uz")
+  titleRu     String    @map("title_ru")
+  /// The short text on the card; the card shows the title alone without it.
+  excerptUz   String?   @map("excerpt_uz") @db.Text
+  excerptRu   String?   @map("excerpt_ru") @db.Text
+  /// `/uploads/news/<file>.webp`, or null for a card without a picture.
+  coverUrl    String?   @map("cover_url")
+  /// NewsBlock[] — validated in NewsService, never trusted as stored.
+  body        Json      @default("[]")
+  status      String    @default("DRAFT") // DRAFT | PUBLISHED
+  /// PUBLIC: posgro.uz and the dashboard. CUSTOMERS: the dashboard only (signed-in users).
+  audience    String    @default("PUBLIC")
+  /// Set on first publish and kept through unpublish, so a re-published post keeps its place.
+  publishedAt DateTime? @map("published_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// Both readers' only query: published, newest first.
+  @@index([status, publishedAt(sort: Desc)])
+  @@map("news_posts")
+}

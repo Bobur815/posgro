@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useLanding } from "../../context/LandingContext";
 import type { StringKey } from "../../i18n";
-import { gradient } from "../../styles/brand";
+import { INFO } from "../../styles/brand";
 import { Section, SectionTitle, SectionLede } from "../common/Section";
 
 const FEATURES: Array<{ icon: typeof WifiOff; t: StringKey; d: StringKey }> = [
@@ -34,15 +34,16 @@ const Card = styled.div`
   background: ${({ theme }) => theme.colors.surface};
 `;
 
-const Icon = styled.div<{ $dark: boolean }>`
-  ${({ $dark }) => gradient($dark)}
+/** A tinted tile, not the gradient: the gradient is kept for the calls to action. */
+const Icon = styled.div`
+  background: ${INFO.tint};
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 42px;
   height: 42px;
   border-radius: 10px;
-  color: #fff;
+  color: ${INFO.main};
   margin-bottom: 14px;
 `;
 
@@ -59,7 +60,7 @@ const Text = styled.p`
 `;
 
 export function Features() {
-  const { t, dark } = useLanding();
+  const { t } = useLanding();
 
   return (
     <Section id="features">
@@ -69,7 +70,7 @@ export function Features() {
       <Grid>
         {FEATURES.map(({ icon: FeatureIcon, t: title, d }) => (
           <Card key={title}>
-            <Icon $dark={dark}>
+            <Icon>
               <FeatureIcon size={21} />
             </Icon>
             <Title>{t(title)}</Title>

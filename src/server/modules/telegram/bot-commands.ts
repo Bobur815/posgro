@@ -515,3 +515,49 @@ export function btnAlertToggle(state: { alerts: boolean; verbose: boolean }, lan
       : t('📈 Batafsil rejimni yoqish', '📈 Включить подробный режим', lang),
   };
 }
+
+// ─── Landing leads ──────────────────────────────────────────────────────────
+
+/** Store types offered by the posgro.uz request form, in the order the dropdown shows them. */
+export const LEAD_STORE_TYPES = [
+  'GROCERY',
+  'SUPERMARKET',
+  'MINIMARKET',
+  'PHARMACY',
+  'HOUSEHOLD',
+  'OTHER',
+] as const;
+export type LeadStoreType = (typeof LEAD_STORE_TYPES)[number];
+
+const STORE_TYPE_LABELS: Record<LeadStoreType, [uz: string, ru: string]> = {
+  GROCERY: ["Oziq-ovqat do'koni", 'Продуктовый магазин'],
+  SUPERMARKET: ['Supermarket', 'Супермаркет'],
+  MINIMARKET: ['Minimarket', 'Минимаркет'],
+  PHARMACY: ['Dorixona', 'Аптека'],
+  HOUSEHOLD: ["Xo'jalik mollari", 'Хозтовары'],
+  OTHER: ['Boshqa', 'Другое'],
+};
+
+export interface NewLead {
+  fullName: string;
+  phone: string;
+  storeName: string;
+  storeType: LeadStoreType;
+  lang: Lang;
+  createdAt: string | Date;
+}
+
+/** Someone left a request on posgro.uz. The phone is plain text so Telegram makes it tappable. */
+export function msgNewLead(l: NewLead, lang?: Lang): string {
+  const [typeUz, typeRu] = STORE_TYPE_LABELS[l.storeType];
+  const title = t("📝 <b>Yangi so'rov — posgro.uz</b>", '📝 <b>Новая заявка — posgro.uz</b>', lang);
+  const rows = [
+    `${t('Ism', 'Имя', lang)}: <b>${escapeHtml(l.fullName)}</b>`,
+    `${t('Telefon', 'Телефон', lang)}: ${escapeHtml(l.phone)}`,
+    `${t("Do'kon", 'Магазин', lang)}: <b>${escapeHtml(l.storeName)}</b>`,
+    `${t('Turi', 'Тип', lang)}: ${t(typeUz, typeRu, lang)}`,
+    `${t('Til', 'Язык', lang)}: ${l.lang.toUpperCase()}`,
+    `${t('Vaqt', 'Время', lang)}: ${moment(l.createdAt)}`,
+  ];
+  return `${title}\n\n${rows.join('\n')}`;
+}
