@@ -7,7 +7,7 @@ import { useHideOnScroll } from "../../hooks/useHideOnScroll";
 import { linkTo, matchRoute, usePathname } from "../../router";
 import { IconBtn } from "../common/Buttons";
 
-/** Fixed, so the hero can pull itself up under the bar by exactly this much. */
+/** Fixed: the hero subtracts it from its height, and the hide-on-scroll threshold uses it. */
 export const HEADER_H = 66;
 
 const Brand = styled.a`
@@ -86,10 +86,9 @@ const LoginBtn = styled.a`
 `;
 
 /**
- * Same width as the page content (Main: 1080px minus its 24px gutters). Frosted white glass: it
- * floats visibly over the dark hero and stays readable over the white sections below, where a
- * tinted glass would drop white text under 3:1. Always sticky, but slides out of view while
- * scrolling down and back in on the first scroll up.
+ * Full width, frosted white glass; its content sits in BarContainer, lined up with the page
+ * content. Always sticky, but slides out of view while scrolling down and back in on the first
+ * scroll up.
  */
 const Bar = styled.header<{ $hidden: boolean }>`
   position: sticky;
@@ -97,15 +96,9 @@ const Bar = styled.header<{ $hidden: boolean }>`
   z-index: 20;
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: calc(100% - 48px);
-  max-width: ${1080 - 48}px;
   height: ${HEADER_H}px;
-  margin: 0 auto;
-  padding: 0 20px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-top: none;
-  border-radius: 0 0 12px 12px;
+  padding: 0 24px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   background: rgba(255, 255, 255, 0.82);
   backdrop-filter: blur(14px) saturate(160%);
   -webkit-backdrop-filter: blur(14px) saturate(160%); /* Safari / iOS */
@@ -126,6 +119,15 @@ const Bar = styled.header<{ $hidden: boolean }>`
   }
 `;
 
+const BarContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 1032px; /* Main's 1080 minus its 24px gutters — the Features grid's width */
+  margin: 0 auto;
+`;
+
 export function Header() {
   const { t, ru, toggleLang } = useLanding();
   const hidden = useHideOnScroll(HEADER_H);
@@ -135,23 +137,25 @@ export function Header() {
 
   return (
     <Bar $hidden={hidden}>
-      <Brand href="/" onClick={home ? undefined : linkTo("/")}>
-        <Mark>PG</Mark>
-        POSGRO
-      </Brand>
-      <NavLink href={section("features")}>{t("nav.features")}</NavLink>
-      <NavLink href={section("pricing")}>{t("nav.pricing")}</NavLink>
-      <NavLink href="/news" onClick={linkTo("/news")}>
-        {t("nav.blog")}
-      </NavLink>
-      <NavLink href={section("contact")}>{t("nav.contact")}</NavLink>
-      <IconBtn onClick={toggleLang} title={t("lang.toggle")}>
-        {ru ? "RU" : "UZ"}
-      </IconBtn>
-      <LoginBtn href={DASHBOARD_URL}>
-        <LogIn size={15} />
-        {t("nav.login")}
-      </LoginBtn>
+      <BarContainer>
+        <Brand href="/" onClick={home ? undefined : linkTo("/")}>
+          <Mark>PG</Mark>
+          POSGRO
+        </Brand>
+        <NavLink href={section("features")}>{t("nav.features")}</NavLink>
+        <NavLink href={section("pricing")}>{t("nav.pricing")}</NavLink>
+        <NavLink href="/news" onClick={linkTo("/news")}>
+          {t("nav.blog")}
+        </NavLink>
+        <NavLink href={section("contact")}>{t("nav.contact")}</NavLink>
+        <IconBtn onClick={toggleLang} title={t("lang.toggle")}>
+          {ru ? "RU" : "UZ"}
+        </IconBtn>
+        <LoginBtn href={DASHBOARD_URL}>
+          <LogIn size={15} />
+          {t("nav.login")}
+        </LoginBtn>
+      </BarContainer>
     </Bar>
   );
 }
