@@ -249,6 +249,22 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Tell every super admin who has linked the bot, whatever their alert setting — `alerts` opts
+   * into terminal logs, and a new customer asking for a call is not a log line. Never throws,
+   * same as notifyStoreAdmins.
+   */
+  async notifySuperAdmins(render: (lang: Lang) => string): Promise<void> {
+    try {
+      const chats = await this.prisma.telegramChat.findMany({ where: { role: 'SUPER_ADMIN' } });
+      for (const chat of chats) {
+        await this.sendHtml(chat.chatId, render(chat.lang as Lang));
+      }
+    } catch (err) {
+      this.logger.error('Notifying super admins failed', err as Error);
+    }
+  }
+
   onModuleDestroy() {
     this.bot?.stop('SIGTERM');
   }

@@ -27,6 +27,8 @@ import { ReconciliationModule } from './modules/reconciliation/reconciliation.mo
 import { SmenaModule } from './modules/smena/smena.module';
 import { DebtorsModule } from './modules/debtors/debtors.module';
 import { LicensesModule } from './modules/licenses/licenses.module';
+import { LeadsModule } from './modules/leads/leads.module';
+import { NewsModule } from './modules/news/news.module';
 
 @Module({
   imports: [
@@ -60,6 +62,8 @@ import { LicensesModule } from './modules/licenses/licenses.module';
     AslBelgisiModule,
     MarkingCodesModule,
     LicensesModule,
+    LeadsModule,
+    NewsModule,
   ],
 })
 export class AppModule {}

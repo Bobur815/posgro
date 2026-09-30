@@ -3,9 +3,9 @@ import { Check } from "lucide-react";
 import type { LandingPlan } from "@shared/types/landing.types";
 import { useLanding } from "../../context/LandingContext";
 import { formatPrice } from "../../i18n";
-import { BRAND, gradient } from "../../styles/brand";
+import { BRAND, gradient, INFO } from "../../styles/brand";
 
-const Card = styled.div<{ $featured: boolean; $dark: boolean }>`
+const Card = styled.div<{ $featured: boolean }>`
   position: relative;
   display: flex;
   flex-direction: column;
@@ -14,26 +14,22 @@ const Card = styled.div<{ $featured: boolean; $dark: boolean }>`
   background: ${({ theme }) => theme.colors.surface};
   border: ${({ $featured, theme }) =>
     $featured ? "2px solid transparent" : `1px solid ${theme.colors.border}`};
-  ${({ $featured, $dark }) =>
+  ${({ $featured }) =>
     $featured &&
     css`
       /* Gradient border without a wrapper: paint the surface, then the brand gradient, and let
          the border box show only the second. */
       background-image:
         linear-gradient(var(--surface), var(--surface)),
-        linear-gradient(
-          135deg,
-          ${$dark ? BRAND.dark.from : BRAND.light.from},
-          ${$dark ? BRAND.dark.to : BRAND.light.to}
-        );
+        linear-gradient(135deg, ${BRAND.from}, ${BRAND.to});
       background-origin: border-box;
       background-clip: padding-box, border-box;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
     `}
 `;
 
-const Badge = styled.span<{ $dark: boolean }>`
-  ${({ $dark }) => gradient($dark)}
+const Badge = styled.span`
+  ${gradient}
   position: absolute;
   top: -12px;
   left: 50%;
@@ -92,11 +88,11 @@ const FeatureItem = styled.li`
   svg {
     flex: 0 0 auto;
     margin-top: 2px;
-    color: ${({ theme }) => theme.colors.primary};
+    color: ${INFO.main};
   }
 `;
 
-const Cta = styled.a<{ $featured: boolean; $dark: boolean }>`
+const Cta = styled.a<{ $featured: boolean }>`
   display: block;
   text-align: center;
   padding: 13px;
@@ -104,10 +100,10 @@ const Cta = styled.a<{ $featured: boolean; $dark: boolean }>`
   font-size: 15px;
   font-weight: 700;
   text-decoration: none;
-  ${({ $featured, $dark, theme }) =>
+  ${({ $featured, theme }) =>
     $featured
       ? css`
-          ${gradient($dark)}
+          ${gradient}
           color: #fff;
         `
       : css`
@@ -126,12 +122,12 @@ interface PlanCardProps {
 }
 
 export function PlanCard({ plan, price, href }: PlanCardProps) {
-  const { t, ru, dark } = useLanding();
+  const { t, ru } = useLanding();
   const features = ru ? plan.featuresRu : plan.featuresUz;
 
   return (
-    <Card $featured={plan.highlighted} $dark={dark}>
-      {plan.highlighted && <Badge $dark={dark}>{t("pricing.popular")}</Badge>}
+    <Card $featured={plan.highlighted}>
+      {plan.highlighted && <Badge>{t("pricing.popular")}</Badge>}
       <Name>{(ru ? plan.nameRu : plan.nameUz) || plan.id}</Name>
       <Tagline>{ru ? plan.taglineRu : plan.taglineUz}</Tagline>
       <Price>
@@ -149,7 +145,7 @@ export function PlanCard({ plan, price, href }: PlanCardProps) {
           </FeatureItem>
         ))}
       </FeatureList>
-      <Cta $featured={plan.highlighted} $dark={dark} href={href}>
+      <Cta $featured={plan.highlighted} href={href}>
         {t("pricing.cta")}
       </Cta>
     </Card>

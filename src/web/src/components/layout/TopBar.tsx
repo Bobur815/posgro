@@ -15,12 +15,14 @@ import { useTheme } from "@theme/ThemeProvider";
 import { ConfirmDialog } from "@components/common/ConfirmDialog";
 import { useToast } from "@context/ToastContext";
 import { useAuthStore } from "../../store/auth-store";
+import { useNewsUnread } from "../news/useNewsUnread";
 import { useSettingsStore } from "../../store/settings-store";
 import { roleLabelKey } from "@shared/constants/roles";
 
 /**
- * The bar above every page: which store you are in (and a switch to your others), then news,
- * language and your profile — sign out and the theme live in the profile menu.
+ * The bar above every page: which store you are in (and a switch to your others), then news (with
+ * a dot while a post is unread), language and your profile — sign out and the theme live in the
+ * profile menu.
  *
  * One person with several stores has one account in each; the switcher lists the ones their
  * password opened at login, and switching reloads the page so no store's data outlives it.
@@ -140,6 +142,22 @@ const RoundButton = styled.button`
     opacity: 0.5;
     cursor: not-allowed;
   }
+`;
+
+const NewsButton = styled(RoundButton)`
+  position: relative;
+`;
+
+/** Unread news: a small dot on the button's corner, ringed so it reads on any background. */
+const UnreadDot = styled.span`
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: ${({ theme }) => theme.colors.error};
+  border: 2px solid ${({ theme }) => theme.colors.surface};
 `;
 
 const ProfileButton = styled.button`
@@ -308,6 +326,7 @@ export function TopBar() {
   const profileMenu = usePopover();
   const [switching, setSwitching] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const newsUnread = useNewsUnread();
 
   // The list as it is now — a store deactivated since login drops out of it — and each store's dot
   // kept current. A terminal reports in every few minutes, so once a minute is plenty.
@@ -420,15 +439,16 @@ export function TopBar() {
       </Side>
 
       <Side>
-        {/* News is published from the super-admin dashboard — not built yet. */}
-        <RoundButton
+        {/* Posts are written in the super admin dashboard (Admin → News). */}
+        <NewsButton
           type="button"
-          disabled
-          title={`${t("topBar.news")} — ${t("topBar.comingSoon")}`}
-          aria-label={t("topBar.news")}
+          title={t("topBar.news")}
+          aria-label={newsUnread ? `${t("topBar.news")} — ${t("news.unread")}` : t("topBar.news")}
+          onClick={() => navigate("/news")}
         >
           <Newspaper size={17} />
-        </RoundButton>
+          {newsUnread && <UnreadDot />}
+        </NewsButton>
 
         <Anchor ref={langMenu.ref}>
           <RoundButton

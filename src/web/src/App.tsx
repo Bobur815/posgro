@@ -29,6 +29,11 @@ import { LoginBannerPage } from './pages/Admin/LoginBannerPage';
 import { SubscriptionPlansPage } from './pages/Admin/SubscriptionPlansPage';
 import { LandingPage } from './pages/Admin/LandingPage';
 import { DownloadsPage } from './pages/Admin/DownloadsPage';
+import { LeadsPage } from './pages/Admin/LeadsPage';
+import { NewsAdminPage } from './pages/Admin/NewsAdminPage';
+import { NewsEditorPage } from './pages/Admin/NewsEditorPage';
+import { NewsList } from './pages/News/NewsList';
+import { NewsDetail } from './pages/News/NewsDetail';
 
 function PrivateRoute({
   children,
@@ -125,6 +130,13 @@ export function App() {
           <Route path="admin/subscription-plans" element={<PrivateRoute superAdminOnly><SubscriptionPlansPage /></PrivateRoute>} />
           <Route path="admin/landing" element={<PrivateRoute superAdminOnly><LandingPage /></PrivateRoute>} />
           <Route path="admin/downloads" element={<PrivateRoute superAdminOnly><DownloadsPage /></PrivateRoute>} />
+          <Route path="admin/leads" element={<PrivateRoute superAdminOnly><LeadsPage /></PrivateRoute>} />
+          <Route path="admin/news" element={<PrivateRoute superAdminOnly><NewsAdminPage /></PrivateRoute>} />
+          <Route path="admin/news/:id" element={<PrivateRoute superAdminOnly><NewsEditorPage /></PrivateRoute>} />
+
+          {/* News — every signed-in role; opened from the top bar */}
+          <Route path="news" element={<NewsList />} />
+          <Route path="news/:slug" element={<NewsDetail />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
