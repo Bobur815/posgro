@@ -11,9 +11,9 @@ import { HEADER_H } from "../layout/Header";
 import { HeroVideo } from "./HeroVideo";
 
 /**
- * Full width, pulled up under the floating sticky header (the video shows around its sides). The
- * height never depends on the video or the network, so nothing shifts when the poster or the video
- * arrives.
+ * Full width, starting below the header. Header plus hero fill the first screen (up to 760px of
+ * hero), and the height never depends on the video or the network, so nothing shifts when the
+ * poster or the video arrives.
  */
 const Wrap = styled.section`
   position: relative;
@@ -22,10 +22,9 @@ const Wrap = styled.section`
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: min(100vh, 760px);
-  min-height: min(100svh, 760px);
-  margin-top: -${HEADER_H}px;
-  padding: ${HEADER_H + 32}px 24px 48px;
+  min-height: min(calc(100vh - ${HEADER_H}px), 760px);
+  min-height: min(calc(100svh - ${HEADER_H}px), 760px);
+  padding: 32px 24px 48px;
   text-align: center;
   color: #fff;
   background: ${HERO_FALLBACK};

@@ -34,6 +34,6 @@ export const INFO = {
 };
 
 /** The hero without a video (none uploaded, or the poster failed): a deep brand gradient, so the
- *  white headline and the transparent header over it read the same as over the video. */
+ *  white headline reads the same as over the video. */
 export const HERO_FALLBACK =
   "linear-gradient(135deg, #0b1f3a 0%, #1a1440 55%, #3b0d24 100%)";
