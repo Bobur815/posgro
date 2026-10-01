@@ -19,6 +19,8 @@ export const LOCAL_ONLY_SETTINGS = new Set([
   // every ledger row that till had already seen and this one had not.
   'debt_ledger_cursor',
   'debt_ledger_balance_mode',
+  // Done-marker of the one-time fiscal-status backfill (database/sqlite-client.ts).
+  'fiscal_sync_backfill',
 
   // ── Machine-scoped hardware config ──
   // Windows device names and a physical label size. They describe the box this terminal runs on,
