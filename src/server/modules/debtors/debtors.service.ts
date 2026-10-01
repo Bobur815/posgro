@@ -14,15 +14,19 @@ type LedgerSettlement = {
   settleTender: string | null;
   settleFiscalize: boolean | null;
   originTerminalId: string | null;
+  voidedAt: Date | null;
+  voidedBy: string | null;
+  voidReason: string | null;
 };
 
 /**
  * What an incoming copy of a ledger row may change on the stored one — or null for nothing.
  *
  * Everything a row says about money (who, type, amount, sale) is fixed when it is written, so a
- * re-send can only add what happened since: the charge got settled, or the stored row lacked its
- * origin. `settledAt` is never cleared and the earliest settlement wins, so two tills that both
- * settled the same charge offline agree on one answer whichever syncs last.
+ * re-send can only add what happened since: the charge got settled, an admin voided the row, or
+ * the stored row lacked its origin. `settledAt` is never cleared and the earliest settlement wins,
+ * so two tills that both settled the same charge offline agree on one answer whichever syncs last.
+ * A void is likewise set once and never undone.
  *
  * The POS applies the same rule to rows it pulls (src/main/sync/debt-ledger-sync.ts).
  */
@@ -39,6 +43,12 @@ export function mergeLedgerRow(
     patch.settledAt = incoming.settledAt;
     patch.settleTender = incoming.settleTender;
     patch.settleFiscalize = incoming.settleFiscalize;
+  }
+  // A void is final: the first one recorded stands, and nothing un-voids a row.
+  if (!stored.voidedAt && incoming.voidedAt) {
+    patch.voidedAt = incoming.voidedAt;
+    patch.voidedBy = incoming.voidedBy;
+    patch.voidReason = incoming.voidReason;
   }
   if (!stored.originTerminalId && incoming.originTerminalId) {
     patch.originTerminalId = incoming.originTerminalId;
@@ -111,6 +121,9 @@ export class DebtorsService {
           settleTender: row.settleTender ?? null,
           settleFiscalize: row.settleFiscalize ?? null,
           originTerminalId: row.originTerminalId ?? null,
+          voidedAt: row.voidedAt ? new Date(row.voidedAt) : null,
+          voidedBy: row.voidedBy ?? null,
+          voidReason: row.voidReason ?? null,
         };
 
         if (!existing) {
@@ -214,7 +227,8 @@ export class DebtorsService {
   async recomputeBalances(storeId: string, userIds: string[]) {
     const sums = await this.prisma.debtTransaction.groupBy({
       by: ['userId'],
-      where: { storeId, userId: { in: userIds } },
+      // A voided row is history, not money.
+      where: { storeId, userId: { in: userIds }, voidedAt: null },
       _sum: { amount: true },
     });
     const byUser = new Map(sums.map((s) => [s.userId, s._sum.amount ?? new Prisma.Decimal(0)]));
@@ -241,7 +255,7 @@ export class DebtorsService {
     });
     const sums = await this.prisma.debtTransaction.groupBy({
       by: ['userId'],
-      where: { storeId },
+      where: { storeId, voidedAt: null },
       _sum: { amount: true },
     });
     const byUser = new Map(sums.map((s) => [s.userId, s._sum.amount ?? new Prisma.Decimal(0)]));

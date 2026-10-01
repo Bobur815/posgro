@@ -87,6 +87,21 @@ export class SyncDebtTransactionDto {
   @IsOptional()
   @IsBoolean()
   settleFiscalize?: boolean | null;
+
+  @ApiPropertyOptional({ description: 'Set when an admin voided (deleted) the row at a till' })
+  @IsOptional()
+  @IsDateString()
+  voidedAt?: string | null;
+
+  @ApiPropertyOptional({ example: 'cladmin123' })
+  @IsOptional()
+  @IsString()
+  voidedBy?: string | null;
+
+  @ApiPropertyOptional({ example: 'Ошибочная оплата' })
+  @IsOptional()
+  @IsString()
+  voidReason?: string | null;
 }
 
 export class SyncDebtBulkDto {
