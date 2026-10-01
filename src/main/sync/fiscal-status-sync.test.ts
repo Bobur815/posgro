@@ -25,6 +25,7 @@ jest.mock('../config/app-config', () => ({
 jest.mock('./queue-manager', () => ({ getServerToken: () => 'token' }));
 
 import { initializeDatabase, closeDatabase, getPrismaClient } from '../database/sqlite-client';
+import { resetMissingEndpoints } from './missing-endpoints';
 import { syncFiscalStatus } from './fiscal-status-sync';
 
 const db = () => getPrismaClient();
@@ -77,6 +78,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  resetMissingEndpoints();
   await db().saleItem.deleteMany({});
   await db().sale.deleteMany({});
 });

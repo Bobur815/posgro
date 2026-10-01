@@ -1,6 +1,7 @@
 import { getPrismaClient } from '../database/sqlite-client';
 import { getAppConfig } from '../config/app-config';
 import { getServerToken } from './queue-manager';
+import { endpointKnownMissing, noteEndpointStatus } from './missing-endpoints';
 
 /**
  * Tell the server which of its sales have been fiscalized, and with what tender.
@@ -20,6 +21,7 @@ export async function syncFiscalStatus(): Promise<void> {
   const prisma = getPrismaClient();
   const token = getServerToken();
   if (!token) return;
+  if (endpointKnownMissing('sales/fiscal-sync')) return;
 
   const rows = (await prisma.sale.findMany({
     where: { fiscalSynced: false, synced: true },
@@ -58,6 +60,7 @@ export async function syncFiscalStatus(): Promise<void> {
     }),
   });
   // A server from before bank turnover: keep the flags, send again once it has the endpoint.
+  noteEndpointStatus('sales/fiscal-sync', res.status);
   if (res.status === 404) return;
   if (!res.ok) {
     console.error(`[fiscal-sync] upload failed (HTTP ${res.status})`);

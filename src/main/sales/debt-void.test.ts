@@ -36,6 +36,7 @@ jest.mock('./shifts', () => ({
 }));
 
 import { initializeDatabase, closeDatabase, getPrismaClient } from '../database/sqlite-client';
+import { resetMissingEndpoints } from '../sync/missing-endpoints';
 import { recordDebtPayment, voidDebtTransaction, debtorLedger } from './debtors';
 import { pullDebtLedger } from '../sync/debt-ledger-sync';
 
@@ -95,6 +96,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  resetMissingEndpoints();
   openShift = null;
   addShiftMovement.mockClear();
   await db().debtTransaction.deleteMany({});

@@ -2,6 +2,7 @@ import { getPrismaClient } from "../database/sqlite-client";
 import { getAppConfig } from "../config/app-config";
 import { getServerToken } from "./queue-manager";
 import { LOCAL_ONLY_SETTINGS } from "./local-only-settings";
+import { endpointKnownMissing, noteEndpointStatus } from "./missing-endpoints";
 import type {
   Category,
   Supplier,
@@ -100,11 +101,13 @@ async function uploadClients(
     where: { role: 'CLIENT', ...(storeId ? { storeId } : {}) },
   });
   if (clients.length === 0) return;
+  if (endpointKnownMissing('users/clients/sync-bulk')) return;
 
   const res = await apiPost('/users/clients/sync-bulk', token, {
     users: clients.map(toUserPayload),
   });
   // A server from before this endpoint: an admin session still sends customers the old way.
+  noteEndpointStatus('users/clients/sync-bulk', res.status);
   if (res.status === 404) return;
   if (!res.ok) {
     const text = await res.text();

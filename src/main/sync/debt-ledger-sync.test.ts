@@ -30,6 +30,7 @@ const fiscalizeSettledSale = jest.fn(async () => undefined);
 jest.mock('../sales/settle-sale', () => ({ fiscalizeSettledSale }));
 
 import { initializeDatabase, closeDatabase, getPrismaClient } from '../database/sqlite-client';
+import { resetMissingEndpoints } from './missing-endpoints';
 import { pullDebtLedger, type RemoteLedgerRow } from './debt-ledger-sync';
 import { uploadNasiya } from './upload-sync';
 import { allocatePayment } from '../sales/debt-ledger';
@@ -146,6 +147,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  resetMissingEndpoints();
   fiscalizeSettledSale.mockClear();
   await db().debtTransaction.deleteMany({});
   await db().saleItem.deleteMany({});
@@ -293,6 +295,11 @@ describe('pullDebtLedger', () => {
     await pullDebtLedger();
     expect(await db().debtTransaction.count()).toBe(0);
     expect(Number((await db().user.findUnique({ where: { id: 'u1' } })).debt)).toBe(500);
+
+    // And it does not ask again on the next cycle: a 404 per cycle is what fail2ban bans.
+    serve(404);
+    await pullDebtLedger();
+    expect(requests).toHaveLength(0);
   });
 });
 
