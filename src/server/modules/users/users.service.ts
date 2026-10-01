@@ -6,6 +6,7 @@ import * as bcrypt from 'bcryptjs';
 import { USER_ROLES } from '@shared/constants';
 import { UserRole } from '@prisma/client';
 import { DASHBOARD_STORE_SELECT } from '../auth/dashboard-access';
+import { balanceFromLedger } from '../debtors/debtors.service';
 
 @Injectable()
 export class UsersService {
@@ -294,24 +295,34 @@ export class UsersService {
       debtDueDate?: string | null;
     }[],
     storeId: string,
+    opts: { clientsOnly?: boolean } = {},
   ) {
     let created = 0;
     let updated = 0;
     let skipped = 0;
     const errors: string[] = [];
+    const ledgerOwnsBalance = balanceFromLedger();
 
     for (const u of users) {
       try {
         const hasProfile = u.nameUz !== undefined && u.nameRu !== undefined && u.password !== undefined;
         // The till owns the balance; this row is a mirror of it. Absent means an older terminal
         // that does not know about nasiya, and its silence must not zero a balance another
-        // terminal reported.
+        // terminal reported. Under DEBT_BALANCE_FROM_LEDGER the replicated ledger is the balance
+        // instead, and a till's figure — stale once another till takes a payment — is ignored.
         const balance = {
-          ...(u.debt !== undefined ? { debt: u.debt } : {}),
+          ...(u.debt !== undefined && !ledgerOwnsBalance ? { debt: u.debt } : {}),
           ...(u.debtDueDate !== undefined
             ? { debtDueDate: u.debtDueDate ? new Date(u.debtDueDate) : null }
             : {}),
         };
+
+        // A cashier's till may only send customers: never a staff profile, and never a row that
+        // would turn someone into, or out of, a customer.
+        if (opts.clientsOnly && hasProfile && u.role !== 'CLIENT') {
+          skipped++;
+          continue;
+        }
 
         const byId = await this.prisma.user.findUnique({ where: { id: u.id } });
         const existing =
@@ -321,7 +332,9 @@ export class UsersService {
                 where: { storeId_phone: { storeId, phone: u.phone } },
               });
 
-        if (existing) {
+        if (existing && opts.clientsOnly && existing.role !== 'CLIENT') {
+          skipped++;
+        } else if (existing) {
           await this.prisma.user.update({
             where: { id: existing.id },
             data: hasProfile
@@ -349,7 +362,8 @@ export class UsersService {
               nameRu: u.nameRu!,
               role: (u.role as any) || 'USER',
               active: u.active ?? true,
-              debt: u.debt ?? 0,
+              // Under the ledger flag the balance arrives with the user's ledger rows.
+              debt: ledgerOwnsBalance ? 0 : (u.debt ?? 0),
               debtDueDate: u.debtDueDate ? new Date(u.debtDueDate) : null,
             },
           });
