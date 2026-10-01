@@ -14,6 +14,11 @@ export const LOCAL_ONLY_SETTINGS = new Set([
   'last_upload_sync',
   'last_audit_log_sync',
   'ai_token_limit_daily',
+  // Where this till's nasiya ledger pull has got to, and which balance mode it last applied
+  // (sync/debt-ledger-sync.ts). Another till's cursor landing here would make this one skip
+  // every ledger row that till had already seen and this one had not.
+  'debt_ledger_cursor',
+  'debt_ledger_balance_mode',
 
   // ── Machine-scoped hardware config ──
   // Windows device names and a physical label size. They describe the box this terminal runs on,

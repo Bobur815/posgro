@@ -27,3 +27,13 @@ describe('isSatelliteOwnSetting', () => {
     expect(LOCAL_ONLY_SETTINGS.has('bulk_weigh_enabled')).toBe(false);
   });
 });
+
+describe('LOCAL_ONLY_SETTINGS', () => {
+  // Per-till sync bookkeeping. Uploaded, another till's settings pull would adopt it.
+  it.each(['debt_ledger_cursor', 'debt_ledger_balance_mode'])(
+    'keeps %s on this till',
+    (key) => {
+      expect(LOCAL_ONLY_SETTINGS.has(key)).toBe(true);
+    },
+  );
+});
