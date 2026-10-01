@@ -1550,9 +1550,9 @@
     }
   },
   "superAdmin": {
-    "title": "Administrator tasdig'i",
-    "hint": "Bu amal himoyalangan. Davom etish uchun do'kon administratori parolini kiriting.",
-    "wrongPassword": "Parol noto'g'ri. Agar urinishlar juda ko'p bo'lsa, bir daqiqa kuting."
+    "title": "Menejer paroli",
+    "hint": "Bu amal himoyalangan. Do'kon menejeri parolini kiriting — uni super-administrator veb-panelda o'rnatadi (Do'konlar → do'kon → «Manager password»). Kirish paroli bu yerda ishlamaydi.",
+    "wrongPassword": "Menejer paroli noto'g'ri. 5 ta muvaffaqiyatsiz urinishdan keyin kiritish bir daqiqaga bloklanadi — hatto to'g'ri parol ham."
   },
   "debtors": {
     "title": "Qarzdorlar",
