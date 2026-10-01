@@ -1,3 +1,102 @@
+# Nasiya multi-till sync, ledger voids, bank turnover (2026-10-01) — approved; task 3 built
+
+Electron is in scope again (CLAUDE.md updated, commit f22e411 on `chore/claude-md-pos-scope`).
+Order matters: task 3 first, because task 1's voids ride on the same ledger-replication rules.
+Each task = one branch off `dev`; server commits before POS commits; POS commits bump the version.
+Rollout per task: server on staging → you confirm → `main` → prod deploy → then `deploy:pos`.
+
+## Task 3 — debtors do not sync T1 → T2 — BUILT on `fix/debtor-multi-till-sync` (1393d76 server, adeec12 POS 1.32.2)
+
+Assumed topology: two tills syncing via the VPS (LAN satellites already read the main's book).
+
+1. `syncUsers` writes `debt` only when creating a local user (`products-sync.ts:452`), never on
+   update (`:469`) → T2's balance freezes at the first pull.
+2. `uploadUsers` sends every user's `debt` every cycle (`upload-sync.ts:131,153`); the server
+   stores it as-is (`users.service.ts:310`) → last till to sync wins; T2's stale figure overwrites T1's.
+3. Ledger rows go up (`/debtors/sync-bulk`) but never down → empty history on T2, drift banner,
+   T2's payments cannot settle (and so never fiscalize) T1's credit receipts.
+4. Ledger + CLIENT upload sits inside the ADMIN-only `uploadLocalData` (`sync-policy.ts:56`) →
+   a debtor created in a cashier-only session never leaves T1.
+5. `rows.slice(0, synced)` (`upload-sync.ts:119`) marks the wrong rows when the server skips one
+   mid-batch → that row is lost for good.
+
+Fix — the ledger becomes the replicated truth, the balance is derived from it:
+- **PG (additive):** `DebtTransaction` + `updatedAt @updatedAt`, `originTerminalId?`,
+  `settleTender?`, `settleFiscalize?`; index `(storeId, updatedAt)`.
+- **SQLite (additive, idempotent ALTER per lessons.md):** same columns.
+- **Server**
+  - `POST /debtors/sync-bulk`: response gains `syncedIds` (additive). Merge on upsert:
+    immutable fields only on create; `settledAt` = earliest non-null (never cleared).
+  - New `GET /debtors/ledger/sync?updatedAfter=` (store-scoped, cursor on `updatedAt`).
+  - Flag `DEBT_BALANCE_FROM_LEDGER` (default off): when on, `users.debt` = Σ ledger after each
+    sync-bulk, and `debt` in `/users/sync-bulk` is ignored. Before turning it on: read-only report
+    of per-user `users.debt` vs Σ ledger (staging, then prod) — the slice bug may have lost rows.
+- **POS**
+  - Mark by `syncedIds` when present; fall back to today's behaviour on an old server.
+  - CLIENT users + ledger rows upload for any role (staff/master data stay ADMIN-gated).
+  - New pull step after `syncUsers`: upsert rows with the same merge rule, then recompute
+    `users.debt` = Σ ledger for touched users.
+  - Settling a charge locally sets `synced=false` and records `settleTender`/`settleFiscalize`, so
+    it re-uploads.
+  - **Cross-till fiscalization:** the till that owns the sale fiscalizes it when it pulls a settled
+    charge whose sale is local and `DEFERRED_DEBT` (and `settleFiscalize` ≠ false).
+- Tests: two-till simulation (charge on T1, pay on T2, both converge; T1 fiscalizes), slice bug,
+  merge rule, server reconcile report.
+
+## Task 1 — admin deletes a ledger transaction, history stays
+
+- **Columns:** `voidedAt?`, `voidedBy?`, `voidReason?` on both schemas. Voided rows are excluded
+  from `recomputeBalance`, `unappliedCredit`, `allocatePayment` and the server Σ.
+- `voidDebtTransaction(id, adminId, reason)`, in one transaction:
+  - Reverse the row's amount on `users.debt`, then `synced=false`.
+  - Re-check settlements: if paid < consumed, un-settle the newest settled charges whose sale is
+    not FISCALIZED. If a fiscalized one would have to reopen, refuse the void.
+  - Proposed: refuse to void a CHARGE that has a `saleId` (do a sale return instead).
+  - A voided cash PAYMENT writes a PAY_OUT into this till's open shift, if one is open.
+  - Write an audit_logs row.
+- **Wiring:** IPC `debtors:voidTransaction` (ADMIN), preload, satellite-ops plus a main route
+  `/terminal/debtors/:id/transactions/:txnId/void`.
+- **UI:** `DebtorDetails.tsx` row struck through and greyed, "удалено · when · reason"; trash icon
+  for admin → confirm with reason; ru + uz.
+- **Server/web:** sync DTO gets the optional void fields; the dashboard debtor ledger renders
+  voided rows struck through.
+
+## Task 2 — bank turnover = card + UzQR + fiscalised cash; deposits
+
+- The server cannot know fiscal status today: `fiscalStatus` exists only in SQLite and a sale
+  syncs once, before fiscalization. A payoff also rewrites the tender locally, and the server never
+  sees that.
+- **PG (additive):**
+  - `Sale` + `fiscalStatus?`, `fiscalizedAt?`, `fiscalTender?`. A separate tender column keeps the
+    existing `paymentMethod` reports unchanged.
+  - New table `CashBankDeposit` (storeId, amount `Decimal(14,2)` — 10,2 caps at ~100M som,
+    depositedAt, note, createdById, createdAt, voidedAt?, voidedById?).
+- **POS:**
+  - SQLite `sales.fiscal_synced` (default true, so no flood). Set it to false when a sale reaches
+    FISCALIZED; a new upload step `POST /sales/fiscal-sync` (bulk, idempotent, keyed
+    `(storeId, receiptNumber)`) sends status, date and tender.
+  - On an old server (404) keep the flag and retry later.
+  - `/sales/sync` also sends `fiscalStatus` as an optional extra.
+- **Server:**
+  - Flag `BANK_TURNOVER_ENABLED` (default off).
+  - `GET /reconciliation/bank?from&to` → card, uzqr, fiscalCash (by `fiscalizedAt`), bankTurnover,
+    deposits in period, fiscalCashToDeposit (running), count of sales with unknown fiscal status.
+  - `POST /reconciliation/bank/deposits` and `POST …/:id/void` (ADMIN own store, SUPER_ADMIN with
+    storeId), with AuditLog.
+- **Web:** a "Банк / Bank" section on `ReconciliationPage.tsx` — cards, deposit form, deposits
+  list (voids struck through, same as task 1); ru + uz.
+
+## Open questions (proposed defaults in brackets)
+
+- Q1: T1/T2 are two VPS-synced tills, not LAN main/satellite? [yes]
+- Q2: the owning till fiscalizes a credit sale paid off on another till? [yes]
+- Q3: void rules — no void of a sale's CHARGE; refuse if a fiscalized receipt would reopen;
+  cash void → PAY_OUT in the open shift. [as listed]
+- Q4: "to deposit" = running balance since a start date (store setting, default = flag-on day),
+  or per selected period? [running]
+- Q5: back-send fiscal status for the last 90 days so the bank figures cover history? [90 days]
+- Q6: OFFLINE_ONLY stores' LAN dashboard (local-server) gets the bank page too? [later, not now]
+
 # Landing hero background video (2026-09-29) — implemented
 
 Spec: `tasks/HERO_VIDEO.md`. Steps 1–5 and 7 done; step 6 (nginx) proposed, not applied.
