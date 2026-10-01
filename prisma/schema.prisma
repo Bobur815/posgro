@@ -158,9 +158,21 @@ model DebtTransaction {
   createdBy String   @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
 
+  /// Multi-till replication (tills pull each other's rows via GET /debtors/ledger/sync).
+  /// Server time, so the pull cursor never depends on a till's clock. Defaulted so the column
+  /// adds without a rewrite and existing rows read as "changed now" — one full pull, then deltas.
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+  /// The till that wrote the row; the one that owns `saleId` fiscalizes it once settled.
+  originTerminalId String?  @map("origin_terminal_id")
+  /// CHARGE only, set with `settledAt`: how the money finally arrived and whether the shop chose
+  /// to fiscalize — what the owning till needs to issue the receipt when another till settled it.
+  settleTender     String?  @map("settle_tender")
+  settleFiscalize  Boolean? @map("settle_fiscalize")
+
   @@index([storeId, userId])
   @@index([userId, settledAt])
   @@index([saleId])
+  @@index([storeId, updatedAt])
   @@map("debt_transactions")
 }
 

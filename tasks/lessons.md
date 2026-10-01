@@ -338,3 +338,16 @@ because it was stopped in time. A sync cycle or the license refresh would have c
 **Rule:** every launch of a test build passes `--user-data-dir=<scratch>`, and a negative test
 most of all — its point is that something *unexpected* happens, which includes the app simply
 starting.
+
+## The format-on-save hook reformats whole files with Prettier defaults
+
+`.claude/hooks/format.ts` runs `prettier --write` on every edited `src/**` file, and the repo has no
+Prettier config — so it applies the defaults (double quotes, width 80) and rewrites the whole file.
+A three-line edit to `users.service.ts` became a 68-line diff, and re-running Prettier with the
+right options does not undo it: an object Prettier has once broken across lines stays broken.
+
+**Rule:** edit existing `src/**` files from Bash (a node script with exact-anchor replacements), which
+the hook does not see. If the hook already ran, rebuild the file from `git show HEAD:<path>` plus the
+intended changes. New files are fine through Write followed by
+`npx prettier --single-quote --print-width 100 --write <file>`. Proper fix (yours to decide): add a
+`.prettierrc` matching the codebase.

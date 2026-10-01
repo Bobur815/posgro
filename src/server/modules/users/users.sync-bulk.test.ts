@@ -81,3 +81,51 @@ describe('UsersService.upsertBulk', () => {
     expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'm' }, data: { debt: 1 } });
   });
 });
+
+describe('UsersService.upsertBulk under DEBT_BALANCE_FROM_LEDGER', () => {
+  const OLD_ENV = process.env.DEBT_BALANCE_FROM_LEDGER;
+  afterEach(() => {
+    process.env.DEBT_BALANCE_FROM_LEDGER = OLD_ENV;
+  });
+
+  it('ignores the balance a till uploads: the replicated ledger owns it', async () => {
+    process.env.DEBT_BALANCE_FROM_LEDGER = 'true';
+    const { svc, prisma } = service([stored]);
+    await svc.upsertBulk([{ id: 'u1', phone: '998901111111', debt: 7000, debtDueDate: null }], 'S1');
+    expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { debtDueDate: null } });
+  });
+});
+
+describe('UsersService.upsertBulk clientsOnly (a cashier till sending customers)', () => {
+  const client: Row = { ...stored, id: 'c1', phone: '998907777777', role: 'CLIENT' };
+  const profile = { password: 'h', nameUz: 'Ali', nameRu: 'Али' };
+
+  it('creates and updates customers', async () => {
+    const { svc } = service([client]);
+    const res = await svc.upsertBulk(
+      [
+        { id: 'c1', phone: '998907777777', role: 'CLIENT', ...profile },
+        { id: 'c2', phone: '998908888888', role: 'CLIENT', ...profile },
+      ],
+      'S1',
+      { clientsOnly: true },
+    );
+    expect(res).toMatchObject({ created: 1, updated: 1, skipped: 0 });
+  });
+
+  it('never touches a staff row, nor creates or promotes one', async () => {
+    const { svc, prisma } = service([stored]);
+    const res = await svc.upsertBulk(
+      [
+        { id: 'u1', phone: '998901111111', role: 'CLIENT', ...profile },
+        { id: 'u1', phone: '998901111111', debt: 5 },
+        { id: 'n1', phone: '998909999999', role: 'ADMIN', ...profile },
+      ],
+      'S1',
+      { clientsOnly: true },
+    );
+    expect(res).toMatchObject({ created: 0, updated: 0, skipped: 3 });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.user.create).not.toHaveBeenCalled();
+  });
+});

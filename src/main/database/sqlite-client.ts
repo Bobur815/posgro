@@ -896,6 +896,18 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
       ALTER TABLE debt_transactions ADD COLUMN synced INTEGER NOT NULL DEFAULT 0
     `;
   }
+  // Multi-till ledger replication: who wrote a row, and how a charge was settled. Nullable, so
+  // every existing row upgrades into "written here, settled the old way" — which it was. Each one
+  // guarded on its own, for the reason given above.
+  if (!(await columnExists(prisma, 'debt_transactions', 'origin_terminal_id'))) {
+    await prisma.$executeRaw`ALTER TABLE debt_transactions ADD COLUMN origin_terminal_id TEXT`;
+  }
+  if (!(await columnExists(prisma, 'debt_transactions', 'settle_tender'))) {
+    await prisma.$executeRaw`ALTER TABLE debt_transactions ADD COLUMN settle_tender TEXT`;
+  }
+  if (!(await columnExists(prisma, 'debt_transactions', 'settle_fiscalize'))) {
+    await prisma.$executeRaw`ALTER TABLE debt_transactions ADD COLUMN settle_fiscalize BOOLEAN`;
+  }
 
   // Migration 36: users.synced — the server's copy of a user wins unless this till changed it.
   //

@@ -52,6 +52,19 @@ export class UsersController {
     return this.usersService.upsertBulk(dto.users, storeId);
   }
 
+  /**
+   * Customer (CLIENT) records only, from any till session — a cashier creates nasiya customers at
+   * the counter, and /users/sync-bulk is admin-only, so a cashier-only till never sent them and no
+   * other till could see their debt. Staff rows are ignored here; see upsertBulk's clientsOnly.
+   */
+  @Post('clients/sync-bulk')
+  @Roles(USER_ROLES.ADMIN, USER_ROLES.USER)
+  @ApiOperation({ summary: 'Bulk upsert nasiya customers (CLIENT) from a terminal' })
+  @ApiResponse({ status: 201, description: 'Customers synced' })
+  async syncClientsBulk(@CurrentStore() storeId: string, @Body() dto: SyncUsersBulkDto) {
+    return this.usersService.upsertBulk(dto.users, storeId, { clientsOnly: true });
+  }
+
   @Get(':id')
   @Roles(USER_ROLES.ADMIN)
   @ApiOperation({ summary: 'Get user by ID (Admin only)' })
