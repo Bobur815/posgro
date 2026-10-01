@@ -78,8 +78,9 @@ nul
 # Generated (Prisma)
 src/generated/
 
-# Claude Code
-.claude/
+# Claude Code (personal, not shared)
+.claude/settings.local.json
+CLAUDE.local.md
 
 # Uploaded files (keep the directory, ignore its contents)
 /uploads/*
