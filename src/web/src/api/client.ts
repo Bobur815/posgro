@@ -1188,6 +1188,31 @@ export interface MoneyReconciliation {
   };
 }
 
+/** Bank turnover (GET /reconciliation/bank). Amounts are Decimal strings. */
+export interface BankTurnover {
+  periodStart: string;
+  periodEnd: string;
+  card: string;
+  uzqr: string;
+  fiscalCash: string;
+  bankTurnover: string;
+  deposited: string;
+  /** Cash sales whose fiscal state no till has reported — not in fiscalCash. */
+  unreported: { count: number; amount: string };
+  /** Null until the owner sets the date the "to deposit" figure counts from. */
+  running: { startDate: string; fiscalCash: string; deposited: string; toDeposit: string } | null;
+  deposits: BankDeposit[];
+}
+
+export interface BankDeposit {
+  id: string;
+  amount: string;
+  depositedAt: string;
+  note: string | null;
+  createdById: string;
+  voidedAt: string | null;
+}
+
 export const reconciliation = {
   goods: async (params?: {
     from?: string;
@@ -1203,6 +1228,29 @@ export const reconciliation = {
   },
   seedOpening: async (): Promise<{ seeded: number; enabled: boolean }> => {
     const { data } = await axiosInstance.post("/reconciliation/seed-opening");
+    return data;
+  },
+  /** 404 while BANK_TURNOVER_ENABLED is off, and from a terminal-served dashboard. */
+  bank: async (params: { from: string; to: string }): Promise<BankTurnover> => {
+    const { data } = await axiosInstance.get("/reconciliation/bank", { params });
+    return data;
+  },
+  addDeposit: async (body: {
+    amount: string;
+    depositedAt?: string;
+    note?: string;
+  }): Promise<BankDeposit> => {
+    const { data } = await axiosInstance.post("/reconciliation/bank/deposits", body);
+    return data;
+  },
+  voidDeposit: async (id: string): Promise<{ voided: boolean }> => {
+    const { data } = await axiosInstance.post(
+      `/reconciliation/bank/deposits/${encodeURIComponent(id)}/void`,
+    );
+    return data;
+  },
+  setBankStartDate: async (startDate: string | null): Promise<{ startDate: string | null }> => {
+    const { data } = await axiosInstance.put("/reconciliation/bank/start-date", { startDate });
     return data;
   },
 };

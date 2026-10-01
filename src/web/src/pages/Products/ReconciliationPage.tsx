@@ -23,6 +23,7 @@ import {
   type GoodsReconciliation,
   type MoneyReconciliation,
 } from "../../api/client";
+import { BankTurnoverSection } from "./BankTurnoverSection";
 
 const Container = styled.div`
   display: flex;
@@ -146,6 +147,8 @@ export function ReconciliationPage() {
   const [loading, setLoading] = useState(false);
   const [confirmSeed, setConfirmSeed] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  /** The period last loaded, as instants — the bank section follows the page's Refresh. */
+  const [range, setRange] = useState<{ from: string; to: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -163,6 +166,7 @@ export function ReconciliationPage() {
       ]);
       setGoods(g);
       setMoney(m);
+      setRange(range);
     } catch {
       toast.error(t("common.error"));
     } finally {
@@ -581,6 +585,8 @@ export function ReconciliationPage() {
           />
         </>
       )}
+
+      {!loading && <BankTurnoverSection range={range} />}
     </Container>
   );
 }
