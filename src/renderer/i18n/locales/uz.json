@@ -1578,6 +1578,15 @@
     "saleTotal": "Chek bo'yicha jami",
     "paidAtCounter": "Kassada to'langan",
     "readOnlyNote": "Faqat ko'rish uchun. Qarzlar kassada olinadi va yopiladi — xaridor, pul va fiskal modul o'sha yerda.",
-    "dashboardDescription": "Kim do'konga qancha qarzdor — faqat ko'rish"
+    "dashboardDescription": "Kim do'konga qancha qarzdor — faqat ko'rish",
+    "deleteEntry": "Yozuvni o'chirish",
+    "deleteConfirm": "Yozuv tarixda chizilgan holda qoladi, qarz qayta hisoblanadi.",
+    "deleteReason": "Sabab (ixtiyoriy)",
+    "deleted": "o'chirilgan",
+    "entryDeleted": "Yozuv o'chirildi",
+    "errors": {
+      "voidPaymentSettled": "Bu to'lov cheklarni yopgan — qarzni tuzatish orqali to'g'rilang",
+      "voidSaleCharge": "Nasiya xaridini o'chirib bo'lmaydi — chekni qaytaring"
+    }
   }
 }

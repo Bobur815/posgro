@@ -379,6 +379,19 @@ export function adjustDebt(data: { userId: string }): Promise<unknown> {
   return mainRequest('POST', debtorPath(data.userId, '/adjustments'), { person: true, body: data });
 }
 
+/** Not repeated after a lost answer either: the main refuses a second void, which reads as an error. */
+export function voidDebtTransaction(data: {
+  userId: string;
+  transactionId: string;
+  reason?: string;
+}): Promise<unknown> {
+  return mainRequest(
+    'POST',
+    debtorPath(data.userId, `/transactions/${encodeURIComponent(data.transactionId)}/void`),
+    { person: true, body: data },
+  );
+}
+
 // ── Shifts (§5.14) ──────────────────────────────────────────────────────────────────────────────
 
 /**

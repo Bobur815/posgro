@@ -193,6 +193,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     recordPayment: (data: unknown) =>
       ipcRenderer.invoke("debtors:recordPayment", data),
     adjust: (data: unknown) => ipcRenderer.invoke("debtors:adjust", data),
+    voidTransaction: (data: { userId: string; transactionId: string; reason?: string }) =>
+      ipcRenderer.invoke("debtors:voidTransaction", data),
   },
 
   // Sync
@@ -713,6 +715,12 @@ declare global {
         getSale: (userId: string, saleId: string) => Promise<unknown>;
         recordPayment: (data: unknown) => Promise<{ debtor: Debtor; settledSales: string[] }>;
         adjust: (data: unknown) => Promise<Debtor>;
+        /** Admin only: strike a ledger row through and reverse it. */
+        voidTransaction: (data: {
+          userId: string;
+          transactionId: string;
+          reason?: string;
+        }) => Promise<Debtor>;
       };
       sync: {
         trigger: () => Promise<void>;

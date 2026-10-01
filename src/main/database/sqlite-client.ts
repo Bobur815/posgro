@@ -908,6 +908,17 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   if (!(await columnExists(prisma, 'debt_transactions', 'settle_fiscalize'))) {
     await prisma.$executeRaw`ALTER TABLE debt_transactions ADD COLUMN settle_fiscalize BOOLEAN`;
   }
+  // An admin deleting a ledger row keeps it, stamped (debtors:voidTransaction). Nullable: every
+  // existing row upgrades into "not voided", which it is.
+  if (!(await columnExists(prisma, 'debt_transactions', 'voided_at'))) {
+    await prisma.$executeRaw`ALTER TABLE debt_transactions ADD COLUMN voided_at DATETIME`;
+  }
+  if (!(await columnExists(prisma, 'debt_transactions', 'voided_by'))) {
+    await prisma.$executeRaw`ALTER TABLE debt_transactions ADD COLUMN voided_by TEXT`;
+  }
+  if (!(await columnExists(prisma, 'debt_transactions', 'void_reason'))) {
+    await prisma.$executeRaw`ALTER TABLE debt_transactions ADD COLUMN void_reason TEXT`;
+  }
 
   // Migration 36: users.synced — the server's copy of a user wins unless this till changed it.
   //

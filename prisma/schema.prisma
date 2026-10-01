@@ -169,6 +169,12 @@ model DebtTransaction {
   settleTender     String?  @map("settle_tender")
   settleFiscalize  Boolean? @map("settle_fiscalize")
 
+  /// Deleted by an admin at a till. The row stays — history must show what happened and that it
+  /// was undone — but no balance, allocation or report counts it. Set once, never cleared.
+  voidedAt   DateTime? @map("voided_at")
+  voidedBy   String?   @map("voided_by")
+  voidReason String?   @map("void_reason")
+
   @@index([storeId, userId])
   @@index([userId, settledAt])
   @@index([saleId])

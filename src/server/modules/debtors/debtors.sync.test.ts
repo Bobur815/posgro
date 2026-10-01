@@ -89,6 +89,9 @@ const none = {
   settleTender: null,
   settleFiscalize: null,
   originTerminalId: null,
+  voidedAt: null,
+  voidedBy: null,
+  voidReason: null,
 };
 
 describe('mergeLedgerRow', () => {
@@ -144,6 +147,20 @@ describe('mergeLedgerRow', () => {
     expect(
       mergeLedgerRow({ ...none, originTerminalId: 'T1' }, { ...none, originTerminalId: 'T2' }),
     ).toBeNull();
+  });
+});
+
+describe('mergeLedgerRow — voids', () => {
+  const at = new Date('2026-10-01T11:00:00Z');
+
+  it('takes a void made on another till, with who and why', () => {
+    expect(
+      mergeLedgerRow(none, { ...none, voidedAt: at, voidedBy: 'admin', voidReason: 'ошибка' }),
+    ).toEqual({ voidedAt: at, voidedBy: 'admin', voidReason: 'ошибка' });
+  });
+
+  it('never un-voids a row — a stale copy from a till that has not seen the void yet', () => {
+    expect(mergeLedgerRow({ ...none, voidedAt: at, voidedBy: 'admin' }, none)).toBeNull();
   });
 });
 

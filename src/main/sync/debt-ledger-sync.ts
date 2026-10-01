@@ -50,6 +50,9 @@ export interface RemoteLedgerRow {
   originTerminalId: string | null;
   settleTender: string | null;
   settleFiscalize: boolean | null;
+  voidedAt?: string | null;
+  voidedBy?: string | null;
+  voidReason?: string | null;
 }
 
 interface PullPage {
@@ -63,6 +66,9 @@ export interface LedgerSettlement {
   settleTender: string | null;
   settleFiscalize: boolean | null;
   originTerminalId: string | null;
+  voidedAt: Date | null;
+  voidedBy: string | null;
+  voidReason: string | null;
 }
 
 /**
@@ -82,6 +88,12 @@ export function mergeLedgerRow(
     patch.settledAt = incoming.settledAt;
     patch.settleTender = incoming.settleTender;
     patch.settleFiscalize = incoming.settleFiscalize;
+  }
+  // A void is final: the first one recorded stands, and nothing un-voids a row.
+  if (!stored.voidedAt && incoming.voidedAt) {
+    patch.voidedAt = incoming.voidedAt;
+    patch.voidedBy = incoming.voidedBy;
+    patch.voidReason = incoming.voidReason;
   }
   if (!stored.originTerminalId && incoming.originTerminalId) {
     patch.originTerminalId = incoming.originTerminalId;
@@ -134,6 +146,9 @@ export async function applyLedgerRows(
       settleTender: row.settleTender ?? null,
       settleFiscalize: row.settleFiscalize ?? null,
       originTerminalId: row.originTerminalId ?? null,
+      voidedAt: row.voidedAt ? new Date(row.voidedAt) : null,
+      voidedBy: row.voidedBy ?? null,
+      voidReason: row.voidReason ?? null,
     };
 
     const local = await prisma.debtTransaction.findUnique({
