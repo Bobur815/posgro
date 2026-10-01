@@ -107,7 +107,8 @@
     "smena": "Smena",
     "markingCheck": "Markirovka tekshiruvi",
     "collapse": "Yig'ish",
-    "expand": "Kengaytirish"
+    "expand": "Kengaytirish",
+    "bank": "Bank"
   },
   "markingCheck": {
     "title": "Markirovka tekshiruvi",
@@ -327,7 +328,9 @@
       "depositSaved": "Bankka topshirish yozildi",
       "voided": "bekor qilingan",
       "void": "Yozuvni bekor qilish",
-      "voidConfirm": "{{amount}} topshirish ro'yxatda chizilgan holda qoladi va topshiriladigan naqd puldan ayirilmaydi."
+      "voidConfirm": "{{amount}} topshirish ro'yxatda chizilgan holda qoladi va topshiriladigan naqd puldan ayirilmaydi.",
+      "off": "Bank bo'yicha aylanma hisobi bu serverda o'chirilgan.",
+      "offHint": "U serverdagi BANK_TURNOVER_ENABLED o'zgaruvchisi orqali yoqiladi."
     }
   },
   "products": {

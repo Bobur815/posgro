@@ -102,8 +102,9 @@ export function SubNav({
 }
 
 /**
- * The Stock section's tabs. Stocktake and reconciliation are admin-only routes, so a cashier is
- * not shown tabs that would bounce them straight back.
+ * The Stock section's tabs. Stocktake, reconciliation and bank turnover are admin-only routes, so
+ * a cashier is not shown tabs that would bounce them straight back. On mobile this strip is the
+ * only way to these pages: the bottom bar carries sections, not their sibling pages.
  */
 export function useStockSubNav(): SubNavItem[] {
   const { t } = useTranslation();
@@ -115,6 +116,7 @@ export function useStockSubNav(): SubNavItem[] {
       ? [
           { to: "/products/stock/inventarizatsiya", label: t("nav.stocktake") },
           { to: "/products/stock/reconciliation", label: t("nav.reconciliation") },
+          { to: "/products/stock/bank", label: t("nav.bank") },
         ]
       : []),
   ];
