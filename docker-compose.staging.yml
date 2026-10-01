@@ -43,6 +43,7 @@ services:
       # reason as the ledger flag. Production turns them on in docker-compose.yml when ready.
       LEADS_ENABLED: "true"
       NEWS_ENABLED: "true"
+      BANK_TURNOVER_ENABLED: "true"
       # Same reason, sharper consequence: two processes long-polling one bot token get 409
       # Conflict from Telegram and the bot flaps between them. Staging therefore stays silent
       # unless given a token of its own — the empty default trips the `if (!token)` guard in

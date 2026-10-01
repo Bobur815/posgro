@@ -52,6 +52,7 @@ services:
       # features are live belongs in version control. Set "false" to switch one off.
       LEADS_ENABLED: "true"
       NEWS_ENABLED: "true"
+      BANK_TURNOVER_ENABLED: "true"
       # Drivers, tools and manuals uploaded from the dashboard and served on panel.posgro.uz.
       DOWNLOADS_DIR: "/app/downloads"
       # Read-only view of the installer feed, so the portal reports the same version the
