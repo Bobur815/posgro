@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "defaultMode": "default",
+    "allow": [
+      "Bash(npm run dev:server*)",
+      "Bash(npm run build:server*)",
+      "Bash(npm run build:web*)",
+      "Bash(npm run lint*)",
+      "Bash(npm run format*)",
+      "Bash(npm test*)",
+      "Bash(npm run prisma:generate*)",
+      "Bash(npm run check:mxik*)",
+      "Bash(npm --prefix src/web run *)",
+      "Bash(npm --prefix src/landing run *)",
+      "Bash(npx tsc --noEmit*)",
+      "Bash(npx jest*)",
+      "Bash(npx prettier*)",
+      "Bash(npx eslint*)",
+      "Bash(npx nest generate *)",
+      "Bash(npx nest g *)",
+      "Bash(npx cross-env APP_MODE=pos electron-vite build*)",
+      "Bash(npx prisma validate*)",
+      "Bash(npx prisma format*)",
+      "Bash(npx prisma generate*)",
+      "Bash(npx prisma migrate status*)",
+      "Bash(npx prisma migrate diff*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git fetch*)",
+      "Bash(git add *)",
+      "Bash(git branch --show-current)",
+      "Bash(git branch -vv*)",
+      "Bash(git branch -a*)",
+      "Bash(docker ps*)",
+      "Bash(docker logs*)",
+      "Bash(docker compose ps*)",
+      "Bash(docker compose logs*)",
+      "Bash(docker compose config*)",
+      "Bash(curl -s http://localhost:*)",
+      "Bash(curl -sf http://localhost:*)",
+      "Bash(ls*)",
+      "Bash(pwd)",
+      "WebFetch(domain:docs.nestjs.com)",
+      "WebFetch(domain:www.prisma.io)",
+      "WebFetch(domain:www.electronjs.org)",
+      "WebFetch(domain:react.i18next.com)",
+      "WebFetch(domain:styled-components.com)",
+      "WebFetch(domain:docs.docker.com)",
+      "Edit(/prisma/**)",
+      "Write(/prisma/**)",
+      "Edit(/src/shared/**)",
+      "Write(/src/shared/**)",
+      "Edit(/package.json)",
+      "Edit(/electron-builder.config.js)",
+      "Edit(/electron.vite.config.ts)",
+      "Edit(/docker-compose*.yml)",
+      "Edit(/Dockerfile)",
+      "Edit(/docker-entrypoint.sh)",
+      "Edit(/nginx/**)",
+      "Edit(/.github/**)",
+      "Edit(/.env.example)",
+      "Bash(npm install*)",
+      "Bash(npm i *)",
+      "Bash(npm ci*)",
+      "Bash(npm uninstall*)",
+      "Bash(npm version*)",
+      "Bash(npm run dev:pos*)",
+      "Bash(npm run build:pos*)",
+      "Bash(npm run prisma:migrate:dev*)",
+      "Bash(npm run prisma:push:sqlite*)",
+      "Bash(npm run prisma:seed*)",
+      "Bash(npm run import:mxik-catalog*)",
+      "Bash(npm run backfill:package-code*)",
+      "Bash(npm run seed:mxik-categories*)",
+      "Bash(npm run test:regos-vcr*)",
+      "Bash(npm run test:aslbelgisi*)",
+      "Bash(git commit*)",
+      "Bash(git push*)",
+      "Bash(git pull*)",
+      "Bash(git checkout*)",
+      "Bash(git switch*)",
+      "Bash(git merge*)",
+      "Bash(git rebase*)",
+      "Bash(git stash*)",
+      "Bash(docker compose up*)",
+      "Bash(docker compose build*)",
+      "Bash(docker compose restart*)",
+      "Bash(docker compose exec*)",
+      "Bash(docker compose down*)",
+      "Bash(docker exec*)",
+      "Bash(ssh *)",
+      "Bash(scp *)",
+      "Bash(rsync *)"
+    ],
+    "deny": [
+      "Edit(/src/generated/**)",
+      "Write(/src/generated/**)",
+      "Edit(/downloads/**)",
+      "Write(/downloads/**)",
+      "Edit(/uploads/**)",
+      "Write(/uploads/**)",
+      "Read(./.env)",
+      "Read(./.env.pos)",
+      "Read(./.env.server)",
+      "Read(./.env.staging)",
+      "Read(./.env.production)",
+      "Read(./.env.local)",
+      "Read(./.env.telegram)",
+      "Read(./uploads/**)",
+      "Read(./downloads/**)",
+      "Read(./dist/**)",
+      "Read(./dist-electron/**)",
+      "Read(./dist-renderer/**)",
+      "Read(./release/**)",
+      "Read(./src/generated/**)",
+      "Read(~/.ssh/**)",
+      "Read(**/*.pem)",
+      "Read(**/*.pfx)",
+      "Read(**/*.p12)",
+      "Bash(npm run deploy:pos*)",
+      "Bash(node scripts/upload-release*)",
+      "Bash(npm run prisma:migrate:deploy*)",
+      "Bash(npx prisma migrate deploy*)",
+      "Bash(npx prisma migrate reset*)",
+      "Bash(npx prisma db push*)",
+      "Bash(npx prisma db execute*)",
+      "Bash(docker compose down -v*)",
+      "Bash(docker-compose down -v*)",
+      "Bash(docker compose down --volumes*)",
+      "Bash(docker volume rm*)",
+      "Bash(docker volume prune*)",
+      "Bash(docker system prune*)",
+      "Bash(rm -rf*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push*main*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean*)",
+      "Bash(sudo *)",
+      "Bash(curl * | sh*)",
+      "Bash(curl * | bash*)",
+      "PowerShell(Remove-Item*-Recurse*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/tsx/dist/cli.mjs\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.ts\"",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/tsx/dist/cli.mjs\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.ts\"",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/tsx/dist/cli.mjs\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/branch-guard.ts\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/tsx/dist/cli.mjs\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/format.ts\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/tsx/dist/cli.mjs\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop-version-check.ts\"",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}
