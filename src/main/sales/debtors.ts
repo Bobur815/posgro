@@ -303,7 +303,10 @@ export async function recordDebtPayment(data: DebtPayment, staffId: string, term
     });
     // After the row above is written: the allocator reads the ledger, so the payment it is
     // settling with is the one just recorded.
-    return allocatePayment(tx, data.userId);
+    return allocatePayment(tx, data.userId, {
+      tender,
+      fiscalize: data.fiscalize !== false,
+    });
   });
 
   // Cash paid against a debt is money in the till that belongs to no sale in this shift. Recording

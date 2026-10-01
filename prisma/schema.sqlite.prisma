@@ -160,6 +160,13 @@ model DebtTransaction {
   synced    Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at")
 
+  /// Multi-till replication (pulled from the VPS by sync/debt-ledger-sync.ts). The till that wrote
+  /// the row, and — CHARGE only, set with settledAt — how it was settled and whether the shop chose
+  /// to fiscalize, so the till holding the sale can issue the receipt when another till settled it.
+  originTerminalId String?  @map("origin_terminal_id")
+  settleTender     String?  @map("settle_tender")
+  settleFiscalize  Boolean? @map("settle_fiscalize")
+
   // The allocator's query: this person's unsettled charges, oldest first.
   @@index([userId, settledAt])
   @@index([saleId])
