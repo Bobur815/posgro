@@ -388,17 +388,24 @@ export interface DebtVoid {
 }
 
 /**
- * Delete a ledger row — an admin's correction of a payment or adjustment entered by mistake.
+ * Delete a ledger row — an admin's correction of a purchase, payment or adjustment.
  *
  * Nothing is removed. The row is stamped voided (who, when, why), struck through on screen, and
  * left out of the balance and the allocator from then on; the stamp replicates to the server and
  * the other tills like a settlement does. Its effect on the balance is reversed in the same
  * transaction, so the stored figure and the ledger still agree.
  *
- * Refused where undoing the row would mean un-doing something outside the ledger:
- *  - a credit sale's CHARGE: the goods left the shop on a receipt — that is a sale return;
- *  - money that already paid off a receipt: the receipt is closed (and may be fiscalized), and a
- *    settlement is never re-opened, here or on any other till. Correct it with an adjustment.
+ * Deleting an open purchase (CHARGE) forgives that receipt's debt: the sale itself stays as it
+ * was, unpaid and not fiscalized, since no money for it ever arrived. A part payment that was
+ * sitting against it is freed, and settles the next open receipt straight away — exactly what it
+ * would have done had the deleted purchase never been there — which is then fiscalized with the
+ * tender of the customer's latest payment.
+ *
+ * Refused where undoing the row would mean re-opening a closed receipt — it may be fiscalized,
+ * and a settlement is never re-opened, here or on any other till. Correct those with an
+ * adjustment instead:
+ *  - a purchase that has already been paid off;
+ *  - money that already paid off a receipt.
  *
  * A cash payment's money went into a drawer as a PAY_IN; voiding it takes it out again as a
  * PAY_OUT from this till's open shift, so the drawer count follows. With no open shift there is
@@ -414,12 +421,17 @@ export async function voidDebtTransaction(
   const txn = await prisma.debtTransaction.findUnique({ where: { id: data.transactionId } });
   if (!txn || txn.userId !== data.userId) throw new Error('debtors.errors.not_found');
   if (txn.voidedAt) throw new Error('debtors.errors.already_voided');
-  if (txn.type === 'CHARGE' && txn.saleId) throw new Error('debtors.errors.void_sale_charge');
+  if (txn.type === 'CHARGE' && txn.settledAt) {
+    throw new Error('debtors.errors.void_charge_settled');
+  }
 
   const amount = num(txn.amount);
   const reason = String(data.reason ?? '').trim() || null;
 
-  await prisma.$transaction(async (tx: typeof prisma) => {
+  // The tender money freed by a deleted purchase is taken to have arrived in: the latest payment's.
+  let freedTender = 'cash';
+
+  const settledSales: string[] = await prisma.$transaction(async (tx: typeof prisma) => {
     // Money that settled receipts: after the void, what was paid must still cover what the
     // settled charges consumed. Checked on the ledger as it is now, so a payment whose money is
     // still sitting unapplied (a part payment, or an advance) can go.
@@ -454,7 +466,20 @@ export async function voidDebtTransaction(
       txn.id,
       JSON.stringify({ userId: data.userId, type: txn.type, amount, reason }),
     );
+
+    if (txn.type !== 'CHARGE') return [];
+    // A part payment that sat against this purchase is free again: let it settle what it covers.
+    const latest = (await tx.debtTransaction.findFirst({
+      where: { userId: data.userId, type: 'PAYMENT', voidedAt: null },
+      orderBy: { createdAt: 'desc' },
+    })) as { paymentMethod: string | null } | null;
+    freedTender = String(latest?.paymentMethod ?? 'cash').toLowerCase();
+    return allocatePayment(tx, data.userId, { tender: freedTender, fiscalize: true });
   });
+
+  for (const saleId of settledSales) {
+    await fiscalizeSettledSale(saleId, freedTender);
+  }
 
   if (txn.type === 'PAYMENT' && isCashTender(txn.paymentMethod)) {
     try {

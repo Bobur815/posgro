@@ -1609,7 +1609,7 @@
     "entryDeleted": "Yozuv o'chirildi",
     "errors": {
       "voidPaymentSettled": "Bu to'lov cheklarni yopgan — qarzni tuzatish orqali to'g'rilang",
-      "voidSaleCharge": "Nasiya xaridini o'chirib bo'lmaydi — chekni qaytaring"
+      "voidChargeSettled": "Bu xarid allaqachon to'langan — qarzni tuzatish orqali to'g'rilang"
     }
   }
 }

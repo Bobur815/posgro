@@ -418,9 +418,9 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
   };
 
   /**
-   * Delete a ledger row. The main process refuses what cannot be undone from here — a credit
-   * sale's charge (that is a return) and money that already closed receipts — with a key the
-   * toast turns into words.
+   * Delete a ledger row. The main process refuses what would re-open a closed receipt — a
+   * purchase already paid off, and money that already closed receipts — with a key the toast
+   * turns into words.
    */
   const submitVoid = async (transactionId: string) => {
     setBusy(true);
@@ -442,10 +442,10 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
               "debtors.errors.voidPaymentSettled",
               "Эта оплата уже закрыла чеки — исправьте долг корректировкой",
             )
-          : message.includes("void_sale_charge")
+          : message.includes("void_charge_settled")
             ? t(
-                "debtors.errors.voidSaleCharge",
-                "Покупку в долг нельзя удалить — оформите возврат чека",
+                "debtors.errors.voidChargeSettled",
+                "Эта покупка уже оплачена — исправьте долг корректировкой",
               )
             : t("common.error"),
       );
@@ -566,8 +566,9 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
                 const expanded = expandable && openSaleId === txn.saleId;
                 const sale = txn.saleId ? sales[txn.saleId] : undefined;
                 const voided = Boolean(txn.voidedAt);
-                // A credit sale's charge is undone by returning the sale, not from here.
-                const voidable = isAdmin && !voided && !(txn.type === "CHARGE" && txn.saleId);
+                // A purchase deletes like a payment, until it is paid off: a closed receipt (maybe
+                // fiscalized) is never re-opened. The main process refuses that too.
+                const voidable = isAdmin && !voided && !(txn.type === "CHARGE" && txn.settledAt);
                 return (
                   <Entry key={txn.id} $charge={charge} $voided={voided}>
                     <EntryHead>
