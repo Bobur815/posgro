@@ -922,17 +922,25 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
 
   // Bank turnover: a sale's fiscal state reaches the server separately, after the sale (see
   // sync/fiscal-status-sync.ts). Existing rows default to "sent" so an upgrade does not flood the
-  // first sync — apart from the last 90 days of fiscalized receipts, queued once here so the bank
+  // first sync — apart from the last 90 days of fiscalized receipts, queued once so the bank
   // figures cover recent history. Through the client, not SQL date arithmetic: Prisma owns how
   // DateTime is stored in this file.
+  //
+  // The backfill keys off its own marker, not off the column being new: a till that died between
+  // the ALTER and the backfill would otherwise never run it. Re-running it is harmless anyway.
   if (!(await columnExists(prisma, 'sales', 'fiscal_synced'))) {
     await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN fiscal_synced BOOLEAN NOT NULL DEFAULT 1`;
+  }
+  if (!(await prisma.systemSetting.findUnique({ where: { key: 'fiscal_sync_backfill' } }))) {
     await prisma.sale.updateMany({
       where: {
         fiscalStatus: 'FISCALIZED',
         regosFiscalAt: { gte: new Date(Date.now() - 90 * 86_400_000) },
       },
       data: { fiscalSynced: false },
+    });
+    await prisma.systemSetting.create({
+      data: { key: 'fiscal_sync_backfill', value: new Date().toISOString() },
     });
   }
 
