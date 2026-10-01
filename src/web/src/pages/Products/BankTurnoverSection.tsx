@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
-import { AlertTriangle, Landmark, Trash2 } from "lucide-react";
+import { AlertTriangle, Trash2 } from "lucide-react";
 import { Table } from "@components/common/Table";
 import { Button } from "@components/common/Button";
 import { Input } from "@components/common/Input";
@@ -29,15 +29,6 @@ import { reconciliation, type BankDeposit, type BankTurnover } from "../../api/c
  * loop of 200+ requests a minute that got the owner's IP banned by fail2ban. The axios interceptor
  * strips `response` from errors, so the old "is it a 404?" check never matched.
  */
-
-const Section = styled.h2`
-  margin: ${({ theme }) => theme.spacing.md} 0 0;
-  font-size: 16px;
-  color: ${({ theme }) => theme.colors.text};
-  display: flex;
-  align-items: center;
-  gap: ${({ theme }) => theme.spacing.xs};
-`;
 
 const Cards = styled.div`
   display: grid;
@@ -123,15 +114,18 @@ const IconButton = styled.button`
 const money = (value: string | number) => formatCurrency(Number(value));
 
 interface Props {
-  /** The page's period as real instants (see ReconciliationPage.load). Null before the first load. */
+  /** The page's period as real instants (see BankTurnoverPage). Null before the first load. */
   range: { from: string; to: string } | null;
+  /** Shown instead of the figures when the feature is off or the server has no such endpoint. */
+  whenUnavailable?: React.ReactNode;
 }
 
-export function BankTurnoverSection({ range }: Props) {
+export function BankTurnoverSection({ range, whenUnavailable }: Props) {
   const { t } = useTranslation();
   const toast = useToast();
 
   const [data, setData] = useState<BankTurnover | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
   const [amount, setAmount] = useState("");
   const [day, setDay] = useState(uztTodayString());
   const [note, setNote] = useState("");
@@ -145,9 +139,11 @@ export function BankTurnoverSection({ range }: Props) {
     try {
       const res = await reconciliation.bank(range);
       setData(res.enabled ? res : null);
+      setUnavailable(!res.enabled);
     } catch {
-      // No such endpoint here (terminal-served dashboard, older server) or it failed: no section.
+      // No such endpoint here (terminal-served dashboard, older server) or it failed.
       setData(null);
+      setUnavailable(true);
     }
   }, [range]);
 
@@ -155,7 +151,7 @@ export function BankTurnoverSection({ range }: Props) {
     void load();
   }, [load]);
 
-  if (!data) return null;
+  if (!data) return unavailable ? <>{whenUnavailable ?? null}</> : null;
 
   const addDeposit = async () => {
     const value = amount.replace(/\s/g, "").replace(",", ".");
@@ -208,11 +204,6 @@ export function BankTurnoverSection({ range }: Props) {
 
   return (
     <>
-      <Section>
-        <Landmark size={16} />
-        {t("reconciliation.bank.title", "Банк")}
-      </Section>
-
       <Cards>
         <Card>
           <CardLabel>{t("reconciliation.bank.card", "Карта")}</CardLabel>
