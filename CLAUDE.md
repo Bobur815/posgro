@@ -4,10 +4,11 @@ Offline-first grocery POS for the Uzbek retail market. Monorepo: Electron POS te
 
 ## Scope of this workspace
 
-I work on the **server side only**. The Electron app is frozen.
+Server (`src/server`), web dashboard (`src/web`), landing (`src/landing`) **and the Electron POS** (`src/main`, `src/renderer`) are all in scope. POS work follows `.claude/rules/electron.md` and skill `ipc-feature`.
 
-- **Off limits (edit/write denied in `.claude/settings.json`):** `src/main/**`, `src/renderer/**`, `electron-builder.config.js`, `scripts/build-pos.js`, build outputs (`dist*`, `release`, `build`). Do not read them either unless I explicitly ask; they burn context.
-- **Consequence:** POS terminals in the field keep running the current Electron build and I will not ship a new one alongside server changes. Every server change MUST stay backward compatible with the existing POS client:
+- **POS changes:** bump `package.json` version (`npm version patch --no-git-tag-version`), compile-check with `npx cross-env APP_MODE=pos electron-vite build`, and tell me to run `npm run deploy:pos` — I build and publish the installer, never you.
+- **Still off limits:** `electron-builder.config.js`, `scripts/build-pos.js`, build outputs (`dist*`, `release`, `build`). Don't read build outputs; they burn context.
+- **Old tills stay in the field.** Terminals update at different times, so the server must keep working with the previous POS release (N-1), and the new POS must tolerate a server that has not deployed yet. Rollout: server first (on `main`, deployed), then the installer. Every server change MUST stay backward compatible with the existing POS client:
   - never rename/remove/retype an endpoint, field, enum value, or status code the POS uses (`POST /api/sales/sync`, `GET /api/products?updatedAfter=`, `/api/auth/*`, `/api/health`);
   - new request fields optional; new response fields additive only;
   - `POST /api/sales/sync` must be idempotent (POS retries on failure) — dedupe on `(storeId, receiptNumber)` (not the terminal's local `id`, which can change after a SQLite reset), never insert twice.
@@ -52,7 +53,7 @@ npm run prisma:migrate:dev    # local DB only — confirm DATABASE_URL first
 npm run prisma:studio
 ```
 
-Never run `dev:pos`, `build:pos`, `electron-vite`, `electron-builder` (denied).
+POS compile check: `npx cross-env APP_MODE=pos electron-vite build`. Don't run `build:pos`, `electron-builder` or `deploy:pos` (slow / publishes — mine to run); `dev:pos` only when I ask.
 
 ## Domain facts worth remembering
 
