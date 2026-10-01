@@ -12,6 +12,7 @@ import {
 import { getCurrentUser } from '../ipc/auth-handlers';
 import { uploadLocalData, uploadNasiya } from './upload-sync';
 import { pullDebtLedger } from './debt-ledger-sync';
+import { syncFiscalStatus } from './fiscal-status-sync';
 import { getAppConfig } from '../config/app-config';
 import { getPrismaClient } from '../database/sqlite-client';
 import { getServerToken, clearServerToken } from './queue-manager';
@@ -179,6 +180,14 @@ export class SyncService {
         }
       } catch (salesError) {
         console.error('Sales sync failed (non-fatal):', salesError instanceof Error ? salesError.message : salesError);
+      }
+
+      // Fiscal state of sales already uploaded — all roles, after the sales so their receipts are
+      // there to be matched. Feeds the bank-turnover figures on the dashboard.
+      try {
+        await syncFiscalStatus();
+      } catch (fiscalError) {
+        console.error('Fiscal status sync failed (non-fatal):', fiscalError instanceof Error ? fiscalError.message : fiscalError);
       }
 
       // Sync closed shifts — all roles, deliberately NOT inside uploadLocalData(), which only

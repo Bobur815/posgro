@@ -305,7 +305,30 @@
     "expectedCash": "Kassada bo'lishi kerak",
     "actualCash": "Kassada amalda",
     "cashVariance": "Kassa bo'yicha farq",
-    "shiftCount": "Hisobga olingan smenalar"
+    "shiftCount": "Hisobga olingan smenalar",
+    "bank": {
+      "title": "Bank",
+      "card": "Karta",
+      "cardNote": "Kassada va qarz to'lovlari karta orqali",
+      "uzqr": "UzQR",
+      "fiscalCash": "Fiskallashtirilgan naqd pul",
+      "turnover": "Bank bo'yicha aylanma",
+      "turnoverNote": "Karta + UzQR + fiskallashtirilgan naqd pul",
+      "depositedInPeriod": "Davr ichida bankka topshirildi",
+      "unreported": "Fiskal holati noma'lum {{count}} ta naqd chek, {{amount}} (kassaning eski versiyasi yoki hali sinxronlanmagan) — ular fiskallashtirilgan naqd pulga kirmaydi.",
+      "toDeposit": "Bankka topshirish qoldi",
+      "toDepositNote": "{{date}} dan: fiskallashtirildi {{cash}}, topshirildi {{deposited}}",
+      "noStartDate": "Bankka topshiriladigan naqd pul qaysi sanadan hisoblanishini ko'rsating.",
+      "amount": "Summa, so'm",
+      "amountRequired": "Summani ko'rsating",
+      "date": "Sana",
+      "note": "Izoh (ixtiyoriy)",
+      "addDeposit": "Bankka topshirishni yozish",
+      "depositSaved": "Bankka topshirish yozildi",
+      "voided": "bekor qilingan",
+      "void": "Yozuvni bekor qilish",
+      "voidConfirm": "{{amount}} topshirish ro'yxatda chizilgan holda qoladi va topshiriladigan naqd puldan ayirilmaydi."
+    }
   },
   "products": {
     "title": "Mahsulotlar",

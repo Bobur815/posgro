@@ -360,6 +360,10 @@ model Sale {
   regosTerminalId String?   @map("regos_terminal_id")
   regosReceiptNo  String?   @map("regos_receipt_no")
   regosFiscalAt   DateTime? @map("regos_fiscal_at")
+  /// The fiscal state above has reached the server (POST /sales/fiscal-sync). False once a sale
+  /// becomes FISCALIZED; the bank-turnover figures need it. Existing rows default to sent, apart
+  /// from the last 90 days of fiscalized ones, which the upgrade queues once.
+  fiscalSynced    Boolean   @default(true) @map("fiscal_synced")
   regosLabels     String?   @map("regos_labels") // JSON [{barcode,label}] snapshot for marked goods
 
   // UzQR (REGOS Payment.Create). Set only when the optional UzQR integration is on and the

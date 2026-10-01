@@ -758,6 +758,8 @@ class RegosVcrService {
         where: { id: saleId },
         data: {
           fiscalStatus: 'FISCALIZED',
+          // Bank turnover: the server learns the receipt was fiscalized (fiscal-status-sync.ts).
+          fiscalSynced: false,
           regosReceiptId: result.Id,
           regosFiscalSign: result.FiscalSign,
           regosQrCodeUrl: result.QRCodeURL,
@@ -794,6 +796,8 @@ class RegosVcrService {
             where: { id: saleId },
             data: {
               fiscalStatus: 'FISCALIZED',
+              // Bank turnover: the server learns the receipt was fiscalized (fiscal-status-sync.ts).
+              fiscalSynced: false,
               regosReceiptId: recovered.Id,
               regosFiscalSign: recovered.FiscalSign,
               regosQrCodeUrl: recovered.QRCodeURL,
