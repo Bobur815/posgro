@@ -1190,6 +1190,7 @@ export interface MoneyReconciliation {
 
 /** Bank turnover (GET /reconciliation/bank). Amounts are Decimal strings. */
 export interface BankTurnover {
+  enabled: true;
   periodStart: string;
   periodEnd: string;
   card: string;
@@ -1230,8 +1231,14 @@ export const reconciliation = {
     const { data } = await axiosInstance.post("/reconciliation/seed-opening");
     return data;
   },
-  /** 404 while BANK_TURNOVER_ENABLED is off, and from a terminal-served dashboard. */
-  bank: async (params: { from: string; to: string }): Promise<BankTurnover> => {
+  /**
+   * `{ enabled: false }` while BANK_TURNOVER_ENABLED is off. A terminal-served dashboard has no
+   * such route at all (404); the section treats any failure as "not here" and does not retry.
+   */
+  bank: async (params: {
+    from: string;
+    to: string;
+  }): Promise<BankTurnover | { enabled: false }> => {
     const { data } = await axiosInstance.get("/reconciliation/bank", { params });
     return data;
   },
