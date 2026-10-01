@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -8,6 +8,10 @@ import {
 } from '@nestjs/swagger';
 import { ReconciliationService } from './reconciliation.service';
 import { MoneyReconciliationService } from './money.service';
+import { BankTurnoverService } from './bank.service';
+import { CreateBankDepositDto, SetBankStartDateDto } from './dto/bank.dto';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { User } from '@prisma/client';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { StoreGuard } from '../../common/guards/store.guard';
@@ -24,6 +28,7 @@ export class ReconciliationController {
   constructor(
     private readonly reconciliation: ReconciliationService,
     private readonly money: MoneyReconciliationService,
+    private readonly bank: BankTurnoverService,
   ) {}
 
   @Get('goods')
@@ -58,6 +63,52 @@ export class ReconciliationController {
     const start = from ? new Date(from) : new Date(Date.now() - 30 * 86_400_000);
     const end = to ? new Date(to) : new Date();
     return this.money.reconcile(storeId, start, end);
+  }
+
+  // ── Bank turnover (BANK_TURNOVER_ENABLED; 404 while off) ──────────────────────────────────────
+
+  @Get('bank')
+  @ApiOperation({ summary: 'Bank turnover: card + UzQR + fiscalised cash, and cash to deposit' })
+  @ApiQuery({ name: 'from', required: true, type: String, description: 'ISO date' })
+  @ApiQuery({ name: 'to', required: true, type: String, description: 'ISO date' })
+  async bankTurnover(
+    @CurrentStore() storeId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ) {
+    const start = from ? new Date(from) : new Date(Date.now() - 30 * 86_400_000);
+    const end = to ? new Date(to) : new Date();
+    return this.bank.summary(storeId, start, end);
+  }
+
+  @Post('bank/deposits')
+  @ApiOperation({ summary: 'Record fiscalised cash taken to the bank' })
+  async createBankDeposit(
+    @CurrentStore() storeId: string,
+    @CurrentUser() user: User,
+    @Body() dto: CreateBankDepositDto,
+  ) {
+    return this.bank.createDeposit(storeId, user.id, dto);
+  }
+
+  @Post('bank/deposits/:id/void')
+  @ApiOperation({ summary: 'Void a deposit entered by mistake (kept, struck through)' })
+  async voidBankDeposit(
+    @CurrentStore() storeId: string,
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+  ) {
+    return this.bank.voidDeposit(storeId, user.id, id);
+  }
+
+  @Put('bank/start-date')
+  @ApiOperation({ summary: 'From when fiscalised cash still to deposit is counted' })
+  async setBankStartDate(
+    @CurrentStore() storeId: string,
+    @CurrentUser() user: User,
+    @Body() dto: SetBankStartDateDto,
+  ) {
+    return this.bank.setStartDate(storeId, user.id, dto.startDate ?? null);
   }
 
   @Post('seed-opening')

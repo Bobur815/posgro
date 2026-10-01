@@ -366,6 +366,7 @@ export class StoresService {
       await this.prisma.$transaction([
         this.prisma.terminalHeartbeat.deleteMany({ where: { storeId: id } }),
         this.prisma.systemSetting.deleteMany({ where: { storeId: id } }),
+        this.prisma.cashBankDeposit.deleteMany({ where: { storeId: id } }),
         this.prisma.supplierTransaction.deleteMany({ where: { storeId: id } }),
         this.prisma.inventoryArrival.deleteMany({ where: { storeId: id } }),
         this.prisma.sale.deleteMany({ where: { storeId: id } }),
