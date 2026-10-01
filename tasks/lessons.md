@@ -346,8 +346,10 @@ Prettier config — so it applies the defaults (double quotes, width 80) and rew
 A three-line edit to `users.service.ts` became a 68-line diff, and re-running Prettier with the
 right options does not undo it: an object Prettier has once broken across lines stays broken.
 
-**Rule:** edit existing `src/**` files from Bash (a node script with exact-anchor replacements), which
-the hook does not see. If the hook already ran, rebuild the file from `git show HEAD:<path>` plus the
-intended changes. New files are fine through Write followed by
-`npx prettier --single-quote --print-width 100 --write <file>`. Proper fix (yours to decide): add a
-`.prettierrc` matching the codebase.
+**Fixed (2026-10-01):** `.prettierrc.json` now holds the measured house style — width 100, single
+quotes, double quotes in `src/renderer` and `src/web`, width 80 in `src/landing` — and the hook formats
+a file only if it was already Prettier-clean at HEAD (or is new). About half the files match no
+config at all, so the config alone would not have stopped whole-file rewrites; the HEAD check does.
+
+**Rule:** a legacy file is formatted, if ever, on purpose in a commit of its own — never as a side
+effect of an edit. The hook lives in `.claude/`, which is gitignored: a fresh clone has the old hook.

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/prettierrc",
+  "printWidth": 100,
+  "singleQuote": true,
+  "endOfLine": "auto",
+  "overrides": [
+    {
+      "files": ["src/renderer/**", "src/web/**"],
+      "options": { "singleQuote": false }
+    },
+    {
+      "files": ["src/landing/**"],
+      "options": { "singleQuote": false, "printWidth": 80 }
+    }
+  ]
+}
