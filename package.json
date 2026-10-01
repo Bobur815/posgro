@@ -1,6 +1,6 @@
 {
   "name": "posgro",
-  "version": "1.32.2",
+  "version": "1.32.3",
   "description": "Grocery Store POS System - Offline-first Point of Sale",
   "main": "dist-electron/main/index.js",
   "scripts": {

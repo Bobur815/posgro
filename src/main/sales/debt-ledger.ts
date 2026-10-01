@@ -106,7 +106,7 @@ export async function allocatePayment(
   if (remaining <= 0) return [];
 
   const open = (await tx.debtTransaction.findMany({
-    where: { userId, type: 'CHARGE', settledAt: null },
+    where: { userId, type: 'CHARGE', settledAt: null, voidedAt: null },
     orderBy: { createdAt: 'asc' },
   })) as DebtCharge[];
 
@@ -130,8 +130,8 @@ export async function allocatePayment(
  * has always paid in whole receipts; positive when a part payment is sitting against the oldest
  * open one. Derived rather than stored, so it cannot drift out of step with the rows.
  */
-async function unappliedCredit(tx: Prisma, userId: string): Promise<number> {
-  const rows = (await tx.debtTransaction.findMany({ where: { userId } })) as Array<{
+export async function unappliedCredit(tx: Prisma, userId: string): Promise<number> {
+  const rows = (await tx.debtTransaction.findMany({ where: { userId, voidedAt: null } })) as Array<{
     type: string;
     amount: unknown;
     settledAt: Date | null;
@@ -182,6 +182,7 @@ async function stampSettled(tx: Prisma, chargeId: string, settle: Settlement): P
  * assertion the debtors screen can actually make rather than a hope.
  */
 export async function recomputeBalance(tx: Prisma, userId: string): Promise<number> {
-  const rows = await tx.debtTransaction.findMany({ where: { userId } });
+  // A voided row stays in the history and out of every sum.
+  const rows = await tx.debtTransaction.findMany({ where: { userId, voidedAt: null } });
   return round(rows.reduce((sum: number, r: { amount: unknown }) => sum + Number(r.amount), 0));
 }

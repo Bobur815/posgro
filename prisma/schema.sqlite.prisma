@@ -167,6 +167,13 @@ model DebtTransaction {
   settleTender     String?  @map("settle_tender")
   settleFiscalize  Boolean? @map("settle_fiscalize")
 
+  /// Deleted by an admin (debtors:voidTransaction). Kept for history, struck through on screen,
+  /// and left out of every balance and allocation. Set once, never cleared; replicates like a
+  /// settlement does.
+  voidedAt   DateTime? @map("voided_at")
+  voidedBy   String?   @map("voided_by")
+  voidReason String?   @map("void_reason")
+
   // The allocator's query: this person's unsettled charges, oldest first.
   @@index([userId, settledAt])
   @@index([saleId])

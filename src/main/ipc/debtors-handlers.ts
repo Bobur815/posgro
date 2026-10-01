@@ -12,7 +12,9 @@ import {
   recordDebtPayment,
   unpaidSales,
   updateDebtor,
+  voidDebtTransaction,
   type DebtorEdit,
+  type DebtVoid,
   type DebtorListOptions,
   type DebtPayment,
   type NewDebtor,
@@ -98,5 +100,15 @@ export function setupDebtorsHandlers(): void {
   ipcMain.handle("debtors:adjust", async (_event, data: { userId: string; amount: number; note?: string }) => {
     const admin = requireAdmin();
     return ipcSafe((await isSatellite()) ? await satellite.adjustDebt(data) : await adjustDebt(data, admin.id));
+  });
+
+  /** Delete a ledger row, keeping it in the history — admin only; see `voidDebtTransaction`. */
+  ipcMain.handle("debtors:voidTransaction", async (_event, data: DebtVoid) => {
+    const admin = requireAdmin();
+    return ipcSafe(
+      (await isSatellite())
+        ? await satellite.voidDebtTransaction(data)
+        : await voidDebtTransaction(data, admin, getAppConfig().terminalId),
+    );
   });
 }

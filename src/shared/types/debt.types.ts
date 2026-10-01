@@ -39,6 +39,10 @@ export interface DebtTransaction {
   note: string | null;
   createdBy: string;
   createdAt: string | Date;
+  /** Deleted by an admin: kept in the history, struck through, counted nowhere. */
+  voidedAt?: string | Date | null;
+  voidedBy?: string | null;
+  voidReason?: string | null;
 }
 
 export interface DebtLedger {

@@ -1106,6 +1106,9 @@ export interface DashboardDebtTransaction {
   dueDate: string | null;
   note: string | null;
   createdAt: string;
+  /** Deleted by an admin at a till: still listed, counted nowhere. Absent from older servers. */
+  voidedAt?: string | null;
+  voidReason?: string | null;
 }
 
 /** A credit sale behind a CHARGE row, with the lines that made it up. */

@@ -152,6 +152,9 @@ async function uploadDebtTransactions(
     originTerminalId: t.originTerminalId ?? terminalId ?? undefined,
     settleTender: t.settleTender ?? undefined,
     settleFiscalize: t.settleFiscalize ?? undefined,
+    voidedAt: t.voidedAt ? new Date(t.voidedAt).toISOString() : undefined,
+    voidedBy: t.voidedBy ?? undefined,
+    voidReason: t.voidReason ?? undefined,
   }));
 
   const res = await apiPost('/debtors/sync-bulk', token, { transactions: payload });
@@ -177,13 +180,14 @@ async function uploadDebtTransactions(
       : [];
   if (taken.length === 0) return;
 
-  // Matched on what was sent: a charge settled while the request was in flight changed after the
-  // copy above was taken, and must go again.
+  // Matched on what was sent: a charge settled, or a row voided, while the request was in flight
+  // changed after the copy above was taken, and must go again.
   for (const t of rows.filter((r: DebtTransactionRow) => taken.includes(r.id))) {
     await prisma.debtTransaction.updateMany({
       where: {
         id: t.id,
         settledAt: t.settledAt ?? null,
+        voidedAt: t.voidedAt ?? null,
       },
       data: { synced: true },
     });
