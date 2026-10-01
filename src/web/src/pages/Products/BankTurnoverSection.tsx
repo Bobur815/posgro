@@ -21,8 +21,13 @@ import { reconciliation, type BankDeposit, type BankTurnover } from "../../api/c
  * bank. Each trip to the bank is recorded here and subtracted; a mistaken entry is voided — kept,
  * struck through — never deleted.
  *
- * Hidden entirely when the server answers 404: BANK_TURNOVER_ENABLED is off, or this dashboard is
- * served by a terminal on the shop's LAN, which has no such endpoint.
+ * Hidden entirely when the server says the feature is off (BANK_TURNOVER_ENABLED), or when the
+ * request fails — a dashboard served by a terminal on the shop's LAN has no such endpoint.
+ *
+ * Fetched once per period, and only then. It used to refetch whenever `toast` changed identity,
+ * which it does on every toast shown; a failure showed a toast, which refetched, which failed — a
+ * loop of 200+ requests a minute that got the owner's IP banned by fail2ban. The axios interceptor
+ * strips `response` from errors, so the old "is it a 404?" check never matched.
  */
 
 const Section = styled.h2`
@@ -134,17 +139,17 @@ export function BankTurnoverSection({ range }: Props) {
   const [busy, setBusy] = useState(false);
   const [confirmVoid, setConfirmVoid] = useState<BankDeposit | null>(null);
 
+  /** One fetch for the current period. Refetches after a write; never retries on its own. */
   const load = useCallback(async () => {
     if (!range) return;
     try {
-      setData(await reconciliation.bank(range));
-    } catch (e) {
-      const status = (e as { response?: { status?: number } }).response?.status;
-      // Off on this server, or a terminal-served dashboard: no section, and no error either.
-      if (status === 404) setData(null);
-      else toast.error(t("common.error"));
+      const res = await reconciliation.bank(range);
+      setData(res.enabled ? res : null);
+    } catch {
+      // No such endpoint here (terminal-served dashboard, older server) or it failed: no section.
+      setData(null);
     }
-  }, [range, t, toast]);
+  }, [range]);
 
   useEffect(() => {
     void load();

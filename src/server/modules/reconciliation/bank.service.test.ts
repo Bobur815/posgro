@@ -8,7 +8,7 @@
  */
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { BankTurnoverService } from './bank.service';
+import { BankTurnoverService, type BankTurnover } from './bank.service';
 import { SalesFiscalService } from '../sales/sales-fiscal.service';
 
 const D = (n: number) => new Prisma.Decimal(n);
@@ -69,10 +69,12 @@ describe('BankTurnoverService', () => {
     process.env.BANK_TURNOVER_ENABLED = OLD;
   });
 
-  it('is not there at all without the flag', async () => {
+  it('answers "off" without the flag — 200, never a 404 a fail2ban jail would count', async () => {
     delete process.env.BANK_TURNOVER_ENABLED;
-    const { svc } = service();
-    await expect(svc.summary('S1', from, to)).rejects.toBeInstanceOf(NotFoundException);
+    const { svc, prisma } = service();
+    await expect(svc.summary('S1', from, to)).resolves.toEqual({ enabled: false });
+    expect(prisma.sale.aggregate).not.toHaveBeenCalled();
+    // Writes stay closed: the page never offers them while the section is hidden.
     await expect(svc.createDeposit('S1', 'a', { amount: '1' })).rejects.toBeInstanceOf(
       NotFoundException,
     );
@@ -80,7 +82,7 @@ describe('BankTurnoverService', () => {
 
   it('adds card (counter + nasiya payments), UzQR and fiscalised cash', async () => {
     const { svc } = service();
-    const r = await svc.summary('S1', from, to);
+    const r = (await svc.summary('S1', from, to)) as BankTurnover;
     expect(r.card.toString()).toBe('350000'); // 300 000 at the counter + 50 000 paid on a debt
     expect(r.uzqr.toString()).toBe('120000');
     expect(r.fiscalCash.toString()).toBe('500000');
@@ -113,10 +115,10 @@ describe('BankTurnoverService', () => {
   });
 
   it('reports nothing to deposit until a start date is set, then fiscalised cash minus deposits', async () => {
-    expect((await service().svc.summary('S1', from, to)).running).toBeNull();
+    expect(((await service().svc.summary('S1', from, to)) as BankTurnover).running).toBeNull();
 
     const startDate = new Date('2026-09-15T00:00:00Z');
-    const r = await service({ startDate }).svc.summary('S1', from, to);
+    const r = (await service({ startDate }).svc.summary('S1', from, to)) as BankTurnover;
     expect(r.running).toMatchObject({ startDate });
     expect(r.running!.toDeposit.toString()).toBe('300000');
   });

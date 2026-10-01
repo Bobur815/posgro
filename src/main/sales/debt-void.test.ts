@@ -36,8 +36,10 @@ jest.mock('./shifts', () => ({
 }));
 
 import { initializeDatabase, closeDatabase, getPrismaClient } from '../database/sqlite-client';
+import { resetMissingEndpoints } from '../sync/missing-endpoints';
 import { recordDebtPayment, voidDebtTransaction, debtorLedger } from './debtors';
 import { pullDebtLedger } from '../sync/debt-ledger-sync';
+import { fiscalizeSettledSale } from './settle-sale';
 
 const db = () => getPrismaClient();
 const admin = { id: 'admin', phone: '998900000001' };
@@ -95,6 +97,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  resetMissingEndpoints();
   openShift = null;
   addShiftMovement.mockClear();
   await db().debtTransaction.deleteMany({});
@@ -159,12 +162,64 @@ describe('voidDebtTransaction', () => {
     expect((await db().debtTransaction.findUnique({ where: { id: p.id } })).voidedAt).toBeNull();
   });
 
-  it("refuses a credit sale's charge — that is a sale return", async () => {
+  it('deletes an open purchase like a payment: kept, struck through, balance back', async () => {
     await customer();
     await charge('c1', 50000);
+
+    await voidDebtTransaction(
+      { userId: 'u1', transactionId: 'c1', reason: 'не тот клиент' },
+      admin,
+      'T1',
+    );
+
+    expect(await balance()).toBe(0);
+    expect(await db().debtTransaction.findUnique({ where: { id: 'c1' } })).toMatchObject({
+      voidedBy: 'admin',
+      voidReason: 'не тот клиент',
+      settledAt: null,
+      synced: false,
+    });
+    expect((await debtorLedger('u1')).ledgerBalance).toBe(0);
+  });
+
+  it('refuses a purchase that is already paid off — its receipt is closed', async () => {
+    await customer();
+    await charge('c1', 50000);
+    await recordDebtPayment(
+      { userId: 'u1', amount: 50000, paymentMethod: 'cash' },
+      'cashier',
+      'T1',
+    );
+
     await expect(
       voidDebtTransaction({ userId: 'u1', transactionId: 'c1' }, admin, 'T1'),
-    ).rejects.toThrow('debtors.errors.void_sale_charge');
+    ).rejects.toThrow('debtors.errors.void_charge_settled');
+    expect(await balance()).toBe(0);
+  });
+
+  it('a part payment freed by a deleted purchase pays off the next receipt, and fiscalizes it', async () => {
+    await customer();
+    await charge('c1', 50000); // oldest: the part payment sits against this one
+    await charge('c2', 30000);
+    await recordDebtPayment(
+      { userId: 'u1', amount: 40000, paymentMethod: 'card' },
+      'cashier',
+      'T1',
+    );
+    (fiscalizeSettledSale as jest.Mock).mockClear();
+
+    await voidDebtTransaction({ userId: 'u1', transactionId: 'c1' }, admin, 'T1');
+
+    // 30 000 owed − 40 000 paid: 10 000 ahead, and c2 is covered.
+    expect(await balance()).toBe(-10000);
+    expect(await db().debtTransaction.findUnique({ where: { id: 'c2' } })).toMatchObject({
+      settleTender: 'card',
+      settleFiscalize: true,
+    });
+    expect(
+      (await db().debtTransaction.findUnique({ where: { id: 'c2' } })).settledAt,
+    ).not.toBeNull();
+    expect(fiscalizeSettledSale).toHaveBeenCalledWith('sale-c2', 'card');
   });
 
   it('refuses a second void, and a row of another person', async () => {

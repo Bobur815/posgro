@@ -13,6 +13,7 @@ const insensitive = (value: string) => ({
 });
 
 export interface BankTurnover {
+  enabled: true;
   periodStart: Date;
   periodEnd: Date;
   /** Paid by card — at the counter, and on nasiya debts later. */
@@ -46,6 +47,15 @@ export interface BankTurnover {
     createdById: string;
     voidedAt: Date | null;
   }[];
+}
+
+/**
+ * What GET /reconciliation/bank answers while BANK_TURNOVER_ENABLED is off: 200, not 404. A 404
+ * reads as a scanner to fail2ban's nginx-404 jail, and a dashboard left open on the page got its
+ * owner's IP banned that way.
+ */
+export interface BankTurnoverDisabled {
+  enabled: false;
 }
 
 /**
@@ -129,8 +139,12 @@ export class BankTurnoverService {
     return (counter._sum.paidAmount ?? ZERO).plus((debts._sum.amount ?? ZERO).negated());
   }
 
-  async summary(storeId: string, periodStart: Date, periodEnd: Date): Promise<BankTurnover> {
-    this.assertEnabled();
+  async summary(
+    storeId: string,
+    periodStart: Date,
+    periodEnd: Date,
+  ): Promise<BankTurnover | BankTurnoverDisabled> {
+    if (!bankTurnoverEnabled()) return { enabled: false };
 
     const [card, uzqr, fiscalCash, deposited, unreported, store, deposits] = await Promise.all([
       this.tender(storeId, 'card', periodStart, periodEnd),
@@ -181,6 +195,7 @@ export class BankTurnoverService {
     }
 
     return {
+      enabled: true,
       periodStart,
       periodEnd,
       card,

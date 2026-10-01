@@ -2,6 +2,7 @@ import { getPrismaClient } from '../database/sqlite-client';
 import { getAppConfig } from '../config/app-config';
 import { getServerToken } from './queue-manager';
 import { recomputeBalance } from '../sales/debt-ledger';
+import { endpointKnownMissing, noteEndpointStatus } from './missing-endpoints';
 
 /**
  * Nasiya across tills: pull the ledger rows the store's other tills wrote.
@@ -244,6 +245,7 @@ export async function pullDebtLedger(): Promise<void> {
   const prisma = getPrismaClient();
   const token = getServerToken();
   if (!token) return;
+  if (endpointKnownMissing('debtors/ledger/sync')) return;
   const { vpsApiUrl } = getAppConfig();
 
   const saved = await readSetting(prisma, CURSOR_KEY);
@@ -268,6 +270,7 @@ export async function pullDebtLedger(): Promise<void> {
     const res = await fetch(`${vpsApiUrl}/debtors/ledger/sync?${query}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    noteEndpointStatus('debtors/ledger/sync', res.status);
     if (res.status === 404) return; // server from before ledger replication
     if (!res.ok) {
       console.error(`[debt-ledger] pull failed (HTTP ${res.status})`);
