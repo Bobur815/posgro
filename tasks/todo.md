@@ -1,4 +1,4 @@
-# Nasiya multi-till sync, ledger voids, bank turnover (2026-10-01) — approved; task 3 built
+# Nasiya multi-till sync, ledger voids, bank turnover (2026-10-01) — approved; all three built, on local `dev`, not pushed
 
 Electron is in scope again (CLAUDE.md updated, commit f22e411 on `chore/claude-md-pos-scope`).
 Order matters: task 3 first, because task 1's voids ride on the same ledger-replication rules.
@@ -43,7 +43,10 @@ Fix — the ledger becomes the replicated truth, the balance is derived from it:
 - Tests: two-till simulation (charge on T1, pay on T2, both converge; T1 fiscalizes), slice bug,
   merge rule, server reconcile report.
 
-## Task 1 — admin deletes a ledger transaction, history stays
+## Task 1 — admin deletes a ledger transaction, history stays — BUILT on `feat/debt-txn-void` (7f91d1f server, 8a72d3d POS 1.32.3)
+
+Deviation from the plan: a payment whose money already settled receipts is refused outright (not only when a *fiscalized* receipt would reopen) — a settlement is never cleared by the replication merge, so reopening one locally would not reach the other tills.
+
 
 - **Columns:** `voidedAt?`, `voidedBy?`, `voidReason?` on both schemas. Voided rows are excluded
   from `recomputeBalance`, `unappliedCredit`, `allocatePayment` and the server Σ.
@@ -61,7 +64,10 @@ Fix — the ledger becomes the replicated truth, the balance is derived from it:
 - **Server/web:** sync DTO gets the optional void fields; the dashboard debtor ledger renders
   voided rows struck through.
 
-## Task 2 — bank turnover = card + UzQR + fiscalised cash; deposits
+## Task 2 — bank turnover = card + UzQR + fiscalised cash; deposits — BUILT on `feat/bank-turnover` (8635ac6 server, 9d1e5a2 POS 1.32.4, 6d402d0 web)
+
+Changes vs plan: start date lives on `stores.bank_cash_start_date` (not a SystemSetting — tills re-upload settings); no new index on `sales` (would need its own CONCURRENTLY migration; existing store/created_at indexes serve these queries).
+
 
 - The server cannot know fiscal status today: `fiscalStatus` exists only in SQLite and a sale
   syncs once, before fiscalization. A payoff also rewrites the tender locally, and the server never
