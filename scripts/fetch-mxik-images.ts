@@ -1,7 +1,7 @@
 // Builds the picture seed the POS installer ships: prisma/seed/images/ (extraResources already
 // copies prisma/**, so nothing in electron-builder.config.js changes).
 //
-//   1. Category pictures from files you drop into scripts/category-images/, named after the
+//   1. Category pictures (png/jpg/webp/avif) from scripts/category-images/, named after the
 //      category's nameUz (`Salqin ichimliklar.png`); matched on the till by categoryNameKey().
 //   2. Fetch: every picture tasnif.soliq.uz has for each MXIK (up to MAX_CANDIDATES) goes into a
 //      local cache, scripts/.mxik-candidates/ (gitignored, never shipped). Network only here.
@@ -54,7 +54,7 @@ const MANIFEST = path.join(OUT_DIR, 'manifest.json');
 const CACHE = path.resolve(process.env.CACHE_DIR ?? path.join(ROOT, 'scripts', '.mxik-candidates'));
 const OVERRIDES = path.resolve(process.env.OVERRIDES_FILE ?? path.join(ROOT, 'scripts', 'mxik-image-overrides.json'));
 const CATEGORY_SRC = path.join(ROOT, 'scripts', 'category-images');
-const CATEGORY_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+const CATEGORY_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.avif']);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
