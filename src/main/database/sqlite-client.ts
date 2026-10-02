@@ -2,6 +2,7 @@
 import path from 'path';
 import { app } from 'electron';
 import fs from 'fs';
+import { createImageTables, importImageSeed } from '../images/image-store';
 
 // Resolve prisma client path relative to app root.
 // In production the JS files live inside app.asar; the .node binary is unpacked to
@@ -111,6 +112,20 @@ export async function initializeDatabase(): Promise<void> {
     console.error('Failed to connect to database:', error);
     throw error;
   }
+
+  // Pictures never stop a till from starting: a broken seed is logged and skipped.
+  try {
+    if (await importImageSeed(prisma, imageSeedDir())) console.log('[db] Picture seed imported');
+  } catch (error) {
+    console.error('[db] Picture seed import failed:', error);
+  }
+}
+
+/** The installer's picture seed — shipped by the existing `extraResources: prisma/**`. */
+function imageSeedDir(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'prisma', 'seed', 'images')
+    : path.join(app.getAppPath(), 'prisma', 'seed', 'images');
 }
 
 /**
@@ -364,6 +379,8 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_sync_queue_entity ON sync_queue(entity)`;
 
+  // Product/category pictures — local to this till, never synced (images/image-store.ts).
+  await createImageTables(prisma);
 }
 
 async function runMigrations(prisma: PrismaClientType): Promise<void> {

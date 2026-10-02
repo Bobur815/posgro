@@ -362,6 +362,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
     get: () => ipcRenderer.invoke("banner:get"),
   },
 
+  // Product/category pictures, local to this till (main/ipc/images-handlers.ts). Shown via posimg:.
+  images: {
+    fetchMxik: (mxik: string) => ipcRenderer.invoke("images:fetchMxik", mxik),
+    saveMxik: (mxik: string, bytes: Uint8Array, sourceName: string) =>
+      ipcRenderer.invoke("images:saveMxik", mxik, bytes, sourceName),
+    setOwn: (type: "product" | "category", key: string, bytes: Uint8Array) =>
+      ipcRenderer.invoke("images:setOwn", type, key, bytes),
+    removeOwn: (type: "product" | "category", key: string) =>
+      ipcRenderer.invoke("images:removeOwn", type, key),
+    hasOwn: (type: "product" | "category", key: string) =>
+      ipcRenderer.invoke("images:hasOwn", type, key),
+  },
+
   // Local config (VPS connection settings)
   config: {
     getLocalConfig: () => ipcRenderer.invoke("config:getLocalConfig"),
@@ -845,6 +858,18 @@ declare global {
       };
       banner: {
         get: () => Promise<{ imageUrl: string; title: string; subtitle: string }>;
+      };
+      images: {
+        fetchMxik: (
+          mxik: string,
+        ) => Promise<
+          | { status: "found"; candidates: Array<{ bytes: Uint8Array; sourceName: string }> }
+          | { status: "skip" | "none" | "error" }
+        >;
+        saveMxik: (mxik: string, bytes: Uint8Array, sourceName: string) => Promise<boolean>;
+        setOwn: (type: "product" | "category", key: string, bytes: Uint8Array) => Promise<void>;
+        removeOwn: (type: "product" | "category", key: string) => Promise<void>;
+        hasOwn: (type: "product" | "category", key: string) => Promise<boolean>;
       };
       config: {
         getLocalConfig: () => Promise<{

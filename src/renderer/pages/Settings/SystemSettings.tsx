@@ -17,6 +17,7 @@ import {
   SpanAll,
   FieldGrid,
 } from "../../components/common/SettingsLayout";
+import { useSettingsStore } from "../../store/settings-store";
 
 const Container = styled(SettingsPage)``;
 
@@ -126,6 +127,8 @@ const StatValue = styled.span`
 
 export function SystemSettings() {
   const { t } = useTranslation();
+  const showProductImages = useSettingsStore((s) => s.showProductImages);
+  const setShowProductImages = useSettingsStore((s) => s.setShowProductImages);
   const navigate = useNavigate();
   const { showToast } = useToast();
 
@@ -343,6 +346,20 @@ export function SystemSettings() {
           </div>
         </Row>
         <InfoText style={{ marginTop: 8 }}>{t("settings.terminalIdHint")}</InfoText>
+      </Section>
+
+      {/* This till only (localStorage), applies at once — a display preference, not store data. */}
+      <Section>
+        <SectionTitle>{t("settings.pictures")}</SectionTitle>
+        <CheckRow>
+          <input
+            type="checkbox"
+            checked={showProductImages}
+            onChange={(e) => setShowProductImages(e.target.checked)}
+          />
+          {t("settings.showProductImages")}
+        </CheckRow>
+        <InfoText style={{ marginTop: 8 }}>{t("settings.showProductImagesHint")}</InfoText>
       </Section>
 
       <Section>

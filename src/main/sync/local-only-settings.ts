@@ -21,6 +21,8 @@ export const LOCAL_ONLY_SETTINGS = new Set([
   'debt_ledger_balance_mode',
   // Done-marker of the one-time fiscal-status backfill (database/sqlite-client.ts).
   'fiscal_sync_backfill',
+  // Which installer picture seed this till has imported (images/image-store.ts).
+  'image_seed_imported',
 
   // ── Machine-scoped hardware config ──
   // Windows device names and a physical label size. They describe the box this terminal runs on,

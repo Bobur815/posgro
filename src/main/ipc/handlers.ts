@@ -17,6 +17,7 @@ import { getAppConfig, updateConfig } from "../config/app-config";
 import { probeApiUrl } from "../config/api-url-probe";
 import { setupPairingHandlers } from "./pairing-handlers";
 import { setupBannerHandlers } from "./banner-handlers";
+import { setupImagesHandlers } from "./images-handlers";
 import { getLocalServerStatus } from "../local-server";
 import { getServerToken, clearServerToken } from "../sync/queue-manager";
 import { getPrismaClient, readStoreBootstrap, writeStoreBootstrap } from "../database/sqlite-client";
@@ -74,6 +75,7 @@ export function setupIpcHandlers(): void {
   setupLicenseHandlers();
   setupPairingHandlers();
   setupBannerHandlers();
+  setupImagesHandlers();
 }
 
 // MXIK catalog lives only in the VPS PostgreSQL, so the renderer proxies through

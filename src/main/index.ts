@@ -21,6 +21,7 @@ import { log } from "./logger";
 import { isSatellite } from "./lan/role";
 import { applyPendingTakeover } from "./lan/takeover";
 import { onHandedOff } from "./local-server/handoff";
+import { handleImageScheme, registerImageScheme } from "./images/images-protocol";
 
 // Disable GPU acceleration — prevents renderer crash on remote desktop sessions
 // (AnyDesk, RDP, TeamViewer) where no real GPU is available.
@@ -35,6 +36,9 @@ try {
     app.quit();
   }
 } catch {}
+
+// Product/category pictures (posimg:) — a scheme must be declared before the app is ready.
+registerImageScheme();
 
 let mainWindow: BrowserWindow | null = null;
 let setupWindow: BrowserWindow | null = null;
@@ -217,6 +221,8 @@ async function bootstrap() {
         app.exit(0);
       }, 1500);
     });
+
+    handleImageScheme();
 
     // Register all IPC handlers once (sync handlers reference module-level syncService)
     setupIpcHandlers();
