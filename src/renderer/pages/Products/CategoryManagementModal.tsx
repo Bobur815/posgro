@@ -6,7 +6,7 @@ import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
-import { PictureEditor } from '../../components/common/PictureEditor';
+import { PictureEditor } from './PictureEditor';
 import { categoryPictureUrl } from '../../utils/pictures';
 import { useToast } from '../../context/ToastContext';
 import { Category, MxikGroup } from '@shared/types';
