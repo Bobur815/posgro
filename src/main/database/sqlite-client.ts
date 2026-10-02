@@ -113,19 +113,41 @@ export async function initializeDatabase(): Promise<void> {
     throw error;
   }
 
-  // Pictures never stop a till from starting: a broken seed is logged and skipped.
+  // Pictures never stop a till from starting: a broken seed is logged and skipped. Every outcome
+  // is logged — a seed that was silently not found once left a till with no category pictures.
+  const seedDir = findImageSeedDir();
+  if (!seedDir) {
+    console.warn(`[db] Picture seed: no manifest.json in ${imageSeedCandidates().join(' | ')}`);
+    return;
+  }
   try {
-    if (await importImageSeed(prisma, imageSeedDir())) console.log('[db] Picture seed imported');
+    const imported = await importImageSeed(prisma, seedDir);
+    console.log(`[db] Picture seed ${imported ? 'imported' : 'already imported'} from ${seedDir}`);
   } catch (error) {
-    console.error('[db] Picture seed import failed:', error);
+    console.error(`[db] Picture seed import from ${seedDir} failed:`, error);
   }
 }
 
-/** The installer's picture seed — shipped by the existing `extraResources: prisma/**`. */
-function imageSeedDir(): string {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, 'prisma', 'seed', 'images')
-    : path.join(app.getAppPath(), 'prisma', 'seed', 'images');
+/**
+ * Where the installer's picture seed may be — shipped by the existing `extraResources: prisma/**`
+ * (resources/prisma/seed/images) — and, in development, the repo's prisma/seed/images, found from
+ * the app path, the working directory or the built main file, whichever the launcher made right.
+ */
+function imageSeedCandidates(): string[] {
+  const rel = ['prisma', 'seed', 'images'];
+  const dirs = app.isPackaged
+    ? [path.join(process.resourcesPath, ...rel)]
+    : [
+        path.join(app.getAppPath(), ...rel),
+        path.join(process.cwd(), ...rel),
+        path.join(__dirname, '..', '..', ...rel),
+        path.join(__dirname, '..', '..', '..', ...rel),
+      ];
+  return [...new Set(dirs)];
+}
+
+function findImageSeedDir(): string | null {
+  return imageSeedCandidates().find((d) => fs.existsSync(path.join(d, 'manifest.json'))) ?? null;
 }
 
 /**

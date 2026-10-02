@@ -11,10 +11,24 @@ import { getCategoryImage, getProductImage, type StoredImage } from './image-sto
  *
  * Everything rides in the query: the caller already has the product/category object, and a
  * satellite's local rows (and ids) need not match the main's. Any other parameter (`v=` after a
- * picture changes) is ignored here and only busts the renderer's cache. No picture → 404, which
- * the `<img>` turns into its onError fallback.
+ * picture changes) is ignored here and only busts the renderer's cache.
+ *
+ * No picture → a 1×1 transparent PNG, not a 404: most products have none, and every 404 is a red
+ * "Failed to load resource" line in DevTools — dozens per catalog page. The tile shows its empty
+ * box either way. `no-store`, so a picture fetched later shows up at once.
  */
 export const IMAGE_SCHEME = 'posimg';
+
+const NONE = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+function noPicture(): Response {
+  return new Response(new Uint8Array(NONE), {
+    headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' },
+  });
+}
 
 /** Must run before `app` is ready. */
 export function registerImageScheme(): void {
@@ -44,8 +58,7 @@ export function handleImageScheme(): void {
   protocol.handle(IMAGE_SCHEME, async (request) => {
     try {
       const image = await resolveImageUrl(request.url);
-      if (!image)
-        return new Response(null, { status: 404, headers: { 'Cache-Control': 'no-store' } });
+      if (!image) return noPicture();
       return new Response(new Uint8Array(image.data), {
         headers: { 'Content-Type': image.mime, 'Cache-Control': 'max-age=3600' },
       });
