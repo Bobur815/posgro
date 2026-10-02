@@ -87,6 +87,8 @@ interface AnalyticsData {
     totalRevenue: number;
     cashSales: number;
     cardSales: number;
+    /** Absent from a server before Click. */
+    clickSales?: number;
     averageTransaction: number;
   };
 }
@@ -441,9 +443,11 @@ export function Analytics() {
             <KpiCard>
               <KpiLabel>
                 {t("reports.cashPayments")} / {t("reports.cardPayments")}
+                {!!data.summary.clickSales && <> / {t("pos.click")}</>}
               </KpiLabel>
               <KpiValue>
                 {data.summary.cashSales} / {data.summary.cardSales}
+                {!!data.summary.clickSales && <> / {data.summary.clickSales}</>}
               </KpiValue>
             </KpiCard>
           </KpiGrid>

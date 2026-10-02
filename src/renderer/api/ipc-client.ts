@@ -131,6 +131,17 @@ export const markingCheck = {
   setApiKey: (key: string) => ipc?.markingCheck.setApiKey(key),
 };
 
+export type ImageOwner = 'product' | 'category';
+
+export const images = {
+  fetchMxik: (mxik: string) => ipc?.images.fetchMxik(mxik),
+  saveMxik: (mxik: string, bytes: Uint8Array, sourceName: string) =>
+    ipc?.images.saveMxik(mxik, bytes, sourceName),
+  setOwn: (type: ImageOwner, key: string, bytes: Uint8Array) => ipc?.images.setOwn(type, key, bytes),
+  removeOwn: (type: ImageOwner, key: string) => ipc?.images.removeOwn(type, key),
+  hasOwn: (type: ImageOwner, key: string) => ipc?.images.hasOwn(type, key),
+};
+
 export const app = {
   getVersion: () => ipc?.app.getVersion(),
   getTerminalId: () => ipc?.app.getTerminalId(),

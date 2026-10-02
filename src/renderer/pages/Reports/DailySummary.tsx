@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import styled, { type DefaultTheme } from "styled-components";
 import { useSales } from "../../hooks/useSales";
-import { UZQR_BRAND_COLOR, type SaleTender } from "@shared/constants";
+import { CLICK_BRAND_COLOR, UZQR_BRAND_COLOR, type SaleTender } from "@shared/constants";
 import { useAuthStore } from "../../store/auth-store";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { formatDateTime } from "../../utils/formatters";
@@ -160,9 +160,10 @@ const Tr = styled.tr`
   }
 `;
 
-/** Green = drawer, house blue = bank card, navy = the UzQR brand. */
+/** Green = drawer, house blue = bank card, navy = the UzQR brand, Click blue = Click. */
 function tenderColor(theme: DefaultTheme, method: string) {
   if (method === "uzqr") return UZQR_BRAND_COLOR;
+  if (method === "click") return CLICK_BRAND_COLOR;
   return method === "cash" ? theme.colors.success : theme.colors.primary;
 }
 
@@ -171,6 +172,8 @@ const TENDER_ICONS: Record<string, string> = {
   cash: "💵",
   card: "💳",
   uzqr: "🔳",
+  click: "📱",
+  mixed: "🔀",
   debt: "💰",
 };
 
@@ -259,7 +262,7 @@ export function ReceiptsSummary() {
   const todayStr = new Date().toISOString().split("T")[0];
   const [startDate, setStartDate] = useState(todayStr);
   const [endDate, setEndDate] = useState(todayStr);
-  const [paymentFilter, setPaymentFilter] = useState<"all" | SaleTender>("all");
+  const [paymentFilter, setPaymentFilter] = useState<"all" | SaleTender | "mixed">("all");
   const [terminalId, setTerminalId] = useState("");
   const [knownTerminals, setKnownTerminals] = useState<string[]>([]);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -322,6 +325,12 @@ export function ReceiptsSummary() {
     const uzqrSales = filteredSales.filter(
       (s) => s.paymentMethod === "uzqr",
     ).length;
+    const clickSales = filteredSales.filter(
+      (s) => s.paymentMethod === "click",
+    ).length;
+    const mixedSales = filteredSales.filter(
+      (s) => s.paymentMethod === "mixed",
+    ).length;
     const totalCost = filteredSales.reduce(
       (sum, s) => sum + (s.totalCost ?? 0),
       0,
@@ -336,6 +345,8 @@ export function ReceiptsSummary() {
       cashSales,
       cardSales,
       uzqrSales,
+      clickSales,
+      mixedSales,
       avgMargin,
     };
   }, [filteredSales]);
@@ -391,13 +402,15 @@ export function ReceiptsSummary() {
           <FilterSelect
             value={paymentFilter}
             onChange={(e) =>
-              setPaymentFilter(e.target.value as "all" | SaleTender)
+              setPaymentFilter(e.target.value as "all" | SaleTender | "mixed")
             }
           >
             <option value="all">{t("reports.allPayments")}</option>
             <option value="cash">{t("pos.cash")}</option>
             <option value="card">{t("pos.card")}</option>
             <option value="uzqr">{t("pos.uzqr")}</option>
+            <option value="click">{t("pos.click")}</option>
+            <option value="mixed">{t("pos.mixed")}</option>
           </FilterSelect>
         </FilterGroup>
         {isAdmin && knownTerminals.length > 1 && (
@@ -472,6 +485,22 @@ export function ReceiptsSummary() {
             <StatCard>
               <StatLabel>{t("reports.uzqrPayments")}</StatLabel>
               <StatValue>{summary.uzqrSales}</StatValue>
+              <StatSubtext>{t("reports.transactions")}</StatSubtext>
+            </StatCard>
+          )}
+
+          {summary.clickSales > 0 && (
+            <StatCard>
+              <StatLabel>{t("reports.clickPayments")}</StatLabel>
+              <StatValue>{summary.clickSales}</StatValue>
+              <StatSubtext>{t("reports.transactions")}</StatSubtext>
+            </StatCard>
+          )}
+
+          {summary.mixedSales > 0 && (
+            <StatCard>
+              <StatLabel>{t("reports.mixedPayments")}</StatLabel>
+              <StatValue>{summary.mixedSales}</StatValue>
               <StatSubtext>{t("reports.transactions")}</StatSubtext>
             </StatCard>
           )}

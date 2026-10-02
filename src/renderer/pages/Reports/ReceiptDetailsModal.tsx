@@ -9,6 +9,7 @@ const TENDER_ICONS: Record<string, string> = {
   cash: "💵",
   card: "💳",
   uzqr: "🔳",
+  click: "📱",
 };
 import { formatDateTime } from "../../utils/formatters";
 import type { FiscalSalePreview } from "@shared/types/fiscal.types";

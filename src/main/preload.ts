@@ -69,6 +69,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Sales
   sales: {
     create: (data: unknown) => ipcRenderer.invoke("sales:create", data),
+    canSplit: () => ipcRenderer.invoke("sales:canSplit"),
     update: (id: string, data: unknown) =>
       ipcRenderer.invoke("sales:update", id, data),
     delete: (id: string) => ipcRenderer.invoke("sales:delete", id),
@@ -193,6 +194,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     recordPayment: (data: unknown) =>
       ipcRenderer.invoke("debtors:recordPayment", data),
     adjust: (data: unknown) => ipcRenderer.invoke("debtors:adjust", data),
+    voidTransaction: (data: { userId: string; transactionId: string; reason?: string }) =>
+      ipcRenderer.invoke("debtors:voidTransaction", data),
   },
 
   // Sync
@@ -358,6 +361,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Login-screen banner. Cached in the main process so it renders with no internet.
   banner: {
     get: () => ipcRenderer.invoke("banner:get"),
+  },
+
+  // Product/category pictures, local to this till (main/ipc/images-handlers.ts). Shown via posimg:.
+  images: {
+    fetchMxik: (mxik: string) => ipcRenderer.invoke("images:fetchMxik", mxik),
+    saveMxik: (mxik: string, bytes: Uint8Array, sourceName: string) =>
+      ipcRenderer.invoke("images:saveMxik", mxik, bytes, sourceName),
+    setOwn: (type: "product" | "category", key: string, bytes: Uint8Array) =>
+      ipcRenderer.invoke("images:setOwn", type, key, bytes),
+    removeOwn: (type: "product" | "category", key: string) =>
+      ipcRenderer.invoke("images:removeOwn", type, key),
+    hasOwn: (type: "product" | "category", key: string) =>
+      ipcRenderer.invoke("images:hasOwn", type, key),
   },
 
   // Local config (VPS connection settings)
@@ -599,6 +615,8 @@ declare global {
       };
       sales: {
         create: (data: unknown) => Promise<unknown>;
+        /** Split payment allowed here (a satellite: only once its main supports it). */
+        canSplit: () => Promise<boolean>;
         update: (id: string, data: unknown) => Promise<unknown>;
         delete: (id: string) => Promise<boolean>;
         getAll: (filters?: {
@@ -713,6 +731,12 @@ declare global {
         getSale: (userId: string, saleId: string) => Promise<unknown>;
         recordPayment: (data: unknown) => Promise<{ debtor: Debtor; settledSales: string[] }>;
         adjust: (data: unknown) => Promise<Debtor>;
+        /** Admin only: strike a ledger row through and reverse it. */
+        voidTransaction: (data: {
+          userId: string;
+          transactionId: string;
+          reason?: string;
+        }) => Promise<Debtor>;
       };
       sync: {
         trigger: () => Promise<void>;
@@ -837,6 +861,18 @@ declare global {
       };
       banner: {
         get: () => Promise<{ imageUrl: string; title: string; subtitle: string }>;
+      };
+      images: {
+        fetchMxik: (
+          mxik: string,
+        ) => Promise<
+          | { status: "found"; candidates: Array<{ bytes: Uint8Array; sourceName: string }> }
+          | { status: "skip" | "none" | "error" }
+        >;
+        saveMxik: (mxik: string, bytes: Uint8Array, sourceName: string) => Promise<boolean>;
+        setOwn: (type: "product" | "category", key: string, bytes: Uint8Array) => Promise<void>;
+        removeOwn: (type: "product" | "category", key: string) => Promise<void>;
+        hasOwn: (type: "product" | "category", key: string) => Promise<boolean>;
       };
       config: {
         getLocalConfig: () => Promise<{

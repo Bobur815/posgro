@@ -39,6 +39,10 @@ model Store {
   /// `subscription_price_extra_terminal` a month. Set by a super admin.
   extraTerminals        Int       @default(0) @map("extra_terminals")
 
+  /// Bank turnover: from when the owner counts fiscalised cash still to be taken to the bank.
+  /// Null = not set yet; the page then shows period figures only. Set from the Reconciliation page.
+  bankCashStartDate DateTime? @map("bank_cash_start_date")
+
   /// Manager-override password for this store's terminals, bcrypt hashed — never plaintext.
   /// Set by a super admin, delivered to a terminal through GET /store-config, and compared there
   /// with bcrypt so it still works for an OFFLINE_ONLY store that never reaches this server.
@@ -73,6 +77,8 @@ model Store {
   suppliers            Supplier[]
   supplierTransactions SupplierTransaction[]
   debtTransactions     DebtTransaction[]
+  cashBankDeposits     CashBankDeposit[]
+  salePayments         SalePayment[]
   systemSettings       SystemSetting[]
   terminalHeartbeats   TerminalHeartbeat[]
   terminalLogs         TerminalLog[]
@@ -138,6 +144,48 @@ model User {
 /// balance alone cannot say WHICH receipt the money finished paying for.
 ///
 /// Mirrored up from the terminal, so the id is the till's own and re-syncing is an upsert.
+/// Fiscalised cash the owner has taken to the bank. Subtracted from the fiscalised cash total on
+/// the Reconciliation page. Voided rather than deleted, like nasiya ledger rows.
+model CashBankDeposit {
+  id      String @id @default(cuid())
+  storeId String @map("store_id")
+  store   Store  @relation(fields: [storeId], references: [id])
+
+  // 14,2 rather than the usual 10,2: a deposit can exceed 100M som.
+  amount      Decimal  @db.Decimal(14, 2)
+  depositedAt DateTime @map("deposited_at")
+  note        String?
+
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  voidedAt   DateTime? @map("voided_at")
+  voidedById String?   @map("voided_by_id")
+
+  @@index([storeId, depositedAt])
+  @@map("cash_bank_deposits")
+}
+
+/// One tender of a split-payment receipt (sales.payment_method = 'mixed'). A single-tender sale has
+/// no rows — its whole paid amount is on sales.payment_method. Keyed like the sale itself,
+/// (storeId, receiptNumber), not by sale id: the lines sync on their own endpoint
+/// (POST /sales/payments-sync) and may arrive before or after the sale.
+model SalePayment {
+  id            String @id @default(cuid())
+  storeId       String @map("store_id")
+  store         Store  @relation(fields: [storeId], references: [id])
+  receiptNumber String @map("receipt_number")
+
+  /// cash | card | uzqr | click. Cash is net of change: what stayed in the drawer for this receipt.
+  method String
+  amount Decimal @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([storeId, receiptNumber, method])
+  @@map("sale_payments")
+}
+
 model DebtTransaction {
   id      String @id @default(cuid())
   storeId String @map("store_id")
@@ -158,9 +206,27 @@ model DebtTransaction {
   createdBy String   @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
 
+  /// Multi-till replication (tills pull each other's rows via GET /debtors/ledger/sync).
+  /// Server time, so the pull cursor never depends on a till's clock. Defaulted so the column
+  /// adds without a rewrite and existing rows read as "changed now" — one full pull, then deltas.
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+  /// The till that wrote the row; the one that owns `saleId` fiscalizes it once settled.
+  originTerminalId String?  @map("origin_terminal_id")
+  /// CHARGE only, set with `settledAt`: how the money finally arrived and whether the shop chose
+  /// to fiscalize — what the owning till needs to issue the receipt when another till settled it.
+  settleTender     String?  @map("settle_tender")
+  settleFiscalize  Boolean? @map("settle_fiscalize")
+
+  /// Deleted by an admin at a till. The row stays — history must show what happened and that it
+  /// was undone — but no balance, allocation or report counts it. Set once, never cleared.
+  voidedAt   DateTime? @map("voided_at")
+  voidedBy   String?   @map("voided_by")
+  voidReason String?   @map("void_reason")
+
   @@index([storeId, userId])
   @@index([userId, settledAt])
   @@index([saleId])
+  @@index([storeId, updatedAt])
   @@map("debt_transactions")
 }
 
@@ -289,6 +355,16 @@ model Sale {
   // Sync tracking
   synced   Boolean   @default(false)
   syncedAt DateTime? @map("synced_at")
+
+  /// Fiscal state as the till last reported it (POST /sales/fiscal-sync) — PENDING | FISCALIZED |
+  /// FAILED | DISABLED | DEFERRED_DEBT, null = never reported (older tills, or older sales).
+  /// A sale syncs before it is fiscalized, so this arrives separately and later.
+  fiscalStatus String?   @map("fiscal_status")
+  fiscalizedAt DateTime? @map("fiscalized_at")
+  /// The tender on the fiscal receipt. Differs from paymentMethod for a credit sale fiscalized at
+  /// its payoff, where it is how the money finally arrived. Kept apart so existing reports, which
+  /// read paymentMethod, do not move.
+  fiscalTender String?   @map("fiscal_tender")
 
   createdAt DateTime @default(now()) @map("created_at")
 

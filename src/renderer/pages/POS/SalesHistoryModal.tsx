@@ -5,7 +5,13 @@ import { Modal } from '../../components/common/Modal';
 import { useSales } from '../../hooks/useSales';
 import type { Sale } from '@shared/types/sale.types';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
-import { UZQR_BRAND_COLOR, SALE_TENDER_I18N_KEYS, DEBT_TENDER, type SaleTender } from '@shared/constants';
+import {
+  CLICK_BRAND_COLOR,
+  UZQR_BRAND_COLOR,
+  SALE_TENDER_I18N_KEYS,
+  DEBT_TENDER,
+  type SaleTender,
+} from '@shared/constants';
 import { ChevronDown, ChevronRight, Pencil, Printer, Trash2, ShieldCheck, ShieldAlert, RotateCcw, Copy } from 'lucide-react';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../context/ToastContext';
@@ -112,9 +118,11 @@ const Time = styled.span`
   white-space: nowrap;
 `;
 
-/** Green = money in the till, house blue = bank card, navy = the UzQR brand. */
+/** Green = money in the till, house blue = bank card, navy = the UzQR brand, Click blue = Click. */
 function tenderColor(theme: DefaultTheme, method?: string) {
   if (method === 'uzqr') return UZQR_BRAND_COLOR;
+  // Not green: Click is fiscalised as cash but never reaches the till.
+  if (method === 'click') return CLICK_BRAND_COLOR;
   // Money the shop has not got yet — red, as in the daily summary.
   if (method === DEBT_TENDER) return theme.colors.error;
   return method === 'card' ? theme.colors.primary : theme.colors.success;
@@ -411,7 +419,7 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
       <Modal
         title={t('pos.salesHistory')}
         onClose={onClose}
-        width="900px"
+        width="1100px"
       >
         <Toolbar>
           <ToolbarLabel>{t('pos.period', 'Период')}</ToolbarLabel>
@@ -440,8 +448,17 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
                       <Badge $method={sale.paymentMethod}>
                         {sale.paymentMethod === DEBT_TENDER
                           ? `💰 ${t('pos.debt')}`
-                          : t(SALE_TENDER_I18N_KEYS[sale.paymentMethod as SaleTender] ?? 'pos.cash')}
+                          : sale.paymentMethod === 'mixed'
+                            ? `🔀 ${t('pos.mixed')}`
+                            : t(SALE_TENDER_I18N_KEYS[sale.paymentMethod as SaleTender] ?? 'pos.cash')}
                       </Badge>
+                      {/* Split payment: each tender with its share, in the tender's own colour. */}
+                      {(sale.payments ?? []).map((p) => (
+                        <Badge key={p.method} $method={p.method}>
+                          {t(SALE_TENDER_I18N_KEYS[p.method as SaleTender] ?? 'pos.mixed')}{' '}
+                          {formatCurrency(Number(p.amount))}
+                        </Badge>
+                      ))}
                       {/* Part-paid on credit: the tender above took the money, this is the rest. */}
                       {sale.paymentMethod !== DEBT_TENDER && Number(sale.debtAmount) > 0 && (
                         <Badge $method={DEBT_TENDER}>

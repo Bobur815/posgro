@@ -338,3 +338,23 @@ because it was stopped in time. A sync cycle or the license refresh would have c
 **Rule:** every launch of a test build passes `--user-data-dir=<scratch>`, and a negative test
 most of all — its point is that something *unexpected* happens, which includes the app simply
 starting.
+
+## The format-on-save hook reformats whole files with Prettier defaults
+
+`.claude/hooks/format.ts` runs `prettier --write` on every edited `src/**` file, and the repo has no
+Prettier config — so it applies the defaults (double quotes, width 80) and rewrites the whole file.
+A three-line edit to `users.service.ts` became a 68-line diff, and re-running Prettier with the
+right options does not undo it: an object Prettier has once broken across lines stays broken.
+
+**Fixed (2026-10-01):** `.prettierrc.json` now holds the measured house style — width 100, single
+quotes, double quotes in `src/renderer` and `src/web`, width 80 in `src/landing` — and the hook formats
+a file only if it was already Prettier-clean at HEAD (or is new). About half the files match no
+config at all, so the config alone would not have stopped whole-file rewrites; the HEAD check does.
+
+**Rule:** a legacy file is formatted, if ever, on purpose in a commit of its own — never as a side
+effect of an edit. The hook lives in `.claude/`, which is gitignored: a fresh clone has the old hook.
+
+**Also (2026-10-02):** the HEAD-clean check lives only in the hook. Running `npx prettier --write`
+by hand skips it: on the Click branch it rewrote 15 legacy files (~1 500 lines) and they had to be
+restored from HEAD and the edits replayed. Never run Prettier by hand on existing files; let the
+hook decide, and check `git diff --ignore-cr-at-eol --stat` before committing.

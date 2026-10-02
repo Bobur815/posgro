@@ -130,11 +130,17 @@ const PanelTitle = styled.h3`
   color: ${({ theme }) => theme.colors.text};
 `;
 
-const Entry = styled.div<{ $charge: boolean }>`
+/** A voided row stays in the list, struck through: deleted at a till, counted nowhere. */
+const Entry = styled.div<{ $charge: boolean; $voided?: boolean }>`
   border-radius: ${({ theme }) => theme.borderRadius};
   margin-bottom: 4px;
-  background: ${({ $charge, theme }) =>
-    $charge ? `${theme.colors.error}12` : `${theme.colors.success}12`};
+  background: ${({ $charge, $voided, theme }) =>
+    $voided
+      ? theme.colors.background
+      : $charge
+        ? `${theme.colors.error}12`
+        : `${theme.colors.success}12`};
+  ${({ $voided }) => ($voided ? "opacity: 0.6; text-decoration: line-through;" : "")}
 `;
 
 const EntryRow = styled.button<{ $expandable: boolean }>`
@@ -202,8 +208,7 @@ export function DebtorsPage() {
   const [ledger, setLedger] = useState<DashboardDebtorLedger | null>(null);
   const [openSaleId, setOpenSaleId] = useState<string | null>(null);
 
-  const formatCurrency = (value: number) =>
-    formatCurrencyBase(value, i18n.language as "ru" | "uz");
+  const formatCurrency = (value: number) => formatCurrencyBase(value, i18n.language as "ru" | "uz");
   const locale = i18n.language === "uz" ? "uz-UZ" : "ru-RU";
 
   const load = useCallback(async () => {
@@ -245,7 +250,11 @@ export function DebtorsPage() {
         </>
       ),
     },
-    { key: "phone", header: t("debtors.phone", "Телефон"), render: (d: DashboardDebtor) => d.phone },
+    {
+      key: "phone",
+      header: t("debtors.phone", "Телефон"),
+      render: (d: DashboardDebtor) => d.phone,
+    },
     {
       key: "due",
       header: t("debtors.dueDate", "Срок"),
@@ -344,13 +353,11 @@ export function DebtorsPage() {
               const expandable = Boolean(sale);
               const expanded = expandable && openSaleId === txn.saleId;
               return (
-                <Entry key={txn.id} $charge={charge}>
+                <Entry key={txn.id} $charge={charge} $voided={Boolean(txn.voidedAt)}>
                   <EntryRow
                     type="button"
                     $expandable={expandable}
-                    onClick={() =>
-                      expandable && setOpenSaleId(expanded ? null : txn.saleId)
-                    }
+                    onClick={() => expandable && setOpenSaleId(expanded ? null : txn.saleId)}
                   >
                     <EntryWhat>
                       {/* Only a charge has a receipt behind it to open. */}
@@ -364,6 +371,9 @@ export function DebtorsPage() {
                             : t("debtors.entryAdjustment", "Корректировка")}
                         {sale ? ` · №${sale.receiptNumber}` : ""}
                         {txn.settledAt ? ` · ${t("debtors.settled", "закрыт")}` : ""}
+                        {txn.voidedAt
+                          ? ` · ${t("debtors.deleted", "удалено")}${txn.voidReason ? `: ${txn.voidReason}` : ""}`
+                          : ""}
                         <EntryWhen>
                           {" "}
                           {new Date(txn.createdAt).toLocaleString(locale, {

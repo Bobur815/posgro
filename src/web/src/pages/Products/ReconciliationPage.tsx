@@ -282,6 +282,92 @@ export function ReconciliationPage() {
         </Centered>
       )}
 
+      {/* Money first: it is what the owner checks daily. Goods variance needs a stocktake and
+          is read far less often. Bank turnover has its own page (BankTurnoverPage). */}
+      {!loading && money && (
+        <>
+          <Section>{t("reconciliation.moneyTitle", "Деньги — по способам оплаты")}</Section>
+          {money.limitation === "NO_SHIFT_DATA_ON_SERVER" ? (
+            <InfoBanner>
+              <AlertTriangle size={18} />
+              <span>
+                {t(
+                  "reconciliation.noShiftData",
+                  "За период нет закрытых смен на сервере, поэтому расхождение по кассе не рассчитано. Показана только выручка по способам оплаты.",
+                )}
+              </span>
+            </InfoBanner>
+          ) : (
+            <Cards>
+              <Card>
+                <CardLabel>
+                  {t("reconciliation.expectedCash", "Должно быть в кассе")}
+                </CardLabel>
+                <CardValue>
+                  {formatCurrency(Number(money.drawer.expectedCash))}
+                </CardValue>
+              </Card>
+              <Card>
+                <CardLabel>{t("reconciliation.actualCash", "Фактически в кассе")}</CardLabel>
+                <CardValue>
+                  {formatCurrency(Number(money.drawer.actualCash))}
+                </CardValue>
+              </Card>
+              <Card>
+                {/* Negative = money missing from the drawer. Signed on purpose, exactly like the
+                    goods variance, so a surplus never reads as a loss at a glance. */}
+                <CardLabel>{t("reconciliation.cashVariance", "Расхождение по кассе")}</CardLabel>
+                <CardValue
+                  $tone={
+                    Number(money.cashVariance) < 0
+                      ? "bad"
+                      : Number(money.cashVariance) > 0
+                        ? "plain"
+                        : "good"
+                  }
+                >
+                  {formatCurrency(Number(money.cashVariance))}
+                </CardValue>
+              </Card>
+              <Card>
+                <CardLabel>{t("reconciliation.shiftCount", "Смен учтено")}</CardLabel>
+                <CardValue>{money.drawer.shiftCount}</CardValue>
+              </Card>
+            </Cards>
+          )}
+          <Table
+            data={money.byTender}
+            columns={[
+              { key: "tender", header: t("reconciliation.tender", "Способ оплаты") },
+              { key: "saleCount", header: t("reconciliation.saleCount", "Чеков") },
+              {
+                key: "amount",
+                header: t("reconciliation.amount", "Сумма"),
+                render: (r) => formatCurrency(Number(r.amount)),
+              },
+            ]}
+            tfoot={
+              <>
+                <tr>
+                  <td>
+                    <strong>{t("reconciliation.netSales", "Итого продаж")}</strong>
+                  </td>
+                  <td />
+                  <td>
+                    <strong>{formatCurrency(Number(money.netSales))}</strong>
+                  </td>
+                </tr>
+                <tr>
+                  <td>{t("reconciliation.discounts", "Скидки (справочно)")}</td>
+                  <td />
+                  <td>{formatCurrency(Number(money.discounts))}</td>
+                </tr>
+              </>
+            }
+          />
+        </>
+      )}
+
       {!loading && goods && !goods.ledgerEnabled && (
         <InfoBanner>
           <AlertTriangle size={18} />
@@ -495,90 +581,6 @@ export function ReconciliationPage() {
               />
             </>
           )}
-        </>
-      )}
-
-      {!loading && money && (
-        <>
-          <Section>{t("reconciliation.moneyTitle", "Деньги — по способам оплаты")}</Section>
-          {money.limitation === "NO_SHIFT_DATA_ON_SERVER" ? (
-            <InfoBanner>
-              <AlertTriangle size={18} />
-              <span>
-                {t(
-                  "reconciliation.noShiftData",
-                  "За период нет закрытых смен на сервере, поэтому расхождение по кассе не рассчитано. Показана только выручка по способам оплаты.",
-                )}
-              </span>
-            </InfoBanner>
-          ) : (
-            <Cards>
-              <Card>
-                <CardLabel>
-                  {t("reconciliation.expectedCash", "Должно быть в кассе")}
-                </CardLabel>
-                <CardValue>
-                  {formatCurrency(Number(money.drawer.expectedCash))}
-                </CardValue>
-              </Card>
-              <Card>
-                <CardLabel>{t("reconciliation.actualCash", "Фактически в кассе")}</CardLabel>
-                <CardValue>
-                  {formatCurrency(Number(money.drawer.actualCash))}
-                </CardValue>
-              </Card>
-              <Card>
-                {/* Negative = money missing from the drawer. Signed on purpose, exactly like the
-                    goods variance, so a surplus never reads as a loss at a glance. */}
-                <CardLabel>{t("reconciliation.cashVariance", "Расхождение по кассе")}</CardLabel>
-                <CardValue
-                  $tone={
-                    Number(money.cashVariance) < 0
-                      ? "bad"
-                      : Number(money.cashVariance) > 0
-                        ? "plain"
-                        : "good"
-                  }
-                >
-                  {formatCurrency(Number(money.cashVariance))}
-                </CardValue>
-              </Card>
-              <Card>
-                <CardLabel>{t("reconciliation.shiftCount", "Смен учтено")}</CardLabel>
-                <CardValue>{money.drawer.shiftCount}</CardValue>
-              </Card>
-            </Cards>
-          )}
-          <Table
-            data={money.byTender}
-            columns={[
-              { key: "tender", header: t("reconciliation.tender", "Способ оплаты") },
-              { key: "saleCount", header: t("reconciliation.saleCount", "Чеков") },
-              {
-                key: "amount",
-                header: t("reconciliation.amount", "Сумма"),
-                render: (r) => formatCurrency(Number(r.amount)),
-              },
-            ]}
-            tfoot={
-              <>
-                <tr>
-                  <td>
-                    <strong>{t("reconciliation.netSales", "Итого продаж")}</strong>
-                  </td>
-                  <td />
-                  <td>
-                    <strong>{formatCurrency(Number(money.netSales))}</strong>
-                  </td>
-                </tr>
-                <tr>
-                  <td>{t("reconciliation.discounts", "Скидки (справочно)")}</td>
-                  <td />
-                  <td>{formatCurrency(Number(money.discounts))}</td>
-                </tr>
-              </>
-            }
-          />
         </>
       )}
     </Container>

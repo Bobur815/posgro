@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { DebtorsService } from './debtors.service';
 import { SyncDebtBulkDto } from './dto/sync-debt.dto';
@@ -24,6 +33,42 @@ export class DebtorsController {
   @ApiResponse({ status: 201, description: 'Rows synced' })
   async syncBulk(@CurrentStore() storeId: string, @Body() dto: SyncDebtBulkDto) {
     return this.debtors.syncFromTerminal(storeId, dto.transactions);
+  }
+
+  /**
+   * The store's ledger rows changed since a cursor — how a till learns what the other tills
+   * wrote. Not @Roles-guarded, like sync-bulk: a cashier's till pulls it on every cycle.
+   * Declared before `:id` so "ledger" is never read as a debtor id.
+   */
+  @Get('ledger/sync')
+  @ApiOperation({ summary: 'Nasiya ledger rows changed since a cursor, for POS terminals' })
+  @ApiQuery({ name: 'updatedAfter', required: false, type: String })
+  @ApiQuery({ name: 'afterId', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async pullLedger(
+    @CurrentStore() storeId: string,
+    @Query('updatedAfter') updatedAfter?: string,
+    @Query('afterId') afterId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const after = updatedAfter ? new Date(updatedAfter) : undefined;
+    if (after && Number.isNaN(after.getTime())) {
+      throw new BadRequestException('updatedAfter must be an ISO date');
+    }
+    return this.debtors.pullLedger(
+      storeId,
+      { updatedAfter: after, afterId: afterId || undefined },
+      limit ? Number(limit) || undefined : undefined,
+    );
+  }
+
+  /** Read-only check to run before DEBT_BALANCE_FROM_LEDGER is switched on. */
+  @Get('ledger/drift')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Debtors whose stored balance differs from their ledger sum' })
+  async ledgerDrift(@CurrentStore() storeId: string) {
+    return this.debtors.ledgerDrift(storeId);
   }
 
   @Get()

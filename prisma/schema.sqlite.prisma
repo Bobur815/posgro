@@ -160,6 +160,20 @@ model DebtTransaction {
   synced    Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at")
 
+  /// Multi-till replication (pulled from the VPS by sync/debt-ledger-sync.ts). The till that wrote
+  /// the row, and — CHARGE only, set with settledAt — how it was settled and whether the shop chose
+  /// to fiscalize, so the till holding the sale can issue the receipt when another till settled it.
+  originTerminalId String?  @map("origin_terminal_id")
+  settleTender     String?  @map("settle_tender")
+  settleFiscalize  Boolean? @map("settle_fiscalize")
+
+  /// Deleted by an admin (debtors:voidTransaction). Kept for history, struck through on screen,
+  /// and left out of every balance and allocation. Set once, never cleared; replicates like a
+  /// settlement does.
+  voidedAt   DateTime? @map("voided_at")
+  voidedBy   String?   @map("voided_by")
+  voidReason String?   @map("void_reason")
+
   // The allocator's query: this person's unsettled charges, oldest first.
   @@index([userId, settledAt])
   @@index([saleId])
@@ -346,6 +360,10 @@ model Sale {
   regosTerminalId String?   @map("regos_terminal_id")
   regosReceiptNo  String?   @map("regos_receipt_no")
   regosFiscalAt   DateTime? @map("regos_fiscal_at")
+  /// The fiscal state above has reached the server (POST /sales/fiscal-sync). False once a sale
+  /// becomes FISCALIZED; the bank-turnover figures need it. Existing rows default to sent, apart
+  /// from the last 90 days of fiscalized ones, which the upgrade queues once.
+  fiscalSynced    Boolean   @default(true) @map("fiscal_synced")
   regosLabels     String?   @map("regos_labels") // JSON [{barcode,label}] snapshot for marked goods
 
   // UzQR (REGOS Payment.Create). Set only when the optional UzQR integration is on and the
@@ -363,11 +381,29 @@ model Sale {
   createdAt DateTime @default(now()) @map("created_at")
 
   items SaleItem[]
+  /// Split payment only (paymentMethod = 'mixed'): one row per tender. Single-tender sales have none.
+  payments SalePayment[]
 
   @@index([synced])
   @@index([createdAt])
   @@index([smenaId])
   @@map("sales")
+}
+
+/// One tender of a split-payment receipt. Cash is net of change. `synced` drives
+/// POST /sales/payments-sync, separate from the sale upload so an older server, which rejects
+/// unknown fields on /sales/sync, still takes the sale.
+model SalePayment {
+  id     String  @id @default(cuid())
+  saleId String  @map("sale_id")
+  sale   Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  method String
+  amount Decimal
+  synced Boolean @default(false)
+
+  @@index([saleId])
+  @@index([synced])
+  @@map("sale_payments")
 }
 
 model SaleItem {

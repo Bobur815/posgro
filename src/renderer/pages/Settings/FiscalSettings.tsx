@@ -323,6 +323,8 @@ export function FiscalSettings() {
   // Held as strings so the number inputs stay editable while being typed (an empty field must
   // not snap back to 0). Parsed on save; the main process floors them anyway.
   const [uzqrEnabled, setUzqrEnabled] = useState(false);
+  // This till only (system setting `click_enabled`, local-only): Click is fiscalised as cash.
+  const [clickEnabled, setClickEnabled] = useState(false);
   const [uzqrPollMs, setUzqrPollMs] = useState('2000');
   const [uzqrTimeoutMs, setUzqrTimeoutMs] = useState('120000');
 
@@ -372,6 +374,7 @@ export function FiscalSettings() {
       setUzqrEnabled(cfg.uzqrEnabled);
       setUzqrPollMs(String(cfg.uzqrPollMs));
       setUzqrTimeoutMs(String(cfg.uzqrTimeoutMs));
+      setClickEnabled((await window.electronAPI.settings.get('click_enabled')) === 'true');
       setLoaded(true);
     } catch {
       // Don't fall back to editable defaults — surface the error and let the user retry, so a
@@ -412,6 +415,7 @@ export function FiscalSettings() {
         uzqrTimeoutMs: Number(uzqrTimeoutMs),
         ...(password ? { password } : {}),
       });
+      await window.electronAPI.settings.set('click_enabled', String(clickEnabled));
       setUzqrPollMs(String(cfg.uzqrPollMs));
       setUzqrTimeoutMs(String(cfg.uzqrTimeoutMs));
       setHasPassword(cfg.hasPassword);
@@ -660,6 +664,23 @@ export function FiscalSettings() {
             </FieldGrid>
           </>
         )}
+
+        <GroupTitle>{t('fiscalSettings.groupClick', 'Click')}</GroupTitle>
+        {/* Off by default: the Checkout shows the Click tile only on tills where this is on. */}
+        <Row>
+          <input
+            type="checkbox"
+            checked={clickEnabled}
+            onChange={(e) => setClickEnabled(e.target.checked)}
+          />
+          {t('fiscalSettings.clickEnabled', 'Принимать оплату Click на этой кассе')}
+        </Row>
+        <Muted>
+          {t(
+            'fiscalSettings.clickHint',
+            'В чеке REGOS оплата Click отправляется как наличные. В кассовый ящик не попадает; в отчётах — отдельной строкой.',
+          )}
+        </Muted>
 
         <ButtonRow>
           <Button variant="primary" onClick={handleSave} disabled={saving}>

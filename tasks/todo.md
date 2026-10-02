@@ -1,3 +1,307 @@
+# Click payment, split payments, local product images (2026-10-02) — not started; analyze → ask → plan → wait
+
+Ask before guessing on any of these.
+
+## Task 1 — new payment method "Click"
+
+- Logos: `src/renderer/assets/Click-light_no_background.png` (light mode),
+  `src/renderer/assets/click_dark_background.jpg` (dark mode).
+- Shown **only** in `src/renderer/pages/POS/Checkout.tsx`.
+- REGOS: a Click sale is fiscalized **as cash**.
+- Bank turnover: Click is included **only when the sale is fiscalized**.
+- Analytics: Click stays a **separate** payment method of its own (not merged into cash).
+- **Analysis (2026-10-02):**
+  - `sales.payment_method` is a free String in both schemas; the server DTO is `@IsString()` only →
+    `'click'` needs **no migration** and an old server stores it fine (new POS ↔ old server OK).
+  - REGOS: `buildPayments()` sends `type: 1` (cash) iff `isCashTender()`, the same function that
+    means "money in the drawer" (`shifts.ts`, `debtors.ts`). Click needs a separate fiscal rule.
+    Refunds use `fullRefund(qrUrl)` — no payments restated, nothing to change.
+  - Bank turnover (`reconciliation/bank.service.ts`) = card + uzqr + fiscalCash (by fiscalTender /
+    paymentMethod, FISCALIZED only); running `toDeposit` = fiscalCash − deposits.
+  - `fiscal-status-sync.ts` reports `fiscalTender = paymentMethod` → `'click'` reaches the server.
+  - Shift sync has only `cashSalesAmount` / `cardSalesAmount` (cashless).
+  - Both logos are square with lots of padding → crop copies for the tile; light theme = PNG,
+    dark theme = dark JPG.
+- **Answers:** Click is **not drawer cash** · fiscalised Click counts in bank turnover **and** in
+  running **to deposit** · tile behind a **per-till setting, off by default**.
+- **Plan (draft — waiting for approval).** Branch `feat/click-payment` off `dev`.
+  Server commit first (deploy to staging → you confirm → main), then the POS commit.
+  1. **Shared** (`src/shared/constants/payment-methods.ts`, additive — needs your OK as `src/shared`):
+     `'click'` in `SALE_TENDERS` + i18n key; new `isFiscalCashTender(m)` = cash or click.
+     `isCashTender` unchanged → drawer, X/Z, debt ledger keep treating Click as cashless.
+  2. **Server** (no migration, no DTO change):
+     - `bank.service`: new `fiscalClick` (Σ FISCALIZED click, by fiscalisation time) — its own
+       line; `bankTurnover` += it; running `toDeposit` = fiscalCash + fiscalClick − deposits.
+       Response field additive. Unfiscalised Click counts nowhere.
+     - `sales.service` daily summary: additive `clickSales` (so cash+card+uzqr+click = total).
+     - Web: Click column/line in DailySummary, MonthlyReport, BankTurnover page/section; ru/uz.
+  3. **POS:**
+     - `regos-vcr-service.buildPayments`: `isFiscalCashTender` → `type: 1` for Click.
+     - Checkout: Click tile (cropped logo, theme-aware) shown only when the till setting
+       `click_enabled` is on (local-only system setting, default off; checkbox in Fiscal settings).
+       Not in POSScreen quick-pay. Part-paid nasiya may use Click like card.
+     - Shift/Z screen: Click as its own line inside cashless; smena sync unchanged (Click stays in
+       `cardSalesAmount`), so the server needs no new column.
+     - Labels: receipt print, SalesHistory, ReceiptDetails, POS Daily/Monthly reports; ru/uz.
+     - Tests: buildPayments (click → type 1, never drawer), shifts split, bank.service fiscalClick.
+- **Side effect to know:** REGOS's own Z-report will show Click inside its **cash** total, so REGOS
+  cash ≠ drawer cash by the Click amount. That is the intended fiscal treatment.
+
+## Task 2 — split payment across methods in `Checkout.tsx`
+
+- One sale paid by several methods: cash + card + Click + UzQR, etc.
+- "Remaining" button: fills the active method with total − already entered.
+  Example: total 100 000 → 55 000 cash typed by hand, 45 000 card via the button.
+- Fiscalization per method: 55 000 cash + 45 000 card → REGOS gets them split the same way.
+  If the 45 000 is Click → the whole 100 000 goes to REGOS as cash.
+- **Analysis (2026-10-02):**
+  - One `sales.payment_method` string per sale (both DBs); every figure keys on it: POS shift /
+    drawer (`shifts.ts`, `smena-sync.ts`), REGOS `buildPayments`, server bank turnover (`tender()`,
+    `fiscalCash()`), daily/monthly reports, analytics, receipt print.
+  - Checkout has one "given amount": below total → **discount** (cash courtesy), above → change.
+  - The server's ValidationPipe has `forbidNonWhitelisted: true`: a new field in
+    `POST /api/sales/sync` would make an **old server reject the whole sale** → the lines must
+    travel on their own endpoint, like fiscal status does (`fiscal-status-sync.ts` +
+    `missing-endpoints.ts` 404 back-off).
+  - REGOS Receipt.Sale takes several payments (`tasks/REGOS_API_INTERFACE_UPDATED.md`: a type 1 +
+    a type 2 in one receipt). Only one Payment.Create-backed (UzQR) payment per receipt.
+  - Returns delete the sale and subtract its whole finalAmount from expected cash, whatever the
+    tender — today's behaviour for card sales too. Unchanged here.
+- **Answers:** lines must **cover the total** (only the cash line may exceed it → change; the old
+  single-cash shortfall-as-discount stays as is) · **no nasiya** in a split (v1) · split is
+  **always available** (the single-tender flow is unchanged until a cashier adds a second line).
+- **Plan (draft — waiting for approval).** Branch `feat/split-payment` off `feat/click-payment`
+  (Click is one of the methods). Server commit first.
+  1. **Storage (additive; touches both Prisma schemas — needs your OK):**
+     - SQLite `sale_payments(id, sale_id, method, amount, synced)` — Prisma model + `CREATE TABLE IF
+       NOT EXISTS` in `createSchemaIfNeeded`, index `sale_id`. One row per method.
+     - A split sale has `payment_method = 'mixed'` (already in the receipt vocabulary) and ≥2 rows;
+       `paid_amount` = total. A single-tender sale writes **no rows** — exactly as today.
+     - PG `SalePayment(storeId, receiptNumber, method, amount Decimal(10,2))`, unique
+       `(storeId, receiptNumber, method)`. Additive migration.
+  2. **One shared reader** `tenderAmounts(sale, lines)` → `{cash, card, uzqr, click}`: no lines →
+     the whole paid amount on `payment_method`; lines → the lines. Everything below uses it.
+  3. **Sync:** new `POST /api/sales/payments-sync` (bulk, idempotent: replaces a receipt's lines,
+     keyed `(storeId, receiptNumber)`). POS step after the sales upload for unsynced rows; 404 →
+     `missing-endpoints` back-off. `/api/sales/sync` itself is untouched.
+  4. **REGOS:** `buildPayments` for `mixed`: one `type 1` = cash + click; card + plain UzQR →
+     `type 2, card_type 2`; a REGOS-backed UzQR line → `type 2, payment_id`. Cash is the net
+     amount (after change). Example: 55 000 cash + 45 000 card → `[{1, 55000}, {2, 45000}]`;
+     55 000 cash + 45 000 Click → `[{1, 100000}]`.
+  5. **POS money:** shift/drawer/smena-sync take the **cash line** of a split sale (Click line →
+     cashless + "of which Click"); reports, sales history, receipt print show the breakdown.
+  6. **Server:** bank turnover and reports read lines for `mixed` sales (fiscalised cash/Click
+     lines count once the receipt is FISCALIZED); daily summary gets an additive `mixedSales`.
+  7. **Checkout UI:** today's tiles/numpad unchanged. A "+ split" button turns the panel into lines
+     (method + amount, one per method); the numpad and banknote buttons type into the active line;
+     **"Qoldiq / Остаток"** fills the active line with total − Σ other lines. Pay is enabled when
+     Σ ≥ total and non-cash Σ ≤ total; change = excess, from cash only. With a UzQR line and the
+     integration on, the QR is raised for that line's amount and the sale is written after it is
+     paid (as today). Hidden while editing a sale and in the credit flow.
+     LAN satellite: split only when its main reports support (older main → button hidden).
+  8. Tests: tenderAmounts, buildPayments mixes, shift cash from lines, payments-sync idempotency,
+     bank turnover with a mixed sale, Checkout math (remaining, change, guard).
+- **Rollout:** server first (migration + endpoint + readers) → staging → you confirm → main →
+  installer. An old server still accepts every sale (lines go separately and wait out 404s); until
+  it is deployed its reports show `mixed` sales unsplit.
+
+## Task 3 — category/product images stored locally in SQLite
+
+- No images on the VPS (disk space). Web dashboard uploads nothing; only the Electron app does.
+- Images are **not synced** between tills or to the server.
+- Settings: toggle to show/hide images (optional, for performance with many images).
+- Step 1: an image table in local SQLite, **shipped with the installer pre-filled**, with an
+  MXIK code column. Products find their image by MXIK.
+- Step 2: a script that fetches the available images from `tasnif.soliq.uz`.
+  First identify the request methods and responses (endpoints, auth, image format/size, rate limits).
+- **tasnif findings (probed 2026-10-02 from this machine, UZ IP):**
+  - Found in the site bundle `tasnif.soliq.uz/assets/index-*.js` (product modal). No auth, no captcha.
+  - `GET https://tasnif.soliq.uz/api/cls-api/integration-mxik/references/get/mxik/picture-names?mxik_code={17 digits}`
+    → bare JSON array of file names, e.g. `["02202002001010009_1.png","02202002001010009_4sc43b1c.jpg"]`;
+    `[]` when there is none (also for an unknown MXIK). HTTP 200 either way.
+  - `GET https://tasnif.soliq.uz/api/cls-api/integration-mxik/references/get/file/{name}` → the bytes,
+    `Content-Type: application/octet-stream`, `Cache-Control: no-store`, no ETag/Last-Modified.
+  - **A missing file is still HTTP 200** with a placeholder whose type depends on the extension
+    (`.jpg` → 1280² "404 Error" JPEG, `.png` → SVG). Only fetch names from `picture-names` and
+    check magic bytes (JPEG/PNG/WebP), reject SVG.
+  - The existing `elasticsearch/search` and `get/history/{mxik}` responses carry no image field.
+  - Files are raw uploads: 45 KB … 1.9 MB, JPEG/PNG, up to 1280px+ → must be resized/re-encoded
+    (thumbnail) before storing, or the installer explodes.
+  - Coverage sample: 9 of 25 grocery MXIKs had pictures (Coca-Cola/Pepsi/milk yes; bread, rice none).
+    0–6 pictures per code; names `{mxik}_{n}.png` (generic) or `{mxik}_{random}.jpg`.
+  - No rate-limit headers seen; throttle anyway. Geo-restricted → the script runs here (UZ), not on the VPS.
+- **Decisions (2026-10-02):** fetch only our stores' distinct MXIKs · installer ships a pre-filled
+  table **and** a till fetches + caches a missing MXIK image on demand (local only, no VPS, no sync) ·
+  256px WebP · one image per MXIK (first valid).
+- **Prod MXIK data (read-only SELECT, 2026-10-02):** 1 901 distinct valid 17-digit codes on
+  3 051 products, 1 store. 186 are generic (`…000000`); the top code `01905007001000000` sits on
+  119 products. Sample of 100 → 25 have pictures ⇒ ~475 images × ~15 KB ≈ **7 MB** seed.
+- **Plan (draft — waiting for approval).** Branch `feat/pos-product-images` off `dev`. POS only:
+  no server, web, PG or N-1 impact. Version bump.
+  1. **Seed script** `scripts/fetch-mxik-images.ts` (tsx + sharp, both already deps). Input: a CSV
+     of MXIKs (from the read-only prod query). Per code: `picture-names` → first file that passes
+     the magic-byte check → flatten onto white, fit inside 256×256, WebP q80. Throttled 1 req/s,
+     resumable (skips done codes), logs misses. Output `prisma/seed/mxik-images/{mxik}.webp` +
+     `manifest.json` (`version`, `[{mxik, sourceName}]`). Run here (UZ IP).
+     Ships via the existing `extraResources: prisma/**` → **no `electron-builder.config.js` change.**
+  2. **SQLite (raw SQL in `createSchemaIfNeeded`, `IF NOT EXISTS`, unconditional — Migration 37)**,
+     in `pos-local.db`; nothing in the Prisma schemas:
+     - `mxik_images(mxik TEXT PK, data BLOB NULL, mime TEXT, source TEXT 'seed'|'tasnif',
+       source_name TEXT, checked_at TEXT)`; `data NULL` = "tasnif has none" (re-check after 30 days).
+     - `entity_images(entity_type TEXT 'product'|'category', entity_id INTEGER, data BLOB, mime TEXT,
+       updated_at TEXT, PRIMARY KEY(entity_type, entity_id))` — manual uploads.
+     - Seed import on boot when `manifest.version` > `local_config` seed version:
+       `INSERT OR IGNORE` (never overwrites a tasnif-fetched row). Extend `legacy-upgrade.test.ts`.
+  3. **Main process:** `images:fetchMxik` (main fetches tasnif, no CORS, validates bytes, returns raw);
+     `images:save*`/`images:remove*` (ADMIN for manual uploads); a custom protocol
+     `posimg://product/{id}` and `posimg://category/{id}` that resolves
+     manual → MXIK → 404, so `<img loading="lazy">` works without pushing blobs over IPC.
+     Preload + ipc-client wiring per skill `ipc-feature`.
+  4. **Renderer:**
+     - Setting `showProductImages` in `settings-store.ts` (per till), **default off** = today's UI.
+       Toggle in `SystemSettings.tsx`, i18n ru/uz.
+     - `ProductSearch.tsx` `ProductCard` + `CategoryButton`: image only when the setting is on;
+       lazy, fixed size, no layout shift when it's missing.
+     - On-demand fill: a visible card with no MXIK row → queue `images:fetchMxik` (max 2 in flight,
+       online only) → canvas resize/flatten → WebP → `images:saveMxik`. Same canvas path for uploads.
+     - Upload/remove image in the Electron `ProductForm.tsx` and the category form (ADMIN).
+  5. Tests: magic-byte check, resolution order, seed import idempotency, legacy DB upgrade.
+     `/check`, `npx cross-env APP_MODE=pos electron-vite build`. You run `deploy:pos`.
+- **Approved 2026-10-02** with these answers:
+  - Generic MXIKs (`…000000`) get no automatic picture — not in the seed, not fetched on the till.
+  - `prisma/seed/` folder OK. LAN satellites showing seed + own fetches only: OK.
+  - **Categories are pre-filled too**, and a user can replace their own category picture later.
+    Source: **files you provide** (one per category), the script only resizes them to 256px WebP.
+    Match key: **normalized category name** (trim, lowercase, collapse spaces; nameUz or nameRu).
+    → table `category_seed_images(name_key TEXT PK, data BLOB, mime TEXT)`; resolution for a
+    category = manual upload → seed by nameUz key → seed by nameRu key → none.
+    Source folder: `scripts/category-images/`, file name = the category's nameUz (any of
+    png/jpg/jpeg/webp), e.g. `Salqin ichimliklar.png`. Prod has 23 categories (ids 1–20 + 39–41).
+- **Built (2026-10-02) on `feat/pos-product-images`, uncommitted, POS 1.32.9.** Deviations from the plan:
+  - Own pictures are keyed by **barcode** (product) and **normalized nameUz** (category), not row
+    id: a LAN satellite shows the main's products and its ids can differ (`lan/satellite-cache.ts`).
+    `entity_images(entity_type, entity_key)`. Renaming a category / changing a barcode drops its own picture.
+  - Picture order: numbered tasnif names (`_1`, `_2`) before random-suffix ones — Coca-Cola's first
+    listed photo was the bottle cap from above.
+  - `posimg:` URLs carry barcode+mxik / nameUz+nameRu, so lookups never read products/categories.
+  - The existing "Фото" tab in `ProductForm` (was "coming soon") is the editor, edit mode only.
+- Tests: `image-bytes`, `image-store` (real SQLite), `tasnif-pictures`, `legacy-upgrade` (+3 raw
+  tables; red proof: 9 failed without `createImageTables`). Full POS jest 613 ✓, tsc ✓, POS build ✓.
+- **Picture quality (approved option 3, "both"):** first run took the first-listed picture; ~1 in 5
+  sampled was a cap/lid from above, a can's back or a flat package print. Now:
+  - numbered picture if any, else the **tallest** (`pickUpright`) — same rule on the till
+    (`encodeTallest`, ≤4 candidates from `fetchTasnifPicture`);
+  - every candidate cached in `scripts/.mxik-candidates/` (gitignored) + `review.html` there;
+    your picks/blocks → `scripts/mxik-image-overrides.json` (committed) → `OFFLINE=1` rebuild;
+  - manifest `mxikBlocked` (optional): till drops the picture and never fetches that code.
+- Left for you: drop category files into `scripts/category-images/` and re-run the script; try it in
+  `dev:pos`; then `deploy:pos`.
+
+# Nasiya multi-till sync, ledger voids, bank turnover (2026-10-01) — approved; all three built, on local `dev`, not pushed
+
+Electron is in scope again (CLAUDE.md updated, commit f22e411 on `chore/claude-md-pos-scope`).
+Order matters: task 3 first, because task 1's voids ride on the same ledger-replication rules.
+Each task = one branch off `dev`; server commits before POS commits; POS commits bump the version.
+Rollout per task: server on staging → you confirm → `main` → prod deploy → then `deploy:pos`.
+
+## Task 3 — debtors do not sync T1 → T2 — BUILT on `fix/debtor-multi-till-sync` (1393d76 server, adeec12 POS 1.32.2)
+
+Assumed topology: two tills syncing via the VPS (LAN satellites already read the main's book).
+
+1. `syncUsers` writes `debt` only when creating a local user (`products-sync.ts:452`), never on
+   update (`:469`) → T2's balance freezes at the first pull.
+2. `uploadUsers` sends every user's `debt` every cycle (`upload-sync.ts:131,153`); the server
+   stores it as-is (`users.service.ts:310`) → last till to sync wins; T2's stale figure overwrites T1's.
+3. Ledger rows go up (`/debtors/sync-bulk`) but never down → empty history on T2, drift banner,
+   T2's payments cannot settle (and so never fiscalize) T1's credit receipts.
+4. Ledger + CLIENT upload sits inside the ADMIN-only `uploadLocalData` (`sync-policy.ts:56`) →
+   a debtor created in a cashier-only session never leaves T1.
+5. `rows.slice(0, synced)` (`upload-sync.ts:119`) marks the wrong rows when the server skips one
+   mid-batch → that row is lost for good.
+
+Fix — the ledger becomes the replicated truth, the balance is derived from it:
+- **PG (additive):** `DebtTransaction` + `updatedAt @updatedAt`, `originTerminalId?`,
+  `settleTender?`, `settleFiscalize?`; index `(storeId, updatedAt)`.
+- **SQLite (additive, idempotent ALTER per lessons.md):** same columns.
+- **Server**
+  - `POST /debtors/sync-bulk`: response gains `syncedIds` (additive). Merge on upsert:
+    immutable fields only on create; `settledAt` = earliest non-null (never cleared).
+  - New `GET /debtors/ledger/sync?updatedAfter=` (store-scoped, cursor on `updatedAt`).
+  - Flag `DEBT_BALANCE_FROM_LEDGER` (default off): when on, `users.debt` = Σ ledger after each
+    sync-bulk, and `debt` in `/users/sync-bulk` is ignored. Before turning it on: read-only report
+    of per-user `users.debt` vs Σ ledger (staging, then prod) — the slice bug may have lost rows.
+- **POS**
+  - Mark by `syncedIds` when present; fall back to today's behaviour on an old server.
+  - CLIENT users + ledger rows upload for any role (staff/master data stay ADMIN-gated).
+  - New pull step after `syncUsers`: upsert rows with the same merge rule, then recompute
+    `users.debt` = Σ ledger for touched users.
+  - Settling a charge locally sets `synced=false` and records `settleTender`/`settleFiscalize`, so
+    it re-uploads.
+  - **Cross-till fiscalization:** the till that owns the sale fiscalizes it when it pulls a settled
+    charge whose sale is local and `DEFERRED_DEBT` (and `settleFiscalize` ≠ false).
+- Tests: two-till simulation (charge on T1, pay on T2, both converge; T1 fiscalizes), slice bug,
+  merge rule, server reconcile report.
+
+## Task 1 — admin deletes a ledger transaction, history stays — BUILT on `feat/debt-txn-void` (7f91d1f server, 8a72d3d POS 1.32.3)
+
+Deviation from the plan: a payment whose money already settled receipts is refused outright (not only when a *fiscalized* receipt would reopen) — a settlement is never cleared by the replication merge, so reopening one locally would not reach the other tills.
+
+
+- **Columns:** `voidedAt?`, `voidedBy?`, `voidReason?` on both schemas. Voided rows are excluded
+  from `recomputeBalance`, `unappliedCredit`, `allocatePayment` and the server Σ.
+- `voidDebtTransaction(id, adminId, reason)`, in one transaction:
+  - Reverse the row's amount on `users.debt`, then `synced=false`.
+  - Re-check settlements: if paid < consumed, un-settle the newest settled charges whose sale is
+    not FISCALIZED. If a fiscalized one would have to reopen, refuse the void.
+  - Proposed: refuse to void a CHARGE that has a `saleId` (do a sale return instead).
+  - A voided cash PAYMENT writes a PAY_OUT into this till's open shift, if one is open.
+  - Write an audit_logs row.
+- **Wiring:** IPC `debtors:voidTransaction` (ADMIN), preload, satellite-ops plus a main route
+  `/terminal/debtors/:id/transactions/:txnId/void`.
+- **UI:** `DebtorDetails.tsx` row struck through and greyed, "удалено · when · reason"; trash icon
+  for admin → confirm with reason; ru + uz.
+- **Server/web:** sync DTO gets the optional void fields; the dashboard debtor ledger renders
+  voided rows struck through.
+
+## Task 2 — bank turnover = card + UzQR + fiscalised cash; deposits — BUILT on `feat/bank-turnover` (8635ac6 server, 9d1e5a2 POS 1.32.4, 6d402d0 web)
+
+Changes vs plan: start date lives on `stores.bank_cash_start_date` (not a SystemSetting — tills re-upload settings); no new index on `sales` (would need its own CONCURRENTLY migration; existing store/created_at indexes serve these queries).
+
+
+- The server cannot know fiscal status today: `fiscalStatus` exists only in SQLite and a sale
+  syncs once, before fiscalization. A payoff also rewrites the tender locally, and the server never
+  sees that.
+- **PG (additive):**
+  - `Sale` + `fiscalStatus?`, `fiscalizedAt?`, `fiscalTender?`. A separate tender column keeps the
+    existing `paymentMethod` reports unchanged.
+  - New table `CashBankDeposit` (storeId, amount `Decimal(14,2)` — 10,2 caps at ~100M som,
+    depositedAt, note, createdById, createdAt, voidedAt?, voidedById?).
+- **POS:**
+  - SQLite `sales.fiscal_synced` (default true, so no flood). Set it to false when a sale reaches
+    FISCALIZED; a new upload step `POST /sales/fiscal-sync` (bulk, idempotent, keyed
+    `(storeId, receiptNumber)`) sends status, date and tender.
+  - On an old server (404) keep the flag and retry later.
+  - `/sales/sync` also sends `fiscalStatus` as an optional extra.
+- **Server:**
+  - Flag `BANK_TURNOVER_ENABLED` (default off).
+  - `GET /reconciliation/bank?from&to` → card, uzqr, fiscalCash (by `fiscalizedAt`), bankTurnover,
+    deposits in period, fiscalCashToDeposit (running), count of sales with unknown fiscal status.
+  - `POST /reconciliation/bank/deposits` and `POST …/:id/void` (ADMIN own store, SUPER_ADMIN with
+    storeId), with AuditLog.
+- **Web:** a "Банк / Bank" section on `ReconciliationPage.tsx` — cards, deposit form, deposits
+  list (voids struck through, same as task 1); ru + uz.
+
+## Open questions (proposed defaults in brackets)
+
+- Q1: T1/T2 are two VPS-synced tills, not LAN main/satellite? [yes]
+- Q2: the owning till fiscalizes a credit sale paid off on another till? [yes]
+- Q3: void rules — no void of a sale's CHARGE; refuse if a fiscalized receipt would reopen;
+  cash void → PAY_OUT in the open shift. [as listed]
+- Q4: "to deposit" = running balance since a start date (store setting, default = flag-on day),
+  or per selected period? [running]
+- Q5: back-send fiscal status for the last 90 days so the bank figures cover history? [90 days]
+- Q6: OFFLINE_ONLY stores' LAN dashboard (local-server) gets the bank page too? [later, not now]
+
 # Landing hero background video (2026-09-29) — implemented
 
 Spec: `tasks/HERO_VIDEO.md`. Steps 1–5 and 7 done; step 6 (nginx) proposed, not applied.

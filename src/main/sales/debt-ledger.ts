@@ -93,7 +93,11 @@ export async function chargeSaleToDebt(
  * `settledAt` is the only thing distinguishing a paid charge from an open one, so it is stamped
  * in the same transaction as the balance it settles.
  */
-export async function allocatePayment(tx: Prisma, userId: string): Promise<string[]> {
+export async function allocatePayment(
+  tx: Prisma,
+  userId: string,
+  settle: Settlement = { tender: null, fiscalize: null },
+): Promise<string[]> {
   // Everything paid and not yet accounted for by a settled charge — including the payment the
   // caller has just written. Deliberately NOT "the amount of this payment": the row is already
   // in the ledger by the time this runs, so taking an amount as well would count it twice, and
@@ -102,7 +106,7 @@ export async function allocatePayment(tx: Prisma, userId: string): Promise<strin
   if (remaining <= 0) return [];
 
   const open = (await tx.debtTransaction.findMany({
-    where: { userId, type: 'CHARGE', settledAt: null },
+    where: { userId, type: 'CHARGE', settledAt: null, voidedAt: null },
     orderBy: { createdAt: 'asc' },
   })) as DebtCharge[];
 
@@ -111,7 +115,7 @@ export async function allocatePayment(tx: Prisma, userId: string): Promise<strin
     const outstanding = round(Number(charge.amount));
     if (remaining < outstanding) break;
 
-    await stampSettled(tx, charge.id);
+    await stampSettled(tx, charge.id, settle);
     if (charge.saleId) settledSales.push(charge.saleId);
     remaining = round(remaining - outstanding);
   }
@@ -126,8 +130,8 @@ export async function allocatePayment(tx: Prisma, userId: string): Promise<strin
  * has always paid in whole receipts; positive when a part payment is sitting against the oldest
  * open one. Derived rather than stored, so it cannot drift out of step with the rows.
  */
-async function unappliedCredit(tx: Prisma, userId: string): Promise<number> {
-  const rows = (await tx.debtTransaction.findMany({ where: { userId } })) as Array<{
+export async function unappliedCredit(tx: Prisma, userId: string): Promise<number> {
+  const rows = (await tx.debtTransaction.findMany({ where: { userId, voidedAt: null } })) as Array<{
     type: string;
     amount: unknown;
     settledAt: Date | null;
@@ -145,10 +149,29 @@ async function unappliedCredit(tx: Prisma, userId: string): Promise<number> {
   return round(Math.max(0, paid - consumed));
 }
 
-async function stampSettled(tx: Prisma, chargeId: string): Promise<void> {
+/**
+ * How a charge got paid off, carried on the charge itself.
+ *
+ * Another till may hold the sale behind it (multi-till nasiya), and that till issues the receipt
+ * once it pulls the settled charge — with the tender the money arrived in, and only if the shop
+ * did not choose "without fiscalization" at the payoff.
+ */
+export interface Settlement {
+  tender: string | null;
+  fiscalize: boolean | null;
+}
+
+async function stampSettled(tx: Prisma, chargeId: string, settle: Settlement): Promise<void> {
   await tx.debtTransaction.update({
     where: { id: chargeId },
-    data: { settledAt: new Date() },
+    data: {
+      settledAt: new Date(),
+      settleTender: settle.tender,
+      settleFiscalize: settle.fiscalize,
+      // The charge was most likely uploaded long ago; without this the server — and every other
+      // till — would never learn it was paid.
+      synced: false,
+    },
   });
 }
 
@@ -159,6 +182,7 @@ async function stampSettled(tx: Prisma, chargeId: string): Promise<void> {
  * assertion the debtors screen can actually make rather than a hope.
  */
 export async function recomputeBalance(tx: Prisma, userId: string): Promise<number> {
-  const rows = await tx.debtTransaction.findMany({ where: { userId } });
+  // A voided row stays in the history and out of every sum.
+  const rows = await tx.debtTransaction.findMany({ where: { userId, voidedAt: null } });
   return round(rows.reduce((sum: number, r: { amount: unknown }) => sum + Number(r.amount), 0));
 }

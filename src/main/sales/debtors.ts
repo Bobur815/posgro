@@ -1,6 +1,7 @@
 import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { getPrismaClient } from '../database/sqlite-client';
+import { randomUUID } from 'crypto';
 import { allocatePayment, recomputeBalance, signedAmount } from './debt-ledger';
 import { fiscalizeSettledSale } from './settle-sale';
 import { addShiftMovement, currentShift } from './shifts';
@@ -53,6 +54,9 @@ export function serializeDebtor(user: {
 
 function serializeTxn(t: {
   id: string;
+  voidedAt?: Date | null;
+  voidedBy?: string | null;
+  voidReason?: string | null;
   type: string;
   amount: unknown;
   paymentMethod: string | null;
@@ -303,7 +307,10 @@ export async function recordDebtPayment(data: DebtPayment, staffId: string, term
     });
     // After the row above is written: the allocator reads the ledger, so the payment it is
     // settling with is the one just recorded.
-    return allocatePayment(tx, data.userId);
+    return allocatePayment(tx, data.userId, {
+      tender,
+      fiscalize: data.fiscalize !== false,
+    });
   });
 
   // Cash paid against a debt is money in the till that belongs to no sale in this shift. Recording
@@ -369,6 +376,127 @@ export async function adjustDebt(
       data: { debt: { increment: amount } },
     });
   });
+
+  const updated = await prisma.user.findUnique({ where: { id: data.userId } });
+  return serializeDebtor(updated);
+}
+
+export interface DebtVoid {
+  userId: string;
+  transactionId: string;
+  reason?: string;
+}
+
+/**
+ * Delete a ledger row — an admin's correction of a purchase, payment or adjustment.
+ *
+ * Nothing is removed. The row is stamped voided (who, when, why), struck through on screen, and
+ * left out of the balance and the allocator from then on; the stamp replicates to the server and
+ * the other tills like a settlement does. Its effect on the balance is reversed in the same
+ * transaction, so the stored figure and the ledger still agree.
+ *
+ * Deleting an open purchase (CHARGE) forgives that receipt's debt: the sale itself stays as it
+ * was, unpaid and not fiscalized, since no money for it ever arrived. A part payment that was
+ * sitting against it is freed, and settles the next open receipt straight away — exactly what it
+ * would have done had the deleted purchase never been there — which is then fiscalized with the
+ * tender of the customer's latest payment.
+ *
+ * Refused where undoing the row would mean re-opening a closed receipt — it may be fiscalized,
+ * and a settlement is never re-opened, here or on any other till. Correct those with an
+ * adjustment instead:
+ *  - a purchase that has already been paid off;
+ *  - money that already paid off a receipt.
+ *
+ * A cash payment's money went into a drawer as a PAY_IN; voiding it takes it out again as a
+ * PAY_OUT from this till's open shift, so the drawer count follows. With no open shift there is
+ * nothing to correct here — the shift it went into is already counted.
+ */
+export async function voidDebtTransaction(
+  data: DebtVoid,
+  admin: { id: string; phone: string },
+  terminalId: string,
+) {
+  const prisma = getPrismaClient();
+
+  const txn = await prisma.debtTransaction.findUnique({ where: { id: data.transactionId } });
+  if (!txn || txn.userId !== data.userId) throw new Error('debtors.errors.not_found');
+  if (txn.voidedAt) throw new Error('debtors.errors.already_voided');
+  if (txn.type === 'CHARGE' && txn.settledAt) {
+    throw new Error('debtors.errors.void_charge_settled');
+  }
+
+  const amount = num(txn.amount);
+  const reason = String(data.reason ?? '').trim() || null;
+
+  // The tender money freed by a deleted purchase is taken to have arrived in: the latest payment's.
+  let freedTender = 'cash';
+
+  const settledSales: string[] = await prisma.$transaction(async (tx: typeof prisma) => {
+    // Money that settled receipts: after the void, what was paid must still cover what the
+    // settled charges consumed. Checked on the ledger as it is now, so a payment whose money is
+    // still sitting unapplied (a part payment, or an advance) can go.
+    if (amount < 0) {
+      const rows = (await tx.debtTransaction.findMany({
+        where: { userId: data.userId, voidedAt: null },
+      })) as Array<{ id: string; type: string; amount: unknown; settledAt: Date | null }>;
+      let paid = 0;
+      let consumed = 0;
+      for (const r of rows) {
+        if (r.id === txn.id) continue;
+        if (r.type !== 'CHARGE') paid += Math.max(0, -num(r.amount));
+        else if (r.settledAt) consumed += num(r.amount);
+      }
+      if (paid + 0.005 < consumed) throw new Error('debtors.errors.void_payment_settled');
+    }
+
+    await tx.debtTransaction.update({
+      where: { id: txn.id },
+      data: { voidedAt: new Date(), voidedBy: admin.id, voidReason: reason, synced: false },
+    });
+    await tx.user.update({
+      where: { id: data.userId },
+      data: { debt: { decrement: amount } },
+    });
+    await tx.$executeRawUnsafe(
+      `INSERT INTO audit_logs (id, user_id, phone, action, entity, entity_id, details)
+       VALUES (?, ?, ?, 'void_debt_transaction', 'debt_transaction', ?, ?)`,
+      randomUUID(),
+      admin.id,
+      admin.phone,
+      txn.id,
+      JSON.stringify({ userId: data.userId, type: txn.type, amount, reason }),
+    );
+
+    if (txn.type !== 'CHARGE') return [];
+    // A part payment that sat against this purchase is free again: let it settle what it covers.
+    const latest = (await tx.debtTransaction.findFirst({
+      where: { userId: data.userId, type: 'PAYMENT', voidedAt: null },
+      orderBy: { createdAt: 'desc' },
+    })) as { paymentMethod: string | null } | null;
+    freedTender = String(latest?.paymentMethod ?? 'cash').toLowerCase();
+    return allocatePayment(tx, data.userId, { tender: freedTender, fiscalize: true });
+  });
+
+  for (const saleId of settledSales) {
+    await fiscalizeSettledSale(saleId, freedTender);
+  }
+
+  if (txn.type === 'PAYMENT' && isCashTender(txn.paymentMethod)) {
+    try {
+      const shift = await currentShift(terminalId);
+      if (shift) {
+        const debtor = await prisma.user.findUnique({ where: { id: data.userId } });
+        await addShiftMovement({
+          smenaId: shift.id,
+          type: 'PAY_OUT',
+          amount: Math.abs(amount),
+          note: `Отмена оплаты долга: ${debtor?.nameRu ?? ''}`,
+        });
+      }
+    } catch (e) {
+      console.error('[debtors] could not take the voided payment out of the shift:', e);
+    }
+  }
 
   const updated = await prisma.user.findUnique({ where: { id: data.userId } });
   return serializeDebtor(updated);

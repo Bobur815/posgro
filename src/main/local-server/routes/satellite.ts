@@ -21,6 +21,7 @@ import {
   debtorSale,
   listDebtors,
   recordDebtPayment,
+  voidDebtTransaction,
   unpaidSales,
   updateDebtor,
 } from '../../sales/debtors';
@@ -526,6 +527,26 @@ export const satelliteRoutes: Route[] = [
       debtorAnswer(() => {
         const admin = requireAdminAt(ctx);
         return adjustDebt({ ...(ctx.body ?? {}), userId: ctx.params.id }, admin.id);
+      }),
+  },
+  {
+    method: 'POST',
+    path: '/terminal/debtors/:id/transactions/:txnId/void',
+    audience: 'terminal',
+    session: true,
+    handler: (ctx) =>
+      debtorAnswer(() => {
+        const admin = requireAdminAt(ctx);
+        // A cash payment voided at a satellite comes out of the satellite's own drawer.
+        return voidDebtTransaction(
+          {
+            userId: ctx.params.id,
+            transactionId: ctx.params.txnId,
+            reason: (ctx.body as { reason?: string } | undefined)?.reason,
+          },
+          admin,
+          ctx.terminal!.terminalId,
+        );
       }),
   },
 

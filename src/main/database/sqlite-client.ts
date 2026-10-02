@@ -2,6 +2,7 @@
 import path from 'path';
 import { app } from 'electron';
 import fs from 'fs';
+import { createImageTables, importImageSeed } from '../images/image-store';
 
 // Resolve prisma client path relative to app root.
 // In production the JS files live inside app.asar; the .node binary is unpacked to
@@ -111,6 +112,42 @@ export async function initializeDatabase(): Promise<void> {
     console.error('Failed to connect to database:', error);
     throw error;
   }
+
+  // Pictures never stop a till from starting: a broken seed is logged and skipped. Every outcome
+  // is logged — a seed that was silently not found once left a till with no category pictures.
+  const seedDir = findImageSeedDir();
+  if (!seedDir) {
+    console.warn(`[db] Picture seed: no manifest.json in ${imageSeedCandidates().join(' | ')}`);
+    return;
+  }
+  try {
+    const imported = await importImageSeed(prisma, seedDir);
+    console.log(`[db] Picture seed ${imported ? 'imported' : 'already imported'} from ${seedDir}`);
+  } catch (error) {
+    console.error(`[db] Picture seed import from ${seedDir} failed:`, error);
+  }
+}
+
+/**
+ * Where the installer's picture seed may be — shipped by the existing `extraResources: prisma/**`
+ * (resources/prisma/seed/images) — and, in development, the repo's prisma/seed/images, found from
+ * the app path, the working directory or the built main file, whichever the launcher made right.
+ */
+function imageSeedCandidates(): string[] {
+  const rel = ['prisma', 'seed', 'images'];
+  const dirs = app.isPackaged
+    ? [path.join(process.resourcesPath, ...rel)]
+    : [
+        path.join(app.getAppPath(), ...rel),
+        path.join(process.cwd(), ...rel),
+        path.join(__dirname, '..', '..', ...rel),
+        path.join(__dirname, '..', '..', '..', ...rel),
+      ];
+  return [...new Set(dirs)];
+}
+
+function findImageSeedDir(): string | null {
+  return imageSeedCandidates().find((d) => fs.existsSync(path.join(d, 'manifest.json'))) ?? null;
 }
 
 /**
@@ -255,6 +292,20 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
     )
   `;
 
+  // Split payment: one row per tender of a 'mixed' sale (single-tender sales write none).
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS sale_payments (
+      id TEXT PRIMARY KEY,
+      sale_id TEXT NOT NULL,
+      method TEXT NOT NULL,
+      amount REAL NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE
+    )
+  `;
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_sale_payments_sale ON sale_payments(sale_id)`;
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_sale_payments_synced ON sale_payments(synced)`;
+
   await prisma.$executeRaw`
     CREATE TABLE IF NOT EXISTS system_settings (
       id TEXT PRIMARY KEY,
@@ -364,6 +415,8 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_sync_queue_entity ON sync_queue(entity)`;
 
+  // Product/category pictures — local to this till, never synced (images/image-store.ts).
+  await createImageTables(prisma);
 }
 
 async function runMigrations(prisma: PrismaClientType): Promise<void> {
@@ -895,6 +948,53 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
     await prisma.$executeRaw`
       ALTER TABLE debt_transactions ADD COLUMN synced INTEGER NOT NULL DEFAULT 0
     `;
+  }
+  // Multi-till ledger replication: who wrote a row, and how a charge was settled. Nullable, so
+  // every existing row upgrades into "written here, settled the old way" — which it was. Each one
+  // guarded on its own, for the reason given above.
+  if (!(await columnExists(prisma, 'debt_transactions', 'origin_terminal_id'))) {
+    await prisma.$executeRaw`ALTER TABLE debt_transactions ADD COLUMN origin_terminal_id TEXT`;
+  }
+  if (!(await columnExists(prisma, 'debt_transactions', 'settle_tender'))) {
+    await prisma.$executeRaw`ALTER TABLE debt_transactions ADD COLUMN settle_tender TEXT`;
+  }
+  if (!(await columnExists(prisma, 'debt_transactions', 'settle_fiscalize'))) {
+    await prisma.$executeRaw`ALTER TABLE debt_transactions ADD COLUMN settle_fiscalize BOOLEAN`;
+  }
+  // An admin deleting a ledger row keeps it, stamped (debtors:voidTransaction). Nullable: every
+  // existing row upgrades into "not voided", which it is.
+  if (!(await columnExists(prisma, 'debt_transactions', 'voided_at'))) {
+    await prisma.$executeRaw`ALTER TABLE debt_transactions ADD COLUMN voided_at DATETIME`;
+  }
+  if (!(await columnExists(prisma, 'debt_transactions', 'voided_by'))) {
+    await prisma.$executeRaw`ALTER TABLE debt_transactions ADD COLUMN voided_by TEXT`;
+  }
+  if (!(await columnExists(prisma, 'debt_transactions', 'void_reason'))) {
+    await prisma.$executeRaw`ALTER TABLE debt_transactions ADD COLUMN void_reason TEXT`;
+  }
+
+  // Bank turnover: a sale's fiscal state reaches the server separately, after the sale (see
+  // sync/fiscal-status-sync.ts). Existing rows default to "sent" so an upgrade does not flood the
+  // first sync — apart from the last 90 days of fiscalized receipts, queued once so the bank
+  // figures cover recent history. Through the client, not SQL date arithmetic: Prisma owns how
+  // DateTime is stored in this file.
+  //
+  // The backfill keys off its own marker, not off the column being new: a till that died between
+  // the ALTER and the backfill would otherwise never run it. Re-running it is harmless anyway.
+  if (!(await columnExists(prisma, 'sales', 'fiscal_synced'))) {
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN fiscal_synced BOOLEAN NOT NULL DEFAULT 1`;
+  }
+  if (!(await prisma.systemSetting.findUnique({ where: { key: 'fiscal_sync_backfill' } }))) {
+    await prisma.sale.updateMany({
+      where: {
+        fiscalStatus: 'FISCALIZED',
+        regosFiscalAt: { gte: new Date(Date.now() - 90 * 86_400_000) },
+      },
+      data: { fiscalSynced: false },
+    });
+    await prisma.systemSetting.create({
+      data: { key: 'fiscal_sync_backfill', value: new Date().toISOString() },
+    });
   }
 
   // Migration 36: users.synced — the server's copy of a user wins unless this till changed it.

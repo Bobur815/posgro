@@ -362,10 +362,26 @@ export class StoresService {
       select: { id: true },
     });
 
+    // Every table that references the store (or a user, product or supplier of it) without
+    // onDelete: Cascade has to be emptied here, children before parents, or the final
+    // store.delete fails on a foreign key and the whole purge rolls back. A table added with such
+    // a relation needs a line here too — stores.purge.test.ts checks the list against the schema.
     for (const { id } of expired) {
       await this.prisma.$transaction([
         this.prisma.terminalHeartbeat.deleteMany({ where: { storeId: id } }),
+        this.prisma.terminalLog.deleteMany({ where: { storeId: id } }),
         this.prisma.systemSetting.deleteMany({ where: { storeId: id } }),
+        this.prisma.cashBankDeposit.deleteMany({ where: { storeId: id } }),
+        this.prisma.salePayment.deleteMany({ where: { storeId: id } }),
+        // Before users: every ledger row points at the person who owes.
+        this.prisma.debtTransaction.deleteMany({ where: { storeId: id } }),
+        // SmenaMovement rows cascade with their shift.
+        this.prisma.smena.deleteMany({ where: { storeId: id } }),
+        this.prisma.soldMarkingCode.deleteMany({ where: { storeId: id } }),
+        this.prisma.pendingMarkingCode.deleteMany({ where: { storeId: id } }),
+        // Before products: both point at them (InventoryCountItem cascades with its count).
+        this.prisma.stockMovement.deleteMany({ where: { storeId: id } }),
+        this.prisma.inventoryCount.deleteMany({ where: { storeId: id } }),
         this.prisma.supplierTransaction.deleteMany({ where: { storeId: id } }),
         this.prisma.inventoryArrival.deleteMany({ where: { storeId: id } }),
         this.prisma.sale.deleteMany({ where: { storeId: id } }),

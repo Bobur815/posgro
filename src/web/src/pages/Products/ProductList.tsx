@@ -1,11 +1,5 @@
 // src/web/src/pages/Products/ProductList.tsx
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ProductForm } from "./ProductForm";
@@ -36,18 +30,32 @@ import { keyframes } from "styled-components";
 import { formatDate } from "../../utils/formatters";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { debounce } from "../../utils/helpers";
-import {
-  MobileCard,
-  MobileCardList,
-  DesktopOnly,
-} from "../../components/common/MobileCard";
-import {
-  mxik as mxikApi,
-  aslBelgisi,
-} from "../../api/client";
+import { MobileCard, MobileCardList, DesktopOnly } from "../../components/common/MobileCard";
+import { mxik as mxikApi, aslBelgisi } from "../../api/client";
 import { BarcodeScannerModal } from "../../components/common/BarcodeScannerModal";
 import { useToast } from "@context/ToastContext";
 import { ListFilter } from "lucide-react";
+import { ColumnPicker } from "@components/common/ColumnPicker";
+import { ColumnDef, useColumnVisibility } from "@components/common/useColumnVisibility";
+
+// No picture column here: pictures are served by the till (posimg:), which the web cannot reach.
+type ColumnKey =
+  | "index"
+  | "id"
+  | "mxik"
+  | "barcode"
+  | "internalCode"
+  | "name"
+  | "price"
+  | "cost"
+  | "active"
+  | "stock"
+  | "minStock"
+  | "unit"
+  | "expiryDate"
+  | "supplier"
+  | "category"
+  | "actions";
 
 const pulse = keyframes`
   0% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb, 59, 130, 246), 0.5); }
@@ -182,10 +190,7 @@ export function ProductList() {
 
   // A product needs an MXIK code to be fiscalized (REGOS:VCR). Surface the ones missing it.
   const isMissingMxik = (p: Product) => p.isActive && !p.mxik;
-  const missingMxikCount = useMemo(
-    () => products.filter(isMissingMxik).length,
-    [products],
-  );
+  const missingMxikCount = useMemo(() => products.filter(isMissingMxik).length, [products]);
   const displayedProducts = useMemo(
     () => (missingMxikOnly ? products.filter(isMissingMxik) : products),
     [products, missingMxikOnly],
@@ -202,9 +207,7 @@ export function ProductList() {
     packageCode?: string;
     isMarked?: boolean | null;
   } | null>(null);
-  const [fabArrivalProductId, setFabArrivalProductId] = useState<string | null>(
-    null,
-  );
+  const [fabArrivalProductId, setFabArrivalProductId] = useState<string | null>(null);
 
   const reloadWithFilters = useCallback(() => {
     const params: ProductFilterParams = { ...filters };
@@ -266,9 +269,7 @@ export function ProductList() {
           if (info.expirationDate) initial.expiryDate = info.expirationDate;
           const MULTI_PACK_TYPES = ["GROUP", "BOX_LV_1", "BOX_LV_2"];
           if (info.packageType && MULTI_PACK_TYPES.includes(info.packageType)) {
-            toast.error(
-              `Multi-pack: ${info.packageType}. Check quantity before saving.`,
-            );
+            toast.error(`Multi-pack: ${info.packageType}. Check quantity before saving.`);
           }
         }
       } catch {
@@ -323,9 +324,7 @@ export function ProductList() {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && mobileCount < displayedProducts.length) {
-          setMobileCount((c) =>
-            Math.min(c + MOBILE_PAGE_SIZE, displayedProducts.length),
-          );
+          setMobileCount((c) => Math.min(c + MOBILE_PAGE_SIZE, displayedProducts.length));
         }
       },
       { rootMargin: "150px" },
@@ -384,20 +383,24 @@ export function ProductList() {
     if (success) reloadWithFilters();
   };
 
-  const columns = [
+  const allColumns: ColumnDef<Product, ColumnKey>[] = [
     {
       key: "index",
-      header: "#",
+      label: "#",
+      fixed: true,
+      defaultVisible: true,
       render: (_: Product, index: number) => pageOffset + index + 1,
     },
     {
       key: "id",
-      header: t("pos.id"),
+      label: t("pos.id"),
+      defaultVisible: true,
       render: (p: Product) => p.storeProductCode ?? p.id,
     },
     {
       key: "mxik",
-      header: "MXIK",
+      label: "MXIK",
+      defaultVisible: true,
       render: (product: Product) =>
         product.mxik ? (
           product.mxik
@@ -414,26 +417,42 @@ export function ProductList() {
           </span>
         ),
     },
-    { key: "barcode", header: t("products.barcode") },
+    {
+      key: "barcode",
+      label: t("products.barcode"),
+      defaultVisible: true,
+      render: (product: Product) => product.barcode,
+    },
     {
       key: "internalCode",
-      header: t("products.internalCode"),
+      label: t("products.internalCode"),
+      defaultVisible: true,
       render: (product: Product) => product.internalCode || "-",
     },
     {
       key: "name",
-      header: t("products.name"),
-      render: (product: Product) =>
-        i18n.language === "uz" ? product.nameUz : product.nameRu,
+      label: t("products.name"),
+      alwaysVisible: true,
+      defaultVisible: true,
+      render: (product: Product) => (i18n.language === "uz" ? product.nameUz : product.nameRu),
     },
     {
       key: "price",
-      header: t("products.price"),
+      label: t("products.price"),
+      defaultVisible: true,
       render: (product: Product) => formatCurrency(product.price),
     },
     {
+      key: "cost",
+      label: t("products.cost"),
+      adminOnly: true,
+      defaultVisible: false,
+      render: (product: Product) => (product.cost != null ? formatCurrency(product.cost) : "-"),
+    },
+    {
       key: "active",
-      header: t("products.status"),
+      label: t("products.status"),
+      defaultVisible: true,
       render: (product: Product) => (
         <span
           style={{
@@ -452,7 +471,8 @@ export function ProductList() {
     },
     {
       key: "stock",
-      header: t("products.stock"),
+      label: t("products.stock"),
+      defaultVisible: true,
       render: (product: Product) => (
         <span
           style={{
@@ -464,14 +484,27 @@ export function ProductList() {
       ),
     },
     {
+      key: "minStock",
+      label: t("products.minStock"),
+      defaultVisible: false,
+      render: (product: Product) => `${product.minStock} ${product.unit}`,
+    },
+    {
+      key: "unit",
+      label: t("products.unit"),
+      defaultVisible: false,
+      render: (product: Product) => product.unit,
+    },
+    {
       key: "expiryDate",
-      header: t("products.expiryDate"),
-      render: (product: Product) =>
-        product.expiryDate ? formatDate(product.expiryDate) : "-",
+      label: t("products.expiryDate"),
+      defaultVisible: true,
+      render: (product: Product) => (product.expiryDate ? formatDate(product.expiryDate) : "-"),
     },
     {
       key: "supplier",
-      header: t("products.supplier"),
+      label: t("products.supplier"),
+      defaultVisible: true,
       render: (product: Product) =>
         product.supplier
           ? i18n.language === "uz"
@@ -481,7 +514,8 @@ export function ProductList() {
     },
     {
       key: "category",
-      header: t("products.category"),
+      label: t("products.category"),
+      defaultVisible: true,
       render: (product: Product) =>
         product.category
           ? i18n.language === "uz"
@@ -489,12 +523,12 @@ export function ProductList() {
             : product.category.nameRu
           : "-",
     },
-  ];
-
-  if (isAdmin) {
-    columns.push({
+    {
       key: "actions",
-      header: t("common.actions"),
+      label: t("common.actions"),
+      fixed: true,
+      adminOnly: true,
+      defaultVisible: true,
       render: (product: Product) => (
         <div style={{ display: "flex", gap: "8px" }}>
           <Button
@@ -534,8 +568,38 @@ export function ProductList() {
           </Button>
         </div>
       ),
-    });
-  }
+    },
+  ];
+
+  const { visible, isVisible, toggle, reset } = useColumnVisibility(
+    "web.products.columns",
+    allColumns,
+  );
+  const availableColumns = allColumns.filter((c) => !c.adminOnly || isAdmin);
+  const picker = (
+    <ColumnPicker
+      columns={availableColumns.filter((c) => !c.fixed)}
+      visible={visible}
+      onToggle={toggle}
+      onReset={reset}
+    />
+  );
+  const columns = availableColumns
+    .filter((c) => isVisible(c.key))
+    .map((c, i) => ({
+      key: c.key,
+      // The picker sits in the first header cell, before the row number.
+      header:
+        i === 0 ? (
+          <>
+            {picker}
+            {c.label}
+          </>
+        ) : (
+          c.label
+        ),
+      render: c.render,
+    }));
 
   return (
     <Container>
@@ -551,10 +615,7 @@ export function ProductList() {
           }}
           size="small"
           variant={missingMxikOnly ? "primary" : "secondary"}
-          tooltip={t(
-            "products.missingMxikHint",
-            "Товары без MXIK не фискализируются",
-          )}
+          tooltip={t("products.missingMxikHint", "Товары без MXIK не фискализируются")}
           onClick={() => setMissingMxikOnly((prev) => !prev)}
         >
           <AlertTriangle size={16} /> {t("products.missingMxik", "Без MXIK")}
@@ -604,13 +665,7 @@ export function ProductList() {
             { value: "inactive", label: t("products.inactive") },
             { value: "all", label: t("filters.all") },
           ]}
-          value={
-            filters.active === true
-              ? "active"
-              : filters.active === false
-                ? "inactive"
-                : "all"
-          }
+          value={filters.active === true ? "active" : filters.active === false ? "inactive" : "all"}
           onChange={(e) => {
             const v = e.target.value;
             setFilters((prev) => ({
@@ -665,10 +720,7 @@ export function ProductList() {
                 value: (
                   <span
                     style={{
-                      color:
-                        product.stock <= product.minStock
-                          ? "#f44336"
-                          : "inherit",
+                      color: product.stock <= product.minStock ? "#f44336" : "inherit",
                     }}
                   >
                     {product.stock} {product.unit}
@@ -693,15 +745,11 @@ export function ProductList() {
               },
               {
                 label: t("products.expiryDate"),
-                value: product.expiryDate
-                  ? formatDate(product.expiryDate)
-                  : "-",
+                value: product.expiryDate ? formatDate(product.expiryDate) : "-",
               },
               {
                 label: t("products.status"),
-                value: product.isActive
-                  ? t("products.active")
-                  : t("products.inactive"),
+                value: product.isActive ? t("products.active") : t("products.inactive"),
               },
             ]}
             actions={
@@ -818,7 +866,6 @@ export function ProductList() {
           }}
         />
       )}
-
     </Container>
   );
 }

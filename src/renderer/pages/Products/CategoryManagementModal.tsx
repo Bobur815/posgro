@@ -6,6 +6,8 @@ import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+import { PictureEditor } from './PictureEditor';
+import { categoryPictureUrl } from '../../utils/pictures';
 import { useToast } from '../../context/ToastContext';
 import { Category, MxikGroup } from '@shared/types';
 import { convertUzbekText } from '@shared/utils/transliterator';
@@ -325,6 +327,15 @@ export function CategoryManagementModal({
                 options={mxikOptions}
                 placeholder={t('categories.selectMxikGroup')}
               />
+              {/* Keyed by the saved nameUz, so only an existing category can have one; renaming it
+                  drops back to the pre-filled picture for the new name. */}
+              {editingCategory && (
+                <PictureEditor
+                  owner="category"
+                  ownerKey={editingCategory.nameUz}
+                  previewUrl={categoryPictureUrl(editingCategory)}
+                />
+              )}
               <Actions>
                 <Button
                   type="button"

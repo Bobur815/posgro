@@ -30,6 +30,8 @@ export interface ReceiptData {
    * stored with paymentMethod "debt"; a part-paid one keeps the tender that took the money.
    */
   debtAmount?: number;
+  /** Split payment (paymentMethod "mixed"): one entry per tender, cash net of change. */
+  payments?: Array<{ method: string; amount: number }>;
   /** Fiscal receipt number (REGOS:VCR) — replaces internal receipt number when set */
   fiscalReceiptNumber?: string;
   /** Fiscal mark (OFD URL `s` param) shown above QR code */
@@ -100,6 +102,7 @@ const labels: Record<string, Record<string, string>> = {
     cash: "Наличные",
     card: "Карта",
     uzqr: "UzQR",
+    click: "Click",
     mixed: "Смешанная",
     debt: "Долг",
     paidNow: "Оплачено",
@@ -124,6 +127,7 @@ const labels: Record<string, Record<string, string>> = {
     cash: "Naqd",
     card: "Karta",
     uzqr: "UzQR",
+    click: "Click",
     mixed: "Aralash",
     debt: "Qarz",
     paidNow: "To'landi",
@@ -282,16 +286,29 @@ export function buildReceiptHTML(
     },
   );
 
-  const tenderLabel =
-    sale.paymentMethod === "cash"
+  const labelOf = (method: string) =>
+    method === "cash"
       ? l.cash
-      : sale.paymentMethod === "card"
+      : method === "card"
         ? l.card
-        : sale.paymentMethod === "uzqr"
+        : method === "uzqr"
           ? l.uzqr
-          : sale.paymentMethod === "debt"
-            ? l.debt
-            : l.mixed;
+          : method === "click"
+            ? l.click
+            : method === "debt"
+              ? l.debt
+              : l.mixed;
+  const tenderLabel = labelOf(sale.paymentMethod);
+  // A split receipt lists each tender under "Оплата: Смешанная".
+  const splitRowsHTML = (sale.payments ?? [])
+    .map(
+      (p) => `
+  <div class="total-row">
+    <span>&nbsp;&nbsp;${labelOf(p.method)}</span><span class="dots">.....................................................</span>
+    <span>${fmt(p.amount, cur)}</span>
+  </div>`,
+    )
+    .join("");
   // What went on the customer's tab: all of it ("debt"), or the rest of a part-paid receipt.
   const debtAmount =
     sale.paymentMethod === "debt" ? sale.finalAmount : Math.max(0, Number(sale.debtAmount) || 0);
@@ -396,7 +413,7 @@ export function buildReceiptHTML(
   ${receiptShows(settings, "receipt_show_payment") ? `<div class="total-row">
     <span>${l.payment}</span><span class="dots">.....................................................</span>
     <span>${paymentLabel}</span>
-  </div>${partPaid ? `
+  </div>${splitRowsHTML}${partPaid ? `
   <div class="total-row">
     <span>${l.paidNow}</span><span class="dots">.....................................................</span>
     <span>${fmt(sale.finalAmount - debtAmount, cur)}</span>

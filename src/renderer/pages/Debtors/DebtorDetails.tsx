@@ -1,7 +1,15 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
-import { AlertTriangle, Banknote, ChevronDown, ChevronRight, CreditCard } from "lucide-react";
+import {
+  AlertTriangle,
+  Banknote,
+  ChevronDown,
+  ChevronRight,
+  CreditCard,
+  Smartphone,
+  Trash2,
+} from "lucide-react";
 import { Modal } from "../../components/common/Modal";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
@@ -127,10 +135,57 @@ const Ledger = styled.div`
   overflow-y: auto;
 `;
 
-const Entry = styled.div<{ $charge: boolean }>`
+/**
+ * A voided row is never removed — the history has to say what happened and that it was undone —
+ * so it stays here, greyed and struck through, and no balance counts it.
+ */
+const Entry = styled.div<{ $charge: boolean; $voided?: boolean }>`
   border-radius: ${({ theme }) => theme.borderRadius};
-  background: ${({ $charge, theme }) =>
-    $charge ? `${theme.colors.error}12` : `${theme.colors.success}12`};
+  background: ${({ $charge, $voided, theme }) =>
+    $voided
+      ? theme.colors.background
+      : $charge
+        ? `${theme.colors.error}12`
+        : `${theme.colors.success}12`};
+  ${({ $voided }) => ($voided ? "opacity: 0.6;" : "")}
+`;
+
+/** The row button and, for an admin, the delete button beside it — a button may not hold one. */
+const EntryHead = styled.div`
+  display: flex;
+  align-items: center;
+`;
+
+const Struck = styled.span<{ $voided?: boolean }>`
+  text-decoration: ${({ $voided }) => ($voided ? "line-through" : "none")};
+`;
+
+const DeleteEntry = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  margin-right: 6px;
+  border: none;
+  border-radius: ${({ theme }) => theme.borderRadius};
+  background: none;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  cursor: pointer;
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.error};
+    background: ${({ theme }) => theme.colors.error}12;
+  }
+`;
+
+/** "Delete this entry?" — in place under the row, like the payoff question, not a second modal. */
+const VoidPrompt = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.spacing.sm};
+  padding: 0 12px 10px;
 `;
 
 /**
@@ -236,7 +291,10 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
 
   const [ledger, setLedger] = useState<DebtLedger | null>(null);
   const [amount, setAmount] = useState("");
-  const [tender, setTender] = useState<"cash" | "card">("cash");
+  const [tender, setTender] = useState<"cash" | "card" | "click">("cash");
+  // Same switch as the Checkout tile (Settings → Fiscal, this till only). A Click payment never
+  // reaches the drawer (no PAY_IN) and a receipt it pays off is fiscalised as cash.
+  const [clickEnabled, setClickEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   /** Which credit sale is unfolded, and the ones already fetched — one request per receipt. */
   const [openSaleId, setOpenSaleId] = useState<string | null>(null);
@@ -248,9 +306,11 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
   const [fiscalEnabled, setFiscalEnabled] = useState(false);
   /** A payment that clears the whole balance, waiting on "fiscalize or not". */
   const [confirmPayoff, setConfirmPayoff] = useState(false);
+  /** The ledger row an admin is about to delete, and why. */
+  const [voidingId, setVoidingId] = useState<string | null>(null);
+  const [voidReason, setVoidReason] = useState("");
 
-  const formatCurrency = (value: number) =>
-    formatCurrencyBase(value, i18n.language as "ru" | "uz");
+  const formatCurrency = (value: number) => formatCurrencyBase(value, i18n.language as "ru" | "uz");
 
   const load = useCallback(async () => {
     try {
@@ -269,6 +329,10 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
       .getConfig()
       .then((cfg) => setFiscalEnabled(cfg.enabled))
       .catch(() => {});
+    window.electronAPI.settings
+      .get("click_enabled")
+      .then((v) => setClickEnabled(v === "true"))
+      .catch(() => setClickEnabled(false));
   }, []);
 
   useEffect(() => {
@@ -293,7 +357,10 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
     try {
       // Through the debtor's own book: on a satellite a receipt rung up elsewhere is only on the
       // main, and this asks it.
-      const sale = (await window.electronAPI.debtors.getSale(debtorId, saleId)) as SaleDetail | null;
+      const sale = (await window.electronAPI.debtors.getSale(
+        debtorId,
+        saleId,
+      )) as SaleDetail | null;
       if (sale) setSales((prev) => ({ ...prev, [saleId]: sale }));
     } catch {
       // A receipt that has since been deleted simply stays unopened; the ledger row is the
@@ -358,16 +425,48 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
     }
   };
 
-  const name = ledger
-    ? i18n.language === "uz"
-      ? ledger.debtor.nameUz
-      : ledger.debtor.nameRu
-    : "";
+  /**
+   * Delete a ledger row. The main process refuses what would re-open a closed receipt — a
+   * purchase already paid off, and money that already closed receipts — with a key the toast
+   * turns into words.
+   */
+  const submitVoid = async (transactionId: string) => {
+    setBusy(true);
+    try {
+      await window.electronAPI.debtors.voidTransaction({
+        userId: debtorId,
+        transactionId,
+        reason: voidReason.trim() || undefined,
+      });
+      setVoidingId(null);
+      setVoidReason("");
+      await load();
+      toast.success(t("debtors.entryDeleted", "Запись удалена"));
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "";
+      toast.error(
+        message.includes("void_payment_settled")
+          ? t(
+              "debtors.errors.voidPaymentSettled",
+              "Эта оплата уже закрыла чеки — исправьте долг корректировкой",
+            )
+          : message.includes("void_charge_settled")
+            ? t(
+                "debtors.errors.voidChargeSettled",
+                "Эта покупка уже оплачена — исправьте долг корректировкой",
+              )
+            : t("common.error"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const name = ledger ? (i18n.language === "uz" ? ledger.debtor.nameUz : ledger.debtor.nameRu) : "";
 
   // Written together and never expected to differ; shown side by side when they do, because a
   // silently wrong balance is the one failure a debt ledger must not have.
-  const drifted =
-    ledger != null && Math.abs(ledger.balance - ledger.ledgerBalance) > 0.01;
+  const drifted = ledger != null && Math.abs(ledger.balance - ledger.ledgerBalance) > 0.01;
 
   const describe = (txn: DebtTransaction) => {
     if (txn.type === "CHARGE") return t("debtors.entryCharge", "Покупка в долг");
@@ -381,9 +480,7 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
         <>
           <Balance $owing={ledger.balance > 0}>
             <BalanceLabel>
-              {ledger.balance >= 0
-                ? t("debtors.debt", "Долг")
-                : t("debtors.prepaidLabel", "Аванс")}
+              {ledger.balance >= 0 ? t("debtors.debt", "Долг") : t("debtors.prepaidLabel", "Аванс")}
               {ledger.debtor.debtDueDate && (
                 <>
                   {" · "}
@@ -459,6 +556,15 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
               <Tender type="button" $selected={tender === "card"} onClick={() => setTender("card")}>
                 <CreditCard size={16} /> {t("pos.card")}
               </Tender>
+              {clickEnabled && (
+                <Tender
+                  type="button"
+                  $selected={tender === "click"}
+                  onClick={() => setTender("click")}
+                >
+                  <Smartphone size={16} /> {t("pos.click")}
+                </Tender>
+              )}
               <Button onClick={handlePay} disabled={busy}>
                 {t("debtors.acceptPayment", "Принять")}
               </Button>
@@ -476,48 +582,121 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
                 const expandable = Boolean(txn.saleId);
                 const expanded = expandable && openSaleId === txn.saleId;
                 const sale = txn.saleId ? sales[txn.saleId] : undefined;
+                const voided = Boolean(txn.voidedAt);
+                // A purchase deletes like a payment, until it is paid off: a closed receipt (maybe
+                // fiscalized) is never re-opened. The main process refuses that too.
+                const voidable = isAdmin && !voided && !(txn.type === "CHARGE" && txn.settledAt);
                 return (
-                  <Entry key={txn.id} $charge={charge}>
-                    <EntryRow
-                      type="button"
-                      $expandable={expandable}
-                      onClick={() => toggleSale(txn.saleId)}
-                      title={
-                        expandable
-                          ? t("debtors.showSaleDetails", "Показать состав чека")
-                          : undefined
-                      }
-                    >
-                      <EntryWhat>
-                        <span>
-                          {expandable &&
-                            (expanded ? (
-                              <ChevronDown size={13} style={{ verticalAlign: "middle" }} />
-                            ) : (
-                              <ChevronRight size={13} style={{ verticalAlign: "middle" }} />
-                            ))}{" "}
-                          {describe(txn)}
-                          {sale ? ` · №${sale.receiptNumber}` : ""}
-                          {txn.settledAt && ` · ${t("debtors.settled", "закрыт")}`}
-                        </span>
-                        <EntryWhen>
-                          {new Date(txn.createdAt).toLocaleString(
-                            i18n.language === "uz" ? "uz-UZ" : "ru-RU",
-                            { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" },
+                  <Entry key={txn.id} $charge={charge} $voided={voided}>
+                    <EntryHead>
+                      <EntryRow
+                        type="button"
+                        $expandable={expandable}
+                        onClick={() => toggleSale(txn.saleId)}
+                        title={
+                          expandable
+                            ? t("debtors.showSaleDetails", "Показать состав чека")
+                            : undefined
+                        }
+                      >
+                        <EntryWhat>
+                          <Struck $voided={voided}>
+                            {expandable &&
+                              (expanded ? (
+                                <ChevronDown size={13} style={{ verticalAlign: "middle" }} />
+                              ) : (
+                                <ChevronRight size={13} style={{ verticalAlign: "middle" }} />
+                              ))}{" "}
+                            {describe(txn)}
+                            {sale ? ` · №${sale.receiptNumber}` : ""}
+                            {txn.settledAt && ` · ${t("debtors.settled", "закрыт")}`}
+                          </Struck>
+                          {voided && (
+                            <EntryWhen>
+                              {t("debtors.deleted", "удалено")}{" "}
+                              {new Date(txn.voidedAt as string | Date).toLocaleString(
+                                i18n.language === "uz" ? "uz-UZ" : "ru-RU",
+                                {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                },
+                              )}
+                              {txn.voidReason ? ` · ${txn.voidReason}` : ""}
+                            </EntryWhen>
                           )}
-                          {txn.dueDate
-                            ? ` · ${t("debtors.dueDate", "Срок")}: ${new Date(
-                                txn.dueDate,
-                              ).toLocaleDateString(i18n.language === "uz" ? "uz-UZ" : "ru-RU")}`
-                            : ""}
-                          {txn.note ? ` · ${txn.note}` : ""}
-                        </EntryWhen>
-                      </EntryWhat>
-                      <EntryAmount $charge={charge}>
-                        {charge ? "+" : "−"}
-                        {formatCurrency(Math.abs(txn.amount))}
-                      </EntryAmount>
-                    </EntryRow>
+                          <EntryWhen>
+                            {new Date(txn.createdAt).toLocaleString(
+                              i18n.language === "uz" ? "uz-UZ" : "ru-RU",
+                              {
+                                day: "2-digit",
+                                month: "2-digit",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              },
+                            )}
+                            {txn.dueDate
+                              ? ` · ${t("debtors.dueDate", "Срок")}: ${new Date(
+                                  txn.dueDate,
+                                ).toLocaleDateString(i18n.language === "uz" ? "uz-UZ" : "ru-RU")}`
+                              : ""}
+                            {txn.note ? ` · ${txn.note}` : ""}
+                          </EntryWhen>
+                        </EntryWhat>
+                        <EntryAmount $charge={charge}>
+                          <Struck $voided={voided}>
+                            {charge ? "+" : "−"}
+                            {formatCurrency(Math.abs(txn.amount))}
+                          </Struck>
+                        </EntryAmount>
+                      </EntryRow>
+                      {voidable && (
+                        <DeleteEntry
+                          type="button"
+                          title={t("debtors.deleteEntry", "Удалить запись")}
+                          aria-label={t("debtors.deleteEntry", "Удалить запись")}
+                          onClick={() => {
+                            setVoidingId(voidingId === txn.id ? null : txn.id);
+                            setVoidReason("");
+                          }}
+                        >
+                          <Trash2 size={16} />
+                        </DeleteEntry>
+                      )}
+                    </EntryHead>
+
+                    {voidingId === txn.id && (
+                      <VoidPrompt>
+                        <FiscalQuestion>
+                          {t(
+                            "debtors.deleteConfirm",
+                            "Запись останется в истории зачёркнутой, долг будет пересчитан.",
+                          )}
+                        </FiscalQuestion>
+                        <Input
+                          value={voidReason}
+                          placeholder={t("debtors.deleteReason", "Причина (необязательно)")}
+                          onChange={(e) => setVoidReason(e.target.value)}
+                        />
+                        <FiscalActions>
+                          <Button
+                            variant="secondary"
+                            onClick={() => setVoidingId(null)}
+                            disabled={busy}
+                          >
+                            {t("common.cancel")}
+                          </Button>
+                          <Button
+                            variant="danger"
+                            onClick={() => submitVoid(txn.id)}
+                            disabled={busy}
+                          >
+                            {t("debtors.deleteEntry", "Удалить запись")}
+                          </Button>
+                        </FiscalActions>
+                      </VoidPrompt>
+                    )}
 
                     {expanded &&
                       (sale ? (

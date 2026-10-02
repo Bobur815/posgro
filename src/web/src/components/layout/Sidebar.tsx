@@ -23,6 +23,7 @@ import {
   Inbox,
   Newspaper,
   Scale,
+  Landmark,
   type LucideIcon,
 } from "lucide-react";
 import { useAuthStore } from "../../store/auth-store";
@@ -366,6 +367,7 @@ export function Sidebar() {
                     Scale,
                     t("nav.reconciliation"),
                   )}
+                  {renderNavItem("/products/stock/bank", Landmark, t("nav.bank"))}
                 </NavSection>
               )}
 

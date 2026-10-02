@@ -5,6 +5,7 @@ import {
   IsIn,
   IsArray,
   IsDateString,
+  IsBoolean,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -69,6 +70,38 @@ export class SyncDebtTransactionDto {
   @ApiProperty({ example: '2026-09-21T10:30:00.000Z' })
   @IsDateString()
   createdAt!: string;
+
+  // Multi-till replication. All optional: terminals before it do not send them.
+
+  @ApiPropertyOptional({ example: 'T1', description: 'Till that wrote the row' })
+  @IsOptional()
+  @IsString()
+  originTerminalId?: string | null;
+
+  @ApiPropertyOptional({ example: 'cash', description: 'CHARGE rows: tender that settled it' })
+  @IsOptional()
+  @IsString()
+  settleTender?: string | null;
+
+  @ApiPropertyOptional({ description: 'CHARGE rows: whether the settling till chose to fiscalize' })
+  @IsOptional()
+  @IsBoolean()
+  settleFiscalize?: boolean | null;
+
+  @ApiPropertyOptional({ description: 'Set when an admin voided (deleted) the row at a till' })
+  @IsOptional()
+  @IsDateString()
+  voidedAt?: string | null;
+
+  @ApiPropertyOptional({ example: 'cladmin123' })
+  @IsOptional()
+  @IsString()
+  voidedBy?: string | null;
+
+  @ApiPropertyOptional({ example: 'Ошибочная оплата' })
+  @IsOptional()
+  @IsString()
+  voidReason?: string | null;
 }
 
 export class SyncDebtBulkDto {

@@ -107,7 +107,8 @@
     "smena": "Smena",
     "markingCheck": "Markirovka tekshiruvi",
     "collapse": "Yig'ish",
-    "expand": "Kengaytirish"
+    "expand": "Kengaytirish",
+    "bank": "Bank"
   },
   "markingCheck": {
     "title": "Markirovka tekshiruvi",
@@ -205,6 +206,17 @@
     "cash": "Naqd",
     "card": "Karta",
     "uzqr": "UzQR",
+    "click": "Click",
+    "mixed": "Aralash",
+    "splitPayment": "To'lovni bo'lish",
+    "singlePayment": "Bitta to'lov",
+    "splitRemaining": "Qoldiq",
+    "splitRemainingHint": "Tanlangan qatorga to'lanishi qolgan summani yozish",
+    "splitShort": "{{amount}} yetmaydi",
+    "splitNonCashOver": "Naqdsiz qatorlar chek summasidan oshib ketdi — qaytimni faqat naqd puldan berish mumkin",
+    "splitEmpty": "Summalarni kiriting",
+    "splitChange": "Qaytim (naqd)",
+    "splitPaid": "To'landi",
     "checkout": "To'lov",
     "totalToPay": "To'lov summasi",
     "itemsCount": "Mahsulotlar soni",
@@ -305,9 +317,39 @@
     "expectedCash": "Kassada bo'lishi kerak",
     "actualCash": "Kassada amalda",
     "cashVariance": "Kassa bo'yicha farq",
-    "shiftCount": "Hisobga olingan smenalar"
+    "shiftCount": "Hisobga olingan smenalar",
+    "bank": {
+      "title": "Bank",
+      "card": "Karta",
+      "cardNote": "Kassada va qarz to'lovlari karta orqali",
+      "uzqr": "UzQR",
+      "fiscalCash": "Fiskallashtirilgan naqd pul",
+      "fiscalClick": "Fiskallashtirilgan Click",
+      "fiscalClickNote": "Chekda naqd pul sifatida",
+      "turnover": "Bank bo'yicha aylanma",
+      "turnoverNote": "Karta + UzQR + fiskallashtirilgan naqd pul va Click",
+      "depositedInPeriod": "Davr ichida bankka topshirildi",
+      "unreported": "Fiskal holati noma'lum {{count}} ta naqd chek, {{amount}} (kassaning eski versiyasi yoki hali sinxronlanmagan) — ular fiskallashtirilgan naqd pulga kirmaydi.",
+      "toDeposit": "Bankka topshirish qoldi",
+      "toDepositNote": "{{date}} dan: fiskallashtirildi {{cash}} naqd va {{click}} Click, topshirildi {{deposited}}",
+      "noStartDate": "Bankka topshiriladigan naqd pul qaysi sanadan hisoblanishini ko'rsating.",
+      "amount": "Summa, so'm",
+      "amountRequired": "Summani ko'rsating",
+      "date": "Sana",
+      "note": "Izoh (ixtiyoriy)",
+      "addDeposit": "Bankka topshirishni yozish",
+      "depositSaved": "Bankka topshirish yozildi",
+      "voided": "bekor qilingan",
+      "void": "Yozuvni bekor qilish",
+      "voidConfirm": "{{amount}} topshirish ro'yxatda chizilgan holda qoladi va topshiriladigan naqd puldan ayirilmaydi.",
+      "off": "Bank bo'yicha aylanma hisobi bu serverda o'chirilgan.",
+      "offHint": "U serverdagi BANK_TURNOVER_ENABLED o'zgaruvchisi orqali yoqiladi."
+    }
   },
   "products": {
+    "image": "Rasm",
+    "columns": "Ustunlar",
+    "columnsReset": "Asl holiga qaytarish",
     "title": "Mahsulotlar",
     "name": "Nomi",
     "nameRu": "Nomi (RU)",
@@ -657,7 +699,10 @@
     "groupConnection": "Ulanish",
     "groupVat": "QQS",
     "groupBehaviour": "Chop etish va markirovka",
-    "groupUzqr": "UzQR"
+    "groupUzqr": "UzQR",
+    "groupClick": "Click",
+    "clickEnabled": "Ushbu kassada Click orqali to'lovni qabul qilish",
+    "clickHint": "REGOS chekida Click to'lovi naqd pul sifatida yuboriladi. Kassa qutisiga tushmaydi; hisobotlarda alohida qatorda."
   },
   "reports": {
     "title": "Hisobotlar",
@@ -671,6 +716,8 @@
     "cashPayments": "Naqd to'lov",
     "cardPayments": "Karta orqali to'lov",
     "uzqrPayments": "UzQR orqali to'lov",
+    "clickPayments": "Click orqali to'lov",
+    "mixedPayments": "Aralash to'lov",
     "transactions": "ta tranzaksiya",
     "items": "dona",
     "perSale": "har bir sotuv uchun",
@@ -794,6 +841,13 @@
     "pinSet": "PIN-kod o'rnatilgan",
     "removePin": "PIN-kodni o'chirish"
   },
+  "pictures": {
+    "upload": "Rasm yuklash",
+    "remove": "O'z rasmini olib tashlash",
+    "hint": "PNG, JPG yoki WebP. Faqat shu terminalda saqlanadi. O'z rasmi bo'lmasa, MXIK bo'yicha rasm ko'rsatiladi.",
+    "saveFailed": "Rasmni saqlab bo'lmadi",
+    "saveProductFirst": "Avval mahsulotni saqlang — rasmni tahrirlashda qo'shish mumkin."
+  },
   "settings": {
     "title": "Sozlamalar",
     "userSettings": "Foydalanuvchi sozlamalari",
@@ -845,6 +899,9 @@
     "receiptHeader": "Chek sarlavhasi",
     "receiptFooter": "Chek pastki qismi",
     "terminalIdHint": "Ushbu terminal uchun noyob identifikator. Har bir qurilma o'z ID ga ega bo'lishi kerak (masalan: T1, T2).",
+    "pictures": "Mahsulot rasmlari",
+    "showProductImages": "Mahsulot va kategoriya rasmlarini ko'rsatish",
+    "showProductImagesHint": "Faqat shu terminalda. Rasmlar kassada saqlanadi va internet bo'lsa MXIK kodi bo'yicha tasnif.soliq.uz dan yuklanadi. Sekin kompyuterda o'chirib qo'ygan ma'qul.",
     "synchronization": "Sinxronizatsiya",
     "syncInterval": "Sinxronizatsiya oralig'i",
     "minutes": "daqiqa",
@@ -1071,6 +1128,9 @@
     "insufficientStock": "\"{{name}}\" mahsuloti yetarli emas. Mavjud: {{available}}, so'ralgan: {{requested}}",
     "noInternet": "Internet aloqasi yo'q",
     "saleAlreadyFiscalized": "Chek allaqachon fiskallashtirilgan — uni o'zgartirib bo'lmaydi. Qaytarishni rasmiylashtiring va yangi chek chiqaring.",
+    "splitNotCovered": "Bo'lingan to'lov summalari chekni qoplamaydi",
+    "splitWithDebt": "Bo'lingan to'lovni qarzga sotish bilan birga ishlatib bo'lmaydi",
+    "splitBadTender": "Bo'lingan to'lovda noma'lum to'lov usuli",
     "saleHasPayment": "Chek bo'yicha to'lov qabul qilingan — uni o'zgartirib bo'lmaydi. Qaytarishni rasmiylashtiring va yangi chek chiqaring.",
     "mainUnreachable": "Asosiy kassa bilan aloqa yo'q — savdo o'tkazilmadi. Savat saqlandi: asosiy kassa yoqilgan va tarmoqda ekanini tekshirib, qayta urinib ko'ring.",
     "mainSessionExpired": "Asosiy kassadagi sessiya tugadi. Chiqib, qayta kiring.",
@@ -1426,6 +1486,7 @@
     "notFiscalizedShort": "fiskal emas",
     "cashSales": "Naqd savdo",
     "cardSales": "Karta bilan",
+    "ofWhichClick": "shu jumladan Click",
     "returns": "Qaytarishlar",
     "discounts": "Chegirmalar",
     "totalRevenue": "Jami daromad",
@@ -1527,9 +1588,9 @@
     }
   },
   "superAdmin": {
-    "title": "Administrator tasdig'i",
-    "hint": "Bu amal himoyalangan. Davom etish uchun do'kon administratori parolini kiriting.",
-    "wrongPassword": "Parol noto'g'ri. Agar urinishlar juda ko'p bo'lsa, bir daqiqa kuting."
+    "title": "Menejer paroli",
+    "hint": "Bu amal himoyalangan. Do'kon menejeri parolini kiriting — uni super-administrator veb-panelda o'rnatadi (Do'konlar → do'kon → «Manager password»). Kirish paroli bu yerda ishlamaydi.",
+    "wrongPassword": "Menejer paroli noto'g'ri. 5 ta muvaffaqiyatsiz urinishdan keyin kiritish bir daqiqaga bloklanadi — hatto to'g'ri parol ham."
   },
   "debtors": {
     "title": "Qarzdorlar",
@@ -1578,6 +1639,15 @@
     "saleTotal": "Chek bo'yicha jami",
     "paidAtCounter": "Kassada to'langan",
     "readOnlyNote": "Faqat ko'rish uchun. Qarzlar kassada olinadi va yopiladi — xaridor, pul va fiskal modul o'sha yerda.",
-    "dashboardDescription": "Kim do'konga qancha qarzdor — faqat ko'rish"
+    "dashboardDescription": "Kim do'konga qancha qarzdor — faqat ko'rish",
+    "deleteEntry": "Yozuvni o'chirish",
+    "deleteConfirm": "Yozuv tarixda chizilgan holda qoladi, qarz qayta hisoblanadi.",
+    "deleteReason": "Sabab (ixtiyoriy)",
+    "deleted": "o'chirilgan",
+    "entryDeleted": "Yozuv o'chirildi",
+    "errors": {
+      "voidPaymentSettled": "Bu to'lov cheklarni yopgan — qarzni tuzatish orqali to'g'rilang",
+      "voidChargeSettled": "Bu xarid allaqachon to'langan — qarzni tuzatish orqali to'g'rilang"
+    }
   }
 }

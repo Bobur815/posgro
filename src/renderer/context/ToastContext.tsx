@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 import styled, { keyframes, css } from 'styled-components';
 
 // Toast types
@@ -175,8 +175,16 @@ export function ToastProvider({ children }: ToastProviderProps) {
     [showToast]
   );
 
+  // Stable across renders: every callback above is memoized, and a fresh object here made each
+  // toast shown change `useToast()`'s identity — any effect depending on it ran again, and a
+  // failing fetch that toasts became a request loop (web BankTurnoverSection, 2026-10-01).
+  const value = useMemo(
+    () => ({ showToast, success, error, warning, info }),
+    [showToast, success, error, warning, info],
+  );
+
   return (
-    <ToastContext.Provider value={{ showToast, success, error, warning, info }}>
+    <ToastContext.Provider value={value}>
       {children}
       <ToastContainer>
         {toasts.map((toast) => (

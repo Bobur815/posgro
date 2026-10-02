@@ -3,7 +3,12 @@
 // LOWER-CASE values. The upper-case PAYMENT_METHODS block below is a separate, older
 // vocabulary used elsewhere — the two have always been distinct, so don't merge them.
 
-export const SALE_TENDERS = ["cash", "card", "uzqr"] as const;
+/**
+ * `click` (Click app payment) is the odd one: the money goes to the shop's Click account, never the
+ * drawer — but it is fiscalised as CASH (see isFiscalCashTender) and kept as its own tender for
+ * analytics. The Checkout tile shows only on tills with the `click_enabled` setting on.
+ */
+export const SALE_TENDERS = ["cash", "card", "uzqr", "click"] as const;
 
 export type SaleTender = (typeof SALE_TENDERS)[number];
 
@@ -32,15 +37,32 @@ export function isCashTender(method: string | null | undefined): boolean {
   return (method ?? "").toLowerCase() === "cash";
 }
 
+export function isClickTender(method: string | null | undefined): boolean {
+  return (method ?? "").toLowerCase() === "click";
+}
+
+/**
+ * What the fiscal receipt (REGOS) and the bank-turnover "fiscalised cash" side count as cash:
+ * cash and Click. Never use this for the drawer — Click money is not in the till; that is
+ * isCashTender.
+ */
+export function isFiscalCashTender(method: string | null | undefined): boolean {
+  return isCashTender(method) || isClickTender(method);
+}
+
 /** i18n keys for the POS tender labels, so no screen hardcodes "Карта" / "UzQR". */
 export const SALE_TENDER_I18N_KEYS: Record<SaleTender, string> = {
   cash: "pos.cash",
   card: "pos.card",
   uzqr: "pos.uzqr",
+  click: "pos.click",
 };
 
 /** Brand navy sampled from the UzQR logo — the button field must match the artwork. */
 export const UZQR_BRAND_COLOR = "#0d2a73";
+
+/** Brand blue sampled from the Click logo (src/renderer/assets/Click-light_no_background.png). */
+export const CLICK_BRAND_COLOR = "#0065ff";
 
 // ==================== SALE PAYMENT METHODS ====================
 // Used for POS checkout (CASH, CARD, MIXED)

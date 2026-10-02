@@ -78,6 +78,10 @@ export async function printZXReport(params: {
     hr,
     row2(`Naqd savdo (${stats.cashSalesCount} chek):`, fmt(stats.cashSalesAmount) + " so'm", W),
     row2(`Karta (${stats.cardSalesCount} chek):`, fmt(stats.cardSalesAmount) + " so'm", W),
+    // Click is inside the card line above (it never reaches the drawer), broken out for the owner.
+    ...(stats.clickSalesAmount
+      ? [row2(`  shu jumladan Click (${stats.clickSalesCount ?? 0}):`, fmt(stats.clickSalesAmount) + " so'm", W)]
+      : []),
     row2(`Qaytarish (${stats.returnCount} chek):`, fmt(stats.returnAmount) + " so'm", W),
     row2("Chegirmalar:", fmt(stats.totalDiscounts) + " so'm", W),
     row2("Jami daromad:", fmt(stats.totalRevenue) + " so'm", W),

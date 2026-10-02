@@ -78,8 +78,9 @@ nul
 # Generated (Prisma)
 src/generated/
 
-# Claude Code
-.claude/
+# Claude Code (personal, not shared)
+.claude/settings.local.json
+CLAUDE.local.md
 
 # Uploaded files (keep the directory, ignore its contents)
 /uploads/*
@@ -112,3 +113,6 @@ CLAUDE.local.md
 # Hero video: raw footage and scripts/encode-hero.sh output (uploaded from the dashboard)
 assets/raw/
 assets/out/
+
+# Picture seed: every tasnif candidate, for review (scripts/fetch-mxik-images.ts). Not shipped.
+scripts/.mxik-candidates/

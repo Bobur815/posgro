@@ -12,6 +12,10 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { SalesService } from './sales.service';
 import { SyncSaleDto } from './dto/sync-sale.dto';
+import { SyncFiscalBulkDto } from './dto/sync-fiscal.dto';
+import { SalesFiscalService } from './sales-fiscal.service';
+import { SyncSalePaymentsBulkDto } from './dto/sync-payments.dto';
+import { SalesPaymentsService } from './sales-payments.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { StoreGuard } from '../../common/guards/store.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -24,7 +28,11 @@ import { SaleFilters } from './types/sale.types';
 @UseGuards(JwtAuthGuard, StoreGuard)
 @ApiBearerAuth('JWT-auth')
 export class SalesController {
-  constructor(private readonly salesService: SalesService) {}
+  constructor(
+    private readonly salesService: SalesService,
+    private readonly salesFiscal: SalesFiscalService,
+    private readonly salesPayments: SalesPaymentsService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Get sales list (filtered by role)' })
@@ -73,6 +81,28 @@ export class SalesController {
   @ApiResponse({ status: 200, description: 'Sale already synced' })
   async sync(@CurrentStore() storeId: string, @Body() syncSaleDto: SyncSaleDto) {
     return this.salesService.syncFromTerminal(storeId, syncSaleDto);
+  }
+
+  /**
+   * Fiscal state of sales already synced — sent after the sale, once the till has fiscalised it.
+   * Any staff session, like /sales/sync: the till of a cashier-only shift reports it too.
+   */
+  @Post('fiscal-sync')
+  @ApiOperation({ summary: 'Fiscal status of synced sales, from a POS terminal' })
+  @ApiResponse({ status: 201, description: 'Receipt numbers recorded' })
+  async fiscalSync(@CurrentStore() storeId: string, @Body() dto: SyncFiscalBulkDto) {
+    return this.salesFiscal.syncFromTerminal(storeId, dto.sales);
+  }
+
+  /**
+   * Tenders of split-payment receipts — sent apart from /sales/sync, which rejects unknown fields
+   * on an older server. Same access as /sales/sync.
+   */
+  @Post('payments-sync')
+  @ApiOperation({ summary: 'Split-payment lines of synced sales, from a POS terminal' })
+  @ApiResponse({ status: 201, description: 'Receipt numbers recorded' })
+  async paymentsSync(@CurrentStore() storeId: string, @Body() dto: SyncSalePaymentsBulkDto) {
+    return this.salesPayments.syncFromTerminal(storeId, dto.sales);
   }
 
   @Delete(':id')

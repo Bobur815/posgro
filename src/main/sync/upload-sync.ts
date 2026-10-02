@@ -2,6 +2,7 @@ import { getPrismaClient } from "../database/sqlite-client";
 import { getAppConfig } from "../config/app-config";
 import { getServerToken } from "./queue-manager";
 import { LOCAL_ONLY_SETTINGS } from "./local-only-settings";
+import { endpointKnownMissing, noteEndpointStatus } from "./missing-endpoints";
 import type {
   Category,
   Supplier,
@@ -57,10 +58,9 @@ export async function uploadLocalData(): Promise<void> {
   const since = await getLastUploadTime(prisma);
 
   await uploadUsers(prisma, token);
-  // After the users: a ledger row whose person the server has not seen yet would fail its
-  // foreign key, and the server skips it rather than taking the batch down — so sending the
-  // people first is what keeps that from happening at all on a terminal's first upload.
-  await uploadDebtTransactions(prisma, token);
+  // The nasiya ledger is no longer uploaded here: it goes from every session, cashier included,
+  // through uploadNasiya() — which the sync cycle runs right after this, so the people above still
+  // land before their ledger rows.
   await uploadCategories(prisma, token, since);
   await uploadSuppliers(prisma, token, since);
   await uploadProducts(prisma, token, since);
@@ -68,6 +68,53 @@ export async function uploadLocalData(): Promise<void> {
   await uploadSettings(prisma, token);
 
   await setLastUploadTime(prisma);
+}
+
+/**
+ * Nasiya, from any session: customers this till created or edited, then the ledger.
+ *
+ * Outside the admin-only master-data upload on purpose. A cashier creates customers and takes
+ * payments all day; when only an admin session could send them, a cashier-only till's debts never
+ * left it, and no other till of the store could see them. Customers go first, so their ledger rows
+ * do not arrive ahead of the person (the server would skip those until the next cycle).
+ *
+ * `staffUploaded`: this cycle already sent every user through the admin path (uploadUsers), which
+ * includes customers — no need to send them twice.
+ */
+export async function uploadNasiya(opts: { staffUploaded: boolean }): Promise<void> {
+  const prisma = getPrismaClient();
+  const token = getServerToken();
+  if (!token) return;
+
+  if (!opts.staffUploaded) await uploadClients(prisma, token);
+  await uploadDebtTransactions(prisma, token);
+}
+
+/** Customers only, through the endpoint a cashier's session may call. */
+async function uploadClients(
+  prisma: ReturnType<typeof getPrismaClient>,
+  token: string,
+): Promise<void> {
+  const localConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+  const storeId = localConfig?.storeId;
+  const clients = await prisma.user.findMany({
+    where: { role: 'CLIENT', ...(storeId ? { storeId } : {}) },
+  });
+  if (clients.length === 0) return;
+  if (endpointKnownMissing('users/clients/sync-bulk')) return;
+
+  const res = await apiPost('/users/clients/sync-bulk', token, {
+    users: clients.map(toUserPayload),
+  });
+  // A server from before this endpoint: an admin session still sends customers the old way.
+  noteEndpointStatus('users/clients/sync-bulk', res.status);
+  if (res.status === 404) return;
+  if (!res.ok) {
+    const text = await res.text();
+    console.error(`Failed to upload customers (HTTP ${res.status}): ${text}`);
+    return;
+  }
+  await markUsersSent(prisma, clients);
 }
 
 /**
@@ -89,6 +136,7 @@ async function uploadDebtTransactions(
   });
   if (rows.length === 0) return;
 
+  const terminalId = getAppConfig().terminalId;
   const payload = rows.map((t: DebtTransactionRow) => ({
     id: t.id,
     userId: t.userId,
@@ -102,6 +150,14 @@ async function uploadDebtTransactions(
     note: t.note ?? undefined,
     createdBy: t.createdBy,
     createdAt: new Date(t.createdAt).toISOString(),
+    // A row pulled from another till keeps its origin; one written here before the column
+    // existed was written by this till.
+    originTerminalId: t.originTerminalId ?? terminalId ?? undefined,
+    settleTender: t.settleTender ?? undefined,
+    settleFiscalize: t.settleFiscalize ?? undefined,
+    voidedAt: t.voidedAt ? new Date(t.voidedAt).toISOString() : undefined,
+    voidedBy: t.voidedBy ?? undefined,
+    voidReason: t.voidReason ?? undefined,
   }));
 
   const res = await apiPost('/debtors/sync-bulk', token, { transactions: payload });
@@ -112,13 +168,33 @@ async function uploadDebtTransactions(
   }
 
   // Only what the server actually took. A row it skipped — its user has not landed yet — stays
-  // unsynced and goes again next cycle, by which time uploadUsers() will have fixed the cause.
-  const { synced } = (await res.json().catch(() => ({ synced: 0 }))) as { synced?: number };
-  if (!synced) return;
-  await prisma.debtTransaction.updateMany({
-    where: { id: { in: rows.slice(0, synced).map((t: DebtTransactionRow) => t.id) } },
-    data: { synced: true },
-  });
+  // unsynced and goes again next cycle, by which time the customer upload will have fixed it.
+  //
+  // By id, never by count: the server skips rows anywhere in the batch, and marking the first
+  // `synced` rows marked a skipped one as sent — it never reached the server again.
+  const body = (await res.json().catch(() => ({}))) as { synced?: number; syncedIds?: string[] };
+  const sentIds = rows.map((t: DebtTransactionRow) => t.id);
+  const taken = Array.isArray(body.syncedIds)
+    ? body.syncedIds.filter((id) => sentIds.includes(id))
+    : // A server from before syncedIds: only an all-or-nothing answer is safe to act on. Anything
+      // less goes again; re-sending is an idempotent upsert there.
+      body.synced === rows.length
+      ? sentIds
+      : [];
+  if (taken.length === 0) return;
+
+  // Matched on what was sent: a charge settled, or a row voided, while the request was in flight
+  // changed after the copy above was taken, and must go again.
+  for (const t of rows.filter((r: DebtTransactionRow) => taken.includes(r.id))) {
+    await prisma.debtTransaction.updateMany({
+      where: {
+        id: t.id,
+        settledAt: t.settledAt ?? null,
+        voidedAt: t.voidedAt ?? null,
+      },
+      data: { synced: true },
+    });
+  }
 }
 
 export async function uploadUsers(
@@ -132,7 +208,24 @@ export async function uploadUsers(
 
   if (users.length === 0) return;
 
-  const payload = users.map((u: User) => ({
+  const res = await apiPost("/users/sync-bulk", token, { users: users.map(toUserPayload) });
+  if (!res.ok) {
+    const text = await res.text();
+    console.error(`Failed to upload users (HTTP ${res.status}): ${text}`);
+    return;
+  }
+
+  const result = (await res.json().catch(() => null)) as { errors?: string[] } | null;
+  if (result?.errors?.length) {
+    console.warn(`[uploadUsers] server refused some users: ${result.errors.join("; ")}`);
+  }
+
+  await markUsersSent(prisma, users);
+}
+
+/** One user as /users/sync-bulk and /users/clients/sync-bulk take it. */
+function toUserPayload(u: User) {
+  return {
     id: u.id,
     phone: u.phone,
     // Who the person is belongs to the server. Only a profile this till changed or created
@@ -152,20 +245,13 @@ export async function uploadUsers(
     // balance and the server mirrors it — the reverse of how the rest of this table syncs.
     debt: Number(u.debt ?? 0),
     debtDueDate: u.debtDueDate ? new Date(u.debtDueDate).toISOString() : null,
-  }));
+  };
+}
 
-  const res = await apiPost("/users/sync-bulk", token, { users: payload });
-  if (!res.ok) {
-    const text = await res.text();
-    console.error(`Failed to upload users (HTTP ${res.status}): ${text}`);
-    return;
-  }
-
-  const result = (await res.json().catch(() => null)) as { errors?: string[] } | null;
-  if (result?.errors?.length) {
-    console.warn(`[uploadUsers] server refused some users: ${result.errors.join("; ")}`);
-  }
-
+async function markUsersSent(
+  prisma: ReturnType<typeof getPrismaClient>,
+  users: User[],
+): Promise<void> {
   // Sent, so the server's copy is authoritative again — including for a row it refused (a phone
   // another user already holds, say): the pull that follows puts the server's version back
   // rather than leaving this till to re-send a losing edit forever. Matched on updatedAt so an

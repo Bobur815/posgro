@@ -10,7 +10,10 @@ import {
   syncDeletedProducts,
 } from './products-sync';
 import { getCurrentUser } from '../ipc/auth-handlers';
-import { uploadLocalData } from './upload-sync';
+import { uploadLocalData, uploadNasiya } from './upload-sync';
+import { pullDebtLedger } from './debt-ledger-sync';
+import { syncFiscalStatus } from './fiscal-status-sync';
+import { syncSalePayments } from './payments-sync';
 import { getAppConfig } from '../config/app-config';
 import { getPrismaClient } from '../database/sqlite-client';
 import { getServerToken, clearServerToken } from './queue-manager';
@@ -153,12 +156,21 @@ export class SyncService {
       // uploadLocalData(). Sales, shifts, heartbeat and logs below are outside it and keep
       // running. `posAdminLocked` is false unless a super admin opted this store in, so an
       // un-opted-in or never-activated terminal behaves exactly as it always has.
-      if (shouldUploadMasterData(currentUser?.role, localConfig)) {
+      const masterUpload = shouldUploadMasterData(currentUser?.role, localConfig);
+      if (masterUpload) {
         try {
           await uploadLocalData();
         } catch (uploadError) {
           console.error('Upload sync failed (non-fatal):', uploadError instanceof Error ? uploadError.message : uploadError);
         }
+      }
+
+      // Nasiya — all roles: customers a cashier created and the ledger behind every balance. Inside
+      // the admin block above, a cashier-only till never sent its debts and no other till saw them.
+      try {
+        await uploadNasiya({ staffUploaded: masterUpload });
+      } catch (nasiyaError) {
+        console.error('Nasiya upload failed (non-fatal):', nasiyaError instanceof Error ? nasiyaError.message : nasiyaError);
       }
 
       // Sync sales (upload local sales to VPS) — all roles
@@ -169,6 +181,22 @@ export class SyncService {
         }
       } catch (salesError) {
         console.error('Sales sync failed (non-fatal):', salesError instanceof Error ? salesError.message : salesError);
+      }
+
+      // Fiscal state of sales already uploaded — all roles, after the sales so their receipts are
+      // there to be matched. Feeds the bank-turnover figures on the dashboard.
+      try {
+        await syncFiscalStatus();
+      } catch (fiscalError) {
+        console.error('Fiscal status sync failed (non-fatal):', fiscalError instanceof Error ? fiscalError.message : fiscalError);
+      }
+
+      // Split-payment lines of sales already uploaded — all roles, on their own endpoint (an older
+      // server rejects unknown fields on /sales/sync). Bank turnover and reports read them.
+      try {
+        await syncSalePayments();
+      } catch (paymentsError) {
+        console.error('Sale payments sync failed (non-fatal):', paymentsError instanceof Error ? paymentsError.message : paymentsError);
       }
 
       // Sync closed shifts — all roles, deliberately NOT inside uploadLocalData(), which only
@@ -189,6 +217,12 @@ export class SyncService {
       // Sync suppliers, users, and store settings (download from VPS to all terminals)
       await syncSuppliers();
       await syncUsers();
+      // After the users, so a customer created on another till is here before their ledger rows.
+      try {
+        await pullDebtLedger();
+      } catch (ledgerError) {
+        console.error('Nasiya ledger pull failed (non-fatal):', ledgerError instanceof Error ? ledgerError.message : ledgerError);
+      }
       await syncSettings();
 
       // Sync products (download updated products from VPS)

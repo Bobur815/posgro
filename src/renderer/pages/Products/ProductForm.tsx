@@ -35,6 +35,8 @@ import { SupplierManagementModal } from "../Suppliers/SupplierManagementModal";
 import { CategoryManagementModal } from "./CategoryManagementModal";
 import { DateInput } from "../../components/common/DateInput";
 import { Spinner } from "../../components/common/Spinner";
+import { PictureEditor } from "./PictureEditor";
+import { productPictureUrl } from "../../utils/pictures";
 
 const Form = styled.form`
   display: flex;
@@ -270,12 +272,6 @@ const PhotoPlaceholder = styled.div`
   border: 2px dashed ${({ theme }) => theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius};
   color: ${({ theme }) => theme.colors.textSecondary};
-`;
-
-const PhotoTitle = styled.div`
-  font-size: 15px;
-  font-weight: 600;
-  color: ${({ theme }) => theme.colors.text};
 `;
 
 const PhotoHint = styled.div`
@@ -1176,16 +1172,19 @@ export function ProductForm({
 
           {tab === "photo" && (
             <TabPanel>
-              <PhotoPlaceholder>
-                <ImageIcon size={56} strokeWidth={1.25} />
-                <PhotoTitle>{t("products.photoComingSoon", "Скоро")}</PhotoTitle>
-                <PhotoHint>
-                  {t(
-                    "products.photoComingSoonHint",
-                    "Загрузка фотографий товара появится в одном из следующих обновлений.",
-                  )}
-                </PhotoHint>
-              </PhotoPlaceholder>
+              {/* Stored under the barcode, which is locked once the product exists. */}
+              {isEdit && formData.barcode ? (
+                <PictureEditor
+                  owner="product"
+                  ownerKey={formData.barcode}
+                  previewUrl={productPictureUrl({ barcode: formData.barcode, mxik: formData.mxik })}
+                />
+              ) : (
+                <PhotoPlaceholder>
+                  <ImageIcon size={56} strokeWidth={1.25} />
+                  <PhotoHint>{t("pictures.saveProductFirst")}</PhotoHint>
+                </PhotoPlaceholder>
+              )}
             </TabPanel>
           )}
 
