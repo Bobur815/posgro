@@ -54,13 +54,56 @@ Ask before guessing on any of these.
   Example: total 100 000 → 55 000 cash typed by hand, 45 000 card via the button.
 - Fiscalization per method: 55 000 cash + 45 000 card → REGOS gets them split the same way.
   If the 45 000 is Click → the whole 100 000 goes to REGOS as cash.
-- Open questions:
-  - Sale storage: today one `paymentMethod` per sale? New payments table/JSON must stay additive,
-    `POST /api/sales/sync` backward compatible (old server ignores the new field).
-  - Change (qaytim): only from the cash part? Overpay allowed on card/Click/UzQR?
-  - Combined with nasiya (debt) as one of the parts?
-  - Returns/refunds of a split sale: which method gets the money back?
-  - UzQR part: the UzQR flow runs for its share only?
+- **Analysis (2026-10-02):**
+  - One `sales.payment_method` string per sale (both DBs); every figure keys on it: POS shift /
+    drawer (`shifts.ts`, `smena-sync.ts`), REGOS `buildPayments`, server bank turnover (`tender()`,
+    `fiscalCash()`), daily/monthly reports, analytics, receipt print.
+  - Checkout has one "given amount": below total → **discount** (cash courtesy), above → change.
+  - The server's ValidationPipe has `forbidNonWhitelisted: true`: a new field in
+    `POST /api/sales/sync` would make an **old server reject the whole sale** → the lines must
+    travel on their own endpoint, like fiscal status does (`fiscal-status-sync.ts` +
+    `missing-endpoints.ts` 404 back-off).
+  - REGOS Receipt.Sale takes several payments (`tasks/REGOS_API_INTERFACE_UPDATED.md`: a type 1 +
+    a type 2 in one receipt). Only one Payment.Create-backed (UzQR) payment per receipt.
+  - Returns delete the sale and subtract its whole finalAmount from expected cash, whatever the
+    tender — today's behaviour for card sales too. Unchanged here.
+- **Answers:** lines must **cover the total** (only the cash line may exceed it → change; the old
+  single-cash shortfall-as-discount stays as is) · **no nasiya** in a split (v1) · split is
+  **always available** (the single-tender flow is unchanged until a cashier adds a second line).
+- **Plan (draft — waiting for approval).** Branch `feat/split-payment` off `feat/click-payment`
+  (Click is one of the methods). Server commit first.
+  1. **Storage (additive; touches both Prisma schemas — needs your OK):**
+     - SQLite `sale_payments(id, sale_id, method, amount, synced)` — Prisma model + `CREATE TABLE IF
+       NOT EXISTS` in `createSchemaIfNeeded`, index `sale_id`. One row per method.
+     - A split sale has `payment_method = 'mixed'` (already in the receipt vocabulary) and ≥2 rows;
+       `paid_amount` = total. A single-tender sale writes **no rows** — exactly as today.
+     - PG `SalePayment(storeId, receiptNumber, method, amount Decimal(10,2))`, unique
+       `(storeId, receiptNumber, method)`. Additive migration.
+  2. **One shared reader** `tenderAmounts(sale, lines)` → `{cash, card, uzqr, click}`: no lines →
+     the whole paid amount on `payment_method`; lines → the lines. Everything below uses it.
+  3. **Sync:** new `POST /api/sales/payments-sync` (bulk, idempotent: replaces a receipt's lines,
+     keyed `(storeId, receiptNumber)`). POS step after the sales upload for unsynced rows; 404 →
+     `missing-endpoints` back-off. `/api/sales/sync` itself is untouched.
+  4. **REGOS:** `buildPayments` for `mixed`: one `type 1` = cash + click; card + plain UzQR →
+     `type 2, card_type 2`; a REGOS-backed UzQR line → `type 2, payment_id`. Cash is the net
+     amount (after change). Example: 55 000 cash + 45 000 card → `[{1, 55000}, {2, 45000}]`;
+     55 000 cash + 45 000 Click → `[{1, 100000}]`.
+  5. **POS money:** shift/drawer/smena-sync take the **cash line** of a split sale (Click line →
+     cashless + "of which Click"); reports, sales history, receipt print show the breakdown.
+  6. **Server:** bank turnover and reports read lines for `mixed` sales (fiscalised cash/Click
+     lines count once the receipt is FISCALIZED); daily summary gets an additive `mixedSales`.
+  7. **Checkout UI:** today's tiles/numpad unchanged. A "+ split" button turns the panel into lines
+     (method + amount, one per method); the numpad and banknote buttons type into the active line;
+     **"Qoldiq / Остаток"** fills the active line with total − Σ other lines. Pay is enabled when
+     Σ ≥ total and non-cash Σ ≤ total; change = excess, from cash only. With a UzQR line and the
+     integration on, the QR is raised for that line's amount and the sale is written after it is
+     paid (as today). Hidden while editing a sale and in the credit flow.
+     LAN satellite: split only when its main reports support (older main → button hidden).
+  8. Tests: tenderAmounts, buildPayments mixes, shift cash from lines, payments-sync idempotency,
+     bank turnover with a mixed sale, Checkout math (remaining, change, guard).
+- **Rollout:** server first (migration + endpoint + readers) → staging → you confirm → main →
+  installer. An old server still accepts every sale (lines go separately and wait out 404s); until
+  it is deployed its reports show `mixed` sales unsplit.
 
 ## Task 3 — category/product images stored locally in SQLite
 
