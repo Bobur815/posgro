@@ -28,7 +28,7 @@ jest.mock('electron', () => ({
 import { initializeDatabase, closeDatabase, getPrismaClient } from './sqlite-client';
 
 /** Tables the app reads or writes by raw SQL, so no Prisma model declares them. */
-const RAW_SQL_TABLES = ['audit_logs'];
+const RAW_SQL_TABLES = ['audit_logs', 'mxik_images', 'category_seed_images', 'entity_images'];
 
 async function tableNames(): Promise<string[]> {
   // getPrismaClient() is `any` — the client is resolved through a runtime require — so the row
