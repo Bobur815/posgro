@@ -1,3 +1,128 @@
+# Click payment, split payments, local product images (2026-10-02) — not started; analyze → ask → plan → wait
+
+Ask before guessing on any of these.
+
+## Task 1 — new payment method "Click"
+
+- Logos: `src/renderer/assets/Click-light_no_background.png` (light mode),
+  `src/renderer/assets/click_dark_background.jpg` (dark mode).
+- Shown **only** in `src/renderer/pages/POS/Checkout.tsx`.
+- REGOS: a Click sale is fiscalized **as cash**.
+- Bank turnover: Click is included **only when the sale is fiscalized**.
+- Analytics: Click stays a **separate** payment method of its own (not merged into cash).
+- Open questions:
+  - New enum value / string on the server and SQLite: the N-1 POS and the old server must tolerate
+    it (CLAUDE.md "Old tills stay in the field"). Behind a flag?
+  - Which reports/dashboard screens show Click as its own column?
+  - Does the cash drawer open, and does Click count toward expected cash in the shift (Z-report)?
+
+## Task 2 — split payment across methods in `Checkout.tsx`
+
+- One sale paid by several methods: cash + card + Click + UzQR, etc.
+- "Remaining" button: fills the active method with total − already entered.
+  Example: total 100 000 → 55 000 cash typed by hand, 45 000 card via the button.
+- Fiscalization per method: 55 000 cash + 45 000 card → REGOS gets them split the same way.
+  If the 45 000 is Click → the whole 100 000 goes to REGOS as cash.
+- Open questions:
+  - Sale storage: today one `paymentMethod` per sale? New payments table/JSON must stay additive,
+    `POST /api/sales/sync` backward compatible (old server ignores the new field).
+  - Change (qaytim): only from the cash part? Overpay allowed on card/Click/UzQR?
+  - Combined with nasiya (debt) as one of the parts?
+  - Returns/refunds of a split sale: which method gets the money back?
+  - UzQR part: the UzQR flow runs for its share only?
+
+## Task 3 — category/product images stored locally in SQLite
+
+- No images on the VPS (disk space). Web dashboard uploads nothing; only the Electron app does.
+- Images are **not synced** between tills or to the server.
+- Settings: toggle to show/hide images (optional, for performance with many images).
+- Step 1: an image table in local SQLite, **shipped with the installer pre-filled**, with an
+  MXIK code column. Products find their image by MXIK.
+- Step 2: a script that fetches the available images from `tasnif.soliq.uz`.
+  First identify the request methods and responses (endpoints, auth, image format/size, rate limits).
+- **tasnif findings (probed 2026-10-02 from this machine, UZ IP):**
+  - Found in the site bundle `tasnif.soliq.uz/assets/index-*.js` (product modal). No auth, no captcha.
+  - `GET https://tasnif.soliq.uz/api/cls-api/integration-mxik/references/get/mxik/picture-names?mxik_code={17 digits}`
+    → bare JSON array of file names, e.g. `["02202002001010009_1.png","02202002001010009_4sc43b1c.jpg"]`;
+    `[]` when there is none (also for an unknown MXIK). HTTP 200 either way.
+  - `GET https://tasnif.soliq.uz/api/cls-api/integration-mxik/references/get/file/{name}` → the bytes,
+    `Content-Type: application/octet-stream`, `Cache-Control: no-store`, no ETag/Last-Modified.
+  - **A missing file is still HTTP 200** with a placeholder whose type depends on the extension
+    (`.jpg` → 1280² "404 Error" JPEG, `.png` → SVG). Only fetch names from `picture-names` and
+    check magic bytes (JPEG/PNG/WebP), reject SVG.
+  - The existing `elasticsearch/search` and `get/history/{mxik}` responses carry no image field.
+  - Files are raw uploads: 45 KB … 1.9 MB, JPEG/PNG, up to 1280px+ → must be resized/re-encoded
+    (thumbnail) before storing, or the installer explodes.
+  - Coverage sample: 9 of 25 grocery MXIKs had pictures (Coca-Cola/Pepsi/milk yes; bread, rice none).
+    0–6 pictures per code; names `{mxik}_{n}.png` (generic) or `{mxik}_{random}.jpg`.
+  - No rate-limit headers seen; throttle anyway. Geo-restricted → the script runs here (UZ), not on the VPS.
+- **Decisions (2026-10-02):** fetch only our stores' distinct MXIKs · installer ships a pre-filled
+  table **and** a till fetches + caches a missing MXIK image on demand (local only, no VPS, no sync) ·
+  256px WebP · one image per MXIK (first valid).
+- **Prod MXIK data (read-only SELECT, 2026-10-02):** 1 901 distinct valid 17-digit codes on
+  3 051 products, 1 store. 186 are generic (`…000000`); the top code `01905007001000000` sits on
+  119 products. Sample of 100 → 25 have pictures ⇒ ~475 images × ~15 KB ≈ **7 MB** seed.
+- **Plan (draft — waiting for approval).** Branch `feat/pos-product-images` off `dev`. POS only:
+  no server, web, PG or N-1 impact. Version bump.
+  1. **Seed script** `scripts/fetch-mxik-images.ts` (tsx + sharp, both already deps). Input: a CSV
+     of MXIKs (from the read-only prod query). Per code: `picture-names` → first file that passes
+     the magic-byte check → flatten onto white, fit inside 256×256, WebP q80. Throttled 1 req/s,
+     resumable (skips done codes), logs misses. Output `prisma/seed/mxik-images/{mxik}.webp` +
+     `manifest.json` (`version`, `[{mxik, sourceName}]`). Run here (UZ IP).
+     Ships via the existing `extraResources: prisma/**` → **no `electron-builder.config.js` change.**
+  2. **SQLite (raw SQL in `createSchemaIfNeeded`, `IF NOT EXISTS`, unconditional — Migration 37)**,
+     in `pos-local.db`; nothing in the Prisma schemas:
+     - `mxik_images(mxik TEXT PK, data BLOB NULL, mime TEXT, source TEXT 'seed'|'tasnif',
+       source_name TEXT, checked_at TEXT)`; `data NULL` = "tasnif has none" (re-check after 30 days).
+     - `entity_images(entity_type TEXT 'product'|'category', entity_id INTEGER, data BLOB, mime TEXT,
+       updated_at TEXT, PRIMARY KEY(entity_type, entity_id))` — manual uploads.
+     - Seed import on boot when `manifest.version` > `local_config` seed version:
+       `INSERT OR IGNORE` (never overwrites a tasnif-fetched row). Extend `legacy-upgrade.test.ts`.
+  3. **Main process:** `images:fetchMxik` (main fetches tasnif, no CORS, validates bytes, returns raw);
+     `images:save*`/`images:remove*` (ADMIN for manual uploads); a custom protocol
+     `posimg://product/{id}` and `posimg://category/{id}` that resolves
+     manual → MXIK → 404, so `<img loading="lazy">` works without pushing blobs over IPC.
+     Preload + ipc-client wiring per skill `ipc-feature`.
+  4. **Renderer:**
+     - Setting `showProductImages` in `settings-store.ts` (per till), **default off** = today's UI.
+       Toggle in `SystemSettings.tsx`, i18n ru/uz.
+     - `ProductSearch.tsx` `ProductCard` + `CategoryButton`: image only when the setting is on;
+       lazy, fixed size, no layout shift when it's missing.
+     - On-demand fill: a visible card with no MXIK row → queue `images:fetchMxik` (max 2 in flight,
+       online only) → canvas resize/flatten → WebP → `images:saveMxik`. Same canvas path for uploads.
+     - Upload/remove image in the Electron `ProductForm.tsx` and the category form (ADMIN).
+  5. Tests: magic-byte check, resolution order, seed import idempotency, legacy DB upgrade.
+     `/check`, `npx cross-env APP_MODE=pos electron-vite build`. You run `deploy:pos`.
+- **Approved 2026-10-02** with these answers:
+  - Generic MXIKs (`…000000`) get no automatic picture — not in the seed, not fetched on the till.
+  - `prisma/seed/` folder OK. LAN satellites showing seed + own fetches only: OK.
+  - **Categories are pre-filled too**, and a user can replace their own category picture later.
+    Source: **files you provide** (one per category), the script only resizes them to 256px WebP.
+    Match key: **normalized category name** (trim, lowercase, collapse spaces; nameUz or nameRu).
+    → table `category_seed_images(name_key TEXT PK, data BLOB, mime TEXT)`; resolution for a
+    category = manual upload → seed by nameUz key → seed by nameRu key → none.
+    Source folder: `scripts/category-images/`, file name = the category's nameUz (any of
+    png/jpg/jpeg/webp), e.g. `Salqin ichimliklar.png`. Prod has 23 categories (ids 1–20 + 39–41).
+- **Built (2026-10-02) on `feat/pos-product-images`, uncommitted, POS 1.32.9.** Deviations from the plan:
+  - Own pictures are keyed by **barcode** (product) and **normalized nameUz** (category), not row
+    id: a LAN satellite shows the main's products and its ids can differ (`lan/satellite-cache.ts`).
+    `entity_images(entity_type, entity_key)`. Renaming a category / changing a barcode drops its own picture.
+  - Picture order: numbered tasnif names (`_1`, `_2`) before random-suffix ones — Coca-Cola's first
+    listed photo was the bottle cap from above.
+  - `posimg:` URLs carry barcode+mxik / nameUz+nameRu, so lookups never read products/categories.
+  - The existing "Фото" tab in `ProductForm` (was "coming soon") is the editor, edit mode only.
+- Tests: `image-bytes`, `image-store` (real SQLite), `tasnif-pictures`, `legacy-upgrade` (+3 raw
+  tables; red proof: 9 failed without `createImageTables`). Full POS jest 613 ✓, tsc ✓, POS build ✓.
+- **Picture quality (approved option 3, "both"):** first run took the first-listed picture; ~1 in 5
+  sampled was a cap/lid from above, a can's back or a flat package print. Now:
+  - numbered picture if any, else the **tallest** (`pickUpright`) — same rule on the till
+    (`encodeTallest`, ≤4 candidates from `fetchTasnifPicture`);
+  - every candidate cached in `scripts/.mxik-candidates/` (gitignored) + `review.html` there;
+    your picks/blocks → `scripts/mxik-image-overrides.json` (committed) → `OFFLINE=1` rebuild;
+  - manifest `mxikBlocked` (optional): till drops the picture and never fetches that code.
+- Left for you: drop category files into `scripts/category-images/` and re-run the script; try it in
+  `dev:pos`; then `deploy:pos`.
+
 # Nasiya multi-till sync, ledger voids, bank turnover (2026-10-01) — approved; all three built, on local `dev`, not pushed
 
 Electron is in scope again (CLAUDE.md updated, commit f22e411 on `chore/claude-md-pos-scope`).
