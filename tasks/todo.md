@@ -10,11 +10,42 @@ Ask before guessing on any of these.
 - REGOS: a Click sale is fiscalized **as cash**.
 - Bank turnover: Click is included **only when the sale is fiscalized**.
 - Analytics: Click stays a **separate** payment method of its own (not merged into cash).
-- Open questions:
-  - New enum value / string on the server and SQLite: the N-1 POS and the old server must tolerate
-    it (CLAUDE.md "Old tills stay in the field"). Behind a flag?
-  - Which reports/dashboard screens show Click as its own column?
-  - Does the cash drawer open, and does Click count toward expected cash in the shift (Z-report)?
+- **Analysis (2026-10-02):**
+  - `sales.payment_method` is a free String in both schemas; the server DTO is `@IsString()` only →
+    `'click'` needs **no migration** and an old server stores it fine (new POS ↔ old server OK).
+  - REGOS: `buildPayments()` sends `type: 1` (cash) iff `isCashTender()`, the same function that
+    means "money in the drawer" (`shifts.ts`, `debtors.ts`). Click needs a separate fiscal rule.
+    Refunds use `fullRefund(qrUrl)` — no payments restated, nothing to change.
+  - Bank turnover (`reconciliation/bank.service.ts`) = card + uzqr + fiscalCash (by fiscalTender /
+    paymentMethod, FISCALIZED only); running `toDeposit` = fiscalCash − deposits.
+  - `fiscal-status-sync.ts` reports `fiscalTender = paymentMethod` → `'click'` reaches the server.
+  - Shift sync has only `cashSalesAmount` / `cardSalesAmount` (cashless).
+  - Both logos are square with lots of padding → crop copies for the tile; light theme = PNG,
+    dark theme = dark JPG.
+- **Answers:** Click is **not drawer cash** · fiscalised Click counts in bank turnover **and** in
+  running **to deposit** · tile behind a **per-till setting, off by default**.
+- **Plan (draft — waiting for approval).** Branch `feat/click-payment` off `dev`.
+  Server commit first (deploy to staging → you confirm → main), then the POS commit.
+  1. **Shared** (`src/shared/constants/payment-methods.ts`, additive — needs your OK as `src/shared`):
+     `'click'` in `SALE_TENDERS` + i18n key; new `isFiscalCashTender(m)` = cash or click.
+     `isCashTender` unchanged → drawer, X/Z, debt ledger keep treating Click as cashless.
+  2. **Server** (no migration, no DTO change):
+     - `bank.service`: new `fiscalClick` (Σ FISCALIZED click, by fiscalisation time) — its own
+       line; `bankTurnover` += it; running `toDeposit` = fiscalCash + fiscalClick − deposits.
+       Response field additive. Unfiscalised Click counts nowhere.
+     - `sales.service` daily summary: additive `clickSales` (so cash+card+uzqr+click = total).
+     - Web: Click column/line in DailySummary, MonthlyReport, BankTurnover page/section; ru/uz.
+  3. **POS:**
+     - `regos-vcr-service.buildPayments`: `isFiscalCashTender` → `type: 1` for Click.
+     - Checkout: Click tile (cropped logo, theme-aware) shown only when the till setting
+       `click_enabled` is on (local-only system setting, default off; checkbox in Fiscal settings).
+       Not in POSScreen quick-pay. Part-paid nasiya may use Click like card.
+     - Shift/Z screen: Click as its own line inside cashless; smena sync unchanged (Click stays in
+       `cardSalesAmount`), so the server needs no new column.
+     - Labels: receipt print, SalesHistory, ReceiptDetails, POS Daily/Monthly reports; ru/uz.
+     - Tests: buildPayments (click → type 1, never drawer), shifts split, bank.service fiscalClick.
+- **Side effect to know:** REGOS's own Z-report will show Click inside its **cash** total, so REGOS
+  cash ≠ drawer cash by the Click amount. That is the intended fiscal treatment.
 
 ## Task 2 — split payment across methods in `Checkout.tsx`
 
