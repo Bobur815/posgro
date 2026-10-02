@@ -366,6 +366,8 @@ export class SalesService {
     // Counted separately, not folded into cardSales: the three must add up to totalSales,
     // otherwise a UzQR sale disappears from the summary entirely.
     const uzqrSales = sales.filter((s: SaleWithItems) => s.paymentMethod === 'uzqr').length;
+    // Click likewise: fiscalised as cash, but its own tender for analytics.
+    const clickSales = sales.filter((s: SaleWithItems) => s.paymentMethod === 'click').length;
 
     return {
       date: startOfDay.toISOString().split('T')[0],
@@ -375,6 +377,7 @@ export class SalesService {
       cashSales,
       cardSales,
       uzqrSales,
+      clickSales,
       averageTransaction: totalSales > 0 ? totalRevenue / totalSales : 0,
     };
   }

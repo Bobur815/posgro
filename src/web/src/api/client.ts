@@ -1196,12 +1196,20 @@ export interface BankTurnover {
   card: string;
   uzqr: string;
   fiscalCash: string;
+  /** Click receipts fiscalised in the period (fiscalised as cash). Absent from a server before Click. */
+  fiscalClick?: string;
   bankTurnover: string;
   deposited: string;
   /** Cash sales whose fiscal state no till has reported — not in fiscalCash. */
   unreported: { count: number; amount: string };
   /** Null until the owner sets the date the "to deposit" figure counts from. */
-  running: { startDate: string; fiscalCash: string; deposited: string; toDeposit: string } | null;
+  running: {
+    startDate: string;
+    fiscalCash: string;
+    fiscalClick?: string;
+    deposited: string;
+    toDeposit: string;
+  } | null;
   deposits: BankDeposit[];
 }
 

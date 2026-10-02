@@ -247,6 +247,7 @@ export class AnalyticsService {
         totalRevenue: number;
         cashSales: number;
         cardSales: number;
+        clickSales: number;
         averageTransaction: number;
       }[]>`
         SELECT
@@ -254,6 +255,7 @@ export class AnalyticsService {
           SUM(final_amount)::float AS "totalRevenue",
           COUNT(*) FILTER (WHERE LOWER(payment_method) = 'cash')::int AS "cashSales",
           COUNT(*) FILTER (WHERE LOWER(payment_method) = 'card')::int AS "cardSales",
+          COUNT(*) FILTER (WHERE LOWER(payment_method) = 'click')::int AS "clickSales",
           CASE WHEN COUNT(*) > 0 THEN (SUM(final_amount) / COUNT(*))::float ELSE 0 END AS "averageTransaction"
         FROM sales
         WHERE store_id = ${storeId}
@@ -334,6 +336,7 @@ export class AnalyticsService {
         totalRevenue: 0,
         cashSales: 0,
         cardSales: 0,
+        clickSales: 0,
         averageTransaction: 0,
       },
     };

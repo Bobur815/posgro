@@ -22,7 +22,13 @@ export interface BankTurnover {
   uzqr: Prisma.Decimal;
   /** Receipts fiscalised with cash in the period, by fiscalisation time. */
   fiscalCash: Prisma.Decimal;
-  /** card + uzqr + fiscalCash: what the tax office sees as the shop's bank-side turnover. */
+  /**
+   * Click receipts fiscalised in the period. REGOS has them as cash (that is how Click is
+   * fiscalised), so they count like fiscalCash — turnover and to-deposit — but are kept apart for
+   * analytics. Click receipts never fiscalised count nowhere.
+   */
+  fiscalClick: Prisma.Decimal;
+  /** card + uzqr + fiscalCash + fiscalClick: what the tax office sees as bank-side turnover. */
   bankTurnover: Prisma.Decimal;
   /** Fiscalised cash taken to the bank in the period (non-voided deposits). */
   deposited: Prisma.Decimal;
@@ -36,7 +42,9 @@ export interface BankTurnover {
   running: {
     startDate: Date;
     fiscalCash: Prisma.Decimal;
+    fiscalClick: Prisma.Decimal;
     deposited: Prisma.Decimal;
+    /** fiscalCash + fiscalClick − deposited. */
     toDeposit: Prisma.Decimal;
   } | null;
   deposits: {
@@ -77,8 +85,13 @@ export class BankTurnoverService {
     if (!bankTurnoverEnabled()) throw new NotFoundException();
   }
 
-  /** Σ finalAmount of receipts fiscalised with cash between the two instants. */
-  private async fiscalCash(storeId: string, from: Date, to: Date): Promise<Prisma.Decimal> {
+  /** Σ finalAmount of receipts fiscalised with `tender` (cash or click) between the two instants. */
+  private async fiscalCash(
+    storeId: string,
+    from: Date,
+    to: Date,
+    tender: 'cash' | 'click' = 'cash',
+  ): Promise<Prisma.Decimal> {
     const res = await this.prisma.sale.aggregate({
       where: {
         storeId,
@@ -86,8 +99,8 @@ export class BankTurnoverService {
         AND: [
           {
             OR: [
-              { fiscalTender: insensitive('cash') },
-              { fiscalTender: null, paymentMethod: insensitive('cash') },
+              { fiscalTender: insensitive(tender) },
+              { fiscalTender: null, paymentMethod: insensitive(tender) },
             ],
           },
           {
@@ -146,10 +159,11 @@ export class BankTurnoverService {
   ): Promise<BankTurnover | BankTurnoverDisabled> {
     if (!bankTurnoverEnabled()) return { enabled: false };
 
-    const [card, uzqr, fiscalCash, deposited, unreported, store, deposits] = await Promise.all([
+    const [card, uzqr, fiscalCash, fiscalClick, deposited, unreported, store, deposits] = await Promise.all([
       this.tender(storeId, 'card', periodStart, periodEnd),
       this.tender(storeId, 'uzqr', periodStart, periodEnd),
       this.fiscalCash(storeId, periodStart, periodEnd),
+      this.fiscalCash(storeId, periodStart, periodEnd, 'click'),
       this.deposited(storeId, periodStart, periodEnd),
       this.prisma.sale.aggregate({
         where: {
@@ -182,15 +196,17 @@ export class BankTurnoverService {
     let running: BankTurnover['running'] = null;
     if (store?.bankCashStartDate) {
       const now = new Date();
-      const [cash, dep] = await Promise.all([
+      const [cash, click, dep] = await Promise.all([
         this.fiscalCash(storeId, store.bankCashStartDate, now),
+        this.fiscalCash(storeId, store.bankCashStartDate, now, 'click'),
         this.deposited(storeId, store.bankCashStartDate, now),
       ]);
       running = {
         startDate: store.bankCashStartDate,
         fiscalCash: cash,
+        fiscalClick: click,
         deposited: dep,
-        toDeposit: cash.minus(dep),
+        toDeposit: cash.plus(click).minus(dep),
       };
     }
 
@@ -201,7 +217,8 @@ export class BankTurnoverService {
       card,
       uzqr,
       fiscalCash,
-      bankTurnover: card.plus(uzqr).plus(fiscalCash),
+      fiscalClick,
+      bankTurnover: card.plus(uzqr).plus(fiscalCash).plus(fiscalClick),
       deposited,
       unreported: {
         count: unreported._count._all,
