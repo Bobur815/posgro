@@ -16,6 +16,11 @@ import {
 } from "../../components/common/SearchControls";
 import { debounce } from "../../utils/helpers";
 import { productRequiresMarking } from "../../../shared/utils/marking";
+import { Picture } from "../../components/common/Picture";
+import { useSettingsStore } from "../../store/settings-store";
+import { usePictureStore } from "../../store/picture-store";
+import { useMxikPictureFill } from "../../hooks/useMxikPictureFill";
+import { categoryPictureUrl, productPictureUrl } from "../../utils/pictures";
 
 const Container = styled.div`
   flex: 1;
@@ -68,6 +73,10 @@ const CategoryBar = styled.div`
 const CategoryButton = styled.button<{ $active?: boolean }>`
   flex: 1;
   min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   padding: 6px 10px;
   font-size: 13px;
   font-weight: 500;
@@ -86,6 +95,13 @@ const CategoryButton = styled.button<{ $active?: boolean }>`
   &:hover {
     border-color: ${({ theme }) => theme.colors.primary};
   }
+`;
+
+// The button is a flex row once it can hold a picture, so the ellipsis lives on the label.
+const CategoryLabel = styled.span`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 `;
 
 const CategorySelect = styled.select<{ $active?: boolean }>`
@@ -206,6 +222,9 @@ export function ProductSearch({ onSelect, keyboardZIndex }: ProductSearchProps) 
   const [topSelling, setTopSelling] = useState<Product[]>([]);
   // Closed until the keyboard button is pressed — the panel never appears on its own.
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const showPictures = useSettingsStore((s) => s.showProductImages);
+  const mxikVersions = usePictureStore((s) => s.mxikVersions);
+  const ownVersion = usePictureStore((s) => s.ownVersion);
   const {
     products,
     categories,
@@ -310,6 +329,13 @@ export function ProductSearch({ onSelect, keyboardZIndex }: ProductSearchProps) 
       : topSelling
   ).filter((p) => p.isActive && !productRequiresMarking(p));
 
+  useMxikPictureFill(
+    displayProducts.map((p) => p.mxik),
+    showPictures,
+  );
+  const pictureOf = (p: Product) =>
+    productPictureUrl(p, `${ownVersion}.${(p.mxik && mxikVersions[p.mxik]) || 0}`);
+
   return (
     <Container>
       <SearchHeader>
@@ -363,7 +389,8 @@ export function ProductSearch({ onSelect, keyboardZIndex }: ProductSearchProps) 
               }
               title={categoryName(c)}
             >
-              {categoryName(c)}
+              {showPictures && <Picture src={categoryPictureUrl(c, ownVersion)} size={20} />}
+              <CategoryLabel>{categoryName(c)}</CategoryLabel>
             </CategoryButton>
           ))}
           <CategorySelect
@@ -396,6 +423,7 @@ export function ProductSearch({ onSelect, keyboardZIndex }: ProductSearchProps) 
               disabled={product.stock <= 0}
               $lowStock={product.stock <= product.minStock && product.stock > 0}
             >
+              {showPictures && <Picture src={pictureOf(product)} size={34} />}
               <ProductName>{getProductName(product)}</ProductName>
               <ProductStock $low={product.stock <= product.minStock}>
                 {product.stock <= 0

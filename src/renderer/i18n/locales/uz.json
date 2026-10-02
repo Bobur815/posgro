@@ -820,6 +820,13 @@
     "pinSet": "PIN-kod o'rnatilgan",
     "removePin": "PIN-kodni o'chirish"
   },
+  "pictures": {
+    "upload": "Rasm yuklash",
+    "remove": "O'z rasmini olib tashlash",
+    "hint": "PNG, JPG yoki WebP. Faqat shu terminalda saqlanadi. O'z rasmi bo'lmasa, MXIK bo'yicha rasm ko'rsatiladi.",
+    "saveFailed": "Rasmni saqlab bo'lmadi",
+    "saveProductFirst": "Avval mahsulotni saqlang — rasmni tahrirlashda qo'shish mumkin."
+  },
   "settings": {
     "title": "Sozlamalar",
     "userSettings": "Foydalanuvchi sozlamalari",
@@ -871,6 +878,9 @@
     "receiptHeader": "Chek sarlavhasi",
     "receiptFooter": "Chek pastki qismi",
     "terminalIdHint": "Ushbu terminal uchun noyob identifikator. Har bir qurilma o'z ID ga ega bo'lishi kerak (masalan: T1, T2).",
+    "pictures": "Mahsulot rasmlari",
+    "showProductImages": "Mahsulot va kategoriya rasmlarini ko'rsatish",
+    "showProductImagesHint": "Faqat shu terminalda. Rasmlar kassada saqlanadi va internet bo'lsa MXIK kodi bo'yicha tasnif.soliq.uz dan yuklanadi. Sekin kompyuterda o'chirib qo'ygan ma'qul.",
     "synchronization": "Sinxronizatsiya",
     "syncInterval": "Sinxronizatsiya oralig'i",
     "minutes": "daqiqa",
