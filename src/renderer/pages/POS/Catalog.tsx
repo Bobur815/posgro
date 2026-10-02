@@ -35,7 +35,7 @@ function CatalogComponent({ onSelect, onClose }: CatalogProps) {
     [onSelect, onClose],
   );
   return (
-    <Modal title={t("pos.catalog", "Каталог")} onClose={onClose} width="1000px">
+    <Modal title={t("pos.catalog", "Каталог")} onClose={onClose} width="1100px">
       <CatalogBody>
         {/* Keyboard z-index above the Modal overlay (1000) so it isn't hidden behind it. */}
         <ProductSearch onSelect={handleSelect} keyboardZIndex={1100} />

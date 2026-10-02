@@ -419,7 +419,7 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
       <Modal
         title={t('pos.salesHistory')}
         onClose={onClose}
-        width="900px"
+        width="1100px"
       >
         <Toolbar>
           <ToolbarLabel>{t('pos.period', 'Период')}</ToolbarLabel>
