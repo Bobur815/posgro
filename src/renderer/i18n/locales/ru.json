@@ -698,7 +698,10 @@
     "groupConnection": "Подключение",
     "groupVat": "НДС",
     "groupBehaviour": "Печать и маркировка",
-    "groupUzqr": "UzQR"
+    "groupUzqr": "UzQR",
+    "groupClick": "Click",
+    "clickEnabled": "Принимать оплату Click на этой кассе",
+    "clickHint": "В чеке REGOS оплата Click отправляется как наличные. В кассовый ящик не попадает; в отчётах — отдельной строкой."
   },
   "reports": {
     "title": "Отчеты",
@@ -1455,6 +1458,7 @@
     "notFiscalizedShort": "не фиск.",
     "cashSales": "Наличные продажи",
     "cardSales": "Картой",
+    "ofWhichClick": "в т.ч. Click",
     "returns": "Возвраты",
     "discounts": "Скидки",
     "totalRevenue": "Итого выручка",

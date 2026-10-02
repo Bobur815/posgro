@@ -5,7 +5,13 @@ import { Modal } from '../../components/common/Modal';
 import { useSales } from '../../hooks/useSales';
 import type { Sale } from '@shared/types/sale.types';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
-import { UZQR_BRAND_COLOR, SALE_TENDER_I18N_KEYS, DEBT_TENDER, type SaleTender } from '@shared/constants';
+import {
+  CLICK_BRAND_COLOR,
+  UZQR_BRAND_COLOR,
+  SALE_TENDER_I18N_KEYS,
+  DEBT_TENDER,
+  type SaleTender,
+} from '@shared/constants';
 import { ChevronDown, ChevronRight, Pencil, Printer, Trash2, ShieldCheck, ShieldAlert, RotateCcw, Copy } from 'lucide-react';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../context/ToastContext';
@@ -112,9 +118,11 @@ const Time = styled.span`
   white-space: nowrap;
 `;
 
-/** Green = money in the till, house blue = bank card, navy = the UzQR brand. */
+/** Green = money in the till, house blue = bank card, navy = the UzQR brand, Click blue = Click. */
 function tenderColor(theme: DefaultTheme, method?: string) {
   if (method === 'uzqr') return UZQR_BRAND_COLOR;
+  // Not green: Click is fiscalised as cash but never reaches the till.
+  if (method === 'click') return CLICK_BRAND_COLOR;
   // Money the shop has not got yet — red, as in the daily summary.
   if (method === DEBT_TENDER) return theme.colors.error;
   return method === 'card' ? theme.colors.primary : theme.colors.success;

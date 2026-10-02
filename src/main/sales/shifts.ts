@@ -1,5 +1,5 @@
 import { getPrismaClient } from '../database/sqlite-client';
-import { isCashTender } from '../../shared/constants';
+import { isCashTender, isClickTender } from '../../shared/constants';
 import type { SmenaStats, SmenaFiscalStats } from '../../shared/types/smena.types';
 import { SaleRefusedError, serially } from './commit-sale';
 import { sellingRefusal } from '../license/license';
@@ -66,6 +66,8 @@ export async function computeSmenaStats(smenaId: string): Promise<SmenaStats> {
   let cashSalesAmount = 0;
   let cardSalesCount = 0;
   let cardSalesAmount = 0;
+  let clickSalesCount = 0;
+  let clickSalesAmount = 0;
   let totalDiscounts = 0;
 
   for (const row of salesRows) {
@@ -81,6 +83,11 @@ export async function computeSmenaStats(smenaId: string): Promise<SmenaStats> {
     } else {
       cardSalesCount += cnt;
       cardSalesAmount += total;
+      // Click stays in the cashless bucket (it never reaches the drawer); shown apart as well.
+      if (isClickTender(row.payment_method)) {
+        clickSalesCount += cnt;
+        clickSalesAmount += total;
+      }
     }
     totalDiscounts += disc;
   }
@@ -125,6 +132,8 @@ export async function computeSmenaStats(smenaId: string): Promise<SmenaStats> {
     cashSalesAmount,
     cardSalesCount,
     cardSalesAmount,
+    clickSalesCount,
+    clickSalesAmount,
     totalRevenue,
     totalDiscounts,
     returnCount,

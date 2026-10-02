@@ -341,3 +341,39 @@ describe('fiscalizeSale — timing', () => {
     expect(stats()['phase:queue'].maxMs).toBeGreaterThan(20);
   });
 });
+
+describe('fiscalizeSale — tender on the receipt', () => {
+  const sentPayments = () => (client.sale.mock.calls[0][0] as { payments: unknown[] }).payments;
+  const withTender = (paymentMethod: string, regosPaymentId: string | null = null) =>
+    prismaMock.sale.findUnique.mockImplementation(async () => ({
+      ...saleRow(),
+      paymentMethod,
+      regosPaymentId,
+    }));
+
+  it('sends a Click sale as cash — Click is fiscalised as cash', async () => {
+    withTender('click');
+    await regosVcrService.fiscalizeSale('sale-1');
+    expect(sentPayments()).toEqual([{ type: 1, value: 100000 }]);
+  });
+
+  it('still sends cash as cash and card / UzQR as card', async () => {
+    withTender('cash');
+    await regosVcrService.fiscalizeSale('sale-1');
+    expect(sentPayments()).toEqual([{ type: 1, value: 100000 }]);
+
+    for (const tender of ['card', 'uzqr']) {
+      jest.clearAllMocks();
+      client.sale.mockResolvedValue(SALE_OK);
+      withTender(tender);
+      await regosVcrService.fiscalizeSale('sale-1');
+      expect(sentPayments()).toEqual([{ type: 2, value: 100000, card_type: 2 }]);
+    }
+  });
+
+  it('books a REGOS-backed UzQR payment by reference', async () => {
+    withTender('uzqr', 'pay-9');
+    await regosVcrService.fiscalizeSale('sale-1');
+    expect(sentPayments()).toEqual([{ type: 2, payment_id: 'pay-9' }]);
+  });
+});

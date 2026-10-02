@@ -686,7 +686,10 @@
     "groupConnection": "Ulanish",
     "groupVat": "QQS",
     "groupBehaviour": "Chop etish va markirovka",
-    "groupUzqr": "UzQR"
+    "groupUzqr": "UzQR",
+    "groupClick": "Click",
+    "clickEnabled": "Ushbu kassada Click orqali to'lovni qabul qilish",
+    "clickHint": "REGOS chekida Click to'lovi naqd pul sifatida yuboriladi. Kassa qutisiga tushmaydi; hisobotlarda alohida qatorda."
   },
   "reports": {
     "title": "Hisobotlar",
@@ -1456,6 +1459,7 @@
     "notFiscalizedShort": "fiskal emas",
     "cashSales": "Naqd savdo",
     "cardSales": "Karta bilan",
+    "ofWhichClick": "shu jumladan Click",
     "returns": "Qaytarishlar",
     "discounts": "Chegirmalar",
     "totalRevenue": "Jami daromad",

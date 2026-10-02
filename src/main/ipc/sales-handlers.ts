@@ -285,6 +285,7 @@ export function setupSalesHandlers(): void {
     // Counted separately, not folded into cardSales: these three must still add up to
     // totalSales, otherwise a UzQR sale disappears from the summary entirely.
     const uzqrSales = sales.filter((s: Sale & { items: PrismaSaleItem[] }) => s.paymentMethod === 'uzqr').length;
+    const clickSales = sales.filter((s: Sale & { items: PrismaSaleItem[] }) => s.paymentMethod === 'click').length;
 
     return {
       date: format(today, 'yyyy-MM-dd'),
@@ -294,6 +295,7 @@ export function setupSalesHandlers(): void {
       cashSales,
       cardSales,
       uzqrSales,
+      clickSales,
       averageTransaction: totalSales > 0 ? totalRevenue / totalSales : 0,
     };
   });
@@ -403,7 +405,8 @@ ipcMain.handle('analytics:getData', async (_event, filters: {
              CAST(SUM(final_amount) AS REAL) as totalRevenue,
              CAST(SUM(CASE WHEN payment_method = 'cash' THEN 1 ELSE 0 END) AS REAL) as cashSales,
              CAST(SUM(CASE WHEN payment_method = 'card' THEN 1 ELSE 0 END) AS REAL) as cardSales,
-             CAST(SUM(CASE WHEN payment_method = 'uzqr' THEN 1 ELSE 0 END) AS REAL) as uzqrSales
+             CAST(SUM(CASE WHEN payment_method = 'uzqr' THEN 1 ELSE 0 END) AS REAL) as uzqrSales,
+             CAST(SUM(CASE WHEN payment_method = 'click' THEN 1 ELSE 0 END) AS REAL) as clickSales
       FROM sales
       WHERE created_at >= ? AND created_at <= ?${terminalClause}
     `, startMs, endMs),
@@ -516,6 +519,7 @@ ipcMain.handle('analytics:getData', async (_event, filters: {
       cashSales: Number(summaryRow.cashSales || 0),
       cardSales: Number(summaryRow.cardSales || 0),
       uzqrSales: Number(summaryRow.uzqrSales || 0),
+      clickSales: Number(summaryRow.clickSales || 0),
       averageTransaction:
         Number(summaryRow.totalSales || 0) > 0
           ? Number(summaryRow.totalRevenue || 0) / Number(summaryRow.totalSales || 0)

@@ -100,6 +100,7 @@ const labels: Record<string, Record<string, string>> = {
     cash: "Наличные",
     card: "Карта",
     uzqr: "UzQR",
+    click: "Click",
     mixed: "Смешанная",
     debt: "Долг",
     paidNow: "Оплачено",
@@ -124,6 +125,7 @@ const labels: Record<string, Record<string, string>> = {
     cash: "Naqd",
     card: "Karta",
     uzqr: "UzQR",
+    click: "Click",
     mixed: "Aralash",
     debt: "Qarz",
     paidNow: "To'landi",
@@ -289,9 +291,11 @@ export function buildReceiptHTML(
         ? l.card
         : sale.paymentMethod === "uzqr"
           ? l.uzqr
-          : sale.paymentMethod === "debt"
-            ? l.debt
-            : l.mixed;
+          : sale.paymentMethod === "click"
+            ? l.click
+            : sale.paymentMethod === "debt"
+              ? l.debt
+              : l.mixed;
   // What went on the customer's tab: all of it ("debt"), or the rest of a part-paid receipt.
   const debtAmount =
     sale.paymentMethod === "debt" ? sale.finalAmount : Math.max(0, Number(sale.debtAmount) || 0);

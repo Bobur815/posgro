@@ -12,6 +12,8 @@ import { UZQR_BRAND_COLOR, DEBT_TENDER, type SaleTender } from "@shared/constant
 import { DebtorPickerModal, type DebtSelection } from "./DebtorPickerModal";
 import { HandCoins } from "lucide-react";
 import { UzQrLogo } from "./UzQrLogo";
+import { ClickLogo, CLICK_FIELD } from "./ClickLogo";
+import { useTheme } from "../../theme/ThemeProvider";
 import { UzQrPaymentModal } from "./UzQrPaymentModal";
 import { parseSaleError } from "./saleErrors";
 
@@ -67,9 +69,10 @@ const SummaryRow = styled.div`
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
-const PaymentMethods = styled.div`
+// Three tiles in a row, as always; with Click on, two rows of two rather than four narrow tiles.
+const PaymentMethods = styled.div<{ $columns: number }>`
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(${({ $columns }) => $columns}, 1fr);
   gap: ${({ theme }) => theme.spacing.md};
 `;
 
@@ -104,6 +107,18 @@ const UzQrButton = styled(PaymentButton)`
   box-shadow: ${({ theme, $selected }) =>
     $selected ? `0 0 0 3px ${theme.colors.primary}40` : "none"};
   background-color: ${UZQR_BRAND_COLOR};
+`;
+
+/** Like the UzQR tile: the artwork is the label, on the field its artwork was drawn for. */
+const ClickButton = styled(PaymentButton)<{ $field: string }>`
+  padding: ${({ theme }) => theme.spacing.sm};
+  background-color: ${({ $field }) => $field};
+  box-shadow: ${({ theme, $selected }) =>
+    $selected ? `0 0 0 3px ${theme.colors.primary}40` : "none"};
+
+  &:hover {
+    background-color: ${({ $field }) => $field};
+  }
 `;
 
 const PaymentIcon = styled.span`
@@ -298,6 +313,9 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   // When on, choosing UzQR opens the QR modal and the sale is only created once the buyer pays.
   const [uzqrEnabled, setUzqrEnabled] = useState(false);
   const [uzQrAmount, setUzQrAmount] = useState<number | null>(null);
+  // Click tile: only on tills with the local setting on (Settings → Fiscal). Off = today's three tiles.
+  const [clickEnabled, setClickEnabled] = useState(false);
+  const { mode } = useTheme();
   /** The debtor picker is up — the checkout panel steps aside while it is. */
   const [creditOpen, setCreditOpen] = useState(false);
 
@@ -311,6 +329,10 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
       .then(setUzqrEnabled)
       // A failed check leaves UzQR as the plain tender it is today — never blocks a sale.
       .catch(() => setUzqrEnabled(false));
+    window.electronAPI.settings
+      .get("click_enabled")
+      .then((v) => setClickEnabled(v === "true"))
+      .catch(() => setClickEnabled(false));
   }, []);
   const [givenAmount, setGivenAmount] = useState(0);
   const [customInput, setCustomInput] = useState("");
@@ -530,7 +552,7 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
             </SummaryRow>
           </SummarySection>
 
-          <PaymentMethods>
+          <PaymentMethods $columns={clickEnabled ? 2 : 3}>
             <PaymentButton
               $selected={paymentMethod === "cash"}
               onClick={() => setPaymentMethod("cash")}
@@ -554,6 +576,17 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
               <UzQrLogo $height={45} $fill />
               <PaymentLabel style={{ color: "white" }}>{t("pos.uzqr")}</PaymentLabel>
             </UzQrButton>
+            {clickEnabled && (
+              <ClickButton
+                $selected={paymentMethod === "click"}
+                $field={CLICK_FIELD[mode]}
+                onClick={() => setPaymentMethod("click")}
+                aria-label={t("pos.click")}
+                title={t("pos.click")}
+              >
+                <ClickLogo height={36} />
+              </ClickButton>
+            )}
           </PaymentMethods>
 
           <Actions>

@@ -79,6 +79,7 @@ export const salesRoutes: Route[] = [
         cashSales: total((m) => m === 'cash'),
         cardSales: total((m) => m === 'card'),
         uzqrSales: total((m) => m === 'uzqr'),
+        clickSales: total((m) => m === 'click'),
         averageTransaction: sales.length > 0 ? totalRevenue / sales.length : 0,
       };
     },

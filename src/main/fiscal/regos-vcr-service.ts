@@ -34,7 +34,7 @@ import type {
 import { repairCyrillicLayout, isLayoutCorrupted } from '../../shared/utils/keyboard-layout';
 import { productRequiresMarking } from '../../shared/utils/marking';
 import { toPieces } from '../../shared/utils/pack';
-import { isCashTender } from '../../shared/constants';
+import { isFiscalCashTender } from '../../shared/constants';
 import { isCodeOutOfCirculation } from '../marking/circulation-check';
 
 const MAX_ATTEMPTS = 5; // cap retries for hard (business) failures
@@ -589,8 +589,10 @@ class RegosVcrService {
     regosPaymentId?: string | null;
   }): VcrPayment[] {
     const value = Math.round(Number(sale.finalAmount) * 100);
-    // paymentMethod may be 'cash'/'card'/'uzqr' (POS quick-pay) or upper-case elsewhere.
-    if (isCashTender(sale.paymentMethod)) return [{ type: 1, value }];
+    // paymentMethod may be 'cash'/'card'/'uzqr'/'click' (POS quick-pay) or upper-case elsewhere.
+    // Click is fiscalised as cash: the receipt says cash although the money went to the shop's
+    // Click account. isFiscalCashTender, never isCashTender — the drawer is a different question.
+    if (isFiscalCashTender(sale.paymentMethod)) return [{ type: 1, value }];
 
     // A Payment.Create-backed tender (UzQR) is booked by REFERENCE: VCR already holds the
     // amount against that payment id, so the receipt links to it instead of restating a sum.
