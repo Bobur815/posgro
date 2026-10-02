@@ -35,7 +35,7 @@ import { SupplierManagementModal } from "../Suppliers/SupplierManagementModal";
 import { CategoryManagementModal } from "./CategoryManagementModal";
 import { DateInput } from "../../components/common/DateInput";
 import { Spinner } from "../../components/common/Spinner";
-import { PictureEditor } from "../../components/common/PictureEditor";
+import { PictureEditor } from "./PictureEditor";
 import { productPictureUrl } from "../../utils/pictures";
 
 const Form = styled.form`

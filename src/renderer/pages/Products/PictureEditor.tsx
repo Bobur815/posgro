@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
-import { Button } from "./Button";
-import { Picture } from "./Picture";
+import { Button } from "../../components/common/Button";
+import { Picture } from "../../components/common/Picture";
 import { useToast } from "../../context/ToastContext";
 import { images, type ImageOwner } from "../../api/ipc-client";
 import { usePictureStore } from "../../store/picture-store";
@@ -37,6 +37,9 @@ interface PictureEditorProps {
 /**
  * Set or remove an admin's own picture for a product or category, on this till only. Without one,
  * the POS falls back to the MXIK / pre-filled picture — the preview shows whichever applies.
+ *
+ * POS-only (it talks to the till over IPC), so it lives here and not in components/common, which
+ * the web dashboard compiles too.
  */
 export function PictureEditor({ owner, ownerKey, previewUrl }: PictureEditorProps) {
   const { t } = useTranslation();
