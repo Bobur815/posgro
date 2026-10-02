@@ -38,6 +38,32 @@ import {
 import { ProductForm } from "./ProductForm";
 import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 import { PluExportModal } from "./PluExportModal";
+import { ColumnPicker } from "../../components/common/ColumnPicker";
+import { ColumnDef, useColumnVisibility } from "../../components/common/useColumnVisibility";
+import { PictureThumb } from "../../components/common/PictureThumb";
+import { useSettingsStore } from "../../store/settings-store";
+import { usePictureStore } from "../../store/picture-store";
+import { useMxikPictureFill } from "../../hooks/useMxikPictureFill";
+import { productPictureUrl } from "../../utils/pictures";
+
+type ColumnKey =
+  | "index"
+  | "image"
+  | "id"
+  | "mxik"
+  | "barcode"
+  | "internalCode"
+  | "name"
+  | "price"
+  | "cost"
+  | "vatRate"
+  | "stock"
+  | "minStock"
+  | "unit"
+  | "expiryDate"
+  | "supplier"
+  | "category"
+  | "actions";
 
 const Container = styled.div`
   display: flex;
@@ -103,6 +129,11 @@ export function ProductList() {
   // (its main), so such a terminal browses it read-only. The list, search and details all stay.
   const adminLocked = useAdminLocked();
   const canManageProducts = isAdmin && !adminLocked;
+  const showPictures = useSettingsStore((s) => s.showProductImages);
+  const mxikVersions = usePictureStore((s) => s.mxikVersions);
+  const ownVersion = usePictureStore((s) => s.ownVersion);
+  const pictureOf = (p: Product) =>
+    productPictureUrl(p, `${ownVersion}.${(p.mxik && mxikVersions[p.mxik]) || 0}`);
 
   useEffect(() => {
     loadProducts();
@@ -136,10 +167,7 @@ export function ProductList() {
 
   // A product needs an MXIK code to be fiscalized (REGOS:VCR). Surface the ones missing it.
   const isMissingMxik = (p: Product) => p.isActive && !p.mxik;
-  const missingMxikCount = useMemo(
-    () => products.filter(isMissingMxik).length,
-    [products],
-  );
+  const missingMxikCount = useMemo(() => products.filter(isMissingMxik).length, [products]);
   const displayedProducts = useMemo(
     () => (missingMxikOnly ? products.filter(isMissingMxik) : products),
     [products, missingMxikOnly],
@@ -178,16 +206,30 @@ export function ProductList() {
     setSearchQuery((prev) => prev + key);
   };
 
-  const columns = [
+  const allColumns: ColumnDef<Product, ColumnKey>[] = [
     {
       key: "index",
-      header: "#",
+      label: "#",
+      fixed: true,
+      defaultVisible: true,
       render: (_: Product, index: number) => pageOffset + index + 1,
     },
-    { key: "id", header: t("pos.id"), render: (p: Product) => p.storeProductCode ?? p.id },
+    {
+      key: "image",
+      label: t("products.image"),
+      defaultVisible: false,
+      render: (p: Product) => <PictureThumb src={pictureOf(p)} />,
+    },
+    {
+      key: "id",
+      label: t("pos.id"),
+      defaultVisible: true,
+      render: (p: Product) => p.storeProductCode ?? p.id,
+    },
     {
       key: "mxik",
-      header: "MXIK",
+      label: "MXIK",
+      defaultVisible: true,
       render: (product: Product) =>
         product.mxik ? (
           product.mxik
@@ -197,32 +239,49 @@ export function ProductList() {
           </span>
         ),
     },
-    { key: "barcode", header: t("products.barcode") },
+    {
+      key: "barcode",
+      label: t("products.barcode"),
+      defaultVisible: true,
+      render: (product: Product) => product.barcode,
+    },
     {
       key: "internalCode",
-      header: t("products.internalCode"),
+      label: t("products.internalCode"),
+      defaultVisible: true,
       render: (product: Product) => product.internalCode || "-",
     },
     {
       key: "name",
-      header: t("products.name"),
-      render: (product: Product) =>
-        i18n.language === "uz" ? product.nameUz : product.nameRu,
+      label: t("products.name"),
+      alwaysVisible: true,
+      defaultVisible: true,
+      render: (product: Product) => (i18n.language === "uz" ? product.nameUz : product.nameRu),
     },
     {
       key: "price",
-      header: t("products.price"),
+      label: t("products.price"),
+      defaultVisible: true,
       render: (product: Product) => formatCurrency(product.price),
     },
     {
+      key: "cost",
+      label: t("products.cost"),
+      adminOnly: true,
+      defaultVisible: false,
+      render: (product: Product) => (product.cost != null ? formatCurrency(product.cost) : "-"),
+    },
+    {
       key: "vatRate",
-      header: t("products.vatRate", "НДС, %"),
+      label: t("products.vatRate", "НДС, %"),
+      defaultVisible: true,
       render: (product: Product) =>
         product.vatRate != null ? `${product.vatRate.toFixed(2)}%` : "—",
     },
     {
       key: "stock",
-      header: t("products.stock"),
+      label: t("products.stock"),
+      defaultVisible: true,
       render: (product: Product) => (
         <span
           style={{
@@ -234,14 +293,27 @@ export function ProductList() {
       ),
     },
     {
+      key: "minStock",
+      label: t("products.minStock"),
+      defaultVisible: false,
+      render: (product: Product) => `${product.minStock} ${product.unit}`,
+    },
+    {
+      key: "unit",
+      label: t("products.unit"),
+      defaultVisible: false,
+      render: (product: Product) => product.unit,
+    },
+    {
       key: "expiryDate",
-      header: t("products.expiryDate"),
-      render: (product: Product) =>
-        product.expiryDate ? formatDate(product.expiryDate) : "-",
+      label: t("products.expiryDate"),
+      defaultVisible: true,
+      render: (product: Product) => (product.expiryDate ? formatDate(product.expiryDate) : "-"),
     },
     {
       key: "supplier",
-      header: t("products.supplier"),
+      label: t("products.supplier"),
+      defaultVisible: true,
       render: (product: Product) =>
         product.supplier
           ? i18n.language === "uz"
@@ -251,7 +323,8 @@ export function ProductList() {
     },
     {
       key: "category",
-      header: t("products.category"),
+      label: t("products.category"),
+      defaultVisible: true,
       render: (product: Product) =>
         product.category
           ? i18n.language === "uz"
@@ -259,12 +332,12 @@ export function ProductList() {
             : product.category.nameRu
           : "-",
     },
-  ];
-  
-  if (isAdmin) {
-    columns.push({
+    {
       key: "actions",
-      header: t("common.actions"),
+      label: t("common.actions"),
+      fixed: true,
+      adminOnly: true,
+      defaultVisible: true,
       render: (product: Product) => (
         <div style={{ display: "flex", gap: "8px" }}>
           {canManageProducts && (
@@ -272,9 +345,7 @@ export function ProductList() {
               variant="secondary"
               size="small"
               tooltip={t("common.edit")}
-              onClick={() =>
-                setFormModal({ open: true, productId: String(product.id) })
-              }
+              onClick={() => setFormModal({ open: true, productId: String(product.id) })}
             >
               <Edit size={16} />
             </Button>
@@ -301,9 +372,43 @@ export function ProductList() {
           </Button>
         </div>
       ),
-    });
-  }
+    },
+  ];
 
+  const { visible, isVisible, toggle, reset } = useColumnVisibility(
+    "pos.products.columns",
+    allColumns,
+  );
+  // What this user may see here: admin-only columns for admins, pictures only while they are on.
+  const availableColumns = allColumns.filter(
+    (c) => (!c.adminOnly || isAdmin) && (c.key !== "image" || showPictures),
+  );
+  const imageShown = showPictures && isVisible("image");
+  useMxikPictureFill(imageShown ? pageData.map((p) => p.mxik) : [], imageShown);
+  const picker = (
+    <ColumnPicker
+      columns={availableColumns.filter((c) => !c.fixed)}
+      visible={visible}
+      onToggle={toggle}
+      onReset={reset}
+    />
+  );
+  const columns = availableColumns
+    .filter((c) => isVisible(c.key))
+    .map((c, i) => ({
+      key: c.key,
+      // The picker sits in the first header cell, before the row number.
+      header:
+        i === 0 ? (
+          <>
+            {picker}
+            {c.label}
+          </>
+        ) : (
+          c.label
+        ),
+      render: c.render,
+    }));
   return (
     <Container>
       <Header>
@@ -316,10 +421,7 @@ export function ProductList() {
             </Button>
           )}
           {canManageProducts && (
-            <Button
-              style={{ fontSize: "26px" }}
-              onClick={() => setFormModal({ open: true })}
-            >
+            <Button style={{ fontSize: "26px" }} onClick={() => setFormModal({ open: true })}>
               <CirclePlus size={24} /> {t("products.add")}
             </Button>
           )}
@@ -354,11 +456,7 @@ export function ProductList() {
               onClick={() => setKeyboardOpen((prev) => !prev)}
             >
               <Keyboard size={18} />
-              {keyboardOpen ? (
-                <ChevronUp size={14} />
-              ) : (
-                <ChevronDown size={14} />
-              )}
+              {keyboardOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </KbToggle>
           </InputControls>
         </SearchInputWrapper>
@@ -368,8 +466,7 @@ export function ProductList() {
           size="small"
           onClick={() => setIsFilterOpen(!isFilterOpen)}
         >
-          {t("filters.filters")}{" "}
-          {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
+          {t("filters.filters")} {isFilterOpen ? <ChevronUp /> : <ChevronDown />}
         </Button>
 
         <Button
@@ -429,9 +526,7 @@ export function ProductList() {
         />
       )}
 
-      {pluExportOpen && (
-        <PluExportModal onClose={() => setPluExportOpen(false)} />
-      )}
+      {pluExportOpen && <PluExportModal onClose={() => setPluExportOpen(false)} />}
 
       {deleteModal.open && deleteModal.product && (
         <ConfirmDialog

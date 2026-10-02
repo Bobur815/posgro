@@ -4,7 +4,8 @@ import styled from "styled-components";
 
 interface Column<T> {
   key: Extract<keyof T, string> | string;
-  header: string;
+  /** Usually text; a node lets a page put controls (e.g. ColumnPicker) in a header cell. */
+  header: React.ReactNode;
   render?: (item: T, index: number) => React.ReactNode;
 }
 

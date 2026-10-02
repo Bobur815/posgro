@@ -23,7 +23,9 @@ const Content = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: ${({ theme }) => theme.spacing.lg};
-  align-items: start;
+  /* Both columns as tall as the taller one, so the right column's bottom row lines up with the
+     pay row on the left. */
+  align-items: stretch;
 `;
 
 const LeftCol = styled.div`
@@ -156,9 +158,22 @@ const ShortcutHint = styled.span`
   font-weight: 500;
 `;
 
-/** Sits under the pay row, separated: it is an alternative to paying, not another tender. */
-const CreditAction = styled.div`
-  margin-top: ${({ theme }) => theme.spacing.sm};
+/**
+ * Split and credit, side by side at the foot of the right column: alternatives to paying, not
+ * tenders. One row instead of two stacked full-width buttons under the pay row keeps the
+ * checkout inside the screen without a vertical scroll.
+ */
+const SecondaryActions = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.sm};
+  margin-top: auto;
+
+  /* Medium text so "Разделить оплату" fits half a column on one line; as tall as the pay row. */
+  > * {
+    flex: 1;
+    min-width: 0;
+    min-height: 56px;
+  }
 `;
 
 const Actions = styled.div`
@@ -656,27 +671,6 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
               <ShortcutHint>(F10)</ShortcutHint>
             </Button>
           </Actions>
-
-          {/* Nasiya. Not one of the tender tiles: those are the three ways money arrives now,
-              and this is the one where it does not. An edit keeps the sale's original terms —
-              re-deciding the credit on a receipt already charged to someone is a different job,
-              done from the debtors screen. */}
-          {canSplit && !editingSaleId && (
-            <CreditAction>
-              <Button variant="secondary" onClick={toggleSplit} fullWidth>
-                {splitMode ? t("pos.singlePayment") : t("pos.splitPayment")}
-              </Button>
-            </CreditAction>
-          )}
-
-          {/* No nasiya in a split (v1): the credit flow stays a single-tender one. */}
-          {!editingSaleId && !splitMode && (
-            <CreditAction>
-              <Button variant="secondary" onClick={() => setCreditOpen(true)} fullWidth>
-                <HandCoins size={16} /> {t("debtors.sellOnCredit", "Продажа в долг")}
-              </Button>
-            </CreditAction>
-          )}
         </LeftCol>
 
         <RightCol>
@@ -774,6 +768,25 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
               />
               {t("pos.fiscalize")}
             </PrintCheckRow>
+          )}
+
+          {/* An edit keeps the sale's original terms — re-deciding a split or the credit on a
+              receipt already charged is a different job, done from the debtors screen. */}
+          {!editingSaleId && (canSplit || !splitMode) && (
+            <SecondaryActions>
+              {canSplit && (
+                <Button variant="secondary" size="medium" onClick={toggleSplit}>
+                  {splitMode ? t("pos.singlePayment") : t("pos.splitPayment")}
+                </Button>
+              )}
+              {/* Nasiya. Not one of the tender tiles: those are the ways money arrives now, and
+                  this is the one where it does not. No nasiya in a split (v1). */}
+              {!splitMode && (
+                <Button variant="secondary" size="medium" onClick={() => setCreditOpen(true)}>
+                  <HandCoins size={16} /> {t("debtors.sellOnCredit", "Продажа в долг")}
+                </Button>
+              )}
+            </SecondaryActions>
           )}
         </RightCol>
       </Content>

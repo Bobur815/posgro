@@ -347,6 +347,9 @@
     }
   },
   "products": {
+    "image": "Rasm",
+    "columns": "Ustunlar",
+    "columnsReset": "Asl holiga qaytarish",
     "title": "Mahsulotlar",
     "name": "Nomi",
     "nameRu": "Nomi (RU)",
