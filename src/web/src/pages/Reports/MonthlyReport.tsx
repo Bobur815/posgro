@@ -135,6 +135,7 @@ const TENDER_ICONS: Record<string, string> = {
   card: "💳",
   uzqr: "🔳",
   click: "📱",
+  mixed: "🔀",
 };
 
 const PaymentBadge = styled.span<{ $method: string }>`
@@ -222,6 +223,7 @@ export function MonthlyReport() {
   const cardCount = sales.filter((s) => s.paymentMethod === "card").length;
   const uzqrCount = sales.filter((s) => s.paymentMethod === "uzqr").length;
   const clickCount = sales.filter((s) => s.paymentMethod === "click").length;
+  const mixedCount = sales.filter((s) => s.paymentMethod === "mixed").length;
   const totalItemsSold = sales.reduce((sum, s) => sum + s.items.length, 0);
   const avgTransaction = sales.length > 0 ? totalRevenue / sales.length : 0;
 
@@ -322,6 +324,14 @@ export function MonthlyReport() {
               <StatCard>
                 <StatLabel>{t("reports.clickPayments")}</StatLabel>
                 <StatValue>{clickCount}</StatValue>
+                <StatSubtext>{t("reports.transactions")}</StatSubtext>
+              </StatCard>
+            )}
+
+            {mixedCount > 0 && (
+              <StatCard>
+                <StatLabel>{t("reports.mixedPayments")}</StatLabel>
+                <StatValue>{mixedCount}</StatValue>
                 <StatSubtext>{t("reports.transactions")}</StatSubtext>
               </StatCard>
             )}

@@ -15,7 +15,17 @@ const D = (n: number) => new Prisma.Decimal(n);
 
 type Where = Record<string, unknown>;
 
-function service(opts: { startDate?: Date | null } = {}) {
+/** Split-payment lines by (method, fiscalised?) — absent = none. */
+type Lines = Partial<Record<string, number>>;
+
+function service(opts: { startDate?: Date | null; lines?: Lines } = {}) {
+  // mixedLines() is a tagged $queryRaw: (strings, storeId, method, when). `when` is a Prisma.sql
+  // fragment whose text says whether only FISCALIZED receipts count.
+  const queryRaw = jest.fn(async (_s: TemplateStringsArray, _store: string, method: string, when: Prisma.Sql) => {
+    const key = `${method}${when.sql.includes('FISCALIZED') ? ':fiscal' : ''}`;
+    const n = opts.lines?.[key];
+    return [{ total: n === undefined ? null : D(n) }];
+  });
   const saleAggregate = jest.fn(async ({ where }: { where: Where }) => {
     // Unreported cash sales
     if (where.fiscalStatus === null)
@@ -30,6 +40,7 @@ function service(opts: { startDate?: Date | null } = {}) {
     return { _sum: { paidAmount: tender === 'card' ? D(300000) : D(120000) } };
   });
   const prisma = {
+    $queryRaw: queryRaw,
     sale: {
       aggregate: saleAggregate,
       updateMany: jest.fn(async () => ({ count: 1 })),
@@ -138,6 +149,23 @@ describe('BankTurnoverService', () => {
     const where = JSON.stringify(call[0].where);
     expect(where).toContain('"fiscalTender":{"equals":"click"');
     expect(where).toContain('"paymentMethod":{"equals":"click"');
+  });
+
+  it('adds split-payment lines: counter lines by sale time, cash/Click lines once fiscalised', async () => {
+    const { svc } = service({
+      lines: { card: 40000, uzqr: 10000, 'cash:fiscal': 55000, 'click:fiscal': 15000 },
+    });
+    const r = (await svc.summary('S1', from, to)) as BankTurnover;
+    expect(r.card.toString()).toBe('390000'); // 350 000 as before + 40 000 split card lines
+    expect(r.uzqr.toString()).toBe('130000');
+    expect(r.fiscalCash.toString()).toBe('555000');
+    expect(r.fiscalClick.toString()).toBe('95000');
+    expect(r.bankTurnover.toString()).toBe('1170000');
+  });
+
+  it('counts no split lines when there are none — unchanged figures', async () => {
+    const r = (await service().svc.summary('S1', from, to)) as BankTurnover;
+    expect(r.bankTurnover.toString()).toBe('1050000');
   });
 
   it('sums only deposits that were not voided', async () => {

@@ -368,6 +368,8 @@ export class SalesService {
     const uzqrSales = sales.filter((s: SaleWithItems) => s.paymentMethod === 'uzqr').length;
     // Click likewise: fiscalised as cash, but its own tender for analytics.
     const clickSales = sales.filter((s: SaleWithItems) => s.paymentMethod === 'click').length;
+    // Split payments (several tenders on one receipt) — their lines are in sale_payments.
+    const mixedSales = sales.filter((s: SaleWithItems) => s.paymentMethod === 'mixed').length;
 
     return {
       date: startOfDay.toISOString().split('T')[0],
@@ -378,6 +380,7 @@ export class SalesService {
       cardSales,
       uzqrSales,
       clickSales,
+      mixedSales,
       averageTransaction: totalSales > 0 ? totalRevenue / totalSales : 0,
     };
   }

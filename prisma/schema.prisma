@@ -78,6 +78,7 @@ model Store {
   supplierTransactions SupplierTransaction[]
   debtTransactions     DebtTransaction[]
   cashBankDeposits     CashBankDeposit[]
+  salePayments         SalePayment[]
   systemSettings       SystemSetting[]
   terminalHeartbeats   TerminalHeartbeat[]
   terminalLogs         TerminalLog[]
@@ -163,6 +164,26 @@ model CashBankDeposit {
 
   @@index([storeId, depositedAt])
   @@map("cash_bank_deposits")
+}
+
+/// One tender of a split-payment receipt (sales.payment_method = 'mixed'). A single-tender sale has
+/// no rows — its whole paid amount is on sales.payment_method. Keyed like the sale itself,
+/// (storeId, receiptNumber), not by sale id: the lines sync on their own endpoint
+/// (POST /sales/payments-sync) and may arrive before or after the sale.
+model SalePayment {
+  id            String @id @default(cuid())
+  storeId       String @map("store_id")
+  store         Store  @relation(fields: [storeId], references: [id])
+  receiptNumber String @map("receipt_number")
+
+  /// cash | card | uzqr | click. Cash is net of change: what stayed in the drawer for this receipt.
+  method String
+  amount Decimal @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([storeId, receiptNumber, method])
+  @@map("sale_payments")
 }
 
 model DebtTransaction {

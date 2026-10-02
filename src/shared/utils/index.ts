@@ -6,3 +6,4 @@ export * from './mxik-packages';
 export * from './mxik-lookup';
 export * from './circulation';
 export * from './pack';
+export * from './split-payment';

@@ -14,6 +14,8 @@ import { SalesService } from './sales.service';
 import { SyncSaleDto } from './dto/sync-sale.dto';
 import { SyncFiscalBulkDto } from './dto/sync-fiscal.dto';
 import { SalesFiscalService } from './sales-fiscal.service';
+import { SyncSalePaymentsBulkDto } from './dto/sync-payments.dto';
+import { SalesPaymentsService } from './sales-payments.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { StoreGuard } from '../../common/guards/store.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -29,6 +31,7 @@ export class SalesController {
   constructor(
     private readonly salesService: SalesService,
     private readonly salesFiscal: SalesFiscalService,
+    private readonly salesPayments: SalesPaymentsService,
   ) {}
 
   @Get()
@@ -89,6 +92,17 @@ export class SalesController {
   @ApiResponse({ status: 201, description: 'Receipt numbers recorded' })
   async fiscalSync(@CurrentStore() storeId: string, @Body() dto: SyncFiscalBulkDto) {
     return this.salesFiscal.syncFromTerminal(storeId, dto.sales);
+  }
+
+  /**
+   * Tenders of split-payment receipts — sent apart from /sales/sync, which rejects unknown fields
+   * on an older server. Same access as /sales/sync.
+   */
+  @Post('payments-sync')
+  @ApiOperation({ summary: 'Split-payment lines of synced sales, from a POS terminal' })
+  @ApiResponse({ status: 201, description: 'Receipt numbers recorded' })
+  async paymentsSync(@CurrentStore() storeId: string, @Body() dto: SyncSalePaymentsBulkDto) {
+    return this.salesPayments.syncFromTerminal(storeId, dto.sales);
   }
 
   @Delete(':id')

@@ -372,6 +372,7 @@ export class StoresService {
         this.prisma.terminalLog.deleteMany({ where: { storeId: id } }),
         this.prisma.systemSetting.deleteMany({ where: { storeId: id } }),
         this.prisma.cashBankDeposit.deleteMany({ where: { storeId: id } }),
+        this.prisma.salePayment.deleteMany({ where: { storeId: id } }),
         // Before users: every ledger row points at the person who owes.
         this.prisma.debtTransaction.deleteMany({ where: { storeId: id } }),
         // SmenaMovement rows cascade with their shift.

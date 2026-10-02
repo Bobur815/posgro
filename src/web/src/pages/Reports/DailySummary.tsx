@@ -175,6 +175,7 @@ const TENDER_ICONS: Record<string, string> = {
   card: "💳",
   uzqr: "🔳",
   click: "📱",
+  mixed: "🔀",
 };
 
 const PaymentBadge = styled.span<{ $method: string }>`
@@ -259,7 +260,7 @@ export function DailySummary() {
   const todayStr = new Date().toISOString().split("T")[0];
   const [startDate, setStartDate] = useState(todayStr);
   const [endDate, setEndDate] = useState(todayStr);
-  const [paymentFilter, setPaymentFilter] = useState<"all" | SaleTender>(
+  const [paymentFilter, setPaymentFilter] = useState<"all" | SaleTender | "mixed">(
     "all",
   );
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -317,6 +318,9 @@ export function DailySummary() {
     const clickSales = filteredSales.filter(
       (s) => s.paymentMethod === "click",
     ).length;
+    const mixedSales = filteredSales.filter(
+      (s) => s.paymentMethod === "mixed",
+    ).length;
     const totalCost = filteredSales.reduce(
       (sum, s) => sum + (s.totalCost ?? 0),
       0,
@@ -331,6 +335,7 @@ export function DailySummary() {
       cardSales,
       uzqrSales,
       clickSales,
+      mixedSales,
       avgMargin,
     };
   }, [filteredSales]);
@@ -378,7 +383,7 @@ export function DailySummary() {
           <FilterSelect
             value={paymentFilter}
             onChange={(e) =>
-              setPaymentFilter(e.target.value as "all" | SaleTender)
+              setPaymentFilter(e.target.value as "all" | SaleTender | "mixed")
             }
           >
             <option value="all">{t("reports.allPayments")}</option>
@@ -386,6 +391,7 @@ export function DailySummary() {
             <option value="card">{t("pos.card")}</option>
             <option value="uzqr">{t("pos.uzqr")}</option>
             <option value="click">{t("pos.click")}</option>
+            <option value="mixed">{t("pos.mixed")}</option>
           </FilterSelect>
         </FilterGroup>
         <Button variant="secondary" size="medium" onClick={handleReset}>
@@ -447,6 +453,14 @@ export function DailySummary() {
             <StatCard>
               <StatLabel>{t("reports.clickPayments")}</StatLabel>
               <StatValue>{summary.clickSales}</StatValue>
+              <StatSubtext>{t("reports.transactions")}</StatSubtext>
+            </StatCard>
+          )}
+
+          {summary.mixedSales > 0 && (
+            <StatCard>
+              <StatLabel>{t("reports.mixedPayments")}</StatLabel>
+              <StatValue>{summary.mixedSales}</StatValue>
               <StatSubtext>{t("reports.transactions")}</StatSubtext>
             </StatCard>
           )}
