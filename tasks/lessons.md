@@ -353,3 +353,8 @@ config at all, so the config alone would not have stopped whole-file rewrites; t
 
 **Rule:** a legacy file is formatted, if ever, on purpose in a commit of its own — never as a side
 effect of an edit. The hook lives in `.claude/`, which is gitignored: a fresh clone has the old hook.
+
+**Also (2026-10-02):** the HEAD-clean check lives only in the hook. Running `npx prettier --write`
+by hand skips it: on the Click branch it rewrote 15 legacy files (~1 500 lines) and they had to be
+restored from HEAD and the edits replayed. Never run Prettier by hand on existing files; let the
+hook decide, and check `git diff --ignore-cr-at-eol --stat` before committing.
