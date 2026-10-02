@@ -2,6 +2,7 @@ import { getPrismaClient } from '../database/sqlite-client';
 import { getAppConfig } from '../config/app-config';
 import { getServerToken } from './queue-manager';
 import { isCashTender } from '../../shared/constants';
+import { shiftTenderRows } from '../sales/shift-tenders';
 
 const BATCH_SIZE = 20;
 
@@ -34,14 +35,9 @@ type ShiftTotals = {
 async function computeShiftTotals(smenaId: string): Promise<ShiftTotals> {
   const prisma = getPrismaClient();
 
-  type SalesRow = { payment_method: string; total: number };
-  // paid_amount, not final_amount: credit handed over now is not money in this shift. See
-  // computeSmenaStats(), which this mirrors.
-  const salesRows = (await prisma.$queryRawUnsafe(
-    `SELECT payment_method, COALESCE(SUM(paid_amount), 0) as total
-     FROM sales WHERE smena_id = ? GROUP BY payment_method`,
-    smenaId,
-  )) as SalesRow[];
+  // paid_amount, not final_amount: credit handed over now is not money in this shift; split
+  // receipts arrive as their lines. The same rows computeSmenaStats() reads (shift-tenders.ts).
+  const salesRows = await shiftTenderRows(smenaId);
 
   let cashSalesAmount = 0;
   let cardSalesAmount = 0;

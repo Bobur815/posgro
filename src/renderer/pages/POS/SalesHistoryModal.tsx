@@ -448,8 +448,17 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
                       <Badge $method={sale.paymentMethod}>
                         {sale.paymentMethod === DEBT_TENDER
                           ? `💰 ${t('pos.debt')}`
-                          : t(SALE_TENDER_I18N_KEYS[sale.paymentMethod as SaleTender] ?? 'pos.cash')}
+                          : sale.paymentMethod === 'mixed'
+                            ? `🔀 ${t('pos.mixed')}`
+                            : t(SALE_TENDER_I18N_KEYS[sale.paymentMethod as SaleTender] ?? 'pos.cash')}
                       </Badge>
+                      {/* Split payment: each tender with its share, in the tender's own colour. */}
+                      {(sale.payments ?? []).map((p) => (
+                        <Badge key={p.method} $method={p.method}>
+                          {t(SALE_TENDER_I18N_KEYS[p.method as SaleTender] ?? 'pos.mixed')}{' '}
+                          {formatCurrency(Number(p.amount))}
+                        </Badge>
+                      ))}
                       {/* Part-paid on credit: the tender above took the money, this is the rest. */}
                       {sale.paymentMethod !== DEBT_TENDER && Number(sale.debtAmount) > 0 && (
                         <Badge $method={DEBT_TENDER}>

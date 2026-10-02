@@ -377,3 +377,48 @@ describe('fiscalizeSale — tender on the receipt', () => {
     expect(sentPayments()).toEqual([{ type: 2, payment_id: 'pay-9' }]);
   });
 });
+
+describe('fiscalizeSale — split payment', () => {
+  const sentPayments = () => (client.sale.mock.calls[0][0] as { payments: unknown[] }).payments;
+  const withLines = (lines: Array<[string, number]>, regosPaymentId: string | null = null) =>
+    prismaMock.sale.findUnique.mockImplementation(async () => ({
+      ...saleRow(),
+      paymentMethod: 'mixed',
+      finalAmount: lines.reduce((s, [, a]) => s + a, 0),
+      regosPaymentId,
+      payments: lines.map(([method, amount]) => ({ method, amount })),
+    }));
+
+  it('55 000 cash + 45 000 card → one cash and one card payment', async () => {
+    withLines([['cash', 55000], ['card', 45000]]);
+    await regosVcrService.fiscalizeSale('sale-1');
+    expect(sentPayments()).toEqual([
+      { type: 1, value: 5500000 },
+      { type: 2, value: 4500000, card_type: 2 },
+    ]);
+  });
+
+  it('55 000 cash + 45 000 Click → all of it as cash', async () => {
+    withLines([['cash', 55000], ['click', 45000]]);
+    await regosVcrService.fiscalizeSale('sale-1');
+    expect(sentPayments()).toEqual([{ type: 1, value: 10000000 }]);
+  });
+
+  it('books a REGOS-backed UzQR line by reference next to the others', async () => {
+    withLines([['card', 30000], ['uzqr', 20000]], 'pay-7');
+    await regosVcrService.fiscalizeSale('sale-1');
+    expect(sentPayments()).toEqual([
+      { type: 2, value: 3000000, card_type: 2 },
+      { type: 2, payment_id: 'pay-7' },
+    ]);
+  });
+
+  it('folds a plain UzQR line into the card payment', async () => {
+    withLines([['click', 10000], ['card', 30000], ['uzqr', 20000]]);
+    await regosVcrService.fiscalizeSale('sale-1');
+    expect(sentPayments()).toEqual([
+      { type: 1, value: 1000000 },
+      { type: 2, value: 5000000, card_type: 2 },
+    ]);
+  });
+});

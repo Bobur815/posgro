@@ -13,6 +13,7 @@ import { getCurrentUser } from '../ipc/auth-handlers';
 import { uploadLocalData, uploadNasiya } from './upload-sync';
 import { pullDebtLedger } from './debt-ledger-sync';
 import { syncFiscalStatus } from './fiscal-status-sync';
+import { syncSalePayments } from './payments-sync';
 import { getAppConfig } from '../config/app-config';
 import { getPrismaClient } from '../database/sqlite-client';
 import { getServerToken, clearServerToken } from './queue-manager';
@@ -188,6 +189,14 @@ export class SyncService {
         await syncFiscalStatus();
       } catch (fiscalError) {
         console.error('Fiscal status sync failed (non-fatal):', fiscalError instanceof Error ? fiscalError.message : fiscalError);
+      }
+
+      // Split-payment lines of sales already uploaded — all roles, on their own endpoint (an older
+      // server rejects unknown fields on /sales/sync). Bank turnover and reports read them.
+      try {
+        await syncSalePayments();
+      } catch (paymentsError) {
+        console.error('Sale payments sync failed (non-fatal):', paymentsError instanceof Error ? paymentsError.message : paymentsError);
       }
 
       // Sync closed shifts — all roles, deliberately NOT inside uploadLocalData(), which only

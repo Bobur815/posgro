@@ -368,3 +368,114 @@ describe('selling on credit', () => {
     expect(sale.debtUserId).toBeNull();
   });
 });
+
+describe('split payment', () => {
+  const linesOf = async (saleId: string) =>
+    (
+      await getPrismaClient().salePayment.findMany({ where: { saleId }, orderBy: { method: 'asc' } })
+    ).map((l: { method: string; amount: unknown }) => [l.method, Number(l.amount)]);
+
+  it('stores a split as mixed, cash net of change, in the same commit', async () => {
+    const p = await product(5);
+    // 3 000 receipt: 1 500 cash handed over and 2 000 by card, so 500 is change and 1 000 cash
+    // stays. The checkout sends what was entered; the main process takes the change off.
+    const { sale } = await commitSale(
+      {
+        ...cart(line(p, 3)),
+        payments: [
+          { method: 'cash', amount: 1500 },
+          { method: 'card', amount: 2000 },
+        ],
+      },
+      MAIN,
+    );
+    markSettled(sale.id);
+
+    expect(sale.paymentMethod).toBe('mixed');
+    expect(Number(sale.paidAmount)).toBe(3000);
+    expect(await linesOf(sale.id)).toEqual([
+      ['card', 2000],
+      ['cash', 1000],
+    ]);
+  });
+
+  it('stores a "split" that leaves one non-zero line as that tender, with no rows', async () => {
+    const p = await product(5);
+    const { sale } = await commitSale(
+      {
+        ...cart(line(p, 2)),
+        payments: [
+          { method: 'cash', amount: 0 },
+          { method: 'click', amount: 2000 },
+        ],
+      },
+      MAIN,
+    );
+    markSettled(sale.id);
+    expect(sale.paymentMethod).toBe('click');
+    expect(await linesOf(sale.id)).toEqual([]);
+  });
+
+  it('refuses a split that does not cover the receipt, and sells nothing', async () => {
+    const p = await product(5);
+    const attempt = commitSale(
+      { ...cart(line(p, 3)), payments: [{ method: 'cash', amount: 1000 }, { method: 'card', amount: 1000 }] },
+      MAIN,
+    );
+    await expect(attempt.catch(codeOf)).resolves.toBe('SPLIT_NOT_COVERED');
+    expect(await stockOf(p.id)).toBe(5);
+  });
+
+  it('refuses card lines over the total (no change from a card) and a split with nasiya', async () => {
+    const p = await product(5);
+    const over = commitSale(
+      { ...cart(line(p, 1)), payments: [{ method: 'card', amount: 600 }, { method: 'click', amount: 600 }] },
+      MAIN,
+    );
+    await expect(over.catch(codeOf)).resolves.toBe('SPLIT_NOT_COVERED');
+
+    const client = await getPrismaClient().user.create({
+      data: { phone: '998900000199', password: 'x', role: 'CLIENT', nameRu: 'К', nameUz: 'K' },
+    });
+    const withDebt = commitSale(
+      {
+        ...cart(line(p, 1)),
+        debtAmount: 500,
+        debtUserId: client.id,
+        payments: [{ method: 'cash', amount: 300 }, { method: 'card', amount: 200 }],
+      },
+      MAIN,
+    );
+    await expect(withDebt.catch(codeOf)).resolves.toBe('SPLIT_WITH_DEBT');
+
+    const unknown = commitSale(
+      { ...cart(line(p, 1)), payments: [{ method: 'debt', amount: 500 }, { method: 'cash', amount: 500 }] },
+      MAIN,
+    );
+    await expect(unknown.catch(codeOf)).resolves.toBe('SPLIT_BAD_TENDER');
+    expect(await stockOf(p.id)).toBe(5);
+  });
+
+  it('an edit replaces the lines, and an edit to one tender leaves none', async () => {
+    const p = await product(5);
+    const { sale } = await commitSale(
+      { ...cart(line(p, 2)), payments: [{ method: 'cash', amount: 1000 }, { method: 'card', amount: 1000 }] },
+      MAIN,
+    );
+    markSettled(sale.id);
+
+    await updateSale(
+      sale.id,
+      { ...cart(line(p, 2)), payments: [{ method: 'cash', amount: 500 }, { method: 'click', amount: 1500 }] },
+      ADMIN,
+    );
+    expect(await linesOf(sale.id)).toEqual([
+      ['cash', 500],
+      ['click', 1500],
+    ]);
+
+    const { sale: single } = await updateSale(sale.id, { ...cart(line(p, 2)), paymentMethod: 'card' }, ADMIN);
+    expect(single.paymentMethod).toBe('card');
+    expect(await linesOf(sale.id)).toEqual([]);
+  });
+});

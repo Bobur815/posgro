@@ -101,6 +101,24 @@ describe('a receipt put on a customer’s tab', () => {
     expect(out).not.toContain('Долг');
   });
 
+  it('lists each tender of a split payment under Смешанная', () => {
+    const out = text(
+      buildReceiptHTML(
+        sale({
+          paymentMethod: 'mixed',
+          payments: [
+            { method: 'cash', amount: 55_000 },
+            { method: 'click', amount: 45_000 },
+          ],
+        }),
+        base,
+      ),
+    );
+    expect(out).toContain('Оплата Смешанная');
+    expect(out).toMatch(/Наличные 55[s ]?000/);
+    expect(out).toMatch(/Click 45[s ]?000/);
+  });
+
   it('speaks Uzbek on an Uzbek receipt', () => {
     const out = text(buildReceiptHTML(sale({ paymentMethod: 'debt' }), { ...base, receipt_language: 'uz' }));
     expect(out).toContain("To'lov Qarz");

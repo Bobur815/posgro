@@ -10,6 +10,7 @@ import { commitSale, deleteSale, updateSale } from '../sales/commit-sale';
 import { settleSale, type SettleOptions } from '../sales/settle-sale';
 import { isSatellite } from '../lan/role';
 import * as satellite from '../lan/satellite-ops';
+import { mainHas } from '../lan/main-features';
 import {
   rankProducts,
   rankingCategories,
@@ -62,6 +63,13 @@ async function finalizeSale(saleId: string, data: SettleOptions): Promise<void> 
 }
 
 export function setupSalesHandlers(): void {
+  /**
+   * Whether the checkout may offer split payment here. Always on a till that commits to its own
+   * database; on a satellite only once its main has said it stores the lines (an older main would
+   * keep the sale and drop them).
+   */
+  ipcMain.handle('sales:canSplit', async () => !(await isSatellite()) || mainHas('split-payment'));
+
   ipcMain.handle('sales:create', async (_event, data) => {
     const currentUser = getCurrentUser();
     if (!currentUser) {
@@ -132,7 +140,7 @@ export function setupSalesHandlers(): void {
 
     const sales = await prisma.sale.findMany({
       where,
-      include: { items: { include: { product: { select: { cost: true } } } } },
+      include: { items: { include: { product: { select: { cost: true } } } }, payments: true },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
@@ -160,7 +168,7 @@ export function setupSalesHandlers(): void {
 
     const sale = await prisma.sale.findUnique({
       where: { id },
-      include: { items: true },
+      include: { items: true, payments: true },
     });
 
     if (!sale) {
@@ -286,6 +294,7 @@ export function setupSalesHandlers(): void {
     // totalSales, otherwise a UzQR sale disappears from the summary entirely.
     const uzqrSales = sales.filter((s: Sale & { items: PrismaSaleItem[] }) => s.paymentMethod === 'uzqr').length;
     const clickSales = sales.filter((s: Sale & { items: PrismaSaleItem[] }) => s.paymentMethod === 'click').length;
+    const mixedSales = sales.filter((s: Sale & { items: PrismaSaleItem[] }) => s.paymentMethod === 'mixed').length;
 
     return {
       date: format(today, 'yyyy-MM-dd'),
@@ -296,6 +305,7 @@ export function setupSalesHandlers(): void {
       cardSales,
       uzqrSales,
       clickSales,
+      mixedSales,
       averageTransaction: totalSales > 0 ? totalRevenue / totalSales : 0,
     };
   });

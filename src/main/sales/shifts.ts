@@ -1,5 +1,6 @@
 import { getPrismaClient } from '../database/sqlite-client';
 import { isCashTender, isClickTender } from '../../shared/constants';
+import { shiftTenderRows } from './shift-tenders';
 import type { SmenaStats, SmenaFiscalStats } from '../../shared/types/smena.types';
 import { SaleRefusedError, serially } from './commit-sale';
 import { sellingRefusal } from '../license/license';
@@ -43,24 +44,10 @@ export async function computeFiscalStats(smenaId: string): Promise<SmenaFiscalSt
 export async function computeSmenaStats(smenaId: string): Promise<SmenaStats> {
   const prisma = getPrismaClient();
 
-  type SalesRow = { payment_method: string; cnt: number; total: number; discounts: number };
-
-  // Sales by payment method.
-  //
-  // SUM(paid_amount), not final_amount: a nasiya sale hands the goods over now and collects the
-  // money later, so only the part actually paid at the counter belongs in a drawer figure. The
+  // Sales by payment method, split receipts broken into their lines (shift-tenders.ts). The
   // backfill in migration 35 set paid_amount = final_amount on every earlier receipt, so this
   // reads identically for every sale that predates credit.
-  const salesRows = (await prisma.$queryRawUnsafe(
-    `SELECT payment_method,
-            COUNT(*) as cnt,
-            COALESCE(SUM(paid_amount), 0) as total,
-            COALESCE(SUM(discount_amount), 0) as discounts
-     FROM sales
-     WHERE smena_id = ?
-     GROUP BY payment_method`,
-    smenaId
-  )) as SalesRow[];
+  const salesRows = await shiftTenderRows(smenaId);
 
   let cashSalesCount = 0;
   let cashSalesAmount = 0;

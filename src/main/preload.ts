@@ -69,6 +69,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Sales
   sales: {
     create: (data: unknown) => ipcRenderer.invoke("sales:create", data),
+    canSplit: () => ipcRenderer.invoke("sales:canSplit"),
     update: (id: string, data: unknown) =>
       ipcRenderer.invoke("sales:update", id, data),
     delete: (id: string) => ipcRenderer.invoke("sales:delete", id),
@@ -601,6 +602,8 @@ declare global {
       };
       sales: {
         create: (data: unknown) => Promise<unknown>;
+        /** Split payment allowed here (a satellite: only once its main supports it). */
+        canSplit: () => Promise<boolean>;
         update: (id: string, data: unknown) => Promise<unknown>;
         delete: (id: string) => Promise<boolean>;
         getAll: (filters?: {
