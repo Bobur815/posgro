@@ -15,18 +15,32 @@ const D = (n: number) => new Prisma.Decimal(n);
 
 type Where = Record<string, unknown>;
 
-function service(opts: { startDate?: Date | null } = {}) {
+/** Split-payment lines by (method, fiscalised?) — absent = none. */
+type Lines = Partial<Record<string, number>>;
+
+function service(opts: { startDate?: Date | null; lines?: Lines } = {}) {
+  // mixedLines() is a tagged $queryRaw: (strings, storeId, method, when). `when` is a Prisma.sql
+  // fragment whose text says whether only FISCALIZED receipts count.
+  const queryRaw = jest.fn(async (_s: TemplateStringsArray, _store: string, method: string, when: Prisma.Sql) => {
+    const key = `${method}${when.sql.includes('FISCALIZED') ? ':fiscal' : ''}`;
+    const n = opts.lines?.[key];
+    return [{ total: n === undefined ? null : D(n) }];
+  });
   const saleAggregate = jest.fn(async ({ where }: { where: Where }) => {
     // Unreported cash sales
     if (where.fiscalStatus === null)
       return { _count: { _all: 3 }, _sum: { finalAmount: D(45000) } };
-    // Fiscalised cash
-    if (where.fiscalStatus === 'FISCALIZED') return { _sum: { finalAmount: D(500000) } };
+    // Fiscalised cash, and fiscalised Click (fiscalised as cash, counted apart)
+    if (where.fiscalStatus === 'FISCALIZED')
+      return {
+        _sum: { finalAmount: JSON.stringify(where).includes('"click"') ? D(80000) : D(500000) },
+      };
     // Counter money by tender
     const tender = (where.paymentMethod as { equals: string }).equals;
     return { _sum: { paidAmount: tender === 'card' ? D(300000) : D(120000) } };
   });
   const prisma = {
+    $queryRaw: queryRaw,
     sale: {
       aggregate: saleAggregate,
       updateMany: jest.fn(async () => ({ count: 1 })),
@@ -80,13 +94,14 @@ describe('BankTurnoverService', () => {
     );
   });
 
-  it('adds card (counter + nasiya payments), UzQR and fiscalised cash', async () => {
+  it('adds card (counter + nasiya payments), UzQR, fiscalised cash and fiscalised Click', async () => {
     const { svc } = service();
     const r = (await svc.summary('S1', from, to)) as BankTurnover;
     expect(r.card.toString()).toBe('350000'); // 300 000 at the counter + 50 000 paid on a debt
     expect(r.uzqr.toString()).toBe('120000');
     expect(r.fiscalCash.toString()).toBe('500000');
-    expect(r.bankTurnover.toString()).toBe('970000');
+    expect(r.fiscalClick.toString()).toBe('80000');
+    expect(r.bankTurnover.toString()).toBe('1050000');
     expect(r.deposited.toString()).toBe('200000');
     expect(r.unreported).toEqual({ count: 3, amount: D(45000) });
   });
@@ -114,13 +129,43 @@ describe('BankTurnoverService', () => {
     expect(JSON.stringify(call[0].where)).toContain('"fiscalizedAt":null');
   });
 
-  it('reports nothing to deposit until a start date is set, then fiscalised cash minus deposits', async () => {
+  it('reports nothing to deposit until a start date is set, then fiscalised cash + Click minus deposits', async () => {
     expect(((await service().svc.summary('S1', from, to)) as BankTurnover).running).toBeNull();
 
     const startDate = new Date('2026-09-15T00:00:00Z');
     const r = (await service({ startDate }).svc.summary('S1', from, to)) as BankTurnover;
     expect(r.running).toMatchObject({ startDate });
-    expect(r.running!.toDeposit.toString()).toBe('300000');
+    expect(r.running!.fiscalClick.toString()).toBe('80000');
+    expect(r.running!.toDeposit.toString()).toBe('380000'); // 500 000 + 80 000 − 200 000
+  });
+
+  it('counts Click only once fiscalised, by its fiscal tender or the sale tender', async () => {
+    const { svc, prisma } = service();
+    await svc.summary('S1', from, to);
+    const call = prisma.sale.aggregate.mock.calls.find(
+      ([a]) =>
+        (a.where as Where).fiscalStatus === 'FISCALIZED' && JSON.stringify(a.where).includes('"click"'),
+    )!;
+    const where = JSON.stringify(call[0].where);
+    expect(where).toContain('"fiscalTender":{"equals":"click"');
+    expect(where).toContain('"paymentMethod":{"equals":"click"');
+  });
+
+  it('adds split-payment lines: counter lines by sale time, cash/Click lines once fiscalised', async () => {
+    const { svc } = service({
+      lines: { card: 40000, uzqr: 10000, 'cash:fiscal': 55000, 'click:fiscal': 15000 },
+    });
+    const r = (await svc.summary('S1', from, to)) as BankTurnover;
+    expect(r.card.toString()).toBe('390000'); // 350 000 as before + 40 000 split card lines
+    expect(r.uzqr.toString()).toBe('130000');
+    expect(r.fiscalCash.toString()).toBe('555000');
+    expect(r.fiscalClick.toString()).toBe('95000');
+    expect(r.bankTurnover.toString()).toBe('1170000');
+  });
+
+  it('counts no split lines when there are none — unchanged figures', async () => {
+    const r = (await service().svc.summary('S1', from, to)) as BankTurnover;
+    expect(r.bankTurnover.toString()).toBe('1050000');
   });
 
   it('sums only deposits that were not voided', async () => {

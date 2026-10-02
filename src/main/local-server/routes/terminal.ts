@@ -5,6 +5,7 @@ import { AttemptThrottle } from '../../ipc/override-throttle';
 import { generateDeviceSecret, redeemPairingCode } from '../pairing';
 import { signTerminalToken } from '../auth';
 import { mayPair } from '../../license/license';
+import { MAIN_FEATURES } from '../../lan/main-features';
 
 /**
  * A six-digit code is only safe with something in front of it. bcrypt does not help here — the
@@ -220,7 +221,9 @@ export const terminalRoutes: Route[] = [
         data: { lastSeenAt: new Date(), unsyncedCount },
       });
 
-      return { ok: true };
+      // What this main can do, so the satellite offers nothing an older main would mishandle
+      // (lan/main-features.ts). Additive: an older satellite ignores the field.
+      return { ok: true, features: MAIN_FEATURES };
     },
   },
 

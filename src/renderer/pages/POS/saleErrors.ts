@@ -42,6 +42,10 @@ export function parseSaleError(
     if (parsed.code === "SALE_HAS_PAYMENT") {
       return t("errors.saleHasPayment");
     }
+    // Split payment refused by the main process — the screen should not have let it through.
+    if (parsed.code === "SPLIT_NOT_COVERED") return t("errors.splitNotCovered");
+    if (parsed.code === "SPLIT_WITH_DEBT") return t("errors.splitWithDebt");
+    if (parsed.code === "SPLIT_BAD_TENDER") return t("errors.splitBadTender");
     // A satellite that cannot reach its main terminal refuses to sell rather than selling from its
     // own copy of the stock; the cart stays as it is, so the cashier retries once the main is back.
     if (parsed.code === "MAIN_UNREACHABLE") {

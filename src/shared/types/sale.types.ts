@@ -9,6 +9,8 @@ export interface Sale {
   discountAmount: number;
   finalAmount: number;
   paymentMethod: string;
+  /** Split payment (paymentMethod 'mixed'): one per tender, cash net of change. Absent otherwise. */
+  payments?: Array<{ method: string; amount: number }>;
   cashierId: string;
   cashierName: string;
   terminalId: string;

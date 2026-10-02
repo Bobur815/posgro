@@ -38,6 +38,12 @@ export interface SmenaStats {
   cashSalesAmount: number;
   cardSalesCount: number;
   cardSalesAmount: number;
+  /**
+   * Click, as a part of the card (cashless) figures above — never added to them again. Optional:
+   * a LAN main on an older build sends stats without it.
+   */
+  clickSalesCount?: number;
+  clickSalesAmount?: number;
   totalRevenue: number;
   totalDiscounts: number;
   returnCount: number;

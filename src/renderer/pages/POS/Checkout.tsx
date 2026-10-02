@@ -12,8 +12,12 @@ import { UZQR_BRAND_COLOR, DEBT_TENDER, type SaleTender } from "@shared/constant
 import { DebtorPickerModal, type DebtSelection } from "./DebtorPickerModal";
 import { HandCoins } from "lucide-react";
 import { UzQrLogo } from "./UzQrLogo";
+import { ClickLogo, CLICK_FIELD } from "./ClickLogo";
+import { useTheme } from "../../theme/ThemeProvider";
 import { UzQrPaymentModal } from "./UzQrPaymentModal";
 import { parseSaleError } from "./saleErrors";
+import { SplitPaymentPanel } from "./SplitPaymentPanel";
+import { splitState, type SplitTender } from "@shared/utils/split-payment";
 
 const Content = styled.div`
   display: grid;
@@ -67,9 +71,10 @@ const SummaryRow = styled.div`
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
-const PaymentMethods = styled.div`
+// Three tiles in a row, as always; with Click on, two rows of two rather than four narrow tiles.
+const PaymentMethods = styled.div<{ $columns: number }>`
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(${({ $columns }) => $columns}, 1fr);
   gap: ${({ theme }) => theme.spacing.md};
 `;
 
@@ -104,6 +109,18 @@ const UzQrButton = styled(PaymentButton)`
   box-shadow: ${({ theme, $selected }) =>
     $selected ? `0 0 0 3px ${theme.colors.primary}40` : "none"};
   background-color: ${UZQR_BRAND_COLOR};
+`;
+
+/** Like the UzQR tile: the artwork is the label, on the field its artwork was drawn for. */
+const ClickButton = styled(PaymentButton)<{ $field: string }>`
+  padding: ${({ theme }) => theme.spacing.sm};
+  background-color: ${({ $field }) => $field};
+  box-shadow: ${({ theme, $selected }) =>
+    $selected ? `0 0 0 3px ${theme.colors.primary}40` : "none"};
+
+  &:hover {
+    background-color: ${({ $field }) => $field};
+  }
 `;
 
 const PaymentIcon = styled.span`
@@ -277,6 +294,15 @@ const CustomAmountInput = styled.input`
 
 const DENOMINATIONS = [20000, 50000, 100000, 200000];
 
+/** A tile's share while the payment is split; coloured for the tile's own field. */
+const TileAmount = styled.span<{ $color?: string }>`
+  font-size: 15px;
+  font-weight: 700;
+  color: ${({ theme, $color }) => $color ?? theme.colors.text};
+`;
+
+const NO_SPLIT: Record<SplitTender, number> = { cash: 0, card: 0, uzqr: 0, click: 0 };
+
 interface CheckoutProps {
   onComplete: () => void;
   onCancel: () => void;
@@ -298,6 +324,14 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   // When on, choosing UzQR opens the QR modal and the sale is only created once the buyer pays.
   const [uzqrEnabled, setUzqrEnabled] = useState(false);
   const [uzQrAmount, setUzQrAmount] = useState<number | null>(null);
+  // Click tile: only on tills with the local setting on (Settings → Fiscal). Off = today's three tiles.
+  const [clickEnabled, setClickEnabled] = useState(false);
+  const { mode } = useTheme();
+  // Split payment: the tiles become lines, `paymentMethod` is the line being typed into. Offered
+  // where the main process can store it (a satellite: once its main supports it), never on an edit.
+  const [canSplit, setCanSplit] = useState(false);
+  const [splitMode, setSplitMode] = useState(false);
+  const [splitAmounts, setSplitAmounts] = useState<Record<SplitTender, number>>(NO_SPLIT);
   /** The debtor picker is up — the checkout panel steps aside while it is. */
   const [creditOpen, setCreditOpen] = useState(false);
 
@@ -311,6 +345,14 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
       .then(setUzqrEnabled)
       // A failed check leaves UzQR as the plain tender it is today — never blocks a sale.
       .catch(() => setUzqrEnabled(false));
+    window.electronAPI.settings
+      .get("click_enabled")
+      .then((v) => setClickEnabled(v === "true"))
+      .catch(() => setClickEnabled(false));
+    window.electronAPI.sales
+      .canSplit()
+      .then(setCanSplit)
+      .catch(() => setCanSplit(false));
   }, []);
   const [givenAmount, setGivenAmount] = useState(0);
   const [customInput, setCustomInput] = useState("");
@@ -326,7 +368,22 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
    * recorded less — the buyer paying more than their receipt says.
    */
   const isUzqrFlow = paymentMethod === "uzqr" && uzqrEnabled;
-  const effectiveDiscount = isUzqrFlow ? discount : discount + discountFromUnderpayment;
+  // The shortfall-as-discount courtesy belongs to a single cash payment; a split must cover the total.
+  const effectiveDiscount =
+    isUzqrFlow || splitMode ? discount : discount + discountFromUnderpayment;
+
+  const splitMethods: SplitTender[] = clickEnabled
+    ? ["cash", "card", "uzqr", "click"]
+    : ["cash", "card", "uzqr"];
+  const splitLines = splitMethods.map((method) => ({ method, amount: splitAmounts[method] || 0 }));
+  const split = splitState(total, splitLines);
+  const tenderLabel = (m: SplitTender) => t(`pos.${m}`);
+
+  const toggleSplit = () => {
+    setSplitAmounts(NO_SPLIT);
+    setGivenAmount(0);
+    setSplitMode((on) => !on);
+  };
 
   const formatCurrency = (amount: number) =>
     formatCurrencyBase(amount, i18n.language as "ru" | "uz");
@@ -393,6 +450,9 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
         // fiscalize immediately and book against the payment id rather than as a plain card.
         regosPaymentId: uzqrPayment?.vcrPaymentId,
         regosPaymentRrn: uzqrPayment?.rrn ?? undefined,
+        // Split: the lines as entered — the main process checks them, takes the change off the
+        // cash line and stores the sale as 'mixed' (or as the one tender if only one is non-zero).
+        ...(splitMode && !credit ? { payments: splitLines } : {}),
       };
 
       const sale = editingSaleId
@@ -451,6 +511,16 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
    */
   const handlePayment = async () => {
     if (isLoading) return;
+    if (splitMode) {
+      if (!split.canPay) return;
+      // The QR is raised for the UzQR line only; the sale is written once the buyer has paid it.
+      if (uzqrEnabled && splitAmounts.uzqr > 0) {
+        setUzQrAmount(splitAmounts.uzqr);
+        return;
+      }
+      await completeSale();
+      return;
+    }
     if (paymentMethod === "uzqr" && uzqrEnabled) {
       setUzQrAmount(total);
       return;
@@ -530,13 +600,14 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
             </SummaryRow>
           </SummarySection>
 
-          <PaymentMethods>
+          <PaymentMethods $columns={clickEnabled ? 2 : 3}>
             <PaymentButton
               $selected={paymentMethod === "cash"}
               onClick={() => setPaymentMethod("cash")}
             >
               <PaymentIcon>💵</PaymentIcon>
               <PaymentLabel>{t("pos.cash")}</PaymentLabel>
+              {splitMode && <TileAmount>{formatCurrency(splitAmounts.cash)}</TileAmount>}
             </PaymentButton>
             <PaymentButton
               $selected={paymentMethod === "card"}
@@ -544,6 +615,7 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
             >
               <PaymentIcon>💳</PaymentIcon>
               <PaymentLabel>{t("pos.card")}</PaymentLabel>
+              {splitMode && <TileAmount>{formatCurrency(splitAmounts.card)}</TileAmount>}
             </PaymentButton>
             <UzQrButton
               $selected={paymentMethod === "uzqr"}
@@ -553,14 +625,33 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
             >
               <UzQrLogo $height={45} $fill />
               <PaymentLabel style={{ color: "white" }}>{t("pos.uzqr")}</PaymentLabel>
+              {splitMode && (
+                <TileAmount $color="white">{formatCurrency(splitAmounts.uzqr)}</TileAmount>
+              )}
             </UzQrButton>
+            {clickEnabled && (
+              <ClickButton
+                $selected={paymentMethod === "click"}
+                $field={CLICK_FIELD[mode]}
+                onClick={() => setPaymentMethod("click")}
+                aria-label={t("pos.click")}
+                title={t("pos.click")}
+              >
+                <ClickLogo height={36} />
+                {splitMode && (
+                  <TileAmount $color={mode === "dark" ? "white" : "black"}>
+                    {formatCurrency(splitAmounts.click)}
+                  </TileAmount>
+                )}
+              </ClickButton>
+            )}
           </PaymentMethods>
 
           <Actions>
             <Button variant="secondary" onClick={onCancel} fullWidth>
               {t("common.cancel")}
             </Button>
-            <Button onClick={handlePayment} disabled={isLoading} fullWidth>
+            <Button onClick={handlePayment} disabled={isLoading || (splitMode && !split.canPay)} fullWidth>
               {isLoading ? t("common.processing") : t("pos.confirmPayment")}{" "}
               <ShortcutHint>(F10)</ShortcutHint>
             </Button>
@@ -570,7 +661,16 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
               and this is the one where it does not. An edit keeps the sale's original terms —
               re-deciding the credit on a receipt already charged to someone is a different job,
               done from the debtors screen. */}
-          {!editingSaleId && (
+          {canSplit && !editingSaleId && (
+            <CreditAction>
+              <Button variant="secondary" onClick={toggleSplit} fullWidth>
+                {splitMode ? t("pos.singlePayment") : t("pos.splitPayment")}
+              </Button>
+            </CreditAction>
+          )}
+
+          {/* No nasiya in a split (v1): the credit flow stays a single-tender one. */}
+          {!editingSaleId && !splitMode && (
             <CreditAction>
               <Button variant="secondary" onClick={() => setCreditOpen(true)} fullWidth>
                 <HandCoins size={16} /> {t("debtors.sellOnCredit", "Продажа в долг")}
@@ -580,7 +680,17 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
         </LeftCol>
 
         <RightCol>
-          {paymentMethod === "cash" && (
+          {splitMode && (
+            <SplitPaymentPanel
+              total={total}
+              amounts={splitAmounts}
+              methods={splitMethods}
+              active={(splitMethods as string[]).includes(paymentMethod) ? (paymentMethod as SplitTender) : "cash"}
+              labelOf={tenderLabel}
+              onChange={(method, amount) => setSplitAmounts((prev) => ({ ...prev, [method]: amount }))}
+            />
+          )}
+          {!splitMode && paymentMethod === "cash" && (
             <CashHelper>
               <div
                 style={{

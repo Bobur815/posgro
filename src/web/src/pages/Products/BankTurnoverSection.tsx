@@ -220,11 +220,18 @@ export function BankTurnoverSection({ range, whenUnavailable }: Props) {
           <CardLabel>{t("reconciliation.bank.fiscalCash", "Фискализированные наличные")}</CardLabel>
           <CardValue>{money(data.fiscalCash)}</CardValue>
         </Card>
+        <Card>
+          <CardLabel>{t("reconciliation.bank.fiscalClick", "Фискализированный Click")}</CardLabel>
+          <CardValue>{money(data.fiscalClick ?? "0")}</CardValue>
+          <CardNote>
+            {t("reconciliation.bank.fiscalClickNote", "В чеке как наличные")}
+          </CardNote>
+        </Card>
         <Card $accent>
           <CardLabel>{t("reconciliation.bank.turnover", "Оборот по банку")}</CardLabel>
           <CardValue>{money(data.bankTurnover)}</CardValue>
           <CardNote>
-            {t("reconciliation.bank.turnoverNote", "Карта + UzQR + фискализированные наличные")}
+            {t("reconciliation.bank.turnoverNote", "Карта + UzQR + фискализированные наличные и Click")}
           </CardNote>
         </Card>
         <Card>
@@ -256,9 +263,11 @@ export function BankTurnoverSection({ range, whenUnavailable }: Props) {
             <CardValue>{money(data.running.toDeposit)}</CardValue>
             <CardNote>
               {t("reconciliation.bank.toDepositNote", {
-                defaultValue: "С {{date}}: фискализировано {{cash}}, сдано {{deposited}}",
+                defaultValue:
+                  "С {{date}}: фискализировано {{cash}} наличными и {{click}} Click, сдано {{deposited}}",
                 date: formatDateTime(data.running.startDate),
                 cash: money(data.running.fiscalCash),
+                click: money(data.running.fiscalClick ?? "0"),
                 deposited: money(data.running.deposited),
               })}
             </CardNote>

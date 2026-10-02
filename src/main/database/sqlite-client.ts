@@ -270,6 +270,20 @@ async function createSchemaIfNeeded(prisma: PrismaClientType): Promise<void> {
     )
   `;
 
+  // Split payment: one row per tender of a 'mixed' sale (single-tender sales write none).
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS sale_payments (
+      id TEXT PRIMARY KEY,
+      sale_id TEXT NOT NULL,
+      method TEXT NOT NULL,
+      amount REAL NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE
+    )
+  `;
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_sale_payments_sale ON sale_payments(sale_id)`;
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_sale_payments_synced ON sale_payments(synced)`;
+
   await prisma.$executeRaw`
     CREATE TABLE IF NOT EXISTS system_settings (
       id TEXT PRIMARY KEY,

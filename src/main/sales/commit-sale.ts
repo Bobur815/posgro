@@ -2,6 +2,12 @@ import { format } from 'date-fns';
 import { randomUUID } from 'node:crypto';
 import { getPrismaClient } from '../database/sqlite-client';
 import { toPieces } from '../../shared/utils/pack';
+import {
+  MIXED_TENDER,
+  SPLIT_TENDERS,
+  linesToStore,
+  type TenderLine,
+} from '../../shared/utils/split-payment';
 import type { Prisma, PrismaClient, Sale, SaleItem } from '../../generated/prisma-sqlite';
 import { HANDING_OFF, isWriteFrozen } from './write-freeze';
 import { sellingRefusal } from '../license/license';
@@ -65,6 +71,12 @@ export interface SaleInput {
   debtUserId?: string | null;
   /** When this credit was agreed to be paid. Recorded on the charge AND as the person's date. */
   debtDueDate?: string | null;
+  /**
+   * Split payment: the tenders as entered at the checkout (cash may include change). With two or
+   * more non-zero lines the sale is stored as MIXED_TENDER with one sale_payments row each, cash
+   * net of change; `paymentMethod` is then ignored. Absent, or a single line, is an ordinary sale.
+   */
+  payments?: TenderLine[];
 }
 
 /** Who is ringing the sale up, and on which till. */
@@ -136,6 +148,34 @@ function debtSplit(
     debtAmount,
     debtUserId: debtAmount > 0 ? (input.debtUserId ?? null) : null,
   };
+}
+
+/**
+ * The rows a split-payment sale stores, or null for an ordinary one — checked here, not trusted
+ * from the screen: every line a known tender, together covering the total, change only from cash,
+ * and no nasiya on top (v1). A split that leaves one non-zero line is that tender, unsplit.
+ */
+function paymentSplit(
+  input: Pick<SaleInput, 'payments' | 'debtAmount' | 'debtUserId'>,
+  finalAmount: number,
+): { method: string; lines: TenderLine[] | null } | null {
+  const entered = (input.payments ?? []).filter((l) => Number(l.amount) > 0);
+  if (entered.length === 0) return null;
+  for (const l of entered) {
+    if (!(SPLIT_TENDERS as readonly string[]).includes(l.method)) {
+      throw new SaleRefusedError({ code: 'SPLIT_BAD_TENDER', method: l.method });
+    }
+  }
+  if (Number(input.debtAmount ?? 0) > 0 && input.debtUserId) {
+    throw new SaleRefusedError({ code: 'SPLIT_WITH_DEBT' });
+  }
+  let lines: TenderLine[];
+  try {
+    lines = linesToStore(finalAmount, entered.map((l) => ({ method: l.method, amount: Number(l.amount) })));
+  } catch {
+    throw new SaleRefusedError({ code: 'SPLIT_NOT_COVERED' });
+  }
+  return lines.length > 1 ? { method: MIXED_TENDER, lines } : { method: lines[0].method, lines: null };
 }
 
 let tail: Promise<unknown> = Promise.resolve();
@@ -265,6 +305,7 @@ async function commitInTx(tx: Tx, input: SaleInput, actor: SaleActor): Promise<C
 
   const { lines, totalAmount } = priceLines(input.items);
   const discountAmount = input.discountAmount || 0;
+  const split = paymentSplit(input, totalAmount - discountAmount);
 
   const sale = await tx.sale.create({
     data: {
@@ -273,8 +314,9 @@ async function commitInTx(tx: Tx, input: SaleInput, actor: SaleActor): Promise<C
       totalAmount,
       discountAmount,
       finalAmount: totalAmount - discountAmount,
-      paymentMethod: input.paymentMethod,
+      paymentMethod: split?.method ?? input.paymentMethod,
       ...debtSplit(input, totalAmount - discountAmount),
+      ...(split?.lines ? { payments: { create: split.lines } } : {}),
       cashierId: actor.cashierId,
       cashierName: actor.cashierName,
       terminalId: actor.terminalId,
@@ -354,16 +396,20 @@ async function updateInTx(
 
   const { lines, totalAmount } = priceLines(input.items);
   const discountAmount = input.discountAmount || 0;
+  const split = paymentSplit(input, totalAmount - discountAmount);
 
   await tx.saleItem.deleteMany({ where: { saleId } });
+  // The tenders are re-decided by the edit: old split lines never outlive it.
+  await tx.salePayment.deleteMany({ where: { saleId } });
   const sale = await tx.sale.update({
     where: { id: saleId },
     data: {
       totalAmount,
       discountAmount,
       finalAmount: totalAmount - discountAmount,
-      paymentMethod: input.paymentMethod,
+      paymentMethod: split?.method ?? input.paymentMethod,
       ...debtSplit(input, totalAmount - discountAmount),
+      ...(split?.lines ? { payments: { create: split.lines } } : {}),
       synced: false,
       items: { create: lines },
     },

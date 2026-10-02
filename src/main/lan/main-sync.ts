@@ -1,5 +1,6 @@
 import { syncCategories, syncProducts, syncSettings, type PullSource } from '../sync/products-sync';
 import { mainRequest } from './main-link';
+import { noteMainFeatures } from './main-features';
 
 /**
  * A satellite's sync cycle: refresh the read cache from its main, and report in
@@ -31,6 +32,9 @@ export async function syncWithMain(): Promise<{ id: number; nameRu: string; stoc
   await syncSettings(mainSource);
   const stockConflicts = await syncProducts(mainSource);
   // Nothing queues on a satellite, so there is never anything unsent to report.
-  await mainRequest('POST', '/terminals/heartbeat', { body: { unsyncedCount: 0 } });
+  const beat = await mainRequest<{ features?: unknown }>('POST', '/terminals/heartbeat', {
+    body: { unsyncedCount: 0 },
+  });
+  noteMainFeatures(beat?.features);
   return stockConflicts;
 }

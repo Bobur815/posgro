@@ -22,7 +22,13 @@ export interface BankTurnover {
   uzqr: Prisma.Decimal;
   /** Receipts fiscalised with cash in the period, by fiscalisation time. */
   fiscalCash: Prisma.Decimal;
-  /** card + uzqr + fiscalCash: what the tax office sees as the shop's bank-side turnover. */
+  /**
+   * Click receipts fiscalised in the period. REGOS has them as cash (that is how Click is
+   * fiscalised), so they count like fiscalCash — turnover and to-deposit — but are kept apart for
+   * analytics. Click receipts never fiscalised count nowhere.
+   */
+  fiscalClick: Prisma.Decimal;
+  /** card + uzqr + fiscalCash + fiscalClick: what the tax office sees as bank-side turnover. */
   bankTurnover: Prisma.Decimal;
   /** Fiscalised cash taken to the bank in the period (non-voided deposits). */
   deposited: Prisma.Decimal;
@@ -36,7 +42,9 @@ export interface BankTurnover {
   running: {
     startDate: Date;
     fiscalCash: Prisma.Decimal;
+    fiscalClick: Prisma.Decimal;
     deposited: Prisma.Decimal;
+    /** fiscalCash + fiscalClick − deposited. */
     toDeposit: Prisma.Decimal;
   } | null;
   deposits: {
@@ -77,17 +85,53 @@ export class BankTurnoverService {
     if (!bankTurnoverEnabled()) throw new NotFoundException();
   }
 
-  /** Σ finalAmount of receipts fiscalised with cash between the two instants. */
-  private async fiscalCash(storeId: string, from: Date, to: Date): Promise<Prisma.Decimal> {
-    const res = await this.prisma.sale.aggregate({
+  /**
+   * Σ of one tender's lines on split-payment receipts (payment_method 'mixed', sale_payments rows).
+   * By sale time — or, with `fiscalised`, only FISCALIZED receipts by fiscalisation time, the same
+   * rule fiscalCash applies to whole receipts. A single-tender sale has no lines and is counted by
+   * the queries below on its payment_method, so nothing is counted twice.
+   */
+  private async mixedLines(
+    storeId: string,
+    method: string,
+    from: Date,
+    to: Date,
+    fiscalised: boolean,
+  ): Promise<Prisma.Decimal> {
+    const when = fiscalised
+      ? Prisma.sql`s.fiscal_status = 'FISCALIZED'
+          AND COALESCE(s.fiscalized_at, s.created_at) BETWEEN ${from} AND ${to}`
+      : Prisma.sql`s.created_at BETWEEN ${from} AND ${to}`;
+    const rows = await this.prisma.$queryRaw<{ total: Prisma.Decimal | null }[]>`
+      SELECT SUM(sp.amount) AS total
+      FROM sale_payments sp
+      JOIN sales s ON s.store_id = sp.store_id AND s.receipt_number = sp.receipt_number
+      WHERE sp.store_id = ${storeId}
+        AND sp.method = ${method}
+        AND LOWER(s.payment_method) = 'mixed'
+        AND ${when}
+    `;
+    return rows[0]?.total ? new Prisma.Decimal(rows[0].total) : ZERO;
+  }
+
+  /** Σ finalAmount of receipts fiscalised with `tender` (cash or click) between the two instants. */
+  private async fiscalCash(
+    storeId: string,
+    from: Date,
+    to: Date,
+    tender: 'cash' | 'click' = 'cash',
+  ): Promise<Prisma.Decimal> {
+    // A split receipt reports fiscalTender 'mixed', so the whole-receipt query never takes it;
+    // its cash/Click lines are added from sale_payments instead.
+    const whole = this.prisma.sale.aggregate({
       where: {
         storeId,
         fiscalStatus: 'FISCALIZED',
         AND: [
           {
             OR: [
-              { fiscalTender: insensitive('cash') },
-              { fiscalTender: null, paymentMethod: insensitive('cash') },
+              { fiscalTender: insensitive(tender) },
+              { fiscalTender: null, paymentMethod: insensitive(tender) },
             ],
           },
           {
@@ -100,7 +144,8 @@ export class BankTurnoverService {
       },
       _sum: { finalAmount: true },
     });
-    return res._sum.finalAmount ?? ZERO;
+    const [res, lines] = await Promise.all([whole, this.mixedLines(storeId, tender, from, to, true)]);
+    return (res._sum.finalAmount ?? ZERO).plus(lines);
   }
 
   private async deposited(storeId: string, from: Date, to: Date): Promise<Prisma.Decimal> {
@@ -111,9 +156,9 @@ export class BankTurnoverService {
     return res._sum.amount ?? ZERO;
   }
 
-  /** Counter money in one tender, plus nasiya payments taken in it. */
+  /** Counter money in one tender (whole sales and split lines), plus nasiya payments taken in it. */
   private async tender(storeId: string, tender: string, from: Date, to: Date) {
-    const [counter, debts] = await Promise.all([
+    const [counter, debts, lines] = await Promise.all([
       this.prisma.sale.aggregate({
         where: {
           storeId,
@@ -134,9 +179,10 @@ export class BankTurnoverService {
         },
         _sum: { amount: true },
       }),
+      this.mixedLines(storeId, tender, from, to, false),
     ]);
     // Payments are stored negative (they reduce a debt).
-    return (counter._sum.paidAmount ?? ZERO).plus((debts._sum.amount ?? ZERO).negated());
+    return (counter._sum.paidAmount ?? ZERO).plus((debts._sum.amount ?? ZERO).negated()).plus(lines);
   }
 
   async summary(
@@ -146,10 +192,11 @@ export class BankTurnoverService {
   ): Promise<BankTurnover | BankTurnoverDisabled> {
     if (!bankTurnoverEnabled()) return { enabled: false };
 
-    const [card, uzqr, fiscalCash, deposited, unreported, store, deposits] = await Promise.all([
+    const [card, uzqr, fiscalCash, fiscalClick, deposited, unreported, store, deposits] = await Promise.all([
       this.tender(storeId, 'card', periodStart, periodEnd),
       this.tender(storeId, 'uzqr', periodStart, periodEnd),
       this.fiscalCash(storeId, periodStart, periodEnd),
+      this.fiscalCash(storeId, periodStart, periodEnd, 'click'),
       this.deposited(storeId, periodStart, periodEnd),
       this.prisma.sale.aggregate({
         where: {
@@ -182,15 +229,17 @@ export class BankTurnoverService {
     let running: BankTurnover['running'] = null;
     if (store?.bankCashStartDate) {
       const now = new Date();
-      const [cash, dep] = await Promise.all([
+      const [cash, click, dep] = await Promise.all([
         this.fiscalCash(storeId, store.bankCashStartDate, now),
+        this.fiscalCash(storeId, store.bankCashStartDate, now, 'click'),
         this.deposited(storeId, store.bankCashStartDate, now),
       ]);
       running = {
         startDate: store.bankCashStartDate,
         fiscalCash: cash,
+        fiscalClick: click,
         deposited: dep,
-        toDeposit: cash.minus(dep),
+        toDeposit: cash.plus(click).minus(dep),
       };
     }
 
@@ -201,7 +250,8 @@ export class BankTurnoverService {
       card,
       uzqr,
       fiscalCash,
-      bankTurnover: card.plus(uzqr).plus(fiscalCash),
+      fiscalClick,
+      bankTurnover: card.plus(uzqr).plus(fiscalCash).plus(fiscalClick),
       deposited,
       unreported: {
         count: unreported._count._all,

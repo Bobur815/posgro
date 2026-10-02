@@ -704,6 +704,11 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
                         <StatSub>
                           {stats.cardSalesCount} {t("smena.receipts")}
                         </StatSub>
+                        {!!stats.clickSalesAmount && (
+                          <StatSub>
+                            {t("smena.ofWhichClick")}: {fmt(stats.clickSalesAmount)}
+                          </StatSub>
+                        )}
                       </StatCard>
                       <StatCard $accent="#f59e0b">
                         <StatLabel>{t("smena.returns")}</StatLabel>
@@ -1222,6 +1227,15 @@ export function SmenaPage({ onClose }: { onClose: () => void }) {
                     {fmt(viewSmena.stats.cardSalesAmount)} so'm
                   </span>
                 </ReceiptRow>
+                {!!viewSmena.stats.clickSalesAmount && (
+                  <ReceiptRow>
+                    <ReceiptLabel>{t("smena.ofWhichClick")}</ReceiptLabel>
+                    <span>
+                      {viewSmena.stats.clickSalesCount ?? 0} ×{" "}
+                      {fmt(viewSmena.stats.clickSalesAmount)} so'm
+                    </span>
+                  </ReceiptRow>
+                )}
                 {viewSmena.stats.returnCount > 0 && (
                   <ReceiptRow>
                     <ReceiptLabel>{t("smena.returns")}</ReceiptLabel>

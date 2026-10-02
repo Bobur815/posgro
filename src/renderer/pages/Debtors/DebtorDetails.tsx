@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronRight,
   CreditCard,
+  Smartphone,
   Trash2,
 } from "lucide-react";
 import { Modal } from "../../components/common/Modal";
@@ -290,7 +291,10 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
 
   const [ledger, setLedger] = useState<DebtLedger | null>(null);
   const [amount, setAmount] = useState("");
-  const [tender, setTender] = useState<"cash" | "card">("cash");
+  const [tender, setTender] = useState<"cash" | "card" | "click">("cash");
+  // Same switch as the Checkout tile (Settings → Fiscal, this till only). A Click payment never
+  // reaches the drawer (no PAY_IN) and a receipt it pays off is fiscalised as cash.
+  const [clickEnabled, setClickEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   /** Which credit sale is unfolded, and the ones already fetched — one request per receipt. */
   const [openSaleId, setOpenSaleId] = useState<string | null>(null);
@@ -325,6 +329,10 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
       .getConfig()
       .then((cfg) => setFiscalEnabled(cfg.enabled))
       .catch(() => {});
+    window.electronAPI.settings
+      .get("click_enabled")
+      .then((v) => setClickEnabled(v === "true"))
+      .catch(() => setClickEnabled(false));
   }, []);
 
   useEffect(() => {
@@ -548,6 +556,15 @@ export function DebtorDetails({ debtorId, onClose }: Props) {
               <Tender type="button" $selected={tender === "card"} onClick={() => setTender("card")}>
                 <CreditCard size={16} /> {t("pos.card")}
               </Tender>
+              {clickEnabled && (
+                <Tender
+                  type="button"
+                  $selected={tender === "click"}
+                  onClick={() => setTender("click")}
+                >
+                  <Smartphone size={16} /> {t("pos.click")}
+                </Tender>
+              )}
               <Button onClick={handlePay} disabled={busy}>
                 {t("debtors.acceptPayment", "Принять")}
               </Button>

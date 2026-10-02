@@ -34,7 +34,8 @@ import type {
 import { repairCyrillicLayout, isLayoutCorrupted } from '../../shared/utils/keyboard-layout';
 import { productRequiresMarking } from '../../shared/utils/marking';
 import { toPieces } from '../../shared/utils/pack';
-import { isCashTender } from '../../shared/constants';
+import { isFiscalCashTender } from '../../shared/constants';
+import { MIXED_TENDER, tenderAmounts, type TenderLine } from '../../shared/utils/split-payment';
 import { isCodeOutOfCirculation } from '../marking/circulation-check';
 
 const MAX_ATTEMPTS = 5; // cap retries for hard (business) failures
@@ -587,10 +588,16 @@ class RegosVcrService {
     paymentMethod: string;
     finalAmount: unknown;
     regosPaymentId?: string | null;
+    payments?: TenderLine[];
   }): VcrPayment[] {
+    if (sale.paymentMethod === MIXED_TENDER && sale.payments?.length) {
+      return this.buildSplitPayments(sale.payments, sale.regosPaymentId ?? null);
+    }
     const value = Math.round(Number(sale.finalAmount) * 100);
-    // paymentMethod may be 'cash'/'card'/'uzqr' (POS quick-pay) or upper-case elsewhere.
-    if (isCashTender(sale.paymentMethod)) return [{ type: 1, value }];
+    // paymentMethod may be 'cash'/'card'/'uzqr'/'click' (POS quick-pay) or upper-case elsewhere.
+    // Click is fiscalised as cash: the receipt says cash although the money went to the shop's
+    // Click account. isFiscalCashTender, never isCashTender — the drawer is a different question.
+    if (isFiscalCashTender(sale.paymentMethod)) return [{ type: 1, value }];
 
     // A Payment.Create-backed tender (UzQR) is booked by REFERENCE: VCR already holds the
     // amount against that payment id, so the receipt links to it instead of restating a sum.
@@ -607,6 +614,31 @@ class RegosVcrService {
   }
 
   /**
+   * A split-payment receipt, tender by tender (Receipt.Sale takes a cash and a card payment side by
+   * side). Cash and Click together are one cash payment — Click is fiscalised as cash; card and a
+   * plain UzQR line are one card payment; a REGOS-backed UzQR line is booked by reference, alone,
+   * as in the single-tender case. Lines are stored net of change, so they sum to the receipt.
+   *
+   * 55 000 cash + 45 000 card  → [{type 1, 5 500 000}, {type 2, 4 500 000}]
+   * 55 000 cash + 45 000 Click → [{type 1, 10 000 000}]
+   */
+  private buildSplitPayments(lines: TenderLine[], regosPaymentId: string | null): VcrPayment[] {
+    const t = tenderAmounts({ paymentMethod: MIXED_TENDER, paidAmount: 0 }, lines);
+    const tiyin = (n: number) => Math.round(n * 100);
+    const payments: VcrPayment[] = [];
+
+    const cash = tiyin(t.cash) + tiyin(t.click);
+    if (cash > 0) payments.push({ type: 1, value: cash });
+
+    const byReference = regosPaymentId && t.uzqr > 0;
+    const card = tiyin(t.card) + (byReference ? 0 : tiyin(t.uzqr));
+    if (card > 0) payments.push({ type: 2, value: card, card_type: 2 });
+    if (byReference) payments.push({ type: 2, payment_id: regosPaymentId });
+
+    return payments;
+  }
+
+  /**
    * Reconstruct everything about a receipt for the Receipt Details modal — the stored
    * fiscal metadata + the EXACT Receipt.Sale body sent to REGOS:VCR. Read-only: it reuses
    * buildPositions/buildPayments (no VCR calls, no writes), so it's the ground truth for
@@ -615,7 +647,10 @@ class RegosVcrService {
    */
   async previewSalePayload(saleId: string): Promise<FiscalSalePreview | null> {
     const prisma = getPrismaClient();
-    const sale = await prisma.sale.findUnique({ where: { id: saleId }, include: { items: true } });
+    const sale = await prisma.sale.findUnique({
+      where: { id: saleId },
+      include: { items: true, payments: true },
+    });
     if (!sale) return null;
 
     const cfg = await this.resolveConfig();
@@ -692,7 +727,10 @@ class RegosVcrService {
     }
     timer.phase('config');
 
-    const sale = await prisma.sale.findUnique({ where: { id: saleId }, include: { items: true } });
+    const sale = await prisma.sale.findUnique({
+      where: { id: saleId },
+      include: { items: true, payments: true },
+    });
     if (!sale || sale.fiscalStatus === 'FISCALIZED') return;
     timer.phase('load');
 

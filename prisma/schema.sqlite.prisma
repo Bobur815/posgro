@@ -381,11 +381,29 @@ model Sale {
   createdAt DateTime @default(now()) @map("created_at")
 
   items SaleItem[]
+  /// Split payment only (paymentMethod = 'mixed'): one row per tender. Single-tender sales have none.
+  payments SalePayment[]
 
   @@index([synced])
   @@index([createdAt])
   @@index([smenaId])
   @@map("sales")
+}
+
+/// One tender of a split-payment receipt. Cash is net of change. `synced` drives
+/// POST /sales/payments-sync, separate from the sale upload so an older server, which rejects
+/// unknown fields on /sales/sync, still takes the sale.
+model SalePayment {
+  id     String  @id @default(cuid())
+  saleId String  @map("sale_id")
+  sale   Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  method String
+  amount Decimal
+  synced Boolean @default(false)
+
+  @@index([saleId])
+  @@index([synced])
+  @@map("sale_payments")
 }
 
 model SaleItem {

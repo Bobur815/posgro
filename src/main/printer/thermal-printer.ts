@@ -158,7 +158,7 @@ export async function printReceipt(saleId: string): Promise<boolean> {
 
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
-    include: { items: { include: { product: true } } },
+    include: { items: { include: { product: true } }, payments: true },
   });
 
   if (!sale) {
@@ -214,6 +214,10 @@ export async function printReceipt(saleId: string): Promise<boolean> {
     finalAmount: Number(sale.finalAmount),
     paymentMethod: sale.paymentMethod,
     debtAmount: Number(sale.debtAmount ?? 0),
+    payments: (sale.payments ?? []).map((p: { method: string; amount: unknown }) => ({
+      method: p.method,
+      amount: Number(p.amount),
+    })),
     fiscalReceiptNumber: fiscalReceiptNo || undefined,
     fiscalMark,
     fiscalQrBase64,

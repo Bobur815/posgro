@@ -56,6 +56,11 @@ export const LOCAL_ONLY_SETTINGS = new Set([
   // /store-config itself; a settings sync must neither upload it nor overwrite it with another's.
   'store_license',
   'license_clock',
+
+  // ── Tenders this till takes ──
+  // Whether the Checkout offers Click. Per till, off by default: a store turns it on at the
+  // counters that actually take Click.
+  'click_enabled',
 ]);
 
 /**
