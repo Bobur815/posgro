@@ -24,13 +24,11 @@ const unitLabels: Record<string, { ru: string; uz: string }> = {
 
 export { formatPhone } from '@shared/utils';
 
+/**
+ * "12 шт", "2.5 кг", "0.457 кг": whole numbers stay whole, fractions keep up to 3 decimals (the
+ * precision of Decimal(10,3) quantities) with trailing zeros and float noise dropped.
+ */
 export function formatQuantity(quantity: number, unit: string, locale: 'ru' | 'uz' = 'ru'): string {
   const label = unitLabels[unit]?.[locale] || unit;
-  if (unit === 'кг' || unit === 'л') {
-    const formatted = quantity % 1 === 0
-      ? quantity.toString()
-      : quantity.toFixed(1);
-    return formatted + ' ' + label;
-  }
-  return Math.floor(quantity) + ' ' + label;
+  return String(Number(quantity.toFixed(3))) + ' ' + label;
 }
