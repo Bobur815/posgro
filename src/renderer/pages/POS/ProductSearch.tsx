@@ -67,36 +67,6 @@ const PriceField = styled.input`
   }
 `;
 
-const CategoryBar = styled.div`
-  display: flex;
-  gap: ${({ theme }) => theme.spacing.xs};
-  align-items: center;
-`;
-
-const CategoryStripScroll = styled(CategoryStrip)`
-  flex: 1;
-`;
-
-const CategorySelect = styled.select<{ $active?: boolean }>`
-  flex: 0 0 200px;
-  min-width: 0;
-  min-height: 44px;
-  padding: 6px 10px;
-  font-size: 13px;
-  border-radius: ${({ theme }) => theme.borderRadius};
-  cursor: pointer;
-  border: 1px solid
-    ${({ theme, $active }) => ($active ? theme.colors.primary : theme.colors.border)};
-  background-color: ${({ theme, $active }) =>
-    $active ? theme.colors.primary + "12" : theme.colors.background};
-  color: ${({ theme, $active }) => ($active ? theme.colors.primary : theme.colors.text)};
-
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme.colors.primary};
-  }
-`;
-
 const ProductsScroll = styled(ProductGrid)`
   flex: 1;
   overflow-y: auto;
@@ -117,7 +87,7 @@ interface ProductSearchProps {
 }
 
 export function ProductSearch({ onSelect, keyboardZIndex }: ProductSearchProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const [priceQuery, setPriceQuery] = useState("");
   // Which text field the on-screen keyboard types into.
@@ -194,21 +164,17 @@ export function ProductSearch({ onSelect, keyboardZIndex }: ProductSearchProps) 
     return () => window.removeEventListener("stock-updated", refresh);
   }, [getTopSelling, searchQuery, selectedCategoryId, priceQuery, loadProducts]);
 
-  const categoryName = (c: { nameRu: string; nameUz: string }) =>
-    i18n.language === "uz" ? c.nameUz || c.nameRu : c.nameRu;
-
-  // Marked goods (MXIK group 022) are hidden per-product from the catalog below — they require a
-  // QR scan — so categories are no longer excluded wholesale (a category's group list spans many
-  // groups and doesn't imply its products are marked).
-  const visibleTopCategories = topCategories;
-
-  // Categories not already shown as a top-5 button — offered in the dropdown.
-  const topCategoryIds = new Set(visibleTopCategories.map((c) => c.id));
-  const otherCategories = categories.filter(
-    (c) => !topCategoryIds.has(Number(c.id)),
-  );
-  const selectedIsOther =
-    selectedCategoryId != null && !topCategoryIds.has(selectedCategoryId);
+  // Every category in one sideways-scrolling strip: the 5 top sellers first, then the rest in
+  // list order. Marked goods (MXIK group 022) are hidden per-product from the catalog below — they
+  // require a QR scan — so no category is excluded wholesale. Memoized: new objects every render
+  // would re-render each memoized card while the cashier types.
+  const stripCategories = useMemo<CategoryCardData[]>(() => {
+    const topIds = new Set(topCategories.map((c) => c.id));
+    const rest = categories
+      .filter((c) => !topIds.has(Number(c.id)))
+      .map((c) => ({ id: Number(c.id), nameRu: c.nameRu, nameUz: c.nameUz }));
+    return [...topCategories, ...rest];
+  }, [topCategories, categories]);
   // Tapping the selected category again clears the filter. Stable, so the memoized cards skip
   // re-rendering while the cashier types.
   const handleCategoryClick = useCallback(
@@ -283,33 +249,17 @@ export function ProductSearch({ onSelect, keyboardZIndex }: ProductSearchProps) 
           </KbToggle>
         </SearchRow>
 
-        <CategoryBar>
-          <CategoryStripScroll>
-            {visibleTopCategories.map((c) => (
-              <CategoryCard
-                key={c.id}
-                category={c}
-                selected={selectedCategoryId === c.id}
-                onClick={handleCategoryClick}
-                pictureSrc={showPictures ? categoryPictureUrl(c, ownVersion) : undefined}
-              />
-            ))}
-          </CategoryStripScroll>
-          <CategorySelect
-            $active={selectedIsOther}
-            value={selectedIsOther ? String(selectedCategoryId) : ""}
-            onChange={(e) =>
-              setSelectedCategoryId(e.target.value ? Number(e.target.value) : null)
-            }
-          >
-            <option value="">{t("products.otherCategories", "Другие категории")}</option>
-            {otherCategories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {categoryName(c)}
-              </option>
-            ))}
-          </CategorySelect>
-        </CategoryBar>
+        <CategoryStrip>
+          {stripCategories.map((c) => (
+            <CategoryCard
+              key={c.id}
+              category={c}
+              selected={selectedCategoryId === c.id}
+              onClick={handleCategoryClick}
+              pictureSrc={showPictures ? categoryPictureUrl(c, ownVersion) : undefined}
+            />
+          ))}
+        </CategoryStrip>
       </SearchHeader>
 
       <ProductsScroll>

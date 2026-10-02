@@ -8,7 +8,9 @@ import { Product } from "@shared/types";
 // Give the (flex:1 + internally-scrolling) ProductSearch a bounded height inside the
 // auto-height Modal content so its product grid scrolls instead of growing the modal.
 const CatalogBody = styled.div`
-  height: 70vh;
+  /* Capped so the body plus the modal's header and padding stays inside its 90vh max-height —
+     the product grid scrolls, never the modal. */
+  height: min(78vh, calc(90vh - 110px));
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -33,7 +35,7 @@ function CatalogComponent({ onSelect, onClose }: CatalogProps) {
     [onSelect, onClose],
   );
   return (
-    <Modal title={t("pos.catalog", "Каталог")} onClose={onClose} width="900px">
+    <Modal title={t("pos.catalog", "Каталог")} onClose={onClose} width="1000px">
       <CatalogBody>
         {/* Keyboard z-index above the Modal overlay (1000) so it isn't hidden behind it. */}
         <ProductSearch onSelect={handleSelect} keyboardZIndex={1100} />
