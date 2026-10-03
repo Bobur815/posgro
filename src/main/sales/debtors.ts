@@ -6,6 +6,7 @@ import { allocatePayment, recomputeBalance, signedAmount } from './debt-ledger';
 import { fiscalizeSettledSale } from './settle-sale';
 import { addShiftMovement, currentShift } from './shifts';
 import { isCashTender } from '../../shared/constants';
+import { markDueDateChanged } from '../sync/debt-due-dates';
 
 /**
  * Nasiya on this terminal's database: the people who owe the shop money, and what they have paid.
@@ -175,7 +176,7 @@ export async function updateDebtor(id: string, data: DebtorEdit) {
   if (data.nameUz && identityEditable) update.nameUz = data.nameUz.trim();
   if (data.phone && identityEditable) update.phone = data.phone.replace(/\D/g, '');
   // A customer's identity is edited here, so it has to reach the server before a pull may
-  // overwrite it. The due date rides with the balance, which is always sent.
+  // overwrite it. The due date is queued separately, below.
   if ('nameRu' in update || 'nameUz' in update || 'phone' in update) {
     update.synced = false;
   }
@@ -184,6 +185,9 @@ export async function updateDebtor(id: string, data: DebtorEdit) {
   }
 
   const debtor = await prisma.user.update({ where: { id }, data: update });
+  // The due date is not part of the profile `synced` guards: it goes up on its own (see
+  // sync/debt-due-dates.ts), so a staff debtor's profile is never re-sent for it.
+  if (data.debtDueDate !== undefined) await markDueDateChanged(prisma, id);
   return serializeDebtor(debtor);
 }
 

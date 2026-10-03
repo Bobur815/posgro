@@ -3,6 +3,8 @@ import { getAppConfig } from "../config/app-config";
 import { getServerToken } from "./queue-manager";
 import { LOCAL_ONLY_SETTINGS } from "./local-only-settings";
 import { endpointKnownMissing, noteEndpointStatus } from "./missing-endpoints";
+import { isLedgerBalanceMode } from "./debt-ledger-sync";
+import { clearSentDueDates, readDirtyDueDates, type DirtyDueDates } from "./debt-due-dates";
 import type {
   Category,
   Supplier,
@@ -103,8 +105,9 @@ async function uploadClients(
   if (clients.length === 0) return;
   if (endpointKnownMissing('users/clients/sync-bulk')) return;
 
+  const ctx = await payloadContext(prisma);
   const res = await apiPost('/users/clients/sync-bulk', token, {
-    users: clients.map(toUserPayload),
+    users: clients.map((u: User) => toUserPayload(u, ctx)),
   });
   // A server from before this endpoint: an admin session still sends customers the old way.
   noteEndpointStatus('users/clients/sync-bulk', res.status);
@@ -115,6 +118,7 @@ async function uploadClients(
     return;
   }
   await markUsersSent(prisma, clients);
+  await clearSentDueDates(prisma, sentDueDates(clients, ctx));
 }
 
 /**
@@ -208,7 +212,10 @@ export async function uploadUsers(
 
   if (users.length === 0) return;
 
-  const res = await apiPost("/users/sync-bulk", token, { users: users.map(toUserPayload) });
+  const ctx = await payloadContext(prisma);
+  const res = await apiPost("/users/sync-bulk", token, {
+    users: users.map((u: User) => toUserPayload(u, ctx)),
+  });
   if (!res.ok) {
     const text = await res.text();
     console.error(`Failed to upload users (HTTP ${res.status}): ${text}`);
@@ -221,10 +228,40 @@ export async function uploadUsers(
   }
 
   await markUsersSent(prisma, users);
+  await clearSentDueDates(prisma, sentDueDates(users, ctx));
+}
+
+/** What decides the nasiya part of a user's payload, read once per upload. */
+export interface PayloadContext {
+  /** The server derives balances from the ledger: a till's total is noise, so it is not sent. */
+  ledgerMode: boolean;
+  /** Customers whose due date was changed on this till since the last upload. */
+  dirtyDueDates: DirtyDueDates;
+}
+
+async function payloadContext(prisma: ReturnType<typeof getPrismaClient>): Promise<PayloadContext> {
+  return {
+    ledgerMode: await isLedgerBalanceMode(prisma),
+    dirtyDueDates: await readDirtyDueDates(prisma),
+  };
+}
+
+/** A due date goes up only from the till that set it — or with a profile this till owns. */
+function sendsDueDate(u: User, ctx: PayloadContext): boolean {
+  return !u.synced || u.id in ctx.dirtyDueDates;
+}
+
+/** The dirty entries this upload carried, so exactly those are cleared once it succeeds. */
+function sentDueDates(users: User[], ctx: PayloadContext): DirtyDueDates {
+  const sent: DirtyDueDates = {};
+  for (const u of users) {
+    if (u.id in ctx.dirtyDueDates) sent[u.id] = ctx.dirtyDueDates[u.id];
+  }
+  return sent;
 }
 
 /** One user as /users/sync-bulk and /users/clients/sync-bulk take it. */
-function toUserPayload(u: User) {
+export function toUserPayload(u: User, ctx: PayloadContext) {
   return {
     id: u.id,
     phone: u.phone,
@@ -241,10 +278,17 @@ function toUserPayload(u: User) {
           role: u.role,
           active: u.active,
         }),
-    // Nasiya. The till is where a debt is taken on and paid off, so it is authoritative for the
-    // balance and the server mirrors it — the reverse of how the rest of this table syncs.
-    debt: Number(u.debt ?? 0),
-    debtDueDate: u.debtDueDate ? new Date(u.debtDueDate).toISOString() : null,
+    // Nasiya balance. In ledger mode the server sums the replicated ledger and ignores this, and
+    // a total sent by every till for every customer is exactly what let the last till overwrite
+    // the others — so it is left out. Otherwise (a server not yet switched over) the till's total
+    // is still the only balance the server gets. Absent is safe either way: the server never
+    // zeroes a balance for a missing field.
+    ...(ctx.ledgerMode ? {} : { debt: Number(u.debt ?? 0) }),
+    // Only a due date this till set (see debt-due-dates.ts); for everyone else the server's copy
+    // stands and comes back down on the user pull.
+    ...(sendsDueDate(u, ctx)
+      ? { debtDueDate: u.debtDueDate ? new Date(u.debtDueDate).toISOString() : null }
+      : {}),
   };
 }
 

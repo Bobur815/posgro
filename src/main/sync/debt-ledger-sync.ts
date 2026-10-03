@@ -23,6 +23,8 @@ import { endpointKnownMissing, noteEndpointStatus } from './missing-endpoints';
 
 const CURSOR_KEY = 'debt_ledger_cursor';
 const MODE_KEY = 'debt_ledger_balance_mode';
+/** When the last pull finished without an error — shown beside the debtors page's Sync button. */
+const LAST_SYNC_KEY = 'debt_ledger_last_sync';
 const PAGE = 500;
 /** A cycle stops after this many pages and carries on next cycle; the cursor is saved per page. */
 const MAX_PAGES = 20;
@@ -240,12 +242,14 @@ async function alignBalances(prisma: Prisma, userIds: string[]): Promise<void> {
  *
  * Safe to call on every cycle and to interrupt: the cursor is saved after each page, and applying
  * a row twice is a no-op. A server without the endpoint (404) leaves everything as it was.
+ *
+ * Returns whether the pull reached the end without an error — what the Sync button reports.
  */
-export async function pullDebtLedger(): Promise<void> {
+export async function pullDebtLedger(): Promise<boolean> {
   const prisma = getPrismaClient();
   const token = getServerToken();
-  if (!token) return;
-  if (endpointKnownMissing('debtors/ledger/sync')) return;
+  if (!token) return false;
+  if (endpointKnownMissing('debtors/ledger/sync')) return false;
   const { vpsApiUrl } = getAppConfig();
 
   const saved = await readSetting(prisma, CURSOR_KEY);
@@ -259,6 +263,7 @@ export async function pullDebtLedger(): Promise<void> {
   const touched = new Set<string>();
   const settledHere: PullResult['settledHere'] = [];
   let balanceFromLedger: boolean | null = null;
+  let failed = false;
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const query = new URLSearchParams({ limit: String(PAGE) });
@@ -271,9 +276,10 @@ export async function pullDebtLedger(): Promise<void> {
       headers: { Authorization: `Bearer ${token}` },
     });
     noteEndpointStatus('debtors/ledger/sync', res.status);
-    if (res.status === 404) return; // server from before ledger replication
+    if (res.status === 404) return false; // server from before ledger replication
     if (!res.ok) {
       console.error(`[debt-ledger] pull failed (HTTP ${res.status})`);
+      failed = true;
       break;
     }
 
@@ -309,6 +315,20 @@ export async function pullDebtLedger(): Promise<void> {
   }
 
   await fiscalizeSettledElsewhere(prisma, settledHere);
+
+  if (failed) return false;
+  await writeSetting(prisma, LAST_SYNC_KEY, new Date().toISOString());
+  return true;
+}
+
+/** The server said balances follow the ledger (as of this till's last pull). */
+export async function isLedgerBalanceMode(prisma: Prisma): Promise<boolean> {
+  return (await readSetting(prisma, MODE_KEY)) === 'ledger';
+}
+
+/** ISO time of the last complete ledger pull, or null if there has not been one. */
+export async function lastLedgerSync(prisma: Prisma): Promise<string | null> {
+  return readSetting(prisma, LAST_SYNC_KEY);
 }
 
 /**

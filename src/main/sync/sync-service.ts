@@ -48,6 +48,13 @@ function isTokenExpired(token: string): boolean {
   }
 }
 
+/** How long the Sync button waits for a running cycle before reporting "busy". */
+const NASIYA_WAIT_MS = 60_000;
+
+export type NasiyaSyncResult =
+  | { ok: true; at: string }
+  | { ok: false; reason: 'busy' | 'not_applicable' | 'no_token' | 'offline' | 'error' };
+
 export class SyncService {
   private syncInterval: NodeJS.Timeout | null = null;
   private isSyncing = false;
@@ -427,5 +434,49 @@ export class SyncService {
   // Force immediate sync
   async triggerSync(): Promise<void> {
     await this.sync();
+  }
+
+  /**
+   * The debtors page's Sync button: nasiya only, now, instead of waiting for the next cycle.
+   *
+   * Push first — customers this till created or edited, then its new ledger rows — so the pull
+   * that follows already includes this till's latest payment. Then the users (a customer created
+   * on another till must exist here before their rows), then the ledger, which merges rows by id
+   * and re-derives balances. Order does not decide correctness — rows merge, they never
+   * overwrite — it only makes one press show the final state.
+   *
+   * Shares the cycle's lock: a cycle in progress is waited for (it does this same work), never
+   * run alongside, so two pulls cannot race on the ledger cursor.
+   */
+  async syncNasiyaNow(): Promise<NasiyaSyncResult> {
+    for (let waited = 0; this.isSyncing && waited < NASIYA_WAIT_MS; waited += 500) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    if (this.isSyncing) return { ok: false, reason: 'busy' };
+    if (isWriteFrozen()) return { ok: false, reason: 'busy' };
+
+    this.isSyncing = true;
+    try {
+      const prisma = getPrismaClient();
+      const localConfig = await prisma.localConfig.findUnique({ where: { id: 'config' } });
+      // A satellite's debtors live on its main, which it reads live; an offline-only main has no
+      // server. Neither has anything to sync from here.
+      if (syncTarget(localConfig) !== 'vps') return { ok: false, reason: 'not_applicable' };
+
+      const token = getServerToken();
+      if (!token || isTokenExpired(token)) return { ok: false, reason: 'no_token' };
+      if (!(await this.checkConnectivity())) return { ok: false, reason: 'offline' };
+
+      await uploadNasiya({ staffUploaded: false });
+      await syncUsers();
+      const pulled = await pullDebtLedger();
+      if (!pulled) return { ok: false, reason: 'error' };
+      return { ok: true, at: new Date().toISOString() };
+    } catch (error) {
+      console.error('[sync] nasiya sync failed:', error instanceof Error ? error.message : error);
+      return { ok: false, reason: 'error' };
+    } finally {
+      this.isSyncing = false;
+    }
   }
 }

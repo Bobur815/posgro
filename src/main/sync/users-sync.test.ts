@@ -30,6 +30,7 @@ jest.mock('./queue-manager', () => ({ getServerToken: () => token }));
 import { initializeDatabase, closeDatabase, getPrismaClient } from '../database/sqlite-client';
 import { syncUsers } from './products-sync';
 import { uploadUsers } from './upload-sync';
+import { markDueDateChanged, readDirtyDueDates } from './debt-due-dates';
 
 const db = () => getPrismaClient();
 
@@ -72,6 +73,9 @@ beforeAll(async () => {
 beforeEach(async () => {
   await db().debtTransaction.deleteMany({});
   await db().user.deleteMany({});
+  await db().systemSetting.deleteMany({
+    where: { key: { in: ['debt_due_dates_dirty', 'debt_ledger_balance_mode'] } },
+  });
 });
 
 afterAll(async () => {
@@ -143,13 +147,70 @@ describe('uploadUsers', () => {
 
     const { users } = posted[0] as { users: Record<string, unknown>[] };
     const byId = Object.fromEntries(users.map((u) => [u.id, u]));
-    expect(byId['server-owned']).toEqual({
-      id: 'server-owned',
-      phone: '998901010101',
-      debt: 5000,
-      debtDueDate: null,
-    });
+    // No due date: this till did not set it, so the server's copy stands (debt-due-dates.ts).
+    expect(byId['server-owned']).toEqual({ id: 'server-owned', phone: '998901010101', debt: 5000 });
     expect(byId['edited-here']).toMatchObject({ nameRu: 'Правка', role: 'USER', active: true, password: 'hash' });
     expect((await db().user.findUnique({ where: { id: 'edited-here' } })).synced).toBe(true);
+  });
+});
+
+describe('nasiya fields between tills', () => {
+  const due = new Date('2026-11-01T00:00:00.000Z');
+
+  it('leaves the balance out once the server derives it from the ledger', async () => {
+    await local({ id: 'c1', phone: '998901212121', role: 'CLIENT', debt: 40000 });
+    await db().systemSetting.create({ data: { key: 'debt_ledger_balance_mode', value: 'ledger' } });
+    serve([]);
+
+    await uploadUsers(db(), token);
+    const [sent] = (posted[0] as { users: Record<string, unknown>[] }).users;
+    // The bug: every till sent its own total for every customer, and the last one won.
+    expect(sent).not.toHaveProperty('debt');
+  });
+
+  it('sends a due date only from the till that set it, then stops', async () => {
+    await local({ id: 'c2', phone: '998902323232', role: 'CLIENT', debtDueDate: due });
+    await markDueDateChanged(db(), 'c2');
+    serve([]);
+
+    await uploadUsers(db(), token);
+    const [first] = (posted[0] as { users: Record<string, unknown>[] }).users;
+    expect(first.debtDueDate).toBe(due.toISOString());
+    expect(await readDirtyDueDates(db())).toEqual({});
+
+    serve([]);
+    await uploadUsers(db(), token);
+    const [second] = (posted[0] as { users: Record<string, unknown>[] }).users;
+    expect(second).not.toHaveProperty('debtDueDate');
+  });
+
+  it('keeps a due date queued when the upload fails', async () => {
+    await local({ id: 'c3', phone: '998903434343', role: 'CLIENT', debtDueDate: due });
+    await markDueDateChanged(db(), 'c3');
+    global.fetch = jest.fn(async () => ({
+      ok: false, status: 500, statusText: 'x', json: async () => ({}), text: async () => 'boom',
+    })) as unknown as typeof fetch;
+
+    await uploadUsers(db(), token);
+    expect(Object.keys(await readDirtyDueDates(db()))).toEqual(['c3']);
+  });
+
+  it("takes another till's due date on the pull, but not over one set here and unsent", async () => {
+    const serverDue = '2026-12-15T00:00:00.000Z';
+    await local({ id: 'c4', phone: '998904545454', role: 'CLIENT', debtDueDate: null, debt: 7000 });
+    await local({ id: 'c5', phone: '998905656565', role: 'CLIENT', debtDueDate: due });
+    await markDueDateChanged(db(), 'c5');
+    serve([
+      { ...serverUser({ id: 'c4', phone: '998904545454', role: 'CLIENT' }), debtDueDate: serverDue, debt: 1 } as ServerUser,
+      { ...serverUser({ id: 'c5', phone: '998905656565', role: 'CLIENT' }), debtDueDate: serverDue } as ServerUser,
+    ]);
+
+    await syncUsers();
+    const c4 = await db().user.findUnique({ where: { id: 'c4' } });
+    expect(new Date(c4.debtDueDate).toISOString()).toBe(serverDue);
+    // The balance is never taken from the pull: the ledger owns it.
+    expect(Number(c4.debt)).toBe(7000);
+    const c5 = await db().user.findUnique({ where: { id: 'c5' } });
+    expect(new Date(c5.debtDueDate).toISOString()).toBe(due.toISOString());
   });
 });
