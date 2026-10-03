@@ -194,6 +194,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     recordPayment: (data: unknown) =>
       ipcRenderer.invoke("debtors:recordPayment", data),
     adjust: (data: unknown) => ipcRenderer.invoke("debtors:adjust", data),
+    paymentsInRange: (filters?: { startDate?: string; endDate?: string }) =>
+      ipcRenderer.invoke("debtors:paymentsInRange", filters),
     voidTransaction: (data: { userId: string; transactionId: string; reason?: string }) =>
       ipcRenderer.invoke("debtors:voidTransaction", data),
   },
@@ -731,6 +733,11 @@ declare global {
         getSale: (userId: string, saleId: string) => Promise<unknown>;
         recordPayment: (data: unknown) => Promise<{ debtor: Debtor; settledSales: string[] }>;
         adjust: (data: unknown) => Promise<Debtor>;
+        /** Nasiya paid back in a period (amount negative, as stored), for the receipts summary. */
+        paymentsInRange: (filters?: {
+          startDate?: string;
+          endDate?: string;
+        }) => Promise<{ id: string; amount: number; paymentMethod: string | null; createdAt: string }[]>;
         /** Admin only: strike a ledger row through and reverse it. */
         voidTransaction: (data: {
           userId: string;

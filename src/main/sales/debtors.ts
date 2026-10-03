@@ -258,6 +258,37 @@ export async function debtorSale(userId: string, saleId: string) {
   return sale;
 }
 
+/**
+ * Nasiya paid back in a period, for the receipts summary (each lands in the tender it arrived in).
+ *
+ * Only this till's book: rows written here (origin null — this till, or a satellite writing into
+ * it) or stamped with this terminal. Rows replicated from other tills through the VPS are left out,
+ * because the receipts beside them are this till's too. Voided rows count nowhere. `createdBy`
+ * narrows it to one cashier, the way their sales list is narrowed.
+ */
+export async function debtPaymentsInRange(opts: {
+  from?: Date;
+  to?: Date;
+  terminalId: string;
+  createdBy?: string;
+}): Promise<{ id: string; amount: number; paymentMethod: string | null; createdAt: Date }[]> {
+  const createdAt: { gte?: Date; lte?: Date } = {};
+  if (opts.from) createdAt.gte = opts.from;
+  if (opts.to) createdAt.lte = opts.to;
+  const rows = (await getPrismaClient().debtTransaction.findMany({
+    where: {
+      type: 'PAYMENT',
+      voidedAt: null,
+      OR: [{ originTerminalId: null }, { originTerminalId: opts.terminalId }],
+      ...(opts.from || opts.to ? { createdAt } : {}),
+      ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
+    },
+    select: { id: true, amount: true, paymentMethod: true, createdAt: true },
+    orderBy: { createdAt: 'desc' },
+  })) as { id: string; amount: unknown; paymentMethod: string | null; createdAt: Date }[];
+  return rows.map((r) => ({ ...r, amount: num(r.amount) }));
+}
+
 export interface DebtPayment {
   userId: string;
   amount: number;

@@ -8,6 +8,7 @@ import {
   createDebtor,
   debtorLedger,
   debtorSale,
+  debtPaymentsInRange,
   listDebtors,
   recordDebtPayment,
   unpaidSales,
@@ -95,6 +96,27 @@ export function setupDebtorsHandlers(): void {
         : await recordDebtPayment(data, staff.id, getAppConfig().terminalId),
     );
   });
+
+  /**
+   * Nasiya paid back in a period, for the receipts summary. A cashier sees the payments they took,
+   * as with their sales. A satellite's receipts list is its own while the ledger lives on the main,
+   * so it shows none rather than mixing the two books.
+   */
+  ipcMain.handle(
+    "debtors:paymentsInRange",
+    async (_event, filters?: { startDate?: string; endDate?: string }) => {
+      const staff = requireStaff();
+      if (await isSatellite()) return [];
+      return ipcSafe(
+        await debtPaymentsInRange({
+          from: filters?.startDate ? new Date(filters.startDate) : undefined,
+          to: filters?.endDate ? new Date(filters.endDate) : undefined,
+          terminalId: getAppConfig().terminalId,
+          createdBy: staff.role === "ADMIN" ? undefined : staff.id,
+        }),
+      );
+    },
+  );
 
   /** Correct a balance by hand — admin only, and it never fiscalizes anything. */
   ipcMain.handle("debtors:adjust", async (_event, data: { userId: string; amount: number; note?: string }) => {
