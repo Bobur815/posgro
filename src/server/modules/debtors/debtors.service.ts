@@ -305,6 +305,27 @@ export class DebtorsService {
     });
   }
 
+  /**
+   * Nasiya paid back in a period — the receipts summary adds it to the tender it arrived in.
+   * Voided rows are left out, like every balance and report. Amounts stay negative, as stored.
+   */
+  async paymentsInRange(storeId: string, range: { from?: Date; to?: Date } = {}) {
+    const createdAt: Prisma.DateTimeFilter = {};
+    if (range.from) createdAt.gte = range.from;
+    if (range.to) createdAt.lte = range.to;
+    return this.prisma.debtTransaction.findMany({
+      where: {
+        storeId,
+        type: 'PAYMENT',
+        voidedAt: null,
+        ...(range.from || range.to ? { createdAt } : {}),
+      },
+      select: { id: true, userId: true, amount: true, paymentMethod: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 5000,
+    });
+  }
+
   /** One person's balance and the history behind it, newest first. */
   async findOne(storeId: string, userId: string) {
     const debtor = await this.prisma.user.findFirst({
