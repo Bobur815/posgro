@@ -71,6 +71,26 @@ export class DebtorsController {
     return this.debtors.ledgerDrift(storeId);
   }
 
+  /** Declared before `:id` so "payments" is never read as a debtor id. */
+  @Get('payments')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Nasiya payments received in a period (read-only)' })
+  @ApiQuery({ name: 'startDate', required: false, type: String })
+  @ApiQuery({ name: 'endDate', required: false, type: String })
+  async payments(
+    @CurrentStore() storeId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    const from = startDate ? new Date(startDate) : undefined;
+    const to = endDate ? new Date(endDate) : undefined;
+    if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime()))) {
+      throw new BadRequestException('startDate and endDate must be ISO dates');
+    }
+    return this.debtors.paymentsInRange(storeId, { from, to });
+  }
+
   @Get()
   @UseGuards(RolesGuard)
   @Roles('ADMIN')

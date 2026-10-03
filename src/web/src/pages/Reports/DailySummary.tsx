@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import styled, { type DefaultTheme } from "styled-components";
 import { useSales } from "../../hooks/useSales";
-import { formatCurrency as formatCurrencyBase } from "@shared/utils";
+import { formatCurrency as formatCurrencyBase, summarizeReceipts } from "@shared/utils";
 import { CLICK_BRAND_COLOR, UZQR_BRAND_COLOR, type SaleTender } from "@shared/constants";
 import { formatDateTime } from "../../utils/formatters";
 import { Modal } from "@components/common/Modal";
@@ -255,7 +255,7 @@ const ModalBtn = styled.button<{ $variant?: "danger" }>`
 
 export function DailySummary() {
   const { t, i18n } = useTranslation();
-  const { loadSales, deleteSale, sales, isLoading } = useSales();
+  const { loadSales, deleteSale, sales, debtPayments, isLoading } = useSales();
 
   const todayStr = new Date().toISOString().split("T")[0];
   const [startDate, setStartDate] = useState(todayStr);
@@ -296,49 +296,25 @@ export function DailySummary() {
     setPageSize,
   } = usePagination(filteredSales);
 
-  const summary = useMemo(() => {
-    if (!filteredSales.length) return null;
-    const totalRevenue = filteredSales.reduce(
-      (sum, s) => sum + Number(s.finalAmount),
-      0,
-    );
-    const totalItems = filteredSales.reduce(
-      (sum, s) => sum + s.items.length,
-      0,
-    );
-    const cashSales = filteredSales.filter(
-      (s) => s.paymentMethod === "cash",
-    ).length;
-    const cardSales = filteredSales.filter(
-      (s) => s.paymentMethod === "card",
-    ).length;
-    const uzqrSales = filteredSales.filter(
-      (s) => s.paymentMethod === "uzqr",
-    ).length;
-    const clickSales = filteredSales.filter(
-      (s) => s.paymentMethod === "click",
-    ).length;
-    const mixedSales = filteredSales.filter(
-      (s) => s.paymentMethod === "mixed",
-    ).length;
-    const totalCost = filteredSales.reduce(
-      (sum, s) => sum + (s.totalCost ?? 0),
-      0,
-    );
-    const avgMargin =
-      totalRevenue > 0 ? ((totalRevenue - totalCost) / totalRevenue) * 100 : 0;
-    return {
-      totalSales: filteredSales.length,
-      totalRevenue,
-      totalItems,
-      cashSales,
-      cardSales,
-      uzqrSales,
-      clickSales,
-      mixedSales,
-      avgMargin,
-    };
-  }, [filteredSales]);
+  // Nasiya paid back in the period counts in the tender it arrived in — so a tender filter keeps
+  // only payments in that tender, and "mixed" (a receipt shape, not a tender) keeps none.
+  const filteredDebtPayments = useMemo(
+    () =>
+      paymentFilter === "all"
+        ? debtPayments
+        : debtPayments.filter(
+            (p) => (p.paymentMethod ?? "").toLowerCase() === paymentFilter,
+          ),
+    [debtPayments, paymentFilter],
+  );
+
+  const summary = useMemo(
+    () =>
+      filteredSales.length || filteredDebtPayments.length
+        ? summarizeReceipts(filteredSales, filteredDebtPayments)
+        : null,
+    [filteredSales, filteredDebtPayments],
+  );
 
   const handleDeleteExecute = async () => {
     if (!deleteTargetId) return;
@@ -402,14 +378,8 @@ export function DailySummary() {
       {summary && (
         <StatsGrid>
           <StatCard>
-            <StatLabel>{t("reports.totalSales")}</StatLabel>
-            <StatValue>{summary.totalSales}</StatValue>
-            <StatSubtext>{t("reports.transactions")}</StatSubtext>
-          </StatCard>
-
-          <StatCard>
-            <StatLabel>{t("reports.totalRevenue")}</StatLabel>
-            <StatValue>{formatCurrency(summary.totalRevenue)}</StatValue>
+            <StatLabel>{t("reports.salesAmount")}</StatLabel>
+            <StatValue>{formatCurrency(summary.total)}</StatValue>
             <StatSubtext>
               {startDate === endDate ? startDate : `${startDate} – ${endDate}`}
             </StatSubtext>
@@ -417,51 +387,43 @@ export function DailySummary() {
 
           <StatCard>
             <StatLabel>{t("reports.avgMargin")}</StatLabel>
-            <StatValue>{summary.avgMargin.toFixed(1)}%</StatValue>
-            <StatSubtext>{t("reports.perSale")}</StatSubtext>
+            <StatValue>{summary.margin.toFixed(1)}%</StatValue>
           </StatCard>
 
           <StatCard>
-            <StatLabel>{t("reports.itemsSold")}</StatLabel>
-            <StatValue>{summary.totalItems}</StatValue>
-            <StatSubtext>{t("reports.items")}</StatSubtext>
+            <StatLabel>{t("reports.debtTaken")}</StatLabel>
+            <StatValue>{formatCurrency(summary.debt)}</StatValue>
+            {summary.debtPaidBack > 0 && (
+              <StatSubtext>
+                {t("reports.debtPaidBack", {
+                  amount: formatCurrency(summary.debtPaidBack),
+                })}
+              </StatSubtext>
+            )}
           </StatCard>
 
           <StatCard>
             <StatLabel>{t("reports.cashPayments")}</StatLabel>
-            <StatValue>{summary.cashSales}</StatValue>
-            <StatSubtext>{t("reports.transactions")}</StatSubtext>
+            <StatValue>{formatCurrency(summary.tenders.cash)}</StatValue>
           </StatCard>
-
-          {/* Only worth a tile once the store actually takes UzQR. */}
-          {summary.uzqrSales > 0 && (
-            <StatCard>
-              <StatLabel>{t("reports.uzqrPayments")}</StatLabel>
-              <StatValue>{summary.uzqrSales}</StatValue>
-              <StatSubtext>{t("reports.transactions")}</StatSubtext>
-            </StatCard>
-          )}
 
           <StatCard>
             <StatLabel>{t("reports.cardPayments")}</StatLabel>
-            <StatValue>{summary.cardSales}</StatValue>
-            <StatSubtext>{t("reports.transactions")}</StatSubtext>
+            <StatValue>{formatCurrency(summary.tenders.card)}</StatValue>
           </StatCard>
 
-          {/* Like UzQR: only once the store actually takes Click. */}
-          {summary.clickSales > 0 && (
+          {/* Only worth a tile once the store actually takes UzQR / Click. */}
+          {summary.tenders.uzqr > 0 && (
             <StatCard>
-              <StatLabel>{t("reports.clickPayments")}</StatLabel>
-              <StatValue>{summary.clickSales}</StatValue>
-              <StatSubtext>{t("reports.transactions")}</StatSubtext>
+              <StatLabel>{t("reports.uzqrPayments")}</StatLabel>
+              <StatValue>{formatCurrency(summary.tenders.uzqr)}</StatValue>
             </StatCard>
           )}
 
-          {summary.mixedSales > 0 && (
+          {summary.tenders.click > 0 && (
             <StatCard>
-              <StatLabel>{t("reports.mixedPayments")}</StatLabel>
-              <StatValue>{summary.mixedSales}</StatValue>
-              <StatSubtext>{t("reports.transactions")}</StatSubtext>
+              <StatLabel>{t("reports.clickPayments")}</StatLabel>
+              <StatValue>{formatCurrency(summary.tenders.click)}</StatValue>
             </StatCard>
           )}
         </StatsGrid>

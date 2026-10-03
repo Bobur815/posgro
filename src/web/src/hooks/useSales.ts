@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { sales as salesApi } from '../api/client';
+import { sales as salesApi, debtors as debtorsApi, type DashboardDebtPayment } from '../api/client';
 
 interface Summary {
   date: string;
@@ -15,6 +15,7 @@ export function useSales() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sales, setSales] = useState<any[]>([]);
+  const [debtPayments, setDebtPayments] = useState<DashboardDebtPayment[]>([]);
 
   const getTodaySummary = useCallback(async (): Promise<Summary | null> => {
     setIsLoading(true);
@@ -35,8 +36,14 @@ export function useSales() {
     setError(null);
 
     try {
-      const data = await salesApi.getAll(filters);
+      const [data, payments] = await Promise.all([
+        salesApi.getAll(filters),
+        // Only feeds the summary cards: a server without the endpoint yet, or a cashier who may
+        // not read it, still gets the receipts list.
+        debtorsApi.payments(filters ?? {}).catch((): DashboardDebtPayment[] => []),
+      ]);
       setSales(data);
+      setDebtPayments(payments);
       return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load sales');
@@ -60,6 +67,7 @@ export function useSales() {
     isLoading,
     error,
     sales,
+    debtPayments,
     getTodaySummary,
     loadSales,
     deleteSale,

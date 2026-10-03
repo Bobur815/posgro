@@ -1132,7 +1132,23 @@ export interface DashboardDebtorLedger {
   sales: DashboardDebtSale[];
 }
 
+/** A nasiya payment received (GET /debtors/payments). `amount` is negative, as stored. */
+export interface DashboardDebtPayment {
+  id: string;
+  userId: string;
+  amount: string;
+  paymentMethod: string | null;
+  createdAt: string;
+}
+
 export const debtors = {
+  payments: async (params: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<DashboardDebtPayment[]> => {
+    const { data } = await axiosInstance.get("/debtors/payments", { params });
+    return data;
+  },
   list: async (params?: {
     withDebtOnly?: boolean;
     search?: string;

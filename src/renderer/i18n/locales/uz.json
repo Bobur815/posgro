@@ -807,7 +807,10 @@
     "rankNoCost": "Tannarxi yo'q — foydada hisobga olinmaydi: {{count}} ta.",
     "allCategories": "Barcha kategoriyalar",
     "otherCategories": "Boshqalar",
-    "onDebt": "qarzga"
+    "onDebt": "qarzga",
+    "salesAmount": "Savdo summasi",
+    "debtTaken": "Qarzga (nasiya)",
+    "debtPaidBack": "Davr ichida qaytarilgan qarz: {{amount}}"
   },
   "users": {
     "title": "Foydalanuvchilar",

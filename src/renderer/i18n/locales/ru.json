@@ -819,7 +819,10 @@
     "rankNoCost": "Без себестоимости — не учитывается в прибыли: {{count}}.",
     "allCategories": "Все категории",
     "otherCategories": "Прочие",
-    "onDebt": "в долг"
+    "onDebt": "в долг",
+    "salesAmount": "Сумма продаж",
+    "debtTaken": "В долг (насия)",
+    "debtPaidBack": "Погашено долгов за период: {{amount}}"
   },
   "users": {
     "title": "Пользователи",
