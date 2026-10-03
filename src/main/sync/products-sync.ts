@@ -2,6 +2,7 @@ import { getPrismaClient } from "../database/sqlite-client";
 import { getAppConfig } from "../config/app-config";
 import { getServerToken } from "./queue-manager";
 import { LOCAL_ONLY_SETTINGS, isSatelliteOwnSetting } from "./local-only-settings";
+import { readDirtyDueDates } from "./debt-due-dates";
 
 /**
  * Where the catalog comes from. The VPS for an ordinary terminal; the main terminal for a satellite
@@ -427,6 +428,8 @@ export async function syncUsers(): Promise<void> {
     if (!Array.isArray(users) || users.length === 0) return;
 
     const keptIds = new Set<string>();
+    // Due dates this till set and has not sent yet: those keep the local value until they go up.
+    const dirtyDueDates = await readDirtyDueDates(prisma);
 
     for (const u of users) {
       try {
@@ -466,10 +469,15 @@ export async function syncUsers(): Promise<void> {
               nameRu: u.nameRu,
               active: u.active ?? true,
               storeId: tokenStoreId,
-              // debt/debtDueDate are deliberately absent: this till changes them all day and the
-              // server only learns on the next upload, so writing the server's copy back here
-              // would undo every payment taken since. They are set on create only (above), which
-              // is what a fresh terminal needs to inherit an existing balance.
+              // debt is deliberately absent: this till changes it all day, and in ledger mode the
+              // balance follows the replicated ledger (debt-ledger-sync.ts alignBalances) anyway.
+              // It is set on create only (above), so a fresh terminal inherits an existing balance.
+              //
+              // The due date comes from the server unless this till changed it and has not sent
+              // it yet — so a date agreed on another till reaches this one (debt-due-dates.ts).
+              ...("debtDueDate" in u && !(local.id in dirtyDueDates)
+                ? { debtDueDate: u.debtDueDate ? new Date(u.debtDueDate) : null }
+                : {}),
             },
           });
         }
