@@ -3,7 +3,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { toPieces } from '../../../shared/utils/pack';
 import { ProductsService } from '../products/products.service';
 import { SyncSaleDto } from './dto/sync-sale.dto';
-import { Sale, SaleItem } from '@prisma/client';
+import { Prisma, Sale, SaleItem } from '@prisma/client';
+import { MIXED_TENDER } from '../../../shared/utils/split-payment';
 import { SaleFilters, SaleWhereInput, SaleUser } from './types/sale.types';
 import {
   MovementSource,
@@ -12,6 +13,8 @@ import {
 } from '../stock-movement/stock-movement.service';
 
 type SaleWithItems = Sale & { items: SaleItem[] };
+
+const ZERO = new Prisma.Decimal(0);
 
 @Injectable()
 export class SalesService {
@@ -32,11 +35,48 @@ export class SalesService {
       if (filters?.endDate) where.createdAt.lte = filters.endDate;
     }
 
-    return this.prisma.sale.findMany({
+    const sales = await this.prisma.sale.findMany({
       where,
-      include: { items: true },
+      include: { items: { include: { product: { select: { cost: true } } } } },
       orderBy: { createdAt: 'desc' },
       ...(filters?.startDate || filters?.endDate ? {} : { take: 100 }),
+    });
+
+    // Split-payment lines are keyed by receipt, not related to the sale — one query for the page.
+    const receiptNumbers = sales.filter((s) => s.paymentMethod.toLowerCase() === MIXED_TENDER).map((s) => s.receiptNumber);
+    const lines = receiptNumbers.length
+      ? await this.prisma.salePayment.findMany({
+          where: { storeId, receiptNumber: { in: receiptNumbers } },
+          select: { receiptNumber: true, method: true, amount: true },
+        })
+      : [];
+    const linesByReceipt = new Map<string, { method: string; amount: Prisma.Decimal }[]>();
+    for (const l of lines) {
+      const list = linesByReceipt.get(l.receiptNumber) ?? [];
+      list.push({ method: l.method, amount: l.amount });
+      linesByReceipt.set(l.receiptNumber, list);
+    }
+
+    // Additive fields only (totalCost, margin, payments): the same shape the POS's sales:getAll
+    // returns, so the dashboard's margin is computed like the till's — current product.cost.
+    return sales.map(({ items, ...sale }) => {
+      const totalCost = items.reduce(
+        (sum, i) =>
+          sum.plus((i.product?.cost ?? ZERO).times(i.quantity).times(i.piecesPerUnit ?? 1)),
+        ZERO,
+      );
+      const finalAmount = sale.finalAmount;
+      const margin = finalAmount.gt(0)
+        ? finalAmount.minus(totalCost).div(finalAmount).times(100).toNumber()
+        : 0;
+      return {
+        ...sale,
+        items: items.map(({ product: _product, ...item }) => item),
+        // A number, like the till's: the page formats it and never adds it to another amount.
+        totalCost: totalCost.toDecimalPlaces(2).toNumber(),
+        margin,
+        payments: linesByReceipt.get(sale.receiptNumber) ?? [],
+      };
     });
   }
 

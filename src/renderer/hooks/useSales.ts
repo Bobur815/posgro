@@ -33,6 +33,9 @@ interface CreateSaleData {
   fiscalize?: boolean;
 }
 
+/** A nasiya PAYMENT row (amount negative, as stored), for the receipts summary. */
+type DebtPaymentRow = Awaited<ReturnType<typeof window.electronAPI.debtors.paymentsInRange>>[number];
+
 interface Summary {
   date: string;
   totalSales: number;
@@ -45,6 +48,7 @@ interface Summary {
 
 export function useSales() {
   const [sales, setSales] = useState<Sale[]>([]);
+  const [debtPayments, setDebtPayments] = useState<DebtPaymentRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,8 +57,15 @@ export function useSales() {
     setError(null);
 
     try {
-      const data = await window.electronAPI.sales.getAll(filters);
+      const [data, payments] = await Promise.all([
+        window.electronAPI.sales.getAll(filters),
+        // Only feeds the summary cards: if it fails, the receipts list still shows.
+        window.electronAPI.debtors
+          .paymentsInRange({ startDate: filters?.startDate, endDate: filters?.endDate })
+          .catch((): DebtPaymentRow[] => []),
+      ]);
       setSales(data as Sale[]);
+      setDebtPayments(payments);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load sales');
     } finally {
@@ -136,6 +147,7 @@ export function useSales() {
 
   return {
     sales,
+    debtPayments,
     isLoading,
     error,
     loadSales,

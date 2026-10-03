@@ -541,7 +541,11 @@
         "title": "Skanerlangan mahsulot",
         "enterQty": "Miqdorni kiriting",
         "currentlyCounted": "Hozir sanalgan",
-        "notCountedYet": "Hali sanalmagan"
+        "notCountedYet": "Hali sanalmagan",
+        "modeAdd": "Qo'shish",
+        "modeTotal": "Jami (qo'lda)",
+        "addHint": "Bu yerda nechta — sanalganiga qo'shiladi",
+        "totalHint": "{{from}} o'rniga {{to}} yoziladi"
       },
       "writeOff": {
         "label": "Sanalmagan {{n}} ta mahsulotni hisobdan chiqarish",
@@ -807,7 +811,10 @@
     "rankNoCost": "Tannarxi yo'q — foydada hisobga olinmaydi: {{count}} ta.",
     "allCategories": "Barcha kategoriyalar",
     "otherCategories": "Boshqalar",
-    "onDebt": "qarzga"
+    "onDebt": "qarzga",
+    "salesAmount": "Savdo summasi",
+    "debtTaken": "Qarzga (nasiya)",
+    "debtPaidBack": "Davr ichida qaytarilgan qarz: {{amount}}"
   },
   "users": {
     "title": "Foydalanuvchilar",
@@ -1593,6 +1600,17 @@
     "wrongPassword": "Menejer paroli noto'g'ri. 5 ta muvaffaqiyatsiz urinishdan keyin kiritish bir daqiqaga bloklanadi — hatto to'g'ri parol ham."
   },
   "debtors": {
+    "sync": {
+      "button": "Sinxronlash",
+      "running": "Sinxronlanmoqda…",
+      "last": "Oxirgi sinxronlash",
+      "done": "Qarzlar barcha kassalar bilan sinxronlandi",
+      "busy": "Boshqa sinxronlash ketmoqda — bir daqiqadan keyin urinib ko'ring",
+      "not_applicable": "Bu kassada qarzlar asosiy kassa orqali sinxronlanadi",
+      "no_token": "Server bilan aloqa yo'q: administrator paroli bilan kiring",
+      "offline": "Internet yo'q — kassadagi ma'lumotlar o'zgarmadi",
+      "error": "Sinxronlab bo'lmadi. Qayta urinib ko'ring — avtomatik sinxronlash ishlashda davom etadi"
+    },
     "title": "Qarzdorlar",
     "client": "Mijoz",
     "phone": "Telefon",

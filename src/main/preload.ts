@@ -194,6 +194,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     recordPayment: (data: unknown) =>
       ipcRenderer.invoke("debtors:recordPayment", data),
     adjust: (data: unknown) => ipcRenderer.invoke("debtors:adjust", data),
+    paymentsInRange: (filters?: { startDate?: string; endDate?: string }) =>
+      ipcRenderer.invoke("debtors:paymentsInRange", filters),
+    syncNow: () => ipcRenderer.invoke("debtors:syncNow"),
+    lastSync: () => ipcRenderer.invoke("debtors:lastSync"),
     voidTransaction: (data: { userId: string; transactionId: string; reason?: string }) =>
       ipcRenderer.invoke("debtors:voidTransaction", data),
   },
@@ -731,6 +735,18 @@ declare global {
         getSale: (userId: string, saleId: string) => Promise<unknown>;
         recordPayment: (data: unknown) => Promise<{ debtor: Debtor; settledSales: string[] }>;
         adjust: (data: unknown) => Promise<Debtor>;
+        /** Nasiya paid back in a period (amount negative, as stored), for the receipts summary. */
+        paymentsInRange: (filters?: {
+          startDate?: string;
+          endDate?: string;
+        }) => Promise<{ id: string; amount: number; paymentMethod: string | null; createdAt: string }[]>;
+        /** Push this till's nasiya, pull the store's, re-derive balances — the Sync button. */
+        syncNow: () => Promise<
+          | { ok: true; at: string }
+          | { ok: false; reason: "busy" | "not_applicable" | "no_token" | "offline" | "error" }
+        >;
+        /** ISO time of the last complete ledger pull, or null. */
+        lastSync: () => Promise<string | null>;
         /** Admin only: strike a ledger row through and reverse it. */
         voidTransaction: (data: {
           userId: string;

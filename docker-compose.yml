@@ -53,6 +53,13 @@ services:
       LEADS_ENABLED: "true"
       NEWS_ENABLED: "true"
       BANK_TURNOVER_ENABLED: "true"
+      # Nasiya balances follow the replicated ledger, not the total each till uploads (last till
+      # wins). Store 1234 on 2026-10-03: stored balances held T1's charges only, 1 106 194 so'm
+      # of T2's were missing; the shop confirmed no payments outside the till. On start the API
+      # aligns every balance with ledger rows to its sum (DebtorsService.onApplicationBootstrap),
+      # and tills on >= 1.32.2 align themselves on their next ledger pull. Set "false" to return
+      # to till totals — the tills switch back on their next pull too.
+      DEBT_BALANCE_FROM_LEDGER: "true"
       # Drivers, tools and manuals uploaded from the dashboard and served on panel.posgro.uz.
       DOWNLOADS_DIR: "/app/downloads"
       # Read-only view of the installer feed, so the portal reports the same version the

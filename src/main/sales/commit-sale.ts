@@ -12,6 +12,7 @@ import type { Prisma, PrismaClient, Sale, SaleItem } from '../../generated/prism
 import { HANDING_OFF, isWriteFrozen } from './write-freeze';
 import { sellingRefusal } from '../license/license';
 import { chargeSaleToDebt } from './debt-ledger';
+import { markDueDateChanged } from '../sync/debt-due-dates';
 
 /**
  * The one place a sale changes stock.
@@ -348,6 +349,8 @@ async function commitInTx(tx: Tx, input: SaleInput, actor: SaleActor): Promise<C
     // the charge keeps its own, so a ledger entry always says what was agreed for THAT receipt.
     if (dueDate) {
       await tx.user.update({ where: { id: sale.debtUserId }, data: { debtDueDate: dueDate } });
+      // Set here, so this till sends it; other tills take the server's copy (debt-due-dates.ts).
+      await markDueDateChanged(tx, sale.debtUserId);
     }
   }
 

@@ -7,3 +7,4 @@ export * from './mxik-lookup';
 export * from './circulation';
 export * from './pack';
 export * from './split-payment';
+export * from './receipts-summary';

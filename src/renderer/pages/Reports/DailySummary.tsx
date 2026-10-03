@@ -4,7 +4,7 @@ import styled, { type DefaultTheme } from "styled-components";
 import { useSales } from "../../hooks/useSales";
 import { CLICK_BRAND_COLOR, UZQR_BRAND_COLOR, type SaleTender } from "@shared/constants";
 import { useAuthStore } from "../../store/auth-store";
-import { formatCurrency as formatCurrencyBase } from "@shared/utils";
+import { formatCurrency as formatCurrencyBase, summarizeReceipts } from "@shared/utils";
 import { formatDateTime } from "../../utils/formatters";
 import { Modal } from "../../components/common/Modal";
 import { Button } from "../../components/common/Button";
@@ -101,12 +101,6 @@ const StatSubtext = styled.div`
   font-size: 12px;
   color: ${({ theme }) => theme.colors.textSecondary};
   margin-top: ${({ theme }) => theme.spacing.xs};
-`;
-
-/** The part of the revenue put on tabs, shown under the total it was taken out of. */
-const DebtSubtext = styled(StatSubtext)`
-  color: ${({ theme }) => theme.colors.error};
-  font-weight: 600;
 `;
 
 const TableCard = styled.div`
@@ -255,7 +249,7 @@ const ModalBtn = styled.button<{ $variant?: "danger" }>`
 
 export function ReceiptsSummary() {
   const { t, i18n } = useTranslation();
-  const { loadSales, deleteSale, sales, isLoading } = useSales();
+  const { loadSales, deleteSale, sales, debtPayments, isLoading } = useSales();
   const { user } = useAuthStore();
   const isAdmin = user?.role === "ADMIN";
 
@@ -300,56 +294,25 @@ export function ReceiptsSummary() {
     [sales, paymentFilter],
   );
 
-  const summary = useMemo(() => {
-    if (!filteredSales.length) return null;
-    const totalRevenue = filteredSales.reduce(
-      (sum, s) => sum + Number(s.finalAmount),
-      0,
-    );
-    // Nasiya: what went on customers' tabs is not money the shop has yet, so the revenue card
-    // shows it taken out, and says how much.
-    const totalDebt = filteredSales.reduce(
-      (sum, s) => sum + (Number(s.debtAmount) || 0),
-      0,
-    );
-    const totalItems = filteredSales.reduce(
-      (sum, s) => sum + s.items.length,
-      0,
-    );
-    const cashSales = filteredSales.filter(
-      (s) => s.paymentMethod === "cash",
-    ).length;
-    const cardSales = filteredSales.filter(
-      (s) => s.paymentMethod === "card",
-    ).length;
-    const uzqrSales = filteredSales.filter(
-      (s) => s.paymentMethod === "uzqr",
-    ).length;
-    const clickSales = filteredSales.filter(
-      (s) => s.paymentMethod === "click",
-    ).length;
-    const mixedSales = filteredSales.filter(
-      (s) => s.paymentMethod === "mixed",
-    ).length;
-    const totalCost = filteredSales.reduce(
-      (sum, s) => sum + (s.totalCost ?? 0),
-      0,
-    );
-    const avgMargin =
-      totalRevenue > 0 ? ((totalRevenue - totalCost) / totalRevenue) * 100 : 0;
-    return {
-      totalSales: filteredSales.length,
-      totalRevenue,
-      totalDebt,
-      totalItems,
-      cashSales,
-      cardSales,
-      uzqrSales,
-      clickSales,
-      mixedSales,
-      avgMargin,
-    };
-  }, [filteredSales]);
+  // Nasiya paid back in the period counts in the tender it arrived in — so a tender filter keeps
+  // only payments in that tender, and "mixed" (a receipt shape, not a tender) keeps none.
+  const filteredDebtPayments = useMemo(
+    () =>
+      paymentFilter === "all"
+        ? debtPayments
+        : debtPayments.filter(
+            (p) => (p.paymentMethod ?? "").toLowerCase() === paymentFilter,
+          ),
+    [debtPayments, paymentFilter],
+  );
+
+  const summary = useMemo(
+    () =>
+      filteredSales.length || filteredDebtPayments.length
+        ? summarizeReceipts(filteredSales, filteredDebtPayments)
+        : null,
+    [filteredSales, filteredDebtPayments],
+  );
 
   const {
     pageData: pagedSales,
@@ -437,71 +400,54 @@ export function ReceiptsSummary() {
       {summary && (
         <StatsGrid>
           <StatCard>
-            <StatLabel>{t("reports.totalSales")}</StatLabel>
-            <StatValue>{summary.totalSales}</StatValue>
-            <StatSubtext>{t("reports.transactions")}</StatSubtext>
-          </StatCard>
-
-          <StatCard>
-            <StatLabel>{t("reports.totalRevenue")}</StatLabel>
-            <StatValue>{formatCurrency(summary.totalRevenue - summary.totalDebt)}</StatValue>
+            <StatLabel>{t("reports.salesAmount")}</StatLabel>
+            <StatValue>{formatCurrency(summary.total)}</StatValue>
             <StatSubtext>
               {startDate === endDate ? startDate : `${startDate} – ${endDate}`}
             </StatSubtext>
-            {summary.totalDebt > 0 && (
-              <DebtSubtext>
-                {TENDER_ICONS.debt} −{formatCurrency(summary.totalDebt)}{" "}
-                {t("reports.onDebt", "в долг")}
-              </DebtSubtext>
-            )}
           </StatCard>
 
           <StatCard>
             <StatLabel>{t("reports.avgMargin")}</StatLabel>
-            <StatValue>{summary.avgMargin.toFixed(1)}%</StatValue>
-            <StatSubtext>{t("reports.perSale")}</StatSubtext>
+            <StatValue>{summary.margin.toFixed(1)}%</StatValue>
           </StatCard>
 
           <StatCard>
-            <StatLabel>{t("reports.itemsSold")}</StatLabel>
-            <StatValue>{summary.totalItems}</StatValue>
-            <StatSubtext>{t("reports.items")}</StatSubtext>
+            <StatLabel>
+              {TENDER_ICONS.debt} {t("reports.debtTaken")}
+            </StatLabel>
+            <StatValue>{formatCurrency(summary.debt)}</StatValue>
+            {summary.debtPaidBack > 0 && (
+              <StatSubtext>
+                {t("reports.debtPaidBack", {
+                  amount: formatCurrency(summary.debtPaidBack),
+                })}
+              </StatSubtext>
+            )}
           </StatCard>
 
           <StatCard>
             <StatLabel>{t("reports.cashPayments")}</StatLabel>
-            <StatValue>{summary.cashSales}</StatValue>
-            <StatSubtext>{t("reports.transactions")}</StatSubtext>
+            <StatValue>{formatCurrency(summary.tenders.cash)}</StatValue>
           </StatCard>
 
           <StatCard>
             <StatLabel>{t("reports.cardPayments")}</StatLabel>
-            <StatValue>{summary.cardSales}</StatValue>
-            <StatSubtext>{t("reports.transactions")}</StatSubtext>
+            <StatValue>{formatCurrency(summary.tenders.card)}</StatValue>
           </StatCard>
 
-          {/* Only worth a tile once the store actually takes UzQR. */}
-          {summary.uzqrSales > 0 && (
+          {/* Only worth a tile once the store actually takes UzQR / Click. */}
+          {summary.tenders.uzqr > 0 && (
             <StatCard>
               <StatLabel>{t("reports.uzqrPayments")}</StatLabel>
-              <StatValue>{summary.uzqrSales}</StatValue>
-              <StatSubtext>{t("reports.transactions")}</StatSubtext>
+              <StatValue>{formatCurrency(summary.tenders.uzqr)}</StatValue>
             </StatCard>
           )}
 
-          {summary.clickSales > 0 && (
+          {summary.tenders.click > 0 && (
             <StatCard>
               <StatLabel>{t("reports.clickPayments")}</StatLabel>
-              <StatValue>{summary.clickSales}</StatValue>
-              <StatSubtext>{t("reports.transactions")}</StatSubtext>
-            </StatCard>
-          )}
-
-          {summary.mixedSales > 0 && (
-            <StatCard>
-              <StatLabel>{t("reports.mixedPayments")}</StatLabel>
-              <StatValue>{summary.mixedSales}</StatValue>
-              <StatSubtext>{t("reports.transactions")}</StatSubtext>
+              <StatValue>{formatCurrency(summary.tenders.click)}</StatValue>
             </StatCard>
           )}
         </StatsGrid>

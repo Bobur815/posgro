@@ -142,7 +142,9 @@ export function setupSalesHandlers(): void {
       where,
       include: { items: { include: { product: { select: { cost: true } } } }, payments: true },
       orderBy: { createdAt: 'desc' },
-      take: 100,
+      // A date range is a whole period: the summary cards add up every receipt in it, so it must
+      // not stop at 100. Without one, the latest 100 — like the server's GET /sales.
+      ...(filters?.startDate || filters?.endDate ? {} : { take: 100 }),
     });
 
     const salesWithMargin = (sales as Array<Sale & { items: Array<PrismaSaleItem & { product: { cost: unknown } | null }> }>).map((sale) => {

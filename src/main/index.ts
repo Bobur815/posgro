@@ -4,7 +4,8 @@ import { setupIpcHandlers } from "./ipc/handlers";
 import { setupSetupHandlers } from "./ipc/setup-handlers";
 import { setupAutoUpdater } from "./updater/auto-updater";
 import { autoUpdater } from "electron-updater";
-import { SyncService } from "./sync/sync-service";
+import { SyncService, type NasiyaSyncResult } from "./sync/sync-service";
+import { lastLedgerSync } from "./sync/debt-ledger-sync";
 import { regosVcrService } from "./fiscal/regos-vcr-service";
 import { startLicenseRefresh, stopLicenseRefresh } from "./license/license";
 import {
@@ -59,6 +60,17 @@ function registerSyncHandlers(): void {
 
   ipcMain.handle("sync:trigger", async () => {
     await syncService?.triggerSync();
+  });
+
+  // The debtors page's Sync button — any signed-in staff member, like taking a payment.
+  ipcMain.handle("debtors:syncNow", async (): Promise<NasiyaSyncResult> => {
+    if (!getCurrentUser()) throw new Error("Not authenticated");
+    return syncService ? syncService.syncNasiyaNow() : { ok: false, reason: "not_applicable" };
+  });
+
+  ipcMain.handle("debtors:lastSync", async (): Promise<string | null> => {
+    if (!getCurrentUser()) throw new Error("Not authenticated");
+    return lastLedgerSync(getPrismaClient());
   });
 
   ipcMain.handle("sync:unbackfillStock", async () => {

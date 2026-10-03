@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnApplicationBootstrap } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SyncDebtTransactionDto } from './dto/sync-debt.dto';
@@ -70,10 +70,75 @@ export function mergeLedgerRow(
  * terminals are offline shows a stale balance and a short history, which is honest.
  */
 @Injectable()
-export class DebtorsService {
+export class DebtorsService implements OnApplicationBootstrap {
   private readonly logger = new Logger(DebtorsService.name);
 
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * Under DEBT_BALANCE_FROM_LEDGER, make every stored balance its ledger's sum once the API is up.
+   *
+   * Turning the flag on changes no stored balance by itself: syncFromTerminal re-derives only the
+   * people whose rows arrive afterwards, so anyone without a new operation kept the total the last
+   * till uploaded — on store 1234 that was one till's charges only. The tills do the same on their
+   * side when they first see ledger mode (debt-ledger-sync.ts alignBalances).
+   *
+   * Safe to run on every start: the result is always the ledger's sum, so a second run corrects
+   * nothing. A failure is logged and never stops the API from starting.
+   */
+  async onApplicationBootstrap(): Promise<void> {
+    if (!balanceFromLedger()) return;
+    try {
+      const { checked, corrected, withoutLedger } = await this.alignAllBalances();
+      this.logger.log(
+        `Ledger balances: ${corrected} of ${checked} corrected` +
+          (withoutLedger > 0 ? `; ${withoutLedger} balance(s) with no ledger rows left as they are` : ''),
+      );
+    } catch (err) {
+      this.logger.error(`Ledger balance alignment failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  /**
+   * Every store: set each person's balance to their ledger's sum, where it differs.
+   *
+   * Only people with ledger rows. A balance with no rows behind it predates the ledger (or was
+   * typed in by hand), and its ledger sum of 0 would be a guess that wipes a real debt — the tills
+   * follow the same rule. Those are counted, and `/debtors/ledger/drift` lists them.
+   */
+  async alignAllBalances(): Promise<{ checked: number; corrected: number; withoutLedger: number }> {
+    const sums = await this.prisma.debtTransaction.groupBy({
+      by: ['storeId', 'userId'],
+      // A voided row is history, not money.
+      where: { voidedAt: null },
+      _sum: { amount: true },
+    });
+    // Everyone with any row, voided ones included: a person whose only row was voided owes 0.
+    const withRows = await this.prisma.debtTransaction.groupBy({ by: ['storeId', 'userId'] });
+    const sumOf = new Map(sums.map((r) => [`${r.storeId}:${r.userId}`, r._sum.amount ?? new Prisma.Decimal(0)]));
+
+    const users = await this.prisma.user.findMany({
+      where: { OR: [{ debt: { not: 0 } }, { id: { in: withRows.map((r) => r.userId) } }] },
+      select: { id: true, storeId: true, debt: true },
+    });
+    const hasRows = new Set(withRows.map((r) => `${r.storeId}:${r.userId}`));
+
+    let corrected = 0;
+    let withoutLedger = 0;
+    for (const u of users) {
+      const key = `${u.storeId}:${u.id}`;
+      if (!hasRows.has(key)) {
+        withoutLedger++;
+        continue;
+      }
+      const ledger = sumOf.get(key) ?? new Prisma.Decimal(0);
+      if (u.debt.equals(ledger)) continue;
+      await this.prisma.user.updateMany({ where: { id: u.id, storeId: u.storeId }, data: { debt: ledger } });
+      this.logger.log(`Ledger balance store=${u.storeId} user=${u.id}: ${u.debt.toString()} → ${ledger.toString()}`);
+      corrected++;
+    }
+    return { checked: users.length - withoutLedger, corrected, withoutLedger };
+  }
 
   /**
    * Mirror a batch of ledger rows up from a terminal.
@@ -302,6 +367,27 @@ export class DebtorsService {
       },
       orderBy: [{ debt: 'desc' }, { nameRu: 'asc' }],
       take: 200,
+    });
+  }
+
+  /**
+   * Nasiya paid back in a period — the receipts summary adds it to the tender it arrived in.
+   * Voided rows are left out, like every balance and report. Amounts stay negative, as stored.
+   */
+  async paymentsInRange(storeId: string, range: { from?: Date; to?: Date } = {}) {
+    const createdAt: Prisma.DateTimeFilter = {};
+    if (range.from) createdAt.gte = range.from;
+    if (range.to) createdAt.lte = range.to;
+    return this.prisma.debtTransaction.findMany({
+      where: {
+        storeId,
+        type: 'PAYMENT',
+        voidedAt: null,
+        ...(range.from || range.to ? { createdAt } : {}),
+      },
+      select: { id: true, userId: true, amount: true, paymentMethod: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 5000,
     });
   }
 
