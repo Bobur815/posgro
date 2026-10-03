@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
-import { Search, Wallet } from "lucide-react";
+import { RefreshCw, Search, Wallet } from "lucide-react";
 import { Table } from "../../components/common/Table";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
@@ -75,6 +75,12 @@ const SearchWrap = styled.div`
   }
 `;
 
+const LastSync = styled.span`
+  font-size: 12px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  white-space: nowrap;
+`;
+
 const Owed = styled.span<{ $owing: boolean }>`
   font-weight: 700;
   color: ${({ $owing, theme }) => ($owing ? theme.colors.error : theme.colors.textSecondary)};
@@ -112,6 +118,8 @@ export function DebtorList() {
   const [withDebtOnly, setWithDebtOnly] = useState(true);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
 
   const formatCurrency = (amount: number) =>
     formatCurrencyBase(amount, i18n.language as "ru" | "uz");
@@ -130,6 +138,34 @@ export function DebtorList() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    window.electronAPI.debtors
+      .lastSync()
+      .then(setLastSync)
+      .catch(() => {});
+  }, []);
+
+  // Nasiya only, now: push this till's customers and ledger rows, pull every till's, re-derive
+  // balances. The automatic cycle does the same; this is for "I just took a payment on the other
+  // till". Rows merge by id, so a failure part-way leaves nothing half-written to undo.
+  const syncNow = async () => {
+    setSyncing(true);
+    try {
+      const res = await window.electronAPI.debtors.syncNow();
+      if (res.ok) {
+        setLastSync(res.at);
+        toast.success(t("debtors.sync.done"));
+        await load();
+      } else {
+        toast.error(t(`debtors.sync.${res.reason}`));
+      }
+    } catch {
+      toast.error(t("debtors.sync.error"));
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const outstanding = debtors.reduce((sum, d) => sum + Math.max(0, d.debt), 0);
 
@@ -203,6 +239,15 @@ export function DebtorList() {
             ? t("debtors.showAll", "Показать всех")
             : t("debtors.showOwingOnly", "Только с долгом")}
         </Button>
+        <Button variant="secondary" onClick={syncNow} disabled={syncing}>
+          <RefreshCw size={16} /> {syncing ? t("debtors.sync.running") : t("debtors.sync.button")}
+        </Button>
+        <LastSync>
+          {t("debtors.sync.last")}:{" "}
+          {lastSync
+            ? new Date(lastSync).toLocaleString(i18n.language === "uz" ? "uz-UZ" : "ru-RU")
+            : "—"}
+        </LastSync>
       </Toolbar>
 
       <Table
