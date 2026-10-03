@@ -44,6 +44,11 @@ services:
       LEADS_ENABLED: "true"
       NEWS_ENABLED: "true"
       BANK_TURNOVER_ENABLED: "true"
+      # Nasiya balances follow the replicated ledger, not the total each till uploads (last till
+      # wins — it wiped another till's credit sale on store 1234, 2026-10-03). Staging only, same
+      # reason as above. Balances are recomputed per customer as their ledger rows sync; production
+      # needs /debtors/ledger/drift checked and a one-time recompute before it gets this.
+      DEBT_BALANCE_FROM_LEDGER: "true"
       # Same reason, sharper consequence: two processes long-polling one bot token get 409
       # Conflict from Telegram and the bot flaps between them. Staging therefore stays silent
       # unless given a token of its own — the empty default trips the `if (!token)` guard in
