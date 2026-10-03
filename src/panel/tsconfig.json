@@ -15,7 +15,6 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "types": ["vite/client"],
-    "baseUrl": ".",
     "paths": {
       "@shared/*": ["../../src/shared/*"],
       "@theme/*": ["../../src/renderer/theme/*"]
