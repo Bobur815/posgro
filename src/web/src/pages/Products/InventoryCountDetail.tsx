@@ -24,7 +24,7 @@ import {
 import { BarcodeScannerModal } from "../../components/common/BarcodeScannerModal";
 import { InventoryCountStatusBadge } from "./InventoryCountStatusBadge";
 import { CompleteCountModal } from "./CompleteCountModal";
-import { ScanQuantityModal } from "./ScanQuantityModal";
+import { ScanQuantityModal, type ScanQtyMode } from "./ScanQuantityModal";
 import {
   inventoryCounts,
   type InventoryCountDetail as CountDetail,
@@ -448,18 +448,32 @@ export function InventoryCountDetail() {
     [count, isReadOnly, toast, t],
   );
 
+  /**
+   * "add" goes through the scan endpoint, which adds on the server to whatever the line holds
+   * THERE — so a second counter's 117 lands on top of the first one's 68 even if this phone
+   * still shows an older figure. "total" replaces the line, for correcting a double count.
+   */
   const handleScannedQty = useCallback(
-    async (qty: number) => {
-      if (!scannedItem) return;
+    async (qty: number, mode: ScanQtyMode) => {
+      if (!scannedItem || !id || isReadOnly) return;
       setIsSavingScan(true);
       try {
         // Keep the modal open on failure so the typed quantity isn't lost.
-        if (await setItemQty(scannedItem, qty)) setScannedItem(null);
+        if (mode === "total") {
+          if (await setItemQty(scannedItem, qty)) setScannedItem(null);
+          return;
+        }
+        try {
+          applyProgress(await inventoryCounts.scan(id, scannedItem.barcode, qty));
+          setScannedItem(null);
+        } catch {
+          toast.error(t("inventoryCount.detail.saveError"));
+        }
       } finally {
         setIsSavingScan(false);
       }
     },
-    [scannedItem, setItemQty],
+    [scannedItem, id, isReadOnly, setItemQty, applyProgress, toast, t],
   );
 
   const visibleItems = useMemo(() => {

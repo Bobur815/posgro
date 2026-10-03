@@ -541,7 +541,11 @@
         "title": "Skanerlangan mahsulot",
         "enterQty": "Miqdorni kiriting",
         "currentlyCounted": "Hozir sanalgan",
-        "notCountedYet": "Hali sanalmagan"
+        "notCountedYet": "Hali sanalmagan",
+        "modeAdd": "Qo'shish",
+        "modeTotal": "Jami (qo'lda)",
+        "addHint": "Bu yerda nechta — sanalganiga qo'shiladi",
+        "totalHint": "{{from}} o'rniga {{to}} yoziladi"
       },
       "writeOff": {
         "label": "Sanalmagan {{n}} ta mahsulotni hisobdan chiqarish",

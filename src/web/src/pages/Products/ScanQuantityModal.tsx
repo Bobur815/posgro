@@ -100,6 +100,38 @@ const Unit = styled.span`
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
+/* Add vs. set total. Two plain buttons rather than a tab strip: there are only ever two. */
+const ModeSwitch = styled.div`
+  display: flex;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  overflow: hidden;
+`;
+
+const ModeButton = styled.button<{ $active: boolean }>`
+  flex: 1;
+  min-height: 44px;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  background-color: ${({ theme, $active }) => ($active ? theme.colors.primary : theme.colors.surface)};
+  color: ${({ theme, $active }) => ($active ? "#fff" : theme.colors.textSecondary)};
+
+  &:disabled {
+    cursor: not-allowed;
+  }
+`;
+
+/* The sum the counter would otherwise do on a calculator, or what a total will replace. */
+const Result = styled.div<{ $warn?: boolean }>`
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+  min-height: 22px;
+  color: ${({ theme, $warn }) => ($warn ? theme.colors.warning : theme.colors.text)};
+`;
+
 const Actions = styled.div`
   display: flex;
   gap: ${({ theme }) => theme.spacing.sm};
@@ -110,20 +142,29 @@ const Actions = styled.div`
   }
 `;
 
+/** "add": the typed quantity goes on top of the line. "total": it replaces the line. */
+export type ScanQtyMode = "add" | "total";
+
 interface ScanQuantityModalProps {
   item: InventoryCountItem;
   /** Hide the expected quantity so the counter isn't anchored to the system number. */
   blindCount: boolean;
   isSaving: boolean;
-  onSave: (qty: number) => void;
+  onSave: (qty: number, mode: ScanQtyMode) => void;
   onClose: () => void;
 }
 
+/** Three decimals is the finest quantity a line holds (kg); hides float noise like 0.30000000000000004. */
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
+
 /**
- * Opened after a CAMERA scan so the counter can type how many they actually see,
- * rather than the +1 the handheld-scanner flow applies. The quantity is absolute:
- * it replaces whatever the line holds, and is pre-filled with the current value so
- * re-scanning a line shows what is already recorded.
+ * Opened after a CAMERA scan so the counter can type how many they actually see, rather than the
+ * +1 the handheld-scanner flow applies.
+ *
+ * ADDS by default: the same product often sits in two places, and whoever counts the second
+ * shelf types what is on THAT shelf (117), not the store's total — the line becomes 68 + 117 =
+ * 185 without a calculator. "Set total" is the correction path (two people counted the same
+ * shelf): pre-filled with the current figure, and it replaces it.
  */
 export function ScanQuantityModal({
   item,
@@ -134,21 +175,31 @@ export function ScanQuantityModal({
 }: ScanQuantityModalProps) {
   const { t, i18n } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [value, setValue] = useState(
-    item.countedQty === null ? "" : String(Number(item.countedQty)),
-  );
+  const current = item.countedQty === null ? 0 : Number(item.countedQty);
+  const [mode, setMode] = useState<ScanQtyMode>("add");
+  const [value, setValue] = useState("");
 
   const productName =
     i18n.language === "uz" ? item.productNameUz : item.productName;
 
   useEffect(() => {
-    // Select rather than just focus, so typing replaces the pre-filled value.
+    // Select rather than just focus, so typing replaces a pre-filled total.
     inputRef.current?.focus();
     inputRef.current?.select();
-  }, []);
+  }, [mode]);
+
+  const switchMode = (next: ScanQtyMode) => {
+    if (next === mode) return;
+    setMode(next);
+    // Each mode starts from what it means: nothing added yet, or the total as it stands.
+    setValue(next === "total" && item.countedQty !== null ? String(current) : "");
+  };
 
   const parsed = Number(value);
-  const isValid = value.trim() !== "" && Number.isFinite(parsed) && parsed >= 0;
+  const isNumber = value.trim() !== "" && Number.isFinite(parsed);
+  // Adding 0 changes nothing; a total of 0 is a real count ("none on the shelf").
+  const isValid = isNumber && (mode === "add" ? parsed > 0 : parsed >= 0);
+  const newTotal = mode === "add" ? round3(current + (isNumber ? parsed : 0)) : parsed;
 
   const step = (delta: number) => {
     const base = value.trim() === "" ? 0 : Number(value);
@@ -158,7 +209,7 @@ export function ScanQuantityModal({
 
   const submit = () => {
     if (!isValid || isSaving) return;
-    onSave(parsed);
+    onSave(parsed, mode);
   };
 
   return (
@@ -184,6 +235,29 @@ export function ScanQuantityModal({
             </strong>
           </CardRow>
         </Card>
+
+        <ModeSwitch role="tablist">
+          <ModeButton
+            type="button"
+            role="tab"
+            aria-selected={mode === "add"}
+            $active={mode === "add"}
+            disabled={isSaving}
+            onClick={() => switchMode("add")}
+          >
+            {t("inventoryCount.detail.scanQty.modeAdd")}
+          </ModeButton>
+          <ModeButton
+            type="button"
+            role="tab"
+            aria-selected={mode === "total"}
+            $active={mode === "total"}
+            disabled={isSaving}
+            onClick={() => switchMode("total")}
+          >
+            {t("inventoryCount.detail.scanQty.modeTotal")}
+          </ModeButton>
+        </ModeSwitch>
 
         <Stepper>
           <StepButton
@@ -221,6 +295,23 @@ export function ScanQuantityModal({
           </StepButton>
         </Stepper>
         <Unit style={{ textAlign: "center" }}>{item.unit}</Unit>
+
+        {mode === "add" ? (
+          <Result>
+            {isValid
+              ? item.countedQty === null
+                ? `= ${newTotal} ${item.unit}`
+                : `${current} + ${round3(parsed)} = ${newTotal} ${item.unit}`
+              : t("inventoryCount.detail.scanQty.addHint")}
+          </Result>
+        ) : (
+          <Result $warn>
+            {t("inventoryCount.detail.scanQty.totalHint", {
+              from: item.countedQty === null ? "—" : `${current} ${item.unit}`,
+              to: isValid ? `${newTotal} ${item.unit}` : "…",
+            })}
+          </Result>
+        )}
 
         <Actions>
           <Button type="button" variant="secondary" onClick={onClose}>
