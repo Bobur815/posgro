@@ -3,7 +3,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { block, projectDir, readHookInput } from './_lib';
+import { block, projectDir, readHookInput } from './_lib.ts';
 
 interface Input {
   stop_hook_active?: boolean;

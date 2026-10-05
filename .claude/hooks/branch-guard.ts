@@ -1,7 +1,7 @@
 // PreToolUse (Edit | Write | MultiEdit): main is production. Develop on dev.
 // Bypass for a real hotfix: set ALLOW_MAIN_EDITS=1 (e.g. in .claude/settings.local.json "env").
 import { spawnSync } from 'node:child_process';
-import { block, norm, projectDir, readHookInput } from './_lib';
+import { block, norm, projectDir, readHookInput } from './_lib.ts';
 
 interface Input {
   tool_input?: { file_path?: string };

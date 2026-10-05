@@ -1,6 +1,6 @@
 // PreToolUse (Bash | PowerShell): hard-blocks commands that must never run from an agent session.
 // Fails closed if the hook input cannot be parsed.
-import { block, readHookInput } from './_lib';
+import { block, readHookInput } from './_lib.ts';
 
 interface Input {
   tool_input?: { command?: string };
@@ -33,7 +33,8 @@ const rules: Rule[] = [
   // Production actions that belong to the human
   { re: /\bdeploy:pos\b|scripts[\\/]upload-release/i, why: 'publishes the installer to production; run it yourself' },
   { re: /\bprisma(?::|\s+)migrate(?::|\s+)deploy\b/i, why: 'production migrations run via the main-branch deploy' },
-  { re: /\bgit\s+push\b[^\n]*\b(main|master)\b/i, why: 'pushing to main (production)' },
+  // Pushing to main is not blocked here: it needs the user's OK after staging (CLAUDE.md), which
+  // the "ask" rule in .claude/settings.json turns into a permission prompt on every push.
   { re: /\bgit\s+push\b[^\n]*(--force|\s-f\b)/i, why: 'force push' },
   { re: /\bgit\s+reset\s+--hard\b/i, why: 'git reset --hard' },
   // ssh/scp/rsync that mutate the PRODUCTION dir (~/posgro, not ~/posgro-staging)
