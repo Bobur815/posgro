@@ -1,3 +1,378 @@
+# Discount on every tender, split included (2026-10-05), branch feat/discount-all-tenders (from dev). Approved by user; done, not committed (1.32.17)
+
+Decisions (user): explicit discount field in checkout; any cashier, no limit; behind a per-till setting, default off.
+
+## Findings
+- `cart-store.ts` already has `discount` + `setDiscount()`, and `total = subtotal + tax − discount`. Nothing calls it.
+- Today's only discount is the cash shortfall courtesy (`Checkout.tsx:375-388`); off for split and UzQR.
+- Below the UI every tender already takes a discount: `commit-sale.ts:308` checks split lines against `total − discount`,
+  satellite route passes `discountAmount`, sync + server store it, shift report sums it, receipt prints it.
+- Fiscal bug (pre-existing, made frequent by card discounts — card is always fiscalized): `buildPositions` rounds each
+  line's discount share to the tiyin separately (`regos-vcr-service.ts:522`); the sum can miss `finalAmount×100`.
+
+## Plan (POS only; no schema, no server, no N-1 impact)
+- [x] Setting `discount_all_tenders` (local-only, like `click_enabled`): add to `local-only-settings.ts`; checkbox in
+      Settings → System; i18n ru/uz. Off = today's checkout exactly.
+- [x] Checkout: when on, a "Скидка / Chegirma" row in the summary → small input, so'm or %, numpad; calls
+      `setDiscount` (clamped to 0…subtotal+tax). Total, split panel, UzQR amount and nasiya then use the reduced total.
+      Changing it resets split amounts / given amount (they were typed against the old total). Clear button.
+- [x] Cash shortfall courtesy unchanged (still cash-only, adds on top of the explicit discount).
+- [x] Fiscal: give the rounding remainder to the last line so Σ line discounts = discountAmount×100 exactly; test.
+- [x] Tests: discount helper (%, clamp), fiscal remainder; `split-payment` already covers totals.
+- [x] Version bump, /check, POS compile check; user runs deploy:pos.
+- Note: 7 sync tests fail locally only — src/generated/prisma-sqlite was generated on the backlog branch
+      (`fiscal_substitutions`); `npm run prisma:generate:sqlite` on this branch fixes it.
+- Out of scope: editing a sale drops its discount (`loadSaleForEdit` sets 0) — pre-existing, separate fix.
+- Open: VAT is computed on the gross line amount, not net of discount — unchanged here; ask before touching.
+
+# Product create/edit speed (2026-10-05), branch fix/product-form-speed (from dev). Approved by user
+
+Store has 3000+ products; save and edit both slow. Decisions: add `supplier` to the create/update response.
+
+- [x] Server: `ProductsService.create/update` include `supplier` (additive response field)
+- [x] Web `useProducts`: create/update/delete no longer call `loadProducts()`; return the saved product;
+      new `upsertProduct` / `removeProduct` patch the store in place
+- [x] Web `ProductList`: onSuccess(product) upserts locally (no full GET /products); delete/activate likewise
+- [x] Web `ProductForm`: onSuccess(product); error toast from the returned message (was a stale closure);
+      skip categories/suppliers reload when the store has them
+- [x] Web `api/client`: tasnif fetches get `AbortSignal.timeout`; `/history` reused between barcode lookup and packages
+- [x] Barcode check: remote lookups only at ≥ 8 chars; stale replies dropped
+- [x] /check (web lint+tsc, server tsc + products tests)
+- Out of scope: `update()` → `findById` without `byDbId` (separate fix)
+
+# Fiscal backlog as a paid service + "same code sent twice" card (2026-10-05). Server ed7d588 (feat/fiscal-backlog-license), POS 29698d8 (1.32.17); not pushed
+
+Decisions (user): (1) a time-boxed entitlement in the signed license, (2) the card is hidden without it, (3) the duplicate-codes card is free,
+(4) open for N days chosen each time.
+
+## Findings
+- License: server signs (`licenses.service.ts sign()` → `shared/utils/license.ts licensePayload()`), till verifies with the built-in
+  public key, refreshes every 6 h, judges dates by its trusted clock (`main/license/trusted-clock.ts`). Optional fields
+  (`terminals`, `seats`) were added before without bumping `LICENSE_VERSION`; older tills ignore unknown fields.
+- Super admin edits a store via `PATCH /api/stores/:id` (`UpdateStoreDto`, `stores.service.ts update()`), web
+  `src/web/src/pages/Admin/StoreDetailPage.tsx` (the extraTerminals control is the pattern to copy).
+- The server has no generic AuditLog writer in `stores`; the till has raw `audit_logs` inserts (`commit-sale.ts:443`).
+
+## Design
+- **Date, not a flag, in the license:** `fiscalBacklogUntil?: string` (ISO). The till compares it with its trusted clock, so access
+  ends on that date even offline. Clearing it early takes effect at the next refresh (≤ 6 h). Absent → no access.
+- Server: `Store.fiscalBacklogUntil DateTime?` (nullable, additive). `UpdateStoreDto.fiscalBacklogDays?: number` (1–90) → the server sets
+  `now + N days`; `0` clears. The response carries `fiscalBacklogUntil`. `issue()` selects it, and `licensePayload()` adds it only
+  when it is in the future (additive param, like `seating`).
+- Till: `fiscalBacklogAllowed()` in `main/license/license.ts` (held license + trusted clock). All 4 `fiscal:backlog*` handlers refuse
+  with `NOT_ENTITLED`, and a new `fiscal:backlogAllowed` IPC lets the screen hide the card. Each step writes a local `audit_logs` row
+  (action `FISCAL_BACKLOG_<STEP>`, details = counts).
+- Web (super admin, StoreDetailPage): a "Fiscal backlog service" row with the open-until date, an "Open for N days" input + button, and "Close".
+  Bilingual ru/uz.
+- **Duplicate-codes card** (free, read-only): IPC `fiscal:duplicateCodeReceipts` → FISCALIZED sales whose `regos_labels` holds ≥2 codes
+  for one barcode and whose `regos_fiscal_at` < `labels_per_line_since` (system setting written once at the first boot of this
+  version). Rows: receipt no., date, product, packs, REGOS receipt no., the codes REGOS never received. Its own card
+  under the queue card. No writes.
+
+## N-1 / rollout
+- Server first (`dev` → staging → your OK → `main`). An old till ignores `fiscalBacklogUntil`. The new till on an old server → no field → the
+  card stays hidden (the safe default). The PATCH field is new and optional.
+- PostgreSQL migration: `ADD COLUMN fiscal_backlog_until TIMESTAMP(3) NULL`, `--create-only`, SQL read, migration-reviewer.
+  `/pg-backup` before prod (rule 3).
+- Installer after the server is live; the version bumps to 1.32.17.
+
+## Steps
+- [x] S1 prisma/schema.prisma + migration (create-only, read SQL)
+- [x] S2 shared/utils/license.ts: optional `fiscalBacklogUntil` + `fiscalBacklogAllowed(license, now)`; tests
+- [x] S3 licenses.service.ts issue/sign; stores DTO/service (days → date, 0 clears); tests
+- [x] S4 web StoreDetailPage control + i18n
+- [x] S5 till: gate + `fiscal:backlogAllowed` + audit rows; FiscalSettings hides the card; tests (red proof: gate off → refused)
+- [x] S6 till: duplicate-codes IPC + card + `labels_per_line_since`; tests
+- [x] S7 /check, /api-compat, version bump, POS build
+
+# Fiscal backlog stepper: rework "Fiscalise all old receipts" into 4 steps (2026-10-04). Implemented on `feat/fiscal-backlog-stepper` (1.32.16), uncommitted, awaiting review
+
+Rule #1 (user, 2026-10-04): of the unfiscalised receipts, the only ones that may skip fiscalisation are those paid
+only by cash and/or Click (mixed cash+Click included) with no marked product. Those become `DISABLED` and are never
+picked up again. Every other receipt must be fiscalised.
+
+## Findings (code read)
+- Button → `fiscal:fiscalizeOld` (`fiscal-handlers.ts:66`, mainOnly) → `regosVcrService.fiscalizeOldReceipts`
+  (`regos-vcr-service.ts:979`). It splits by "marked or not" only, so unmarked **card/UzQR** receipts are DISABLED,
+  which breaks rule #1. There is no date filter, and `fiscalStatus: { not: 'FISCALIZED' }` also takes
+  **`DEFERRED_DEBT`** (an unpaid nasiya sale) and earlier-DISABLED rows.
+- Tally bug: `fiscalizeSaleImpl` returns without throwing on `isWriteFrozen()`, config off, or no password (`!client`
+  → FAILED). The bulk loop still does `fiscalized++` (`:1081`).
+- The payload is built from **current** product data (`buildPositions` `:458`). `SaleItem` holds only name/barcode/qty/
+  price/subtotal; MXIK, `packageCode`, `vatRate`, `unit` and `isMarked` come from `Product`. Fixing a product therefore
+  fixes the payload of every old receipt that has it.
+- Labels: `sale.regosLabels` JSON `[{barcode,label}]`, matched to a line by barcode. `repairCyrillicLayout`
+  (`shared/utils/keyboard-layout.ts`) already inverts RU→US. Checked by hand against the user's sample
+  (`…21ФК16…ГЯА092Й2Ьцв50птЯФшоОЯвнсНСимдаьф9шНлПМ3ДВ6я71ЗЬТН=` → `…21AR16…UZF092Q2Mwd50gnZAijJZdycYCbvlfma9iYkGV3LD6z71PMNY=`).
+- Marking check: MarkingCheckPage → `markingCheck:verify` (`marking-check-handlers.ts`) → `verifyMarkingCodeDetails` +
+  `classifyCirculation` (IN/OUT/UNKNOWN, `isValid=false` → OUT), via VPS `/aslbelgisi/verify`. Step 3 reuses this same
+  function and verdict in the main process (no renderer round trip per code).
+- Tasnif: `mxik:lookupByBarcode` and `mxik:getPackages` (`ipc/handlers.ts:104,154`) with `findBarcodeMatch` and
+  `pickSingleUnitPackage`. The logic is inline in the IPC handlers, so it gets extracted to reuse it from the service.
+- Tenders: `isFiscalCashTender` (cash|click) in `shared/constants/payment-methods.ts`. Split sales: `paymentMethod='mixed'`
+  + `SalePayment` rows.
+- Statuses: the server `sync-fiscal.dto.ts:27` is `@IsIn([PENDING, FISCALIZED, FAILED, DISABLED, DEFERRED_DEBT])`, so a
+  **new status value would be rejected by the server**. Rule-#1 skips stay `DISABLED` and are tagged
+  `fiscalError = 'skip:cash_unmarked'`, so later runs can exclude exactly those.
+- `settle-sale.ts:140` also writes `DISABLED` (fiscalisation off at sale time), with `fiscalError` null, which looks the same
+  as old bulk-run DISABLED rows → Q1.
+
+## Design (pending answers)
+Stepper card, like the picture: 4 circles + connecting line (done ✓ / current filled / upcoming hollow). Each step is
+its own IPC call that returns a summary. The admin reviews it and presses "Next" (Q7). Progress is streamed over the
+existing `fiscal:bulkProgress` channel with a `step` field (additive).
+
+1. **Classify**: pick the candidate receipts (scope per Q1; never FISCALIZED, never DEFERRED_DEBT). Cash/Click-only and
+   no marked product → `DISABLED` + `skip:cash_unmarked`. Everything else is kept for steps 2–4. Show both counts plus
+   the list of kept receipts.
+2. **Repair data**:
+   (a) labels: `repairCyrillicLayout` on `regosLabels`. Also repairs the matching `sold_marking_codes` key if it is stored corrupted.
+   (b) products in kept receipts: from tasnif, fill/fix `mxik` (by barcode, exact match only), `packageCode`
+   (`pickSingleUnitPackage`) and `isMarked`. The write policy is Q5. Product writes bump `updatedAt`, so they sync like the VAT heal does.
+   Summary: labels fixed, products fixed, products still missing MXIK (listed by name).
+3. **Verify marking codes**: every label of every kept receipt → asl-belgisi. A line with OUT/NOT_FOUND, or a marked
+   line with no label (Q3), is marked for **substitution**. Substitution changes the fiscal payload only: name/barcode/
+   icps/package_code/unit/vat come from the substitute product (Q2), `label` is dropped, `amount` and `discount` stay the
+   same. No change to `sale_items`, stock, sale totals or sync. Stored per sale (Q6) so retries, Receipt Details preview
+   and refunds use the same payload. Unreachable/UNKNOWN → Q4.
+4. **Fiscalise**: one at a time through `fiscalizeSale` (existing lock, Z-report, VAT heal, recover-by-code). A sale
+   counts as fiscalised **only if its status reads FISCALIZED afterwards** (fixes the tally). The run stops early on
+   VCR unreachable, as today. Shows the failed receipts with their REGOS error.
+
+## Decisions (user, 2026-10-04)
+1. "From date" picker. Every non-FISCALIZED, non-DEFERRED_DEBT receipt created on/after it is a candidate, including old
+   `DISABLED` ones, except those tagged `skip:cash_unmarked`.
+2. Substitute = setting `fiscal_substitute_product_id` (local system setting) with a product picker in Fiscal Settings. On the payload:
+   quantity 1000 (1 kg), amount = line total, name/barcode/icps/package_code/unit/vat from the substitute.
+3. A marked line with no scanned code → substitute too.
+4. asl-belgisi unreachable / key expired / UNKNOWN → step 3 stops (shows why). Step 4 stays locked until step 3 completes clean.
+5. Product data source = **our server DB** (it is correct), not tasnif. Step 2b: `GET /api/products` (existing endpoint, no
+   server change), match by barcode, overwrite the local `mxik`, `packageCode`, `isMarked`, `vatRate` for products in the
+   kept receipts. Server unreachable → step 2 stops. The tasnif extraction (old step 2) is dropped.
+6. New nullable SQLite column `sales.fiscal_substitutions` approved.
+7. Each step waits for "Next".
+
+## Steps (after approval)
+Branch `feat/fiscal-backlog-stepper` from `dev`. POS only, no server change. **Version bump** (src/main, src/renderer, src/shared).
+- [x] 0. Bug fixes, independent of the stepper and not behind a flag (they only make the counting/selection correct):
+      tally counts by re-reading the status; the bulk query excludes `DEFERRED_DEBT`; card/UzQR/mixed-with-card receipts are
+      never DISABLED. Tests first, with a red proof (lessons.md: `!process.env.RED`, `FORCE_COLOR=0`, "N failed").
+- [x] 1. `src/shared/utils/fiscal-backlog.ts` (pure): `isSkippableUnderRule1(sale)`, `applySubstitution(position, substitute)`.
+      Tests: cash, click, cash+click mixed, cash+card mixed, uzqr, debt-tender, marked+cash, the user's Cyrillic label.
+- [x] 2. Product refresh helper: fetch the store's products from the server (`vpsSource.get('products')`, same auth as
+      `syncProducts`), overwrite the 4 fiscal fields locally for the affected products only. No stock/price/name change.
+- [x] 3. Service: `backlogClassify`, `backlogRepair`, `backlogVerify`, `backlogFiscalize` in `regos-vcr-service.ts`.
+      `buildPositions` applies stored substitutions (it is also used by `previewSalePayload`, so the modal shows the real body).
+- [x] 4. Schema (only if Q6 = yes): `sales.fiscal_substitutions TEXT NULL` in `prisma/schema.sqlite.prisma` + an idempotent
+      `ALTER TABLE` in `sqlite-client.ts` upgrade path (lessons.md: unconditional, no "exists" guard). Covered by `legacy-upgrade.test.ts`.
+      No PostgreSQL change. migration-reviewer agent on the diff.
+- [x] 5. IPC: `fiscal:backlog:{classify,repair,verify,fiscalize}` (mainOnly) + preload + types (additive `step` on
+      `FiscalBulkProgress`).
+- [x] 6. UI: `Stepper` component (theme tokens, light/dark) + queue card rewrite in `FiscalSettings.tsx`. Also: refresh `queue`
+      after Save (fixes the greyed-out button). Keep `bulkRunning` in main (a `fiscal:backlog:state` query), so leaving and
+      returning to the page can't start a second run. Substitute-product picker if Q2 = setting.
+- [x] 7. i18n ru + uz for every new string.
+- [x] 8. Flag per Q7.
+- [x] 9. `/check`; `npm version patch --no-git-tag-version`; `npx cross-env APP_MODE=pos electron-vite build`.
+
+## Extension (user, 2026-10-05). Implemented (answers: no-code = invalid; card unchanged; tasnif MXIK saved to product, warn on failure; live label fix = separate commit ca037ae)
+Rule #1 additions:
+- (A) A cash/Click-only receipt with marked products: send **only** the marked lines whose code is valid (IN) in Asl-belgisi,
+  with payment = their amount (cash). If no line is valid → `DISABLED` (tagged, never taken again).
+- (B) A product with no MXIK (local DB = server DB, both empty) → look it up on tasnif.soliq.uz by barcode.
+- Sale history and stock stay untouched; only the REGOS payload changes.
+
+Findings:
+- Each marked scan is its own `sale_items` row, qty 1, never merged (`cart-store.ts:157`). Codes sit in `regosLabels` by barcode, so two
+  packs of the same item share a barcode. **Live-path bug:** `buildPositions` does `new Map(labels.map(l => [barcode, label]))`, so both
+  lines get the *last* code, and REGOS sees one code twice. My substitutions are also keyed by barcode, so the same flaw applies → Q4.
+- `fiscal_substitutions` is unreleased (only on this branch), so its JSON can change shape freely: per line → `{line, action: 'substitute' | 'omit', reason}`.
+- Tasnif lookup already exists inline in `ipc/handlers.ts:104` (`mxik:lookupByBarcode`, exact match via `findBarcodeMatch`) and `:154`
+  (`mxik:getPackages` + `pickSingleUnitPackage`). Extract both into `src/main/fiscal/tasnif.ts`; the IPC handlers call them (no behaviour change).
+
+Design:
+- Step 1 classify: only cash/Click with **no** marked product → DISABLED (unchanged). Cash/Click with marked products is kept for step 3.
+- Step 2 repair: + for every kept-receipt product with no 17-digit MXIK → tasnif lookup; on an exact match write `mxik` (+ `packageCode`
+  for a marked one) to the product (Q3). Summary lists found / not found.
+- Step 3 verify: codes are matched to lines **in order** (k-th line with barcode X ↔ k-th code with barcode X).
+  - Card/UzQR/mixed-with-card: invalid or missing → `substitute` (as now).
+  - Cash/Click-only: invalid or missing → `omit`; unmarked lines → `omit`; if nothing is left → `DISABLED` + tag `skip:cash_marking_invalid`.
+- Step 4 / `buildPositions`: `omit` lines are dropped; payments = Σ(amount − discount) of the sent lines as one cash payment (Click
+  is fiscal cash already). `buildPayments` takes the sent total instead of `finalAmount` only when something was omitted.
+- Tests: partial-cash payload (positions + payment sum), all-invalid → DISABLED, two identical marked lines → two different codes,
+  tasnif fill (mocked fetch).
+
+## Done notes (2026-10-04)
+- Step 2 per the 2nd answer: the till's product data is correct, so nothing is fetched. It repairs labels and lists products missing MXIK, or marked products missing a package code (a warning, Next still allowed).
+- No flag (Q7 = replace). The tally re-reads the status; the selection excludes DEFERRED_DEBT and treats debt>0 / card / UzQR / mixed-with-card as must-fiscalise.
+- The substitute is saved as `regos_vcr_substitute_product_id` (local DB id) via fiscal setConfig, picked in step 3.
+- Tests: fiscal-backlog.test.ts (21), regos-vcr-service.backlog.test.ts (14). Red proofs: the old tally and old classify fail 2; dropping Migration 37 fails 3 schema tests.
+- Left: commit and merge to dev, then the user publishes the installer for a test till and runs the stepper there first (real VCR and asl-belgisi).
+
+## Compatibility / offline
+- No server or API change. `fiscal-sync` still only sends the existing status values. N-1 server is unaffected.
+- Old installers keep the old button; nothing they read changes. The new column is nullable and old code ignores it.
+- Steps 2–3 need the internet (tasnif, VPS asl-belgisi); step 4 needs the VCR only. Offline: step 2/3 report "unreachable"
+  per Q4 and never block a sale. Everything runs in the main process off the sale path, serialised by `runExclusive` for VCR calls.
+- Satellite: all four are mainOnly (as today), and the satellite shows a "run on the main till" message instead of a generic error.
+
+## Verify
+- Unit tests above + `regos-vcr-service.fiscalize.test.ts` cases for no-password tally, DEFERRED_DEBT excluded, substitution payload.
+- Real VCR + asl-belgisi only on the store till: you run the stepper on a copy first. I list the receipts per step, and you paste the
+  summaries. Then run it on the live till. Check one substituted receipt in Receipt Details and on soliq.uz.
+- Both store modes (offline SQLite+sync / online): confirm in which mode the till holds the backlog. Sales history and stock
+  totals before/after must be byte-identical (I'll give the SQLite query).
+
+## Rollout / rollback
+- feature branch → `dev` → you run `npm run deploy:pos` for a staging/test till → your OK → `main`.
+- Rollback: the flag off (or the previous installer). Rows already DISABLED by step 1 are tagged `skip:cash_unmarked`, so
+  one UPDATE can return them to PENDING. FISCALIZED receipts can't be un-fiscalised (by nature). This is why step 4 is a separate,
+  explicit press.
+
+# Stocktake camera scan adds instead of replacing (2026-10-03): on dev (743fad0), awaiting staging OK
+
+- Cause: `ScanQuantityModal` pre-filled the current total and saved via `setItem` (replace). The scan endpoint (VPS and local
+  server) already adds `qty`. Now "Add" (default, empty field, shows 68 + 117 = 185) → `scan(id, barcode, qty)`; "Set total" tab
+  → `setItem` (old behaviour, for double counts). The table's Counted cell still sets the total. Web-only; no API change.
+- Not done (user chose): atomic increment on the VPS scan (read-then-write; two saves of one product in the same instant can lose one).
+
+# Nasiya multi-till balances: ledger owns the balance (2026-10-03). Steps 1–2 and 3a on dev (fa27285); installer 1.32.15 pending; 3b–3e need approval
+
+## Findings (staging, store 1234, read-only)
+- `DEBT_BALANCE_FROM_LEDGER` was unset, so `users.service.ts upsertBulk` wrote every till's `debt` total, and the last till to sync won.
+  Every till sends ALL customers with its own total on each cycle (`upload-sync.ts toUserPayload`); a pulled customer's
+  balance is never updated locally afterwards (`products-sync.ts:469`).
+- The ledger itself replicated correctly: 45 rows (T1: 44, T4: 1 credit sale of 18 000), none lost.
+- Oysha: stored 40 000 vs ledger sum 50 000. T4's sale was wiped out of the balance by T1's next push.
+- Server recomputes balances only for users touched by an incoming ledger row (`debtors.service.ts:168`), with no recompute on flag flip.
+
+## Steps
+- [x] 1. Staging: `DEBT_BALANCE_FROM_LEDGER: "true"` in `docker-compose.staging.yml` (staging-only flags live there, `.env` is shared with prod).
+- [x] 2. POS: send `debtDueDate` only for `synced: false` customers; stop sending `debt` in ledger mode;
+       debtors page "Sync" button (push ledger rows → pull → align balances, last-sync time). Version bump.
+- [ ] 3. Prod. Found 2026-10-03 (read-only): store 1234 has 4 people (3 staff tabs, 1 client) whose stored balance = T1's charges
+       only; T2's 91 charges (1 106 194 so'm) are in the ledger but missing from the total (913 996 stored vs 2 020 190 ledger).
+       Ledger is consistent (every charge ↔ its credit sale); the shop confirmed no payments made outside the till. T1/T2 run 1.32.13
+       (ledger mode since 1.32.2) and pull the ledger, so they align themselves once the server says ledger mode.
+   - [x] 3a. Server: align all balances with ledger rows on start under the flag (4ac68b5, on dev fa27285).
+   - [x] 3b. (912ff30, on dev 5c14d47) `DEBT_BALANCE_FROM_LEDGER: "true"` in docker-compose.yml.
+   - [x] 3c. /pg-backup prod: ~/backups/posgro-20261003-121045.dump (25 MB), restore OK, counts match live.
+   - [x] 3d. Merged dev → main (edc1bb4), pushed 2026-10-03; prod deploy 23:00 Tashkent.
+   - [x] 3e. Deployed 12:57 UTC: "Ledger balances: 4 of 5 corrected", drift query 0 rows (stored = ledger = 2 056 190). Tills pulling the ledger (18 pulls in 45 min); till screens to be confirmed by the user.
+
+# Receipts summary cards: sums, debt card, payoffs by tender, web margin (2026-10-03) — implemented on `feat/receipts-summary-sums`, merged to dev (62c813c), awaiting staging OK; installer 1.32.14 pending
+
+## Findings (code read)
+- Web margin is always 100%: `GET /sales` (`sales.service.ts:35`) returns no `totalCost`, so the page computes `(rev − 0)/rev`.
+  POS calculates it in `sales-handlers.ts:148` as `product.cost × qty × piecesPerUnit`.
+- POS `sales:getAll` has `take: 100` even with a date range (`sales-handlers.ts:145`), so a day with more than 100 receipts gives wrong cards.
+- Debt payoffs are `DebtTransaction` rows with `type='PAYMENT'`, a negative `amount` and `paymentMethod` in upper case, and `voidedAt` null when live.
+  Server precedent for summing by payment type: `reconciliation/bank.service.ts:160` (paidAmount + mixed lines + debt payments).
+
+## Answers
+1. Total = finalAmount (debt included). 2. Debt card = Σ debtAmount for the period; payoffs received in the period go in the subtext.
+3. Mixed is split into its payment types via SalePayment, and the Mixed card is removed (the list badge and the filter stay). 4. Margin cost = current product.cost (same as POS).
+
+## Cards (both pages)
+Total sales · Margin · Debt · Cash · Card · UzQR (shown if > 0) · Click (shown if > 0). All are sums of money.
+Each payment-type card = paidAmount of single-type sales + the matching SalePayment lines of mixed sales + debt payments received in the period in that type.
+Removed: totalSales count, itemsSold count, DebtSubtext. The payment filter still filters the list and the cards built from it.
+
+## Steps
+- [ ] Shared pure helper `summarizeReceipts(sales, debtPayments)` → numbers per card; unit test (sums, mixed split, debt, payoff, voided payment ignored).
+      Location: `src/shared/utils` (needs OK, it is in shared) or a copy per app.
+- [ ] Server (additive): `GET /sales` adds `totalCost`, `margin`, `payments[]` per sale (store-scoped, Decimal → string/number like today);
+      new `GET /debtors/payments?startDate&endDate` (ADMIN/SUPER_ADMIN, store-scoped, voidedAt null). Jest tests for both.
+- [ ] Web: `DailySummary.tsx` uses the helper; `useSales` loads the debt payments; types without `any`.
+- [ ] POS: IPC `debtors:paymentsInRange` (handler → preload → ipc-client → useSales); `sales:getAll` with no `take` when a date range is given;
+      `DailySummary.tsx` uses the helper; i18n ru/uz (`reports.debt`, `reports.debtPaidBack`…); version bump.
+- [ ] /check, `electron-vite build`, feature branch `feat/receipts-summary-sums` → dev → staging → wait for OK.
+
+## Task 2: /web/products slow (analysis only, separate follow-up)
+Measured: TTFB about 0.1 s; a static 1.41 MB JS file takes 23.5 s (about 60 KB/s); no gzip even when the request asks for it. The bottleneck is network throughput to Contabo, not the server.
+Fixes: (1) nginx gzip for json/js/css; (2) opt-in `?view=list` slim products response (POS response unchanged); (3) web delta cache via updatedAfter; (4) split the web bundle, measure a Cloudflare proxy / UZ hosting.
+
+# Product/Category cards + column picker (2026-10-02) — implemented on `feat/product-cards-columns` (2f1df0a, 7a8997a); /check green; staging OK; on main (feb37c8) 2026-10-02 → prod 23:00; installer 1.32.13 pending
+
+## Findings (code read)
+- **Pictures already exist.** `Product` and `Category` have no image field, and none is needed: `productPictureUrl(p, v)` and
+  `categoryPictureUrl(c, v)` (`src/renderer/utils/pictures.ts`) build `posimg://` URLs that the main process
+  serves. `Picture.tsx` already loads lazily and asynchronously and handles `onError`. The per-till setting
+  `showProductImages` (`settings-store.ts`, **default false**) controls them. → **No schema, migration or server change.**
+- `posimg:` only exists in Electron, so the web dashboard can't show pictures. The image column has to be renderer-only.
+- **The web build compiles `src/renderer/components/common/**`, `theme` and `i18n`** (`src/web/tsconfig.json`, vite aliases).
+  Web uses styled-components with the same theme, the same `Table` and the same `ru.json`/`uz.json`. So ColumnPicker and
+  `useColumnVisibility` can be **one shared copy** in `components/common` instead of two. Nothing there may touch
+  `window.electronAPI` (same lesson as 4925b3b PictureEditor).
+- POS cards today are an inline styled `ProductCard` in `pages/POS/ProductSearch.tsx` (grid minmax 200px).
+  **That file has uncommitted WIP** (column layout, 60px picture). POS categories are a bar of five
+  `CategoryButton`s plus a `<select>` for the rest. There is no category grid anywhere.
+- `formatQuantity` floors `шт` and shows 1 decimal for kg/l. The spec wants up to 3 decimals.
+- Both `ProductList.tsx` files already use a column array and the shared `Table`. `Table`'s header is a `string`, and its
+  container has `overflow-x: auto`, so the popover needs a portal. Neither table has cost/minStock/unit/image columns today.
+  Renderer: index,id,mxik,barcode,internalCode,name,price,vatRate,stock,expiryDate,supplier,category,actions(admin).
+  Web: the same minus vatRate, plus `active` (status). Web also has a mobile card list (`MobileCardList`).
+- Roles: renderer `isAdmin = role==='ADMIN'`. Web `ADMIN || SUPER_ADMIN`.
+- i18n: `products.outOfStock/lowStock/cost/minStock/unit/status` already exist. New keys: `products.image`,
+  `products.columns`, `products.columnsReset`.
+
+## Answers (2026-10-02)
+1. Carry the uncommitted `ProductSearch.tsx` WIP onto the feature branch; the new card replaces it.
+2. Pictures off → `ProductCard`/`CategoryCard` render **no image area** at all.
+3. (a) Category cards go into the POS catalog (replacing the 5-button bar, see design below).
+4. Keep all existing columns. New `image`/`cost`/`minStock`/`unit` start unchecked. `index`/`actions` are not in the picker and always shown.
+5. Image column offered only while `showProductImages` is on.
+6. `adminOnly` follows today's `isAdmin` in each app (POS: ADMIN; web: ADMIN + SUPER_ADMIN).
+7. Change `formatQuantity` itself (renderer **and** the web copy `src/web/src/utils/formatters.ts`): up to 3 decimals,
+   trailing zeros stripped, rounded to 3 dp (no float noise), for every unit. Call sites: POS card,
+   `Cart.tsx` line quantity (kg lines show `0.457 кг` instead of `0.5 кг`, a box line stays `2 кор.`),
+   `NewArrivalModal` (both apps).
+- **Category design (proposed):** a horizontally scrolling `CategoryStrip` of `CategoryCard`s (fixed ~120px wide, so it
+  doesn't push the product grid down in the 70vh modal), the top-5 first, followed by the existing "Other categories"
+  `<select>`. Tapping toggles the filter as today. `CategoryGrid` (minmax 180px) is still exported for later use.
+
+## Areas & version
+- Renderer (`src/renderer`) → **version bump** 1.32.12 → 1.32.13. Web → no bump. Server, prisma, shared and landing: untouched.
+- Schema: none. Flag: card images follow the existing `showProductImages` (default off = today). Column picker
+  defaults to today's columns, so the default is current behaviour.
+- N-1 / offline: UI only, no IPC/API/sync change. Works the same offline.
+
+## Plan (branch `feat/product-cards-columns` off `dev`, 2 commits: cards, then column picker)
+### A. Cards (renderer)
+- [ ] `utils/formatters.ts`: add `formatStock(qty, unit, locale)` (up to 3 decimals, only when fractional). Leave `formatQuantity` unchanged
+- [ ] `components/common/ProductCard.tsx` (+ `ProductGrid`), `React.memo`. Image 4/3 cover, top corners rounded. Name clamped to 2 lines.
+      Stock left, price right. Hover lift, active 0.98, focus-visible. Out of stock: image dimmed, badge, disabled.
+      Low stock shown in `warning`. Inline-SVG placeholder when the picture is missing or fails. `selected` prop.
+      Takes `pictureSrc?: string` (the caller builds the posimg URL), so the component stays safe for the web build.
+- [ ] `components/common/CategoryCard.tsx` (+ `CategoryGrid`), same visual language, primary border when selected
+- [ ] Shared `PicturePlaceholder` SVG, reused by both cards and the 40×40 table thumbnail
+- [ ] `ProductSearch.tsx`: replace the inline card with `ProductCard`. Keep `onSelect`, filters, the marking filter and the stock refresh
+- [ ] Category integration, per your answer to Q3
+- [ ] i18n ru+uz for any new keys
+### B. Column picker (shared, used by both apps)
+- [ ] `components/common/useColumnVisibility.ts`: returns `{visible,toggle,reset,isVisible}`. localStorage keys
+      `pos.products.columns` / `web.products.columns`. Parse in try/catch, drop unknown keys, fall back to `defaultVisible`
+- [ ] `components/common/ColumnPicker.tsx`: inline-SVG trigger with `aria-haspopup="menu"` and `aria-expanded`. Portal with `position: fixed`.
+      Max height 240px with scroll, 44px rows. `alwaysVisible` columns checked and disabled. Reset action.
+      Outside click or Escape closes it and returns focus to the trigger
+- [ ] `Table.tsx` (additive): `header: ReactNode` (a string still works). Needed to put the picker in the first header cell
+- [ ] Renderer `ProductList.tsx`: typed column defs (keys per Q4). `adminOnly` columns filtered by `isAdmin`. `image` thumbnail
+      (renderer only), see Q5
+- [ ] Web `ProductList.tsx`: same defs minus image. Desktop table only; mobile cards untouched
+- [ ] i18n ru+uz: `products.image`, `products.columns`, `products.columnsReset`
+
+## Verification
+- [ ] `/check`: `npx tsc --noEmit` (root) + `npx tsc --noEmit -p src/web` + `npm run lint`
+- [ ] `npx cross-env APP_MODE=pos electron-vite build`; `npm --prefix src/web run build`
+- [ ] You, on a till: catalog with pictures on and off, light and dark, touch; barcode scan + add to cart; column lists as cashier and as admin
+- [ ] Staging web: picker, persistence across reload, as ADMIN, SUPER_ADMIN and USER
+
+## Rollout / rollback
+- Feature branch → `dev` (staging web auto-deploys) → you confirm → `main` → you build and publish the POS installer.
+- Rollback: revert the two commits. Old code ignores the localStorage keys. No data touched.
+
+---
+
 # Click payment, split payments, local product images (2026-10-02) — not started; analyze → ask → plan → wait
 
 Ask before guessing on any of these.
