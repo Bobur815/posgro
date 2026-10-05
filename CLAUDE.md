@@ -17,10 +17,10 @@ Server (`src/server`), web dashboard (`src/web`), landing (`src/landing`) **and 
 
 ## Hard rules
 
-1. Migrations are **additive only**: new tables, new nullable/defaulted columns, new indexes. No drops, renames, type changes, or `NOT NULL` without default. Use expand → backfill → (much later) contract.
-2. New behaviour goes behind a feature flag that **defaults to current behaviour**.
+1. Migrations are **additive only**: new tables, new nullable/defaulted columns, new indexes. No drops, renames, type changes, or `NOT NULL` without default. Use expand → backfill → (much later) contract, contract in a separate approved release.
+2. New behaviour goes behind a feature flag that **defaults to current behaviour**. No hard deletion of live functionality.
 3. Never delete a Docker volume, run `migrate reset`, `db push`, `docker compose down -v`, or `DROP/TRUNCATE`. Prod data needs a verified backup-restore cycle first (`/pg-backup`).
-4. Never read or print `.env*` (except `.env.example`), JWT secrets, bot tokens, or DB passwords. Never commit them.
+4. Never read or print `.env*` (except `.env.example`), JWT secrets, bot tokens, DB passwords, or `.pfx/.pem` files. Never commit them.
 5. Don't change `DB_USER`/`DB_PASSWORD` in `.env` for an existing Postgres volume (SCRAM mismatch). If auth fails, fix inside the running container with `ALTER USER`, not by wiping data.
 6. Don't bind Postgres to `0.0.0.0` — Docker-published ports bypass UFW. Use `127.0.0.1:5432:5432` or no published port.
 
@@ -44,13 +44,8 @@ Server (`src/server`), web dashboard (`src/web`), landing (`src/landing`) **and 
 ## Commands (server)
 
 ```bash
-npm run dev:server            # NestJS watch, http://localhost:3000
-npm run build:server
 npm run lint && npx tsc --noEmit -p tsconfig.json
-npm run test
-npm run prisma:generate
 npm run prisma:migrate:dev    # local DB only — confirm DATABASE_URL first
-npm run prisma:studio
 ```
 
 POS compile check: `npx cross-env APP_MODE=pos electron-vite build`. Don't run `build:pos`, `electron-builder` or `deploy:pos` (slow / publishes — mine to run); `dev:pos` only when I ask.
@@ -62,16 +57,7 @@ POS compile check: `npx cross-env APP_MODE=pos electron-vite build`. Don't run `
 - Uzbek compliance: MXIK/IKPU mandatory per product, `vat_value = -1` for non-VAT payers, asl-belgisi marking codes, OFD via ofd.soliq.uz. See skill `regos-vcr`.
 - Infra: Contabo VPS (Ubuntu, Docker Compose, Nginx, Let's Encrypt), PostgreSQL **15** in prod (`postgres:15-alpine`, 15.17 verified on the VPS 2026-09-29), Cloudflare DNS. Prod DB on `127.0.0.1:5432`, staging DB on `127.0.0.1:5434`, API on `127.0.0.1:3001` (staging `3002`); only 22/80/443 are public.
 - The VPS is **shared** with other projects (`hisob-app`, `yettibuloq-app` + its own Postgres, `telegram-bots-*` with Postgres 17). Scope every Docker command to the posgro compose project — never `docker system prune`, global restarts, or touching other containers/volumes.
-- Telegram bot runs separately on the UZ VPS via PM2 and reaches Postgres over an SSH tunnel. Schema changes can break it — check its Prisma usage before altering shared tables.
-
-## Known inconsistencies in `GROCERY_POS_DOCUMENTATION.md` (verify against code, don't trust blindly)
-
-- Login DTO says `username`; `User` model has `phone`.
-- `SaleItem.productId` is `String` but `Product.id` is `Int` (relation won't validate as written).
-- Sync code posts a flat `{...sale, terminalId}`; the API section documents `{ sale, items }`.
-- `GET /api/products?updatedAfter=` is used by sync but not listed in the endpoint docs.
-- Doc lists Postgres 15 — that one is correct (prod is 15; 17 is the separate `telegram-bots` DB). `CORS_ORIGINS=*` and published `5432` are dev defaults, not prod-safe.
-- Doc layout may be stale (e.g. a web/admin app may exist) — `ls` the repo before assuming paths.
+- Telegram bot runs on the same VPS.
 
 ## Where things live
 
