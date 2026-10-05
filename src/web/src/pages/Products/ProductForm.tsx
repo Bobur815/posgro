@@ -4,6 +4,7 @@ import styled from "styled-components";
 import { generateProductBarcode } from "@shared/utils/barcode-parser";
 import { useProducts } from "../../hooks/useProducts";
 import { useAuthStore } from "../../store/auth-store";
+import { useProductsStore } from "../../store/products-store";
 import { useToast } from "@context/ToastContext";
 import { Button } from "@components/common/Button";
 import { Input } from "@components/common/Input";
@@ -349,7 +350,8 @@ interface ProductFormProps {
   };
   openArrival?: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  /** Receives the saved product after a create/edit; nothing after an arrival. */
+  onSuccess: (saved?: Product) => void;
 }
 
 export function ProductForm({
@@ -372,13 +374,15 @@ export function ProductForm({
     loadCategories,
     loadSuppliers,
     isLoading,
-    error,
   } = useProducts();
 
   const isEdit = Boolean(productId);
   const barcodeCheckTimeout = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  // Bumped on every barcode edit: a lookup whose number is no longer current drops its reply,
+  // so a slow answer for an earlier prefix cannot overwrite the name/MXIK of the code typed since.
+  const barcodeLookupSeq = useRef(0);
   const isBulkWeighted = initialData?.groupCode === "019";
 
   const [formData, setFormData] = useState({
@@ -458,8 +462,9 @@ export function ProductForm({
   } | null>(null);
 
   useEffect(() => {
-    loadCategories();
-    loadSuppliers();
+    // The list page has usually loaded both already; the management modals reload them on change.
+    if (categories.length === 0) loadCategories();
+    if (suppliers.length === 0) loadSuppliers();
 
     if (isEdit && productId) {
       loadProduct();
@@ -538,9 +543,12 @@ export function ProductForm({
   const checkBarcode = useCallback(
     async (barcode: string) => {
       if (!barcode || barcode.length < 3 || isEdit) return;
+      const seq = barcodeLookupSeq.current;
+      const stale = () => seq !== barcodeLookupSeq.current;
 
       // 1. Local DB — existing product
       const product = await searchByBarcode(barcode);
+      if (stale()) return;
       if (product) {
         setExistingProduct(product);
         setShowArrivalModal(true);
@@ -560,8 +568,13 @@ export function ProductForm({
         return;
       }
 
+      // Shorter than EAN-8 is a code still being typed (or an in-store code): only our own
+      // products can match it, so the catalog and tasnif are not asked.
+      if (barcode.length < 8) return;
+
       // 2. Local MxikCatalog — fast, no geo-restriction
       const catalogEntry = await mxikApi.catalogLookup(barcode);
+      if (stale()) return;
       if (catalogEntry) {
         if (isMxikExcluded(catalogEntry.mxikCode)) {
           toast.error(
@@ -586,6 +599,7 @@ export function ProductForm({
       try {
         const ean = extractEan13(barcode);
         const info = await mxikApi.searchByBarcode(ean);
+        if (stale()) return;
         if (isMxikExcluded(info.code)) {
           toast.error(
             t("products.categoryNotAllowed", { category: info.nameRu }),
@@ -602,7 +616,7 @@ export function ProductForm({
         }));
         autoSelectCategory(info.code.slice(0, 3));
       } catch {
-        toast.warning(t("products.manualEntryRequired"));
+        if (!stale()) toast.warning(t("products.manualEntryRequired"));
       }
     },
     [searchByBarcode, isEdit, autoSelectCategory],
@@ -659,6 +673,7 @@ export function ProductForm({
   };
 
   const handleBarcodeChange = (value: string) => {
+    barcodeLookupSeq.current += 1;
     setFormData((prev) => ({ ...prev, barcode: value }));
 
     if (!value) setMcVerification(null);
@@ -1050,19 +1065,17 @@ export function ProductForm({
       boxBarcode: formData.boxBarcode || null,
     };
 
-    let success = false;
-    if (isEdit && productId) {
-      success = await updateProduct(productId, data);
-      if (success) toast.success(t("common.saved"));
-    } else {
-      success = await createProduct(data);
-      if (success) toast.success(t("common.saved"));
-    }
+    const saved =
+      isEdit && productId
+        ? await updateProduct(productId, data)
+        : await createProduct(data);
 
-    if (success) {
-      onSuccess();
-    } else if (error) {
-      toast.error(error);
+    if (saved) {
+      toast.success(t("common.saved"));
+      onSuccess(saved);
+    } else {
+      // Read from the store: the `error` this render saw predates the request.
+      toast.error(useProductsStore.getState().error ?? t("common.error"));
     }
   };
 

@@ -1324,6 +1324,47 @@ function labelToIsMarked(label: unknown): boolean | null {
   return Number(label) === 1;
 }
 
+// tasnif is called from the browser and sometimes hangs; without a limit the product form waits as
+// long as the browser does. Same limit as lookupBatch.
+const TASNIF_TIMEOUT_MS = 6000;
+
+type MxikHistory = {
+  mxikCode: string;
+  brandName?: string | null;
+  attributeNameUz?: string | null;
+  attributeNameRu?: string | null;
+  subPositionNameUz?: string | null;
+  subPositionNameRu?: string | null;
+  packageNames?: unknown;
+};
+
+// One /history request per MXIK per page load: the barcode lookup and the package picker both need
+// it, back to back. Failures are not kept, so the next attempt asks tasnif again.
+const mxikHistoryCache = new Map<string, Promise<MxikHistory | null>>();
+
+function fetchMxikHistory(mxikCode: string): Promise<MxikHistory | null> {
+  const cached = mxikHistoryCache.get(mxikCode);
+  if (cached) return cached;
+  const request = (async () => {
+    try {
+      const res = await fetch(
+        `https://tasnif.soliq.uz/api/cls-api/integration-mxik/get/history/${mxikCode}`,
+        { signal: AbortSignal.timeout(TASNIF_TIMEOUT_MS) },
+      );
+      if (!res.ok) return null;
+      const json = (await res.json()) as { success?: boolean; data?: MxikHistory | null };
+      return json.success && json.data ? json.data : null;
+    } catch {
+      return null;
+    }
+  })();
+  mxikHistoryCache.set(mxikCode, request);
+  void request.then((data) => {
+    if (!data) mxikHistoryCache.delete(mxikCode);
+  });
+  return request;
+}
+
 export const mxik = {
   lookupCode: async (code: string): Promise<{ code: string; name: string; nameRu: string; packageCode: string; isMarked: boolean | null }> => {
     const { data } = await axiosInstance.get(`/mxik/code/${encodeURIComponent(code)}`);
@@ -1332,7 +1373,10 @@ export const mxik = {
   searchByBarcode: async (barcode: string): Promise<{ code: string; name: string; nameRu: string; packageCode: string; isMarked: boolean | null }> => {
     // Call tasnif directly from browser (VPS is geo-blocked; browser is in Uzbekistan)
     const TASNIF = 'https://tasnif.soliq.uz/api/cls-api';
-    const searchRes = await fetch(`${TASNIF}/elasticsearch/search?lang=uz_cyrl&search=${encodeURIComponent(barcode)}&size=5&page=0`);
+    const searchRes = await fetch(
+      `${TASNIF}/elasticsearch/search?lang=uz_cyrl&search=${encodeURIComponent(barcode)}&size=5&page=0`,
+      { signal: AbortSignal.timeout(TASNIF_TIMEOUT_MS) },
+    );
     const searchJson = await searchRes.json();
     if (!searchJson.success || !searchJson.data?.length) throw new Error('Not found');
     // Exact barcode match only — tasnif's search is fuzzy and its first row is regularly a
@@ -1342,10 +1386,8 @@ export const mxik = {
     const mxikCode: string = match.mxikCode;
     // The elasticsearch match row carries the authoritative `label` marking flag.
     const isMarked = labelToIsMarked(match.label);
-    const detailRes = await fetch(`${TASNIF}/integration-mxik/get/history/${mxikCode}`);
-    const detailJson = await detailRes.json();
-    if (!detailJson.success || !detailJson.data) throw new Error('Not found');
-    const d = detailJson.data;
+    const d = await fetchMxikHistory(mxikCode);
+    if (!d) throw new Error('Not found');
     const brand = d.brandName ? `${d.brandName} ` : '';
     return {
       code: d.mxikCode,
@@ -1401,14 +1443,8 @@ export const mxik = {
   // Package (unit) codes for an MXIK — called directly against tasnif (browser is in UZ).
   getPackages: async (mxikCode: string): Promise<MxikPackage[]> => {
     if (!/^\d{17}$/.test(mxikCode)) return [];
-    try {
-      const res = await fetch(`https://tasnif.soliq.uz/api/cls-api/integration-mxik/get/history/${mxikCode}`);
-      if (!res.ok) return [];
-      const json = await res.json();
-      return mapPackageNames(json?.data?.packageNames);
-    } catch {
-      return [];
-    }
+    const history = await fetchMxikHistory(mxikCode);
+    return history ? mapPackageNames(history.packageNames) : [];
   },
 
   catalogLookup: async (barcode: string): Promise<CatalogEntry | null> => {
