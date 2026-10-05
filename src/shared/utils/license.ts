@@ -33,6 +33,21 @@ export interface LicensePayload {
    */
   terminals?: number;
   seats?: string[];
+  /**
+   * Paid service: until when this store may run the fiscal backlog stepper. Present only while it
+   * is open at signing; a till compares it with its trusted clock, so access ends on the date even
+   * offline. Optional for the same reason as `terminals`.
+   */
+  fiscalBacklogUntil?: string;
+}
+
+/** Whether the fiscal backlog service is open for this license at `now` (a trusted clock). */
+export function fiscalBacklogAllowed(
+  license: Pick<LicensePayload, 'fiscalBacklogUntil'> | null,
+  now: number,
+): boolean {
+  const until = license?.fiscalBacklogUntil ? Date.parse(license.fiscalBacklogUntil) : NaN;
+  return Number.isFinite(until) && now < until;
 }
 
 /** Whether `terminalId` holds one of the store's slots by this license. */
@@ -90,7 +105,8 @@ function isLicensePayload(p: unknown): p is LicensePayload {
     isDate(o.checkinBy) &&
     (o.terminals === undefined || (typeof o.terminals === 'number' && o.terminals >= 0)) &&
     (o.seats === undefined ||
-      (Array.isArray(o.seats) && o.seats.every((id) => typeof id === 'string')))
+      (Array.isArray(o.seats) && o.seats.every((id) => typeof id === 'string'))) &&
+    (o.fiscalBacklogUntil === undefined || isDate(o.fiscalBacklogUntil))
   );
 }
 
@@ -101,6 +117,8 @@ export function licensePayload(
   issuedAt: number,
   checkinDays: number,
   seating?: { terminals: number; seats: string[] } | null,
+  /** Until when the paid fiscal backlog service is open; signed in only while still ahead. */
+  fiscalBacklogUntil?: Date | null,
 ): LicensePayload {
   const at = new Date(issuedAt).toISOString();
   // Blocked with no dates — a new store with no plan — is blocked from the moment of signing.
@@ -116,6 +134,9 @@ export function licensePayload(
     issuedAt: at,
     checkinBy: new Date(issuedAt + checkinDays * DAY_MS).toISOString(),
     ...(seating ? { terminals: seating.terminals, seats: seating.seats } : {}),
+    ...(fiscalBacklogUntil && fiscalBacklogUntil.getTime() > issuedAt
+      ? { fiscalBacklogUntil: fiscalBacklogUntil.toISOString() }
+      : {}),
   };
 }
 

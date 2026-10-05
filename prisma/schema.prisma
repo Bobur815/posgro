@@ -38,6 +38,10 @@ model Store {
   /// Terminals bought on top of the plan's own (site config `subscription_terminals`), each at
   /// `subscription_price_extra_terminal` a month. Set by a super admin.
   extraTerminals        Int       @default(0) @map("extra_terminals")
+  /// Paid service: until when this store's tills may run the fiscal backlog stepper. Signed into
+  /// the store's license; a till compares it with its trusted clock. Null = not open. Set by a
+  /// super admin for N days at a time.
+  fiscalBacklogUntil    DateTime? @map("fiscal_backlog_until")
 
   /// Bank turnover: from when the owner counts fiscalised cash still to be taken to the bank.
   /// Null = not set yet; the page then shows period figures only. Set from the Reconciliation page.
