@@ -307,8 +307,15 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
       const failed = { ok: false, error: "IPC" };
       if (step === "classify") setClassify({ ...failed, skipped: 0, kept: [] });
       if (step === "repair")
-        setRepair({ ...failed, labelsRepaired: 0, receiptsTouched: 0, productIssues: [] });
-      if (step === "verify") setVerify({ ...failed, checked: 0, substituted: [] });
+        setRepair({
+          ...failed,
+          labelsRepaired: 0,
+          receiptsTouched: 0,
+          mxikFilled: [],
+          tasnifUnreachable: 0,
+          productIssues: [],
+        });
+      if (step === "verify") setVerify({ ...failed, checked: 0, disabled: 0, changes: [] });
       if (step === "fiscalize") setFiscalize({ ...failed, fiscalized: 0, failed: [] });
     } finally {
       setRunning(false);
@@ -476,6 +483,29 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
                     receipts: repair.receiptsTouched,
                   })}
                 </Line>
+                {repair.mxikFilled.length > 0 && (
+                  <>
+                    <Line $tone="ok">
+                      <CheckCircle size={16} />
+                      {t("fiscalSettings.backlog.mxikFilled", { count: repair.mxikFilled.length })}
+                    </Line>
+                    <List>
+                      {repair.mxikFilled.map((p) => (
+                        <div key={p.productId}>
+                          {p.name} · {p.barcode} → {p.mxik}
+                        </div>
+                      ))}
+                    </List>
+                  </>
+                )}
+                {repair.tasnifUnreachable > 0 && (
+                  <Line $tone="warn">
+                    <AlertTriangle size={16} />
+                    {t("fiscalSettings.backlog.tasnifUnreachable", {
+                      count: repair.tasnifUnreachable,
+                    })}
+                  </Line>
+                )}
                 {repair.productIssues.length > 0 && (
                   <>
                     <Line $tone="warn">
@@ -513,18 +543,23 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
                 <CheckCircle size={16} />
                 {t("fiscalSettings.backlog.verifyDone", {
                   checked: verify.checked,
-                  substituted: verify.substituted.length,
+                  substituted: verify.changes.filter((c) => c.action === "substitute").length,
+                  omitted: verify.changes.filter((c) => c.action === "omit").length,
+                  disabled: verify.disabled,
                 })}
               </Line>
             )}
-            {verify.substituted.length > 0 && (
+            {verify.changes.length > 0 && (
               <List>
-                {verify.substituted.map((s, i) => (
-                  <div key={`${s.receipt}-${i}`}>
-                    #{s.receipt} · {s.productName} —{" "}
-                    {s.reason === "NO_LABEL"
+                {verify.changes.map((c, i) => (
+                  <div key={`${c.receipt}-${i}`}>
+                    #{c.receipt}
+                    {c.productName ? ` · ${c.productName}` : ""} —{" "}
+                    {t(`fiscalSettings.backlog.action.${c.action}`)} (
+                    {c.reason === "NO_LABEL"
                       ? t("fiscalSettings.backlog.noLabel")
-                      : translateMarkingStatus(s.reason, t)}
+                      : translateMarkingStatus(c.reason, t)}
+                    )
                   </div>
                 ))}
               </List>

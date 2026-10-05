@@ -3,7 +3,8 @@ import {
   isBacklogCandidate,
   isCashOrClickOnly,
   maySkipFiscalisation,
-  parseSubstitutions,
+  SKIP_TAG_MARKING,
+  parseLinePlan,
 } from './fiscal-backlog';
 import { repairCyrillicLayout } from './keyboard-layout';
 
@@ -60,6 +61,7 @@ describe('backlog candidates', () => {
     ['DISABLED', null, true],
     ['DISABLED', 'out_of_circulation:OUT', true],
     ['DISABLED', SKIP_TAG, false],
+    ['DISABLED', SKIP_TAG_MARKING, false],
     ['FISCALIZED', null, false],
     ['DEFERRED_DEBT', null, false],
   ])('%s / %s → %s', (status, error, expected) => {
@@ -67,13 +69,15 @@ describe('backlog candidates', () => {
   });
 });
 
-describe('parseSubstitutions', () => {
+describe('parseLinePlan', () => {
   it('reads valid rows and ignores junk', () => {
-    expect(parseSubstitutions('[{"barcode":"1","reason":"NO_LABEL"},{"x":1},null]')).toEqual([
-      { barcode: '1', reason: 'NO_LABEL' },
-    ]);
-    expect(parseSubstitutions('not json')).toEqual([]);
-    expect(parseSubstitutions(null)).toEqual([]);
+    expect(
+      parseLinePlan(
+        '[{"itemId":"i1","action":"omit","reason":"UNMARKED"},{"itemId":"i2","action":"x"},{"barcode":"1"},null]',
+      ),
+    ).toEqual([{ itemId: 'i1', action: 'omit', reason: 'UNMARKED' }]);
+    expect(parseLinePlan('not json')).toEqual([]);
+    expect(parseLinePlan(null)).toEqual([]);
   });
 });
 

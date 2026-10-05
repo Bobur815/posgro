@@ -30,7 +30,7 @@ import type {
   FiscalBacklogProductIssue,
   FiscalBacklogVerifyResult,
   FiscalBacklogFiscalizeResult,
-  FiscalSubstitution,
+  FiscalLinePlan,
   FiscalLabel,
   FiscalZReportStatus,
   FiscalSalePreview,
@@ -39,6 +39,8 @@ import type {
 } from '../../shared/types/fiscal.types';
 import { repairCyrillicLayout, isLayoutCorrupted } from '../../shared/utils/keyboard-layout';
 import { labelsPerLine } from '../../shared/utils/fiscal-labels';
+import { pickSingleUnitPackage } from '../../shared/utils/mxik-packages';
+import { lookupMxikByBarcode, getMxikPackages } from './tasnif';
 import { productRequiresMarking } from '../../shared/utils/marking';
 import { toPieces } from '../../shared/utils/pack';
 import { isFiscalCashTender } from '../../shared/constants';
@@ -47,10 +49,12 @@ import { verifyMarkingCodeDetails } from '../marking/circulation-check';
 import { classifyCirculation } from '../../shared/utils/circulation';
 import {
   SKIP_TAG,
+  SKIP_TAG_MARKING,
   SUBSTITUTE_QUANTITY,
   isBacklogCandidate,
+  isCashOrClickOnly,
   maySkipFiscalisation,
-  parseSubstitutions,
+  parseLinePlan,
 } from '../../shared/utils/fiscal-backlog';
 
 const MAX_ATTEMPTS = 5; // cap retries for hard (business) failures
@@ -491,17 +495,18 @@ class RegosVcrService {
       items: Array<Record<string, unknown>>;
     },
     cfg: ResolvedConfig,
-  ): Promise<{ positions: VcrPosition[]; meta: PositionMeta[] }> {
+  ): Promise<{ positions: VcrPosition[]; meta: PositionMeta[]; partial: boolean }> {
     const prisma = getPrismaClient();
     const labels: FiscalLabel[] = sale.regosLabels ? safeParseLabels(sale.regosLabels) : [];
     // Per line, not per barcode: two packs of one drink share a barcode but never a code.
     const lineLabels = labelsPerLine(sale.items as Array<{ barcode: string }>, labels);
 
-    // Lines the backlog run found with a dead or missing marking code go out as the substitute
-    // product, at their own amount. Only this payload changes; the sale itself never does.
-    const substituted = new Set(parseSubstitutions(sale.fiscalSubstitutions).map((s) => s.barcode));
+    // The backlog run's per-line plan: a line with a dead or missing marking code goes out as the
+    // substitute product at its own amount (card receipts), or is left off (cash/Click receipts
+    // send only their valid marked lines). Only this payload changes; the sale itself never does.
+    const planByItem = new Map(parseLinePlan(sale.fiscalSubstitutions).map((p) => [p.itemId, p]));
     let substitute: SubstituteProduct | null = null;
-    if (substituted.size > 0) {
+    if ([...planByItem.values()].some((p) => p.action === 'substitute')) {
       substitute = cfg.substituteProductId
         ? await prisma.product.findUnique({
             where: { id: cfg.substituteProductId },
@@ -529,8 +534,14 @@ class RegosVcrService {
 
     const positions: VcrPosition[] = [];
     const meta: PositionMeta[] = [];
+    let partial = false;
     for (const [lineIndex, item] of sale.items.entries()) {
-      const sub = substitute && substituted.has(String(item.barcode)) ? substitute : null;
+      const plan = planByItem.get(String(item.id));
+      if (plan?.action === 'omit') {
+        partial = true;
+        continue;
+      }
+      const sub = plan?.action === 'substitute' ? substitute : null;
       const product = sub ?? productById.get(Number(item.productId));
       const subtotal = Number(item.subtotal);
       const amount = Math.round(subtotal * 100);
@@ -583,7 +594,21 @@ class RegosVcrService {
       // A VAT heal on a substituted line corrects the substitute — it is the product sent.
       meta.push({ productId: sub ? sub.id : Number(item.productId), rate });
     }
-    return { positions, meta };
+    if (positions.length === 0) throw new Error('В чеке не осталось позиций для фискализации');
+    return { positions, meta, partial };
+  }
+
+  /**
+   * Payments for what is actually sent. A receipt with lines left off (backlog, cash/Click only)
+   * pays exactly the sent lines, as cash — Click is fiscal cash too. Everything else is unchanged.
+   */
+  private paymentsFor(
+    sale: Parameters<RegosVcrService['buildPayments']>[0],
+    built: { positions: VcrPosition[]; partial: boolean },
+  ): VcrPayment[] {
+    if (!built.partial) return this.buildPayments(sale);
+    const value = built.positions.reduce((s, p) => s + p.amount - (p.discount ?? 0), 0);
+    return [{ type: 1, value }];
   }
 
   /**
@@ -706,8 +731,9 @@ class RegosVcrService {
     if (!sale) return null;
 
     const cfg = await this.resolveConfig();
-    const { positions } = await this.buildPositions(sale as never, cfg);
-    const payments = this.buildPayments(sale as never);
+    const built = await this.buildPositions(sale as never, cfg);
+    const { positions } = built;
+    const payments = this.paymentsFor(sale as never, built);
     const labels: FiscalLabel[] = sale.regosLabels ? safeParseLabels(sale.regosLabels) : [];
 
     return {
@@ -792,8 +818,9 @@ class RegosVcrService {
     try {
       await this.ensureZReportOpen(client, sale.smenaId);
       timer.phase('zreport');
-      ({ positions, meta } = await this.buildPositions(sale as never, cfg));
-      const payments = this.buildPayments(sale as never);
+      const built = await this.buildPositions(sale as never, cfg);
+      ({ positions, meta } = built);
+      const payments = this.paymentsFor(sale as never, built);
       if (FISCAL_DEBUG) {
         console.log('[fiscal] positions:', JSON.stringify(positions));
         console.log('[fiscal] payments:', JSON.stringify(payments));
@@ -1074,6 +1101,7 @@ class RegosVcrService {
         payments: { select: { method: true } },
         items: {
           select: {
+            id: true,
             barcode: true,
             productName: true,
             product: {
@@ -1097,6 +1125,7 @@ class RegosVcrService {
       fiscalSubstitutions: string | null;
       payments: Array<{ method: string }>;
       items: Array<{
+        id: string;
         barcode: string;
         productName: string;
         product: {
@@ -1118,7 +1147,12 @@ class RegosVcrService {
           { paymentMethod: s.paymentMethod, debtAmount: Number(s.debtAmount ?? 0), payments: s.payments },
           marked,
         );
-        return { ...s, marked, skippable };
+        const cashOnly = isCashOrClickOnly({
+          paymentMethod: s.paymentMethod,
+          debtAmount: Number(s.debtAmount ?? 0),
+          payments: s.payments,
+        });
+        return { ...s, marked, skippable, cashOnly };
       });
   }
 
@@ -1161,15 +1195,17 @@ class RegosVcrService {
   }
 
   /**
-   * Step 2: undo the Russian-layout corruption in stored marking codes, and list products in the
-   * kept receipts whose fiscal data REGOS will reject. Product data is the till's own (synced from
-   * the server, which is authoritative); nothing is fetched.
+   * Step 2: undo the Russian-layout corruption in stored marking codes; fill a missing MXIK from
+   * tasnif.soliq.uz (exact barcode match only) and save it on the product, with the single-unit
+   * package code for a marked one; then list products REGOS will still reject. Saving bumps
+   * updatedAt, so the corrected product syncs like the VAT heal's.
    */
   async backlogRepair(fromDate: string): Promise<FiscalBacklogRepairResult> {
     const busy: FiscalBacklogRepairResult = {
-      ok: false, error: 'BUSY', labelsRepaired: 0, receiptsTouched: 0, productIssues: [],
+      ok: false, error: 'BUSY', labelsRepaired: 0, receiptsTouched: 0, mxikFilled: [], tasnifUnreachable: 0, productIssues: [],
     };
     return this.withBacklogLock('repair', busy, async () => {
+      const prisma = getPrismaClient();
       const kept = (await this.loadBacklog(fromDate)).filter((s) => !s.skippable);
       let labelsRepaired = 0;
       let receiptsTouched = 0;
@@ -1180,40 +1216,71 @@ class RegosVcrService {
         if (n > 0) receiptsTouched++;
       }
 
-      const issues = new Map<number, FiscalBacklogProductIssue>();
+      // Every distinct product in the kept receipts, once.
+      type P = NonNullable<(typeof kept)[number]['items'][number]['product']>;
+      const products = new Map<number, { p: P; name: string }>();
       for (const s of kept) {
         for (const it of s.items) {
-          const p = it.product;
-          if (!p || issues.has(p.id)) continue;
-          const name = p.nameRu || p.nameUz || it.productName;
-          if (!/^\d{17}$/.test(p.mxik ?? '')) {
-            issues.set(p.id, { productId: p.id, name, barcode: p.barcode, problem: 'NO_MXIK' });
-          } else if (productRequiresMarking(p) && !p.packageCode) {
-            issues.set(p.id, { productId: p.id, name, barcode: p.barcode, problem: 'NO_PACKAGE_CODE' });
+          if (it.product && !products.has(it.product.id)) {
+            products.set(it.product.id, { p: { ...it.product }, name: it.product.nameRu || it.product.nameUz || it.productName });
           }
         }
       }
-      log.info(`[fiscal] backlog repair: ${labelsRepaired} labels in ${receiptsTouched} receipts, ${issues.size} product issues`);
-      return { ok: true, labelsRepaired, receiptsTouched, productIssues: [...issues.values()] };
+
+      const mxikFilled: FiscalBacklogRepairResult['mxikFilled'] = [];
+      let tasnifUnreachable = 0;
+      for (const { p, name } of products.values()) {
+        if (/^\d{17}$/.test(p.mxik ?? '')) continue;
+        const r = await lookupMxikByBarcode(p.barcode);
+        if (!r.ok) {
+          tasnifUnreachable++;
+          continue;
+        }
+        if (!r.match || !/^\d{17}$/.test(r.match.code)) continue;
+        const data: { mxik: string; packageCode?: string } = { mxik: r.match.code };
+        if (productRequiresMarking({ isMarked: p.isMarked, mxik: r.match.code }) && !p.packageCode) {
+          const pick = pickSingleUnitPackage(await getMxikPackages(r.match.code));
+          if (pick) data.packageCode = pick.code;
+        }
+        await prisma.product.update({ where: { id: p.id }, data });
+        p.mxik = data.mxik;
+        if (data.packageCode) p.packageCode = data.packageCode;
+        mxikFilled.push({ productId: p.id, name, barcode: p.barcode, mxik: data.mxik });
+      }
+
+      const productIssues: FiscalBacklogProductIssue[] = [];
+      for (const { p, name } of products.values()) {
+        if (!/^\d{17}$/.test(p.mxik ?? '')) {
+          productIssues.push({ productId: p.id, name, barcode: p.barcode, problem: 'NO_MXIK' });
+        } else if (productRequiresMarking(p) && !p.packageCode) {
+          productIssues.push({ productId: p.id, name, barcode: p.barcode, problem: 'NO_PACKAGE_CODE' });
+        }
+      }
+      log.info(
+        `[fiscal] backlog repair: ${labelsRepaired} labels in ${receiptsTouched} receipts, ${mxikFilled.length} MXIK from tasnif (${tasnifUnreachable} unreachable), ${productIssues.length} product issues`,
+      );
+      return { ok: true, labelsRepaired, receiptsTouched, mxikFilled, tasnifUnreachable, productIssues };
     });
   }
 
   /**
    * Step 3: ask asl-belgisi about every marking code in the kept receipts (the same lookup as the
-   * Marking Check screen). A line whose code is out of circulation / unknown to the registry, or a
-   * marked line with no code at all, is recorded in sales.fiscal_substitutions so step 4 sends the
-   * substitute product instead. Stops — without guessing — when the registry can't answer.
+   * Marking Check screen) and decide each line, stored in sales.fiscal_substitutions:
+   *  - card/UzQR receipt: a dead or missing code → the line goes out as the substitute product;
+   *  - cash/Click receipt: only marked lines with a valid code are sent, everything else is left
+   *    off; with no valid code at all the receipt is DISABLED (SKIP_TAG_MARKING).
+   * Stops — without guessing — when the registry can't answer.
    */
   async backlogVerify(
     fromDate: string,
     onProgress?: (p: FiscalBacklogProgress) => void,
   ): Promise<FiscalBacklogVerifyResult> {
-    const busy: FiscalBacklogVerifyResult = { ok: false, error: 'BUSY', checked: 0, substituted: [] };
+    const busy: FiscalBacklogVerifyResult = { ok: false, error: 'BUSY', checked: 0, disabled: 0, changes: [] };
     return this.withBacklogLock('verify', busy, async () => {
       const prisma = getPrismaClient();
       const cfg = await this.resolveConfig();
       const kept = (await this.loadBacklog(fromDate)).filter((s) => !s.skippable);
-      const result: FiscalBacklogVerifyResult = { ok: true, checked: 0, substituted: [] };
+      const result: FiscalBacklogVerifyResult = { ok: true, checked: 0, disabled: 0, changes: [] };
 
       // The substitute is checked once, the first time a line needs it.
       let substituteChecked = false;
@@ -1238,15 +1305,22 @@ class RegosVcrService {
       for (const s of kept) {
         onProgress?.({ step: 'verify', processed, total, currentReceipt: s.receiptNumber });
         const labels = s.regosLabels ? safeParseLabels(s.regosLabels) : [];
-        const labelByBarcode = new Map(labels.map((l) => [l.barcode, l.label]));
-        const subs: FiscalSubstitution[] = [];
+        // Per line: two packs of one drink share a barcode but never a code.
+        const lineLabels = labelsPerLine(s.items, labels);
+        const plan: FiscalLinePlan[] = [];
+        const changes: FiscalBacklogVerifyResult['changes'] = [];
+        let validMarked = 0;
 
-        for (const it of s.items) {
-          if (!it.product || !productRequiresMarking(it.product)) continue;
-          if (subs.some((x) => x.barcode === it.barcode)) continue;
-          const label = labelByBarcode.get(it.barcode);
+        for (const [i, it] of s.items.entries()) {
+          const productName = it.product?.nameRu || it.product?.nameUz || it.productName;
+          if (!it.product || !productRequiresMarking(it.product)) {
+            // A cash/Click receipt sends only its valid marked lines.
+            if (s.cashOnly) plan.push({ itemId: it.id, action: 'omit', reason: 'UNMARKED' });
+            continue;
+          }
+
+          const label = lineLabels[i];
           let reason: string | null = null;
-
           if (!label) {
             reason = 'NO_LABEL';
           } else {
@@ -1256,11 +1330,10 @@ class RegosVcrService {
               v = lookup.reachable
                 ? {
                     reachable: true,
-                    status: lookup.details?.status,
+                    status: lookup.details?.isValid === false ? 'NOT_FOUND' : lookup.details?.status,
                     verdict: lookup.details?.isValid === false ? 'OUT' : classifyCirculation(lookup.details?.status),
                   }
                 : { reachable: false, verdict: 'UNKNOWN', error: lookup.error };
-              if (lookup.reachable && lookup.details?.isValid === false) v.status = 'NOT_FOUND';
               verdicts.set(label, v);
             }
             result.checked++;
@@ -1268,37 +1341,54 @@ class RegosVcrService {
               return { ...result, ok: false, error: v.error ?? 'REGISTRY_UNREACHABLE', stoppedAt: { receipt: s.receiptNumber, label } };
             }
             if (v.verdict === 'UNKNOWN') {
-              return {
-                ...result,
-                ok: false,
-                error: `UNKNOWN_STATUS:${v.status ?? '—'}`,
-                stoppedAt: { receipt: s.receiptNumber, label },
-              };
+              return { ...result, ok: false, error: `UNKNOWN_STATUS:${v.status ?? '—'}`, stoppedAt: { receipt: s.receiptNumber, label } };
             }
             if (v.verdict === 'OUT') reason = v.status ?? 'NOT_FOUND';
           }
 
-          if (reason) {
+          if (!reason) {
+            validMarked++;
+          } else if (s.cashOnly) {
+            plan.push({ itemId: it.id, action: 'omit', reason });
+            changes.push({ receipt: s.receiptNumber, productName, reason, action: 'omit' });
+          } else {
             const err = await ensureSubstitute();
             if (err) return { ...result, ok: false, error: err, stoppedAt: { receipt: s.receiptNumber } };
-            subs.push({ barcode: it.barcode, reason });
-            result.substituted.push({
-              receipt: s.receiptNumber,
-              productName: it.product.nameRu || it.product.nameUz || it.productName,
-              reason,
-            });
+            plan.push({ itemId: it.id, action: 'substitute', reason });
+            changes.push({ receipt: s.receiptNumber, productName, reason, action: 'substitute' });
           }
         }
 
-        // Written for every kept receipt, so a code that is fine now clears an older substitution.
-        const json = subs.length ? JSON.stringify(subs) : null;
-        if (json !== (s.fiscalSubstitutions ?? null)) {
-          await prisma.sale.update({ where: { id: s.id }, data: { fiscalSubstitutions: json } });
+        if (s.cashOnly && validMarked === 0) {
+          // Rule #1: nothing in this cash/Click receipt may be fiscalised — it is skipped for good.
+          await prisma.sale.updateMany({
+            where: {
+              id: s.id,
+              OR: [{ fiscalStatus: null }, { fiscalStatus: { notIn: ['FISCALIZED', 'DEFERRED_DEBT'] } }],
+            },
+            data: { fiscalStatus: 'DISABLED', fiscalError: SKIP_TAG_MARKING, fiscalSubstitutions: null },
+          });
+          result.disabled++;
+          result.changes.push({
+            receipt: s.receiptNumber,
+            productName: '',
+            reason: changes[0]?.reason ?? 'NO_LABEL',
+            action: 'disable',
+          });
+        } else {
+          result.changes.push(...changes);
+          // Written for every kept receipt, so a code that is fine now clears an older plan.
+          const json = plan.length ? JSON.stringify(plan) : null;
+          if (json !== (s.fiscalSubstitutions ?? null)) {
+            await prisma.sale.update({ where: { id: s.id }, data: { fiscalSubstitutions: json } });
+          }
         }
         processed++;
       }
       onProgress?.({ step: 'verify', processed, total });
-      log.info(`[fiscal] backlog verify: ${result.checked} codes checked, ${result.substituted.length} lines substituted`);
+      log.info(
+        `[fiscal] backlog verify: ${result.checked} codes checked, ${result.changes.length} changes, ${result.disabled} cash receipts disabled`,
+      );
       return result;
     });
   }

@@ -232,25 +232,35 @@ export interface FiscalBacklogProductIssue {
   problem: "NO_MXIK" | "NO_PACKAGE_CODE";
 }
 
-/** Step 2 — keyboard-layout repair of marking codes + product fiscal-data check. */
+/** Step 2 — keyboard-layout repair of marking codes, missing MXIK from tasnif, product data check. */
 export interface FiscalBacklogRepairResult {
   ok: boolean;
   error?: string;
   labelsRepaired: number;
   receiptsTouched: number;
+  /** Products whose missing MXIK was found on tasnif.soliq.uz and saved. */
+  mxikFilled: { productId: number; name: string; barcode: string; mxik: string }[];
+  /** Products tasnif could not be asked about (offline/error) — they stay in productIssues. */
+  tasnifUnreachable: number;
   productIssues: FiscalBacklogProductIssue[];
 }
 
-/** Why a line goes out as the substitute product. */
-export type FiscalSubstitutionReason = "NO_LABEL" | "NOT_FOUND" | string;
+/** Why a line is changed on the payload: "NO_LABEL", "NOT_FOUND", "UNMARKED" or a registry status. */
+export type FiscalLineReason = string;
 
-/** One substituted line, stored as JSON in sales.fiscal_substitutions. Keyed by the line barcode. */
-export interface FiscalSubstitution {
-  barcode: string;
-  reason: FiscalSubstitutionReason;
+/**
+ * What the payload does with one receipt line, stored as JSON in sales.fiscal_substitutions:
+ *  - substitute: sent as the configured substitute product at the same amount (card receipts)
+ *  - omit:       left off the payload (cash/Click receipts send only marked lines with valid codes)
+ * Keyed by sale_items.id. The sale itself, its lines and stock never change.
+ */
+export interface FiscalLinePlan {
+  itemId: string;
+  action: "substitute" | "omit";
+  reason: FiscalLineReason;
 }
 
-/** Step 3 — asl-belgisi check of every marking code; dead or missing ones get the substitute. */
+/** Step 3 — asl-belgisi check of every marking code; decides each line's fate. */
 export interface FiscalBacklogVerifyResult {
   ok: boolean;
   /** Set when the step stopped: registry unreachable/key problem, UNKNOWN status, no substitute. */
@@ -258,7 +268,15 @@ export interface FiscalBacklogVerifyResult {
   /** The receipt and code the step stopped on, when it stopped on one. */
   stoppedAt?: { receipt: string; label?: string };
   checked: number;
-  substituted: { receipt: string; productName: string; reason: FiscalSubstitutionReason }[];
+  /** Cash/Click receipts with no valid marked line, DISABLED. */
+  disabled: number;
+  /** Substituted lines, omitted marked lines and disabled receipts, for the admin to review. */
+  changes: {
+    receipt: string;
+    productName: string;
+    reason: FiscalLineReason;
+    action: "substitute" | "omit" | "disable";
+  }[];
 }
 
 /** Step 4 — fiscalisation. Counts come from the status read back, never from "no exception". */
