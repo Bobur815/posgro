@@ -424,3 +424,23 @@ describe('fiscalizeSale — split payment', () => {
     ]);
   });
 });
+
+describe('fiscalizeSale — marking codes per line', () => {
+  it('sends each of two identical drinks with its own code', async () => {
+    const row = saleRow(2);
+    // Same drink twice: one barcode, two scans, two different codes.
+    row.items[1] = { ...row.items[0], productId: 1 };
+    prismaMock.sale.findUnique.mockImplementation(async () => ({
+      ...row,
+      regosLabels: JSON.stringify([
+        { barcode: '1000', label: 'CODE-A' },
+        { barcode: '1000', label: 'CODE-B' },
+      ]),
+    }));
+
+    await regosVcrService.fiscalizeSale('sale-1');
+
+    const positions = (client.sale.mock.calls[0][0] as { positions: Array<{ label?: string }> }).positions;
+    expect(positions.map((p) => p.label)).toEqual(['CODE-A', 'CODE-B']);
+  });
+});

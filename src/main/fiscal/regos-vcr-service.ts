@@ -38,6 +38,7 @@ import type {
   FiscalPreviewPayment,
 } from '../../shared/types/fiscal.types';
 import { repairCyrillicLayout, isLayoutCorrupted } from '../../shared/utils/keyboard-layout';
+import { labelsPerLine } from '../../shared/utils/fiscal-labels';
 import { productRequiresMarking } from '../../shared/utils/marking';
 import { toPieces } from '../../shared/utils/pack';
 import { isFiscalCashTender } from '../../shared/constants';
@@ -493,7 +494,8 @@ class RegosVcrService {
   ): Promise<{ positions: VcrPosition[]; meta: PositionMeta[] }> {
     const prisma = getPrismaClient();
     const labels: FiscalLabel[] = sale.regosLabels ? safeParseLabels(sale.regosLabels) : [];
-    const labelByBarcode = new Map(labels.map((l) => [l.barcode, l.label]));
+    // Per line, not per barcode: two packs of one drink share a barcode but never a code.
+    const lineLabels = labelsPerLine(sale.items as Array<{ barcode: string }>, labels);
 
     // Lines the backlog run found with a dead or missing marking code go out as the substitute
     // product, at their own amount. Only this payload changes; the sale itself never does.
@@ -527,7 +529,7 @@ class RegosVcrService {
 
     const positions: VcrPosition[] = [];
     const meta: PositionMeta[] = [];
-    for (const item of sale.items) {
+    for (const [lineIndex, item] of sale.items.entries()) {
       const sub = substitute && substituted.has(String(item.barcode)) ? substitute : null;
       const product = sub ?? productById.get(Number(item.productId));
       const subtotal = Number(item.subtotal);
@@ -575,7 +577,7 @@ class RegosVcrService {
         owner_type: 'BuyingAndSelling',
       };
       if (product?.packageCode) pos.package_code = product.packageCode;
-      const label = sub ? undefined : labelByBarcode.get(String(item.barcode));
+      const label = sub ? undefined : lineLabels[lineIndex];
       if (label) pos.label = label;
       positions.push(pos);
       // A VAT heal on a substituted line corrects the substitute — it is the product sent.
