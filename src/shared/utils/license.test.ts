@@ -1,5 +1,6 @@
 import { generateKeyPairSync } from 'crypto';
 import {
+  fiscalBacklogAllowed,
   holdsSeat,
   licensePayload,
   licenseState,
@@ -145,5 +146,39 @@ describe('terminal slots in a license', () => {
       const token = signLicense({ ...seated, ...bad } as never, priv);
       expect(readLicense(token, pub)).toBeNull();
     }
+  });
+});
+
+describe('the paid fiscal backlog service', () => {
+  const { priv, pub } = keyPair();
+  const status = subscriptionStatus({ plan: 'PRO', expiresAt: new Date(days(30)) }, rules, NOW);
+  const open = licensePayload('1000', status, NOW, 14, null, new Date(days(7)));
+
+  it('is signed in while open and read back intact', () => {
+    expect(open.fiscalBacklogUntil).toBe(new Date(days(7)).toISOString());
+    expect(readLicense(signLicense(open, priv), pub)).toEqual(open);
+  });
+
+  it('is left out when closed or already over', () => {
+    expect(licensePayload('1000', status, NOW, 14, null, null)).not.toHaveProperty('fiscalBacklogUntil');
+    expect(licensePayload('1000', status, NOW, 14, null, new Date(days(-1)))).not.toHaveProperty('fiscalBacklogUntil');
+  });
+
+  it('is allowed only before its date, judged by the clock given', () => {
+    expect(fiscalBacklogAllowed(open, days(6))).toBe(true);
+    expect(fiscalBacklogAllowed(open, days(7))).toBe(false);
+    expect(fiscalBacklogAllowed(pro(10), NOW)).toBe(false);
+    expect(fiscalBacklogAllowed(null, NOW)).toBe(false);
+  });
+
+  it('cannot be granted by editing the payload', () => {
+    const token = signLicense(pro(10), priv);
+    const [, sig] = token.split('.');
+    const forged = Buffer.from(JSON.stringify({ ...pro(10), fiscalBacklogUntil: '2099-01-01T00:00:00.000Z' })).toString('base64url');
+    expect(readLicense(`${forged}.${sig}`, pub)).toBeNull();
+  });
+
+  it('rejects a date that is not a date', () => {
+    expect(readLicense(signLicense({ ...open, fiscalBacklogUntil: 'soon' } as never, priv), pub)).toBeNull();
   });
 });

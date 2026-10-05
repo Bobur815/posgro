@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateStoreDto } from "./dto/create-store.dto";
@@ -37,6 +38,7 @@ const STORE_FIELDS = {
   subscriptionRequired: true,
   subscriptionGraceFrom: true,
   extraTerminals: true,
+  fiscalBacklogUntil: true,
   settings: true,
   scheduledDeleteAt: true,
   mode: true,
@@ -82,6 +84,8 @@ function withPasswordFlag<T extends StoreRow>(store: T) {
 
 @Injectable()
 export class StoresService {
+  private readonly logger = new Logger(StoresService.name);
+
   constructor(
     private prisma: PrismaService,
     private siteConfig: SiteConfigService,
@@ -299,6 +303,16 @@ export class StoresService {
       }
     }
     if (updateStoreDto.extraTerminals !== undefined) data.extraTerminals = updateStoreDto.extraTerminals;
+    // The paid fiscal backlog service: N days from now, or closed with 0. The date reaches the
+    // store's tills in their next license (≤ 6 h); they stop on the date by themselves.
+    if (updateStoreDto.fiscalBacklogDays !== undefined) {
+      data.fiscalBacklogUntil = updateStoreDto.fiscalBacklogDays > 0
+        ? new Date(Date.now() + updateStoreDto.fiscalBacklogDays * DAY_MS)
+        : null;
+      this.logger.log(
+        `Fiscal backlog service for store ${id}: ${updateStoreDto.fiscalBacklogDays > 0 ? `open ${updateStoreDto.fiscalBacklogDays} days` : 'closed'}`,
+      );
+    }
     if (updateStoreDto.mode !== undefined) data.mode = updateStoreDto.mode;
     if (updateStoreDto.posAdminLocked !== undefined)
       data.posAdminLocked = updateStoreDto.posAdminLocked;

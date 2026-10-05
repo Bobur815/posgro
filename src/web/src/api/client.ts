@@ -581,6 +581,8 @@ export interface StoreRecord {
   subscriptionGraceFrom: string | null;
   /** Terminals bought on top of the plan's own (`terminalAllowance`, shared/utils/subscription). */
   extraTerminals: number;
+  /** Paid fiscal backlog service: open until then on the store's tills. Absent from older servers. */
+  fiscalBacklogUntil?: string | null;
   scheduledDeleteAt: string | null;
   mode: StoreMode;
   posAdminLocked: boolean;
@@ -674,6 +676,8 @@ export const stores = {
       subscriptionPlan: string;
       subscriptionExpiresAt: string | null;
       extraTerminals: number;
+      /** Open the paid fiscal backlog service for N days from now; 0 closes it. */
+      fiscalBacklogDays: number;
       mode: StoreMode;
       posAdminLocked: boolean;
       /** Plaintext; the server hashes it. Omit to leave unchanged, "" to clear. */

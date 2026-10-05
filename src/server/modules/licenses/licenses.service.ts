@@ -91,11 +91,12 @@ export class LicensesService {
     rules: SubscriptionRules,
     now: number = Date.now(),
     seating: Seating | null = null,
+    fiscalBacklogUntil: Date | null = null,
   ): string | null {
     if (!this.key) return null;
     const status = subscriptionStatus(facts, rules, now);
     return signLicense(
-      licensePayload(storeId, status, now, rules.offlineCheckinDays, seating),
+      licensePayload(storeId, status, now, rules.offlineCheckinDays, seating, fiscalBacklogUntil),
       this.key.priv,
     );
   }
@@ -117,13 +118,21 @@ export class LicensesService {
           subscriptionGraceFrom: true,
           subscriptionRequired: true,
           extraTerminals: true,
+          fiscalBacklogUntil: true,
         },
       }),
       this.siteConfig.getSubscriptionRules(),
     ]);
     if (!store) return null;
     const seating = await this.seating(storeId, store.subscriptionPlan, store.extraTerminals);
-    return this.sign(storeId, storeSubscriptionFacts(store), rules, Date.now(), seating);
+    return this.sign(
+      storeId,
+      storeSubscriptionFacts(store),
+      rules,
+      Date.now(),
+      seating,
+      store.fiscalBacklogUntil,
+    );
   }
 
   /**

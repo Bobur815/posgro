@@ -62,6 +62,16 @@ export class UpdateStoreDto {
   @Max(TERMINAL_LIMITS.extra.max)
   extraTerminals?: number;
 
+  @ApiPropertyOptional({
+    example: 7,
+    description: 'Open the paid fiscal backlog service for N days from now (0 closes it)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(90)
+  fiscalBacklogDays?: number;
+
   @ApiPropertyOptional({ enum: ['OFFLINE_ONLY', 'ONLINE'], description: 'Operating mode' })
   @IsOptional()
   @IsString()
