@@ -60,7 +60,7 @@ jest.mock('./regos-vcr-client', () => {
 });
 
 import { VcrError } from './regos-vcr-client';
-import { regosVcrService } from './regos-vcr-service';
+import { regosVcrService, settleDiscountRemainder } from './regos-vcr-service';
 import { reset as resetTimings, stats } from './fiscal-timing';
 
 const OPEN_Z = { OpenTime: '2026-09-09 08:00:00', CloseTime: '' };
@@ -420,5 +420,54 @@ describe('fiscalizeSale — split payment', () => {
       { type: 1, value: 1000000 },
       { type: 2, value: 5000000, card_type: 2 },
     ]);
+  });
+});
+
+describe('fiscalizeSale — order discount', () => {
+  // Card receipts are always fiscalized, so a discount on card must balance to the tiyin.
+  it('spreads the discount so the lines add up to it exactly', async () => {
+    // 1 000 so'm off three 1 000 lines: 333.33 each rounds to 99 999 tiyin in total, not 100 000.
+    prismaMock.sale.findUnique.mockImplementation(async () => ({ ...saleRow(3), discountAmount: 1000, finalAmount: 2000 }));
+    prismaMock.product.findMany.mockImplementation(async () => products(3));
+
+    await regosVcrService.fiscalizeSale('sale-1');
+
+    const { positions, payments } = client.sale.mock.calls[0][0] as {
+      positions: { amount: number; discount: number }[];
+      payments: { value: number }[];
+    };
+    const discounts = positions.map((p) => p.discount);
+    expect(discounts.reduce((a, b) => a + b, 0)).toBe(100000);
+    // The receipt balances: what the lines come to is what was paid.
+    expect(positions.reduce((s, p) => s + p.amount - p.discount, 0)).toBe(payments[0].value);
+  });
+});
+
+describe('settleDiscountRemainder', () => {
+  const pos = (amount: number, discount: number) => ({ amount, discount }) as Parameters<typeof settleDiscountRemainder>[0][number];
+
+  it('puts a missing tiyin on the last line', () => {
+    const p = [pos(100000, 33333), pos(100000, 33333), pos(100000, 33333)];
+    settleDiscountRemainder(p, 100000);
+    expect(p.map((x) => x.discount)).toEqual([33333, 33333, 33334]);
+  });
+
+  it('takes an extra tiyin back off the last line', () => {
+    const p = [pos(100000, 50001), pos(100000, 50001)];
+    settleDiscountRemainder(p, 100001);
+    expect(p.map((x) => x.discount)).toEqual([50001, 50000]);
+  });
+
+  // A line can never be discounted past its own price.
+  it('spills onto earlier lines when the last one is full', () => {
+    const p = [pos(100000, 99999), pos(5000, 5000)];
+    settleDiscountRemainder(p, 105000);
+    expect(p.map((x) => x.discount)).toEqual([100000, 5000]);
+  });
+
+  it('leaves a receipt with no discount alone', () => {
+    const p = [pos(100000, 0)];
+    settleDiscountRemainder(p, 0);
+    expect(p[0].discount).toBe(0);
   });
 });

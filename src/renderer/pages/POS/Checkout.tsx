@@ -18,6 +18,7 @@ import { UzQrPaymentModal } from "./UzQrPaymentModal";
 import { parseSaleError } from "./saleErrors";
 import { SplitPaymentPanel } from "./SplitPaymentPanel";
 import { splitState, type SplitTender } from "@shared/utils/split-payment";
+import { parseDiscountInput, resolveDiscount, type DiscountMode } from "./discount";
 
 const Content = styled.div`
   display: grid;
@@ -318,6 +319,34 @@ const TileAmount = styled.span<{ $color?: string }>`
 
 const NO_SPLIT: Record<SplitTender, number> = { cash: 0, card: 0, uzqr: 0, click: 0 };
 
+/** The summary's discount row as a button: tapping it opens the discount editor. */
+const DiscountRowButton = styled.button`
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  padding: ${({ theme }) => theme.spacing.xs} 0;
+  border: none;
+  background: none;
+  font-size: 14px;
+  color: ${({ theme }) => theme.colors.primary};
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+`;
+
+const ModeToggle = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: ${({ theme }) => theme.spacing.sm};
+`;
+
+const ModeButton = styled(DenomButton)<{ $selected: boolean }>`
+  border-color: ${({ theme, $selected }) => ($selected ? theme.colors.primary : theme.colors.border)};
+  background-color: ${({ theme, $selected }) =>
+    $selected ? theme.colors.primary + "15" : theme.colors.surface};
+  color: ${({ theme, $selected }) => ($selected ? theme.colors.primary : theme.colors.text)};
+`;
+
 interface CheckoutProps {
   onComplete: () => void;
   onCancel: () => void;
@@ -325,7 +354,7 @@ interface CheckoutProps {
 
 export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   const { t, i18n } = useTranslation();
-  const { items, subtotal, tax, taxRate, discount, total, clearCart, editingSaleId } =
+  const { items, subtotal, tax, taxRate, discount, total, clearCart, editingSaleId, setDiscount } =
     useCartStore();
   const { createSale, updateSale, isLoading } = useSales();
   const toast = useToast();
@@ -349,6 +378,13 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   const [splitAmounts, setSplitAmounts] = useState<Record<SplitTender, number>>(NO_SPLIT);
   /** The debtor picker is up — the checkout panel steps aside while it is. */
   const [creditOpen, setCreditOpen] = useState(false);
+  // Discount on every tender (local setting `discount_all_tenders`). Off = only the cash shortfall
+  // courtesy below, as before. The discount itself lives on the cart, so the total — and with it
+  // the split panel, the UzQR amount and the debtor picker — is already net of it.
+  const [discountEnabled, setDiscountEnabled] = useState(false);
+  const [discountOpen, setDiscountOpen] = useState(false);
+  const [discountMode, setDiscountMode] = useState<DiscountMode>("sum");
+  const [discountInput, setDiscountInput] = useState("");
 
   useEffect(() => {
     window.electronAPI.fiscal
@@ -364,6 +400,10 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
       .get("click_enabled")
       .then((v) => setClickEnabled(v === "true"))
       .catch(() => setClickEnabled(false));
+    window.electronAPI.settings
+      .get("discount_all_tenders")
+      .then((v) => setDiscountEnabled(v === "true"))
+      .catch(() => setDiscountEnabled(false));
     window.electronAPI.sales
       .canSplit()
       .then(setCanSplit)
@@ -402,6 +442,29 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
 
   const formatCurrency = (amount: number) =>
     formatCurrencyBase(amount, i18n.language as "ru" | "uz");
+
+  /**
+   * Sets (or, with 0, removes) the discount. Whatever was typed against the old total — split
+   * lines, cash given — is cleared: it no longer adds up, and a split that silently stopped
+   * covering the receipt would only surface as a disabled pay button.
+   */
+  const applyDiscount = (amount: number) => {
+    setDiscount(amount);
+    setSplitAmounts(NO_SPLIT);
+    setGivenAmount(0);
+    setDiscountInput("");
+    setDiscountOpen(false);
+  };
+
+  const submitDiscount = () =>
+    applyDiscount(resolveDiscount(parseDiscountInput(discountInput), discountMode, subtotal + tax));
+
+  // A discount belongs to this checkout. Left on the cart after a cancel it would ride along
+  // unseen while the cashier changes the basket, so it goes when the checkout does.
+  const cancelCheckout = () => {
+    if (discount > 0) setDiscount(0);
+    onCancel();
+  };
 
   const addCustomAmount = () => {
     const parsed = parseFloat(customInput.replace(/\s/g, "").replace(",", "."));
@@ -584,7 +647,7 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
   }
 
   return (
-    <Modal title={t("pos.checkout")} onClose={onCancel} width="860px">
+    <Modal title={t("pos.checkout")} onClose={cancelCheckout} width="860px">
       <Content>
         <LeftCol>
           <TotalSection>
@@ -603,11 +666,18 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
                 <span>{formatCurrency(tax)}</span>
               </SummaryRow>
             )}
-            {discount > 0 && (
-              <SummaryRow>
-                <span>{t("pos.discount")}</span>
-                <span>-{formatCurrency(discount)}</span>
-              </SummaryRow>
+            {discountEnabled ? (
+              <DiscountRowButton type="button" onClick={() => setDiscountOpen((open) => !open)}>
+                <span>{t("pos.addDiscount")} ✎</span>
+                <span>{discount > 0 ? `-${formatCurrency(discount)}` : "—"}</span>
+              </DiscountRowButton>
+            ) : (
+              discount > 0 && (
+                <SummaryRow>
+                  <span>{t("pos.discount")}</span>
+                  <span>-{formatCurrency(discount)}</span>
+                </SummaryRow>
+              )
             )}
             <SummaryRow>
               <span>{t("pos.itemsCount")}</span>
@@ -663,7 +733,7 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
           </PaymentMethods>
 
           <Actions>
-            <Button variant="secondary" onClick={onCancel} fullWidth>
+            <Button variant="secondary" onClick={cancelCheckout} fullWidth>
               {t("common.cancel")}
             </Button>
             <Button onClick={handlePayment} disabled={isLoading || (splitMode && !split.canPay)} fullWidth>
@@ -674,7 +744,62 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
         </LeftCol>
 
         <RightCol>
-          {splitMode && (
+          {/* The discount editor takes the right column while it is open: the split lines and the
+              cash helper below were typed against the total it is about to change. */}
+          {discountOpen && (
+            <CashHelper>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <CashHelperLabel>{t("pos.discountAmount")}</CashHelperLabel>
+                {discount > 0 && (
+                  <ClearButton onClick={() => applyDiscount(0)}>
+                    {t("pos.removeDiscount")} ×
+                  </ClearButton>
+                )}
+              </div>
+              <ModeToggle>
+                {(["sum", "percent"] as const).map((m) => (
+                  <ModeButton key={m} $selected={discountMode === m} onClick={() => setDiscountMode(m)}>
+                    {m === "sum" ? t("pos.discountSum") : t("pos.discountPercent")}
+                  </ModeButton>
+                ))}
+              </ModeToggle>
+              <CustomAmountRow>
+                <CustomAmountInput
+                  type="text"
+                  inputMode="none"
+                  autoFocus
+                  placeholder={discountMode === "sum" ? t("pos.discountSum") : "%"}
+                  value={discountInput}
+                  onChange={(e) => setDiscountInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      submitDiscount();
+                    }
+                  }}
+                />
+              </CustomAmountRow>
+              <NumberPad
+                onDigit={(d) =>
+                  setDiscountInput((prev) => {
+                    if (d === "." && prev.includes(".")) return prev;
+                    if ((d === "0" || d === "00") && prev === "") return prev;
+                    return prev + d;
+                  })
+                }
+                onBackspace={() => setDiscountInput((prev) => prev.slice(0, -1))}
+                onClear={() => setDiscountInput("")}
+                onEnter={submitDiscount}
+              />
+              <Button
+                onClick={submitDiscount}
+                fullWidth
+              >
+                {t("pos.applyDiscount")}
+              </Button>
+            </CashHelper>
+          )}
+          {!discountOpen && splitMode && (
             <SplitPaymentPanel
               total={total}
               amounts={splitAmounts}
@@ -684,7 +809,7 @@ export function Checkout({ onComplete, onCancel }: CheckoutProps) {
               onChange={(method, amount) => setSplitAmounts((prev) => ({ ...prev, [method]: amount }))}
             />
           )}
-          {!splitMode && paymentMethod === "cash" && (
+          {!discountOpen && !splitMode && paymentMethod === "cash" && (
             <CashHelper>
               <div
                 style={{

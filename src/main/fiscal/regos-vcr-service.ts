@@ -52,6 +52,24 @@ const DEFAULT_VAT_PERCENT = 12;
 // Doubles as the PositionMeta.rate marker for "без НДС" (no numeric rate applies).
 const NON_VAT_PAYER_VAT_VALUE = -1;
 
+/**
+ * Makes the positions' discounts add up to the receipt's discount exactly, in tiyin.
+ *
+ * Each line's share is rounded on its own, so three lines splitting 10 000 so'm can sum to a tiyin
+ * more or less than the payment, which is `finalAmount` to the tiyin — and the receipt no longer
+ * balances. The difference goes on the last lines, never taking a line's discount below zero or
+ * above its amount.
+ */
+export function settleDiscountRemainder(positions: VcrPosition[], totalDiscount: number): void {
+  let diff = totalDiscount - positions.reduce((s, p) => s + p.discount, 0);
+  for (let i = positions.length - 1; i >= 0 && diff !== 0; i--) {
+    const current = positions[i].discount;
+    const next = Math.min(positions[i].amount, Math.max(0, current + diff));
+    positions[i].discount = next;
+    diff -= next - current;
+  }
+}
+
 // Per-position bookkeeping kept alongside the VCR positions so a VAT-rate heal can map a
 // position back to its product (to persist the corrected rate) and know its current rate.
 interface PositionMeta {
@@ -531,6 +549,7 @@ class RegosVcrService {
       positions.push(pos);
       meta.push({ productId: Number(item.productId), rate });
     }
+    settleDiscountRemainder(positions, Math.round(orderDiscount * 100));
     return { positions, meta };
   }
 
