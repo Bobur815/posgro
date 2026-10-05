@@ -50,6 +50,7 @@ type Row = {
   subscriptionGraceFrom?: Date | null;
   subscriptionRequired?: boolean;
   extraTerminals?: number;
+  fiscalBacklogUntil?: Date | null;
 };
 
 type TerminalRow = { storeId: string; terminalId: string; firstSeenAt: Date; lastSeenAt: Date };
@@ -355,5 +356,20 @@ describe('routes open to a blocked till', () => {
     expect(open(TerminalsController.prototype.getStatus)).toBe(false);
     expect(open(LogsController)).toBe(false);
     expect(open(SalesController)).toBe(false);
+  });
+});
+
+describe('the paid fiscal backlog service in the license', () => {
+  it('signs in the date a super admin opened it until', async () => {
+    const until = ago(-7);
+    const token = await build({ '1000': { ...PRO_FOR_10_DAYS, fiscalBacklogUntil: until } }).issue('1000');
+    expect(readLicense(token, SERVER.pub)?.fiscalBacklogUntil).toBe(until.toISOString());
+  });
+
+  it('leaves it out when it was never opened, or has run out', async () => {
+    const never = await build({ '1000': PRO_FOR_10_DAYS }).issue('1000');
+    const over = await build({ '1000': { ...PRO_FOR_10_DAYS, fiscalBacklogUntil: ago(1) } }).issue('1000');
+    expect(readLicense(never, SERVER.pub)).not.toHaveProperty('fiscalBacklogUntil');
+    expect(readLicense(over, SERVER.pub)).not.toHaveProperty('fiscalBacklogUntil');
   });
 });

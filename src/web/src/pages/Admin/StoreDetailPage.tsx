@@ -370,6 +370,26 @@ function StoreDetails({ store, onUpdated }: Props) {
     }
   };
 
+  // Paid fiscal backlog service: opened for N days at a time, carried to the tills by the license.
+  const [backlogDays, setBacklogDays] = useState(7);
+  const [savingBacklog, setSavingBacklog] = useState(false);
+  const [backlogError, setBacklogError] = useState<string | null>(null);
+  const backlogUntil = store.fiscalBacklogUntil ? new Date(store.fiscalBacklogUntil) : null;
+  const backlogOpen = backlogUntil !== null && backlogUntil.getTime() > Date.now();
+
+  const handleBacklogSave = async (days: number) => {
+    setSavingBacklog(true);
+    setBacklogError(null);
+    try {
+      await stores.update(store.id, { fiscalBacklogDays: days });
+      onUpdated();
+    } catch (e) {
+      setBacklogError((e as Error).message);
+    } finally {
+      setSavingBacklog(false);
+    }
+  };
+
   const handleFreeSlot = async (terminalId: string) => {
     if (
       !window.confirm(
@@ -624,6 +644,52 @@ function StoreDetails({ store, onUpdated }: Props) {
             {savingSub ? "Saving…" : "Save Subscription"}
           </PlanBtn>
           {subError && <ErrorMsg>{subError}</ErrorMsg>}
+        </PlanCard>
+
+        {/* Paid fiscal backlog service */}
+        <SectionTitle>Fiscal backlog service</SectionTitle>
+        <PlanCard $pro={backlogOpen}>
+          <PlanRow>
+            <PlanLabel>Status</PlanLabel>
+            <PlanBadge $pro={backlogOpen}>
+              {backlogOpen ? `Open until ${backlogUntil!.toLocaleString("ru-UZ")}` : "Closed"}
+            </PlanBadge>
+          </PlanRow>
+          <PlanRow>
+            <PlanLabel>Open for (days)</PlanLabel>
+            <input
+              type="number"
+              min={1}
+              max={90}
+              value={backlogDays}
+              disabled={savingBacklog}
+              onChange={(e) => setBacklogDays(Math.max(1, Math.min(90, Number(e.target.value) || 1)))}
+              style={{ width: 80, padding: "4px 8px" }}
+            />
+          </PlanRow>
+          <PlanNote>
+            The store&apos;s tills show the fiscal backlog stepper until this date, checked against their
+            trusted clock even offline. Opening or closing reaches a till with its next license
+            renewal (within about 6 hours).
+          </PlanNote>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <PlanBtn
+              $active
+              onClick={() => void handleBacklogSave(backlogDays)}
+              disabled={savingBacklog}
+              style={{ flex: 1 }}
+            >
+              {savingBacklog ? "Saving…" : `Open for ${backlogDays} day${backlogDays === 1 ? "" : "s"}`}
+            </PlanBtn>
+            <PlanBtn
+              onClick={() => void handleBacklogSave(0)}
+              disabled={savingBacklog || !backlogOpen}
+              style={{ flex: 1 }}
+            >
+              Close
+            </PlanBtn>
+          </div>
+          {backlogError && <ErrorMsg>{backlogError}</ErrorMsg>}
         </PlanCard>
 
         {/* Terminals */}
