@@ -85,11 +85,28 @@ export function useProducts() {
     isLoading,
     error,
     setProducts,
+    upsertProduct,
+    removeProduct,
     setCategories,
     setSuppliers,
     setLoading,
     setError,
   } = useProductsStore();
+
+  /**
+   * Put a saved product into the loaded list without re-downloading the catalog: in place when it
+   * still matches the list's filters, dropped from it when it no longer does.
+   */
+  const applySavedProduct = useCallback(
+    (product: Product, filters?: ProductFilterParams) => {
+      if (filters && applyClientFilters([product], filters).length === 0) {
+        removeProduct(product.id);
+      } else {
+        upsertProduct(product);
+      }
+    },
+    [upsertProduct, removeProduct],
+  );
 
   const loadProducts = useCallback(async (filters?: ProductFilterParams) => {
     setLoading(true);
@@ -173,42 +190,44 @@ export function useProducts() {
     }
   }, []);
 
-  const createProduct = useCallback(async (data: Partial<Product>) => {
+  // create/update/delete do not reload the catalog: with thousands of products that download was
+  // most of the wait behind "Save". Callers patch the list with applySavedProduct / removeProduct.
+  // On failure they return null and the message is in the store's `error` (read it via getState —
+  // the `error` a component rendered with is from before the call).
+  const createProduct = useCallback(async (data: Partial<Product>): Promise<Product | null> => {
     setLoading(true);
+    setError(null);
 
     try {
-      await productsApi.create(data);
-      await loadProducts();
-      return true;
+      return transformProduct(await productsApi.create(data));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create product');
-      return false;
+      return null;
     } finally {
       setLoading(false);
     }
-  }, [loadProducts, setLoading, setError]);
+  }, [setLoading, setError]);
 
-  const updateProduct = useCallback(async (id: string, data: Partial<Product>) => {
+  const updateProduct = useCallback(async (id: string, data: Partial<Product>): Promise<Product | null> => {
     setLoading(true);
+    setError(null);
 
     try {
-      await productsApi.update(id, data);
-      await loadProducts();
-      return true;
+      return transformProduct(await productsApi.update(id, data));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update product');
-      return false;
+      return null;
     } finally {
       setLoading(false);
     }
-  }, [loadProducts, setLoading, setError]);
+  }, [setLoading, setError]);
 
   const deleteProduct = useCallback(async (id: string) => {
     setLoading(true);
 
     try {
       await productsApi.delete(id);
-      await loadProducts();
+      removeProduct(Number(id));
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete product');
@@ -216,7 +235,7 @@ export function useProducts() {
     } finally {
       setLoading(false);
     }
-  }, [loadProducts, setLoading, setError]);
+  }, [removeProduct, setLoading, setError]);
 
   const getLowStock = useCallback(async () => {
     try {
@@ -253,6 +272,7 @@ export function useProducts() {
     findByInternalCode,
     createProduct,
     updateProduct,
+    applySavedProduct,
     deleteProduct,
     getLowStock,
     getTopSelling,
