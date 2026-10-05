@@ -136,13 +136,16 @@
       "Bash(rm -rf*)",
       "Bash(git push --force*)",
       "Bash(git push -f*)",
-      "Bash(git push*main*)",
       "Bash(git reset --hard*)",
       "Bash(git clean*)",
       "Bash(sudo *)",
       "Bash(curl * | sh*)",
       "Bash(curl * | bash*)",
       "PowerShell(Remove-Item*-Recurse*)"
+    ],
+    "ask": [
+      "Bash(git push*main*)",
+      "PowerShell(git push*main*)"
     ]
   },
   "hooks": {
@@ -151,7 +154,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/tsx/dist/cli.mjs\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.ts\"",
+            "command": "node --experimental-strip-types --no-warnings \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.ts\"",
             "timeout": 20
           }
         ]
@@ -163,7 +166,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/tsx/dist/cli.mjs\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.ts\"",
+            "command": "node --experimental-strip-types --no-warnings \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.ts\"",
             "timeout": 15
           }
         ]
@@ -173,7 +176,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/tsx/dist/cli.mjs\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/branch-guard.ts\"",
+            "command": "node --experimental-strip-types --no-warnings \"$CLAUDE_PROJECT_DIR/.claude/hooks/branch-guard.ts\"",
             "timeout": 15
           }
         ]
@@ -185,7 +188,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/tsx/dist/cli.mjs\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/format.ts\"",
+            "command": "node --experimental-strip-types --no-warnings \"$CLAUDE_PROJECT_DIR/.claude/hooks/format.ts\"",
             "timeout": 30
           }
         ]
@@ -196,7 +199,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/tsx/dist/cli.mjs\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop-version-check.ts\"",
+            "command": "node --experimental-strip-types --no-warnings \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop-version-check.ts\"",
             "timeout": 20
           }
         ]
