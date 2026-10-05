@@ -209,7 +209,7 @@ export class ProductsService {
         boxBarcode: createProductDto.boxBarcode || null,
         storeProductCode: nextCode,
       },
-      include: { category: true },
+      include: { category: true, supplier: true },
     });
   }
 
@@ -249,7 +249,7 @@ export class ProductsService {
           expiryDate: expiryDate ? new Date(expiryDate) : null,
         }),
       },
-      include: { category: true },
+      include: { category: true, supplier: true },
     });
   }
 
