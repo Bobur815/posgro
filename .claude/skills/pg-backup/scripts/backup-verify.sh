@@ -7,10 +7,12 @@ OUT_DIR="${BACKUP_DIR:-$HOME/backups}"
 mkdir -p "$OUT_DIR"
 FILE="$OUT_DIR/$(basename "$PWD")-$(date +%Y%m%d-%H%M%S).dump"
 
-docker compose exec -T "$SERVICE" sh -c 'pg_dump -U "${POSTGRES_USER:-postgres}" -Fc "${POSTGRES_DB:-posgro}"' > "$FILE"
+# `< /dev/null` on every exec: this script is usually piped in (`bash -s < backup-verify.sh`), and an
+# exec that reads stdin would swallow the rest of the script — the dump is written, nothing after runs.
+docker compose exec -T "$SERVICE" sh -c 'pg_dump -U "${POSTGRES_USER:-postgres}" -Fc "${POSTGRES_DB:-posgro}"' < /dev/null > "$FILE"
 [ -s "$FILE" ] || { echo "FAIL: empty dump" >&2; exit 1; }
 
-MAJOR="$(docker compose exec -T "$SERVICE" sh -c 'echo "$PG_MAJOR"' | tr -d '\r')"
+MAJOR="$(docker compose exec -T "$SERVICE" sh -c 'echo "$PG_MAJOR"' < /dev/null | tr -d '\r')"
 [ -n "$MAJOR" ] || { echo "FAIL: cannot detect Postgres major version" >&2; exit 1; }
 
 CHK="pgcheck-$$"
