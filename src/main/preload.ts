@@ -117,16 +117,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
     setConfig: (input: unknown) => ipcRenderer.invoke("fiscal:setConfig", input),
     testConnection: () => ipcRenderer.invoke("fiscal:testConnection"),
     getStatus: () => ipcRenderer.invoke("fiscal:getStatus"),
-    fiscalizeOld: () => ipcRenderer.invoke("fiscal:fiscalizeOld"),
-    onBulkProgress: (
-      cb: (p: import("../shared/types/fiscal.types").FiscalBulkProgress) => void,
+    backlogBusy: () => ipcRenderer.invoke("fiscal:backlogBusy"),
+    backlogClassify: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogClassify", fromDate),
+    backlogRepair: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogRepair", fromDate),
+    backlogVerify: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogVerify", fromDate),
+    backlogFiscalize: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogFiscalize", fromDate),
+    onBacklogProgress: (
+      cb: (p: import("../shared/types/fiscal.types").FiscalBacklogProgress) => void,
     ) => {
       const h = (
         _e: IpcRendererEvent,
-        p: import("../shared/types/fiscal.types").FiscalBulkProgress,
+        p: import("../shared/types/fiscal.types").FiscalBacklogProgress,
       ) => cb(p);
-      ipcRenderer.on("fiscal:bulkProgress", h);
-      return () => ipcRenderer.removeListener("fiscal:bulkProgress", h);
+      ipcRenderer.on("fiscal:backlogProgress", h);
+      return () => ipcRenderer.removeListener("fiscal:backlogProgress", h);
     },
     retrySale: (saleId: string) => ipcRenderer.invoke("fiscal:retrySale", saleId),
     previewPayload: (saleId: string) => ipcRenderer.invoke("fiscal:previewPayload", saleId),
@@ -677,9 +681,21 @@ declare global {
         ) => Promise<import("../shared/types/fiscal.types").RegosVcrConfig>;
         testConnection: () => Promise<import("../shared/types/fiscal.types").FiscalConnectionResult>;
         getStatus: () => Promise<import("../shared/types/fiscal.types").FiscalQueueStatus>;
-        fiscalizeOld: () => Promise<import("../shared/types/fiscal.types").FiscalBulkResult>;
-        onBulkProgress: (
-          cb: (p: import("../shared/types/fiscal.types").FiscalBulkProgress) => void,
+        backlogBusy: () => Promise<import("../shared/types/fiscal.types").FiscalBacklogStep | null>;
+        backlogClassify: (
+          fromDate: string,
+        ) => Promise<import("../shared/types/fiscal.types").FiscalBacklogClassifyResult>;
+        backlogRepair: (
+          fromDate: string,
+        ) => Promise<import("../shared/types/fiscal.types").FiscalBacklogRepairResult>;
+        backlogVerify: (
+          fromDate: string,
+        ) => Promise<import("../shared/types/fiscal.types").FiscalBacklogVerifyResult>;
+        backlogFiscalize: (
+          fromDate: string,
+        ) => Promise<import("../shared/types/fiscal.types").FiscalBacklogFiscalizeResult>;
+        onBacklogProgress: (
+          cb: (p: import("../shared/types/fiscal.types").FiscalBacklogProgress) => void,
         ) => () => void;
         retrySale: (saleId: string) => Promise<{ ok: boolean; error?: string }>;
         previewPayload: (

@@ -651,20 +651,6 @@
     "fiscalized": "Fiskallashtirildi",
     "pending": "Kutilmoqda",
     "failed": "Xatolar",
-    "bulkButton": "Barcha eski cheklarni fiskallashtirish",
-    "bulkRunning": "Cheklar qayta ishlanmoqda…",
-    "bulkHint": "Markirovkalangan tovarli (022-guruh) barcha eski cheklarni QR-belgilarini to'g'rilab fiskallashtiradi. Qolgan eski cheklar fiskallashtirish talab qilinmaydi deb belgilanadi.",
-    "bulkDone": "Tayyor: fiskallashtirildi {{fiscalized}}, xatolar {{failed}}, belgilar tuzatildi {{repaired}}, o'chirildi {{disabled}}, muomaladan tashqari {{outOfCirculation}}",
-    "bulkProgress": {
-      "checking": "Markirovka tekshirilmoqda…",
-      "fiscalizing": "Fiskallashtirilmoqda…",
-      "done": "Tayyor",
-      "disabled": "O'chirildi",
-      "outOfCirculation": "Muomaladan tashqari",
-      "outOfCirculationList": "Markirovka muomaladan chiqqani uchun o'chirilgan cheklar"
-    },
-    "bulkUnreachable": "Virtual kassa mavjud emas — qayta ishlash to'xtatildi",
-    "disabledFirst": "Avval fiskallashtirishni yoqing",
     "uzqrEnabled": "REGOS orqali UzQR to'lovi (kassa ekranida QR kod)",
     "uzqrHint": "Xaridor ekrandagi QR kodni skanerlaydi. Chek faqat to'lov tasdiqlangandan keyin yaratiladi. O'chirilgan bo'lsa — UzQR QR kodsiz oddiy to'lov turi bo'lib qoladi.",
     "uzqrPollMs": "So'rov oralig'i, ms",
@@ -706,7 +692,60 @@
     "groupUzqr": "UzQR",
     "groupClick": "Click",
     "clickEnabled": "Ushbu kassada Click orqali to'lovni qabul qilish",
-    "clickHint": "REGOS chekida Click to'lovi naqd pul sifatida yuboriladi. Kassa qutisiga tushmaydi; hisobotlarda alohida qatorda."
+    "clickHint": "REGOS chekida Click to'lovi naqd pul sifatida yuboriladi. Kassa qutisiga tushmaydi; hisobotlarda alohida qatorda.",
+    "backlog": {
+      "hint": "Faqat naqd/Click bilan to'langan va markirovkali tovarsiz cheklardan tashqari barcha fiskallashtirilmagan cheklar fiskallashtirilishi shart. 4 bosqichni tartib bilan o'ting; har bir bosqich «Keyingi» tugmasini kutadi.",
+      "fromDate": "Cheklar sanasidan boshlab",
+      "busyElsewhere": "Qayta ishlash allaqachon ketmoqda — tugashini kuting",
+      "steps": {
+        "classify": "Saralash",
+        "repair": "Tuzatish",
+        "verify": "Markirovka",
+        "fiscalize": "Fiskallashtirish"
+      },
+      "about": {
+        "classify": "Faqat naqd yoki Click bilan to'langan va markirovkali tovarsiz cheklar fiskallashtirish talab qilinmaydi deb belgilanadi va boshqa qayta ishlanmaydi. Qolganlari fiskallashtirilishi shart.",
+        "repair": "Rus klaviatura tartibida o'qilgan markirovka kodlarini tuzatadi va shu cheklardagi tovarlarning MXIK va qadoq kodini tekshiradi.",
+        "verify": "Har bir markirovka kodini Asl-Belgisi'da tekshiradi. Kod muomaladan tashqari, topilmagan yoki skanerlanmagan bo'lsa, pozitsiya REGOS'ga xuddi shu summada almashtiruvchi tovar sifatida yuboriladi. Savdo tarixi va qoldiqlar o'zgarmaydi.",
+        "fiscalize": "Tayyorlangan cheklarni REGOS:VCR'ga birma-bir yuboradi."
+      },
+      "run": {
+        "classify": "Cheklarni saralash",
+        "repair": "Ma'lumotlarni tuzatish",
+        "verify": "Markirovkani tekshirish",
+        "fiscalize": "Fiskallashtirish"
+      },
+      "running": "Bajarilmoqda…",
+      "next": "Keyingi",
+      "finish": "Tayyor",
+      "restart": "Qaytadan boshlash",
+      "marked": "markirovka",
+      "classifyDone": "Fiskallashtirish talab qilinmaydi: {{skipped}}. Fiskallashtiriladi: {{kept}}.",
+      "repairDone": "Tuzatilgan markirovka kodlari: {{labels}} ({{receipts}} ta chekda).",
+      "productIssues": "Ma'lumoti to'liq bo'lmagan tovarlar ({{count}}) — bunday cheklarni REGOS rad etadi. Tovarlarni tuzatib, bosqichni qaytaring:",
+      "problem": {
+        "NO_MXIK": "MXIK yo'q",
+        "NO_PACKAGE_CODE": "qadoq kodi yo'q"
+      },
+      "substitute": "Almashtiruvchi tovar",
+      "substituteSearch": "Tovarni nomi, kodi yoki shtrix-kodi bo'yicha qidirish",
+      "substituteHint": "Tarozi tovari: REGOS chekida almashtirilgan pozitsiya summasida 1 kg bo'lib boradi.",
+      "verifyDone": "Tekshirilgan kodlar: {{checked}}. Almashtirilgan pozitsiyalar: {{substituted}}.",
+      "noLabel": "kod skanerlanmagan",
+      "stoppedAt": "#{{receipt}} chekda to'xtatildi",
+      "fiscalizeDone": "Fiskallashtirildi: {{fiscalized}}. Xatolar: {{failed}}.",
+      "notFiscalized": "chek fiskallashtirilmadi",
+      "errors": {
+        "BUSY": "Qayta ishlash allaqachon ketmoqda",
+        "FISCAL_DISABLED": "Avval fiskallashtirishni yoqing va sozlamalarni saqlang",
+        "NO_PASSWORD": "Kassir paroli kiritilmagan",
+        "NO_SUBSTITUTE": "Almashtiruvchi tovarni tanlang",
+        "SUBSTITUTE_NO_MXIK": "Almashtiruvchi tovarda MXIK yo'q",
+        "UNKNOWN_STATUS": "Asl-Belgisi noma'lum «{{status}}» holatini qaytardi — tekshiruv to'xtatildi",
+        "VCR_UNREACHABLE": "Virtual kassa mavjud emas — qayta ishlash to'xtatildi",
+        "IPC": "Bosqichni bajarib bo'lmadi"
+      }
+    }
   },
   "reports": {
     "title": "Hisobotlar",

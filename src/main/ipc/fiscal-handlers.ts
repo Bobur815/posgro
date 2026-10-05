@@ -1,7 +1,10 @@
 import { ipcMain } from "electron";
 import { regosVcrService } from "../fiscal/regos-vcr-service";
 import { stats, recentSales, reset } from "../fiscal/fiscal-timing";
-import type { RegosVcrConfigInput } from "../../shared/types/fiscal.types";
+import type {
+  FiscalBacklogProgress,
+  RegosVcrConfigInput,
+} from "../../shared/types/fiscal.types";
 import { assertNotSatellite } from "../lan/satellite-guard";
 import { isSatellite } from "../lan/role";
 import * as satellite from "../lan/satellite-ops";
@@ -60,16 +63,30 @@ export function setupFiscalHandlers(): void {
     regosVcrService.previewSalePayload(saleId),
   );
 
-  // Bulk: fiscalise all old (group-022) receipts and disable the rest. Manual replacement for
-  // the removed background retry worker. Streams live progress to the caller's window over
-  // 'fiscal:bulkProgress' so the Fiscal Settings screen can render a progress UI.
+  // Fiscal backlog stepper (Fiscal Settings). Four steps, each pressed by the admin; the long ones
+  // stream progress to the caller's window over 'fiscal:backlogProgress'.
+  const progressTo = (event: Electron.IpcMainInvokeEvent) => (p: FiscalBacklogProgress) => {
+    if (!event.sender.isDestroyed()) event.sender.send("fiscal:backlogProgress", p);
+  };
+  ipcMain.handle("fiscal:backlogBusy", async () => regosVcrService.backlogBusy());
   ipcMain.handle(
-    "fiscal:fiscalizeOld",
-    mainOnly(async (event: Electron.IpcMainInvokeEvent) =>
-      regosVcrService.fiscalizeOldReceipts((p) => {
-        if (!event.sender.isDestroyed())
-          event.sender.send("fiscal:bulkProgress", p);
-      }),
+    "fiscal:backlogClassify",
+    mainOnly(async (_event, fromDate: string) => regosVcrService.backlogClassify(fromDate)),
+  );
+  ipcMain.handle(
+    "fiscal:backlogRepair",
+    mainOnly(async (_event, fromDate: string) => regosVcrService.backlogRepair(fromDate)),
+  );
+  ipcMain.handle(
+    "fiscal:backlogVerify",
+    mainOnly(async (event: Electron.IpcMainInvokeEvent, fromDate: string) =>
+      regosVcrService.backlogVerify(fromDate, progressTo(event)),
+    ),
+  );
+  ipcMain.handle(
+    "fiscal:backlogFiscalize",
+    mainOnly(async (event: Electron.IpcMainInvokeEvent, fromDate: string) =>
+      regosVcrService.backlogFiscalize(fromDate, progressTo(event)),
     ),
   );
 

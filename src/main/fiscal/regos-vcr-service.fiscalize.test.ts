@@ -21,7 +21,9 @@ jest.mock('./secret-store', () => ({
   hasVcrPassword: async () => true,
   setVcrPassword: async () => undefined,
 }));
-jest.mock('../marking/circulation-check', () => ({ isCodeOutOfCirculation: async () => false }));
+jest.mock('../marking/circulation-check', () => ({
+  verifyMarkingCodeDetails: async () => ({ reachable: false }),
+}));
 
 const prismaMock = {
   systemSetting: {
