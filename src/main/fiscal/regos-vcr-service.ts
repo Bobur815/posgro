@@ -52,6 +52,23 @@ const DEFAULT_VAT_PERCENT = 12;
 // Doubles as the PositionMeta.rate marker for "без НДС" (no numeric rate applies).
 const NON_VAT_PAYER_VAT_VALUE = -1;
 
+// Product names appended to a failed receipt's log line, so the admin's Telegram alert can say
+// what was being sold even before the sale reaches the server. The device does not say which
+// position it rejected, so these are the receipt's lines in order.
+const LOGGED_ITEMS_MAX = 3;
+
+/**
+ * ` items=["Coca-Cola 1L","Pepsi"] +2` — a JSON array, so a name holding a comma or bracket
+ * still parses. The server reads this back (src/server/modules/telegram/log-alerts.service.ts,
+ * LOGGED_ITEMS); change both together.
+ */
+export function loggedItems(names: string[]): string {
+  if (names.length === 0) return '';
+  const shown = names.slice(0, LOGGED_ITEMS_MAX);
+  const more = names.length - shown.length;
+  return ` items=${JSON.stringify(shown)}${more > 0 ? ` +${more}` : ''}`;
+}
+
 // Per-position bookkeeping kept alongside the VCR positions so a VAT-rate heal can map a
 // position back to its product (to persist the corrected rate) and know its current rate.
 interface PositionMeta {
@@ -815,7 +832,9 @@ class RegosVcrService {
       // FAILED line for a sale that succeeded.
       // Use the electron-log instance (not raw console) so these lines land in the upload buffer
       // → terminal_logs → super-admin Logs dashboard. Main-process console is NOT captured.
-      log.error(`[fiscal] ✗ fiscalize ${saleId} failed: ${this.errText(e)}`);
+      // The SQLite client is require()d, so `sale` is untyped — name the one field read.
+      const names = sale.items.map((i: { productName: string }) => i.productName);
+      log.error(`[fiscal] ✗ fiscalize ${saleId} failed: ${this.errText(e)}${loggedItems(names)}`);
       // Log the raw REGOS code + description too — describeVcrError() collapses several distinct
       // VAT/MXIK faults into one staff message, which hides which one actually fired when debugging.
       if (e instanceof VcrError) log.error(`[fiscal] raw VCR error [${e.code}] ${e.method}: ${e.description}`);

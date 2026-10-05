@@ -60,7 +60,8 @@ jest.mock('./regos-vcr-client', () => {
 });
 
 import { VcrError } from './regos-vcr-client';
-import { regosVcrService } from './regos-vcr-service';
+import { loggedItems, regosVcrService } from './regos-vcr-service';
+import { log } from '../logger';
 import { reset as resetTimings, stats } from './fiscal-timing';
 
 const OPEN_Z = { OpenTime: '2026-09-09 08:00:00', CloseTime: '' };
@@ -420,5 +421,29 @@ describe('fiscalizeSale — split payment', () => {
       { type: 1, value: 1000000 },
       { type: 2, value: 5000000, card_type: 2 },
     ]);
+  });
+});
+
+describe('fiscalizeSale — failure log line', () => {
+  // The admin's Telegram alert reads these names back; the device never says which line it rejected.
+  it('names the receipt\'s products so the alert can show them before the sale syncs', async () => {
+    prismaMock.sale.findUnique.mockImplementation(async () => saleRow(5));
+    prismaMock.product.findMany.mockImplementation(async () => products(5));
+    client.sale.mockRejectedValue(new VcrError(701003, 'Код обязательной маркировки не задан', 'Receipt.Sale'));
+
+    await regosVcrService.fiscalizeSale('sale-1');
+
+    const failed = (log.error as jest.Mock).mock.calls.map((c) => String(c[0])).find((m) => m.includes('✗ fiscalize'));
+    expect(failed).toMatch(/^\[fiscal\] ✗ fiscalize sale-1 failed: \[701003\] .* items=\["P1","P2","P3"\] \+2$/);
+  });
+});
+
+describe('loggedItems', () => {
+  it('is empty for a receipt with no lines', () => {
+    expect(loggedItems([])).toBe('');
+  });
+
+  it('writes names as JSON, so a comma or bracket in a name survives', () => {
+    expect(loggedItems(['Сок, яблоко [1L]'])).toBe(' items=["Сок, яблоко [1L]"]');
   });
 });
