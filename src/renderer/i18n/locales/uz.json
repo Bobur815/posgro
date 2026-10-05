@@ -743,7 +743,8 @@
         "SUBSTITUTE_NO_MXIK": "Almashtiruvchi tovarda MXIK yo'q",
         "UNKNOWN_STATUS": "Asl-Belgisi noma'lum «{{status}}» holatini qaytardi — tekshiruv to'xtatildi",
         "VCR_UNREACHABLE": "Virtual kassa mavjud emas — qayta ishlash to'xtatildi",
-        "IPC": "Bosqichni bajarib bo'lmadi"
+        "IPC": "Bosqichni bajarib bo'lmadi",
+        "NOT_ENTITLED": "Eski cheklarni qayta ishlash xizmati bu do'kon uchun ulanmagan"
       },
       "mxikFilled": "MXIK tasnif.soliq.uz'dan topilib, tovarlarga saqlandi: {{count}}",
       "tasnifUnreachable": "tasnif.soliq.uz mavjud emas — tekshirib bo'lmagan tovarlar: {{count}}",
@@ -752,6 +753,13 @@
         "omit": "yuborilmaydi",
         "disable": "chek fiskallashtirilmaydi"
       }
+    },
+    "duplicateCodes": {
+      "title": "Bir nechta qadoq uchun bitta markirovka kodi bilan yuborilgan cheklar: {{count}}",
+      "hint": "Tuzatishdan oldin bir chekdagi bir xil markirovkali tovarlar REGOS'ga bitta (oxirgi) kod bilan yuborilgan, qolgan kodlar ro'yxatdan o'tmagan. Bu cheklar allaqachon fiskallashtirilgan; ro'yxat faqat ma'lumot uchun, hech narsa o'zgartirilmaydi.",
+      "packs": "qadoqlar: {{packs}}",
+      "sent": "Hammasi uchun yuborilgan",
+      "unsent": "REGOS olmagan"
     }
   },
   "reports": {

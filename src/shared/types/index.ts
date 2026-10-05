@@ -108,6 +108,7 @@ export type {
   FiscalBacklogVerifyResult,
   FiscalBacklogFiscalizeResult,
   FiscalBacklogStep,
+  FiscalDuplicateCodeReceipt,
   FiscalBacklogProgress,
   FiscalLabel,
   FiscalZReport,

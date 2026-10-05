@@ -72,6 +72,8 @@ interface Row {
   fiscalAttempts: number;
   regosLabels: string | null;
   fiscalSubstitutions: string | null;
+  regosFiscalAt?: Date | null;
+  regosReceiptNo?: string | null;
   smenaId: string | null;
   cashierName: string;
   discountAmount: number;
@@ -157,11 +159,15 @@ type Where = {
   id?: string | { in: string[] };
   createdAt?: { gte: Date };
   OR?: Array<{ fiscalStatus: null | { notIn: string[] } }>;
+  fiscalStatus?: string;
+  regosFiscalAt?: { lt: Date };
 };
 function matches(r: Row, where: Where): boolean {
   if (typeof where.id === 'string' && r.id !== where.id) return false;
   if (where.id && typeof where.id === 'object' && !where.id.in.includes(r.id)) return false;
   if (where.createdAt && r.createdAt < where.createdAt.gte) return false;
+  if (typeof where.fiscalStatus === 'string' && r.fiscalStatus !== where.fiscalStatus) return false;
+  if (where.regosFiscalAt && !(r.regosFiscalAt && r.regosFiscalAt < where.regosFiscalAt.lt)) return false;
   if (where.OR) {
     const ok = where.OR.some((c) =>
       c.fiscalStatus === null
@@ -176,7 +182,8 @@ function matches(r: Row, where: Where): boolean {
 const prismaMock = {
   systemSetting: {
     findMany: jest.fn(async () => Object.entries(settings).map(([key, value]) => ({ key, value }))),
-    findUnique: jest.fn(async () => null),
+    findUnique: jest.fn<Promise<{ key: string; value: string } | null>, unknown[]>(async () => null),
+    create: jest.fn(async () => undefined),
     upsert: jest.fn(async () => undefined),
   },
   sale: {
@@ -647,5 +654,51 @@ describe('step 4 — fiscalize', () => {
     const second = await regosVcrService.backlogFiscalize(FROM);
     expect(second).toMatchObject({ ok: false, error: 'BUSY' });
     await first;
+  });
+});
+
+describe('receipts sent with one code for several packs (read-only)', () => {
+  it('lists those fiscalised before per-line codes, with the codes REGOS never got', async () => {
+    const since = new Date(2026, 9, 5, 9);
+    prismaMock.systemSetting.findUnique.mockResolvedValueOnce({
+      key: 'labels_per_line_since',
+      value: since.toISOString(),
+    });
+    const twoPacks = JSON.stringify([
+      { barcode: '222', label: 'CODE-A' },
+      { barcode: '222', label: 'CODE-B' },
+    ]);
+    sales = [
+      sale('old', {
+        fiscalStatus: 'FISCALIZED',
+        regosFiscalAt: new Date(2026, 9, 4),
+        regosReceiptNo: '77',
+        items: [item(MARKED), item(MARKED)],
+        regosLabels: twoPacks,
+      }),
+      sale('new', {
+        fiscalStatus: 'FISCALIZED',
+        regosFiscalAt: new Date(2026, 9, 5, 10),
+        items: [item(MARKED), item(MARKED)],
+        regosLabels: twoPacks,
+      }),
+      sale('one-pack', {
+        fiscalStatus: 'FISCALIZED',
+        regosFiscalAt: new Date(2026, 9, 4),
+        items: [item(MARKED)],
+        regosLabels: JSON.stringify([{ barcode: '222', label: 'CODE-C' }]),
+      }),
+    ];
+
+    const rows = await regosVcrService.duplicateCodeReceipts();
+
+    expect(rows.map((r) => r.saleId)).toEqual(['old']);
+    expect(rows[0]).toMatchObject({
+      regosReceiptNo: '77',
+      lines: [{ barcode: '222', packs: 2, sentCode: 'CODE-B', unsentCodes: ['CODE-A'] }],
+    });
+    // Read-only.
+    expect(prismaMock.sale.update).not.toHaveBeenCalled();
+    expect(prismaMock.sale.updateMany).not.toHaveBeenCalled();
   });
 });

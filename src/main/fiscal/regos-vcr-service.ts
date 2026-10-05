@@ -31,6 +31,7 @@ import type {
   FiscalBacklogVerifyResult,
   FiscalBacklogFiscalizeResult,
   FiscalLinePlan,
+  FiscalDuplicateCodeReceipt,
   FiscalLabel,
   FiscalZReportStatus,
   FiscalSalePreview,
@@ -38,7 +39,7 @@ import type {
   FiscalPreviewPayment,
 } from '../../shared/types/fiscal.types';
 import { repairCyrillicLayout, isLayoutCorrupted } from '../../shared/utils/keyboard-layout';
-import { labelsPerLine } from '../../shared/utils/fiscal-labels';
+import { duplicateCodeLines, labelsPerLine } from '../../shared/utils/fiscal-labels';
 import { pickSingleUnitPackage } from '../../shared/utils/mxik-packages';
 import { lookupMxikByBarcode, getMxikPackages } from './tasnif';
 import { productRequiresMarking } from '../../shared/utils/marking';
@@ -57,6 +58,8 @@ import {
   parseLinePlan,
 } from '../../shared/utils/fiscal-backlog';
 
+/** system_settings key: when this till began sending marking codes per line. */
+const LABELS_PER_LINE_SINCE = 'labels_per_line_since';
 const MAX_ATTEMPTS = 5; // cap retries for hard (business) failures
 const FISCAL_DEBUG = process.env.FISCAL_DEBUG === 'true'; // verbose position/payment logs
 const ERR_ZREPORT_EMPTY = 704020; // VCR: can't close an empty Z-report — benign no-op for us
@@ -1035,6 +1038,67 @@ class RegosVcrService {
     }
   }
 
+  /**
+   * When this till started sending marking codes per line (the first boot of a build that does).
+   * Written once and never moved: receipts fiscalised before it may have gone to REGOS with one
+   * code for several packs; receipts after it cannot have.
+   */
+  private async labelsPerLineSince(): Promise<Date> {
+    const prisma = getPrismaClient();
+    const row = await prisma.systemSetting.findUnique({ where: { key: LABELS_PER_LINE_SINCE } });
+    const at = row ? new Date(row.value) : null;
+    if (at && !Number.isNaN(at.getTime())) return at;
+    const now = new Date();
+    await prisma.systemSetting
+      .create({ data: { key: LABELS_PER_LINE_SINCE, value: now.toISOString() } })
+      .catch(() => {}); // another caller wrote it first — theirs stands
+    return now;
+  }
+
+  /**
+   * Read-only: fiscalised receipts in which two or more packs of one product were sent to REGOS
+   * with the same (last scanned) code, before codes were sent per line. Lists the codes REGOS never
+   * received, so the owner can decide what to do; nothing here is changed.
+   */
+  async duplicateCodeReceipts(): Promise<FiscalDuplicateCodeReceipt[]> {
+    const since = await this.labelsPerLineSince();
+    const rows: Array<{
+      id: string;
+      receiptNumber: string;
+      createdAt: Date;
+      regosReceiptNo: string | null;
+      regosFiscalAt: Date | null;
+      regosLabels: string | null;
+      items: Array<{ barcode: string; productName: string }>;
+    }> = await getPrismaClient().sale.findMany({
+      where: { fiscalStatus: 'FISCALIZED', regosLabels: { not: null }, regosFiscalAt: { lt: since } },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        receiptNumber: true,
+        createdAt: true,
+        regosReceiptNo: true,
+        regosFiscalAt: true,
+        regosLabels: true,
+        items: { select: { barcode: true, productName: true } },
+      },
+    });
+    const out: FiscalDuplicateCodeReceipt[] = [];
+    for (const s of rows) {
+      const lines = duplicateCodeLines(safeParseLabels(s.regosLabels ?? '[]'), s.items);
+      if (lines.length === 0) continue;
+      out.push({
+        saleId: s.id,
+        receiptNumber: s.receiptNumber,
+        createdAt: s.createdAt.toISOString(),
+        regosReceiptNo: s.regosReceiptNo,
+        regosFiscalAt: s.regosFiscalAt ? s.regosFiscalAt.toISOString() : null,
+        lines,
+      });
+    }
+    return out;
+  }
+
   async getQueueStatus(): Promise<FiscalQueueStatus> {
     const prisma = getPrismaClient();
     const enabled = await this.isEnabled();
@@ -1503,6 +1567,8 @@ class RegosVcrService {
     // log instead of guesswork — including whether the stored VCR password decrypted.
     this.logStartupConfig().catch(() => {});
     this.warmZReportCache().catch(() => {});
+    // Fix the per-line-codes cut-off at the first boot of this build, before any receipt is sent.
+    this.labelsPerLineSince().catch(() => {});
     // NOTE: the periodic background retry worker was removed by request. Fiscalization now happens
     // (a) immediately when a sale is created, (b) as a flush on shift close (smena:close →
     // processPending), and (c) on demand via the "Fiscalise all old receipts" admin button

@@ -289,7 +289,28 @@ export interface FiscalBacklogFiscalizeResult {
   unreachable?: boolean;
 }
 
-export type FiscalBacklogStep = "classify" | "repair" | "verify" | "fiscalize";
+/**
+ * A receipt fiscalised before marking codes were sent per line: two or more packs of one product
+ * went to REGOS all carrying the last scanned code, so the other codes were never registered.
+ */
+export interface FiscalDuplicateCodeReceipt {
+  saleId: string;
+  receiptNumber: string;
+  createdAt: string;
+  regosReceiptNo: string | null;
+  regosFiscalAt: string | null;
+  lines: {
+    barcode: string;
+    productName: string;
+    packs: number;
+    /** The code every one of those packs was sent with. */
+    sentCode: string;
+    /** The codes REGOS never received. */
+    unsentCodes: string[];
+  }[];
+}
+
+export type FiscalBacklogStep ="classify" | "repair" | "verify" | "fiscalize";
 
 /** Live progress for steps 3 and 4, streamed over `fiscal:backlogProgress`. */
 export interface FiscalBacklogProgress {

@@ -22,6 +22,7 @@ import type {
   FiscalTimings,
 } from '@shared/types';
 import { FiscalBacklogCard } from './FiscalBacklogCard';
+import { DuplicateCodesCard } from './DuplicateCodesCard';
 import {
   PHASE_COLOR,
   phaseBreakdown,
@@ -268,6 +269,8 @@ export function FiscalSettings() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<FiscalConnectionResult | null>(null);
   const [queue, setQueue] = useState<FiscalQueueStatus | null>(null);
+  // The backlog stepper is a paid service: shown only while the store's license has it open.
+  const [backlogAllowed, setBacklogAllowed] = useState(false);
   const [timings, setTimings] = useState<FiscalTimings | null>(null);
 
   // Config load state. The form must NOT show its editable defaults until the real config has
@@ -320,6 +323,7 @@ export function FiscalSettings() {
     loadConfig();
     window.electronAPI.fiscal.getTimings().then(setTimings).catch(() => {});
     window.electronAPI.fiscal.getStatus().then(setQueue).catch(() => {});
+    window.electronAPI.fiscal.backlogAllowed().then(setBacklogAllowed).catch(() => setBacklogAllowed(false));
   }, [loadConfig]);
 
   const handleSave = async () => {
@@ -600,7 +604,8 @@ export function FiscalSettings() {
           that used to be empty, and neither pushes the other below the fold. 430px keeps the
           timings tables readable — below that the pair collapses back to one column. */}
       <SettingsGrid $min={430}>
-      {queue && <FiscalBacklogCard queue={queue} onChanged={refreshQueue} />}
+      {queue && backlogAllowed && <FiscalBacklogCard queue={queue} onChanged={refreshQueue} />}
+      <DuplicateCodesCard />
 
       {timings && (
         <Card>

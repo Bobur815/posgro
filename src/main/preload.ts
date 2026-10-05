@@ -117,6 +117,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     setConfig: (input: unknown) => ipcRenderer.invoke("fiscal:setConfig", input),
     testConnection: () => ipcRenderer.invoke("fiscal:testConnection"),
     getStatus: () => ipcRenderer.invoke("fiscal:getStatus"),
+    backlogAllowed: () => ipcRenderer.invoke("fiscal:backlogAllowed"),
+    duplicateCodeReceipts: () => ipcRenderer.invoke("fiscal:duplicateCodeReceipts"),
     backlogBusy: () => ipcRenderer.invoke("fiscal:backlogBusy"),
     backlogClassify: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogClassify", fromDate),
     backlogRepair: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogRepair", fromDate),
@@ -681,6 +683,8 @@ declare global {
         ) => Promise<import("../shared/types/fiscal.types").RegosVcrConfig>;
         testConnection: () => Promise<import("../shared/types/fiscal.types").FiscalConnectionResult>;
         getStatus: () => Promise<import("../shared/types/fiscal.types").FiscalQueueStatus>;
+        backlogAllowed: () => Promise<boolean>;
+        duplicateCodeReceipts: () => Promise<import("../shared/types/fiscal.types").FiscalDuplicateCodeReceipt[]>;
         backlogBusy: () => Promise<import("../shared/types/fiscal.types").FiscalBacklogStep | null>;
         backlogClassify: (
           fromDate: string,
