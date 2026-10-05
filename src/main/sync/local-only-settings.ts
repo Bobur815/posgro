@@ -61,6 +61,9 @@ export const LOCAL_ONLY_SETTINGS = new Set([
   // Whether the Checkout offers Click. Per till, off by default: a store turns it on at the
   // counters that actually take Click.
   'click_enabled',
+  // Whether the Checkout offers a discount on every tender, split included. Per till, off by
+  // default: off leaves only the cash shortfall courtesy, as before.
+  'discount_all_tenders',
 ]);
 
 /**
