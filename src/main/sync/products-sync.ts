@@ -110,6 +110,8 @@ export async function syncProducts(source: PullSource = vpsSource): Promise<
         packageCode: p.packageCode ?? null,
         vatRate: p.vatRate ?? null,
         isMarked: p.isMarked ?? null,
+        // A server from before isValid sends none: a new product starts valid, like the column.
+        isValid: p.isValid ?? true,
         productType: p.productType ?? "REGULAR",
         internalCode: p.internalCode ?? null,
         piecesPerBox: p.piecesPerBox ?? null,
@@ -198,6 +200,9 @@ export async function syncProducts(source: PullSource = vpsSource): Promise<
               packageCode: product.packageCode ?? null,
               vatRate: product.vatRate ?? null,
               isMarked: product.isMarked ?? null,
+              // The VPS holds the store-wide answer (every till's reports, every arrival). One from
+              // before isValid sends none — then this till's own value stands (undefined = untouched).
+              isValid: product.isValid ?? undefined,
               productType: product.productType ?? "REGULAR",
               internalCode: product.internalCode ?? null,
               piecesPerBox: product.piecesPerBox ?? null,

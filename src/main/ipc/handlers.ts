@@ -713,6 +713,9 @@ function setupInventoryHandlers(): void {
     const productUpdate: Record<string, unknown> = {
       stock: { increment: data.quantity },
       ...(data.cost != null && { cost: data.cost }),
+      // New goods: what REGOS rejected about the last batch no longer stands (Product.isValid).
+      // The VPS does the same when this arrival uploads, so every till learns it.
+      isValid: true,
     };
 
     if (data.newPrice !== undefined && data.priceMode) {

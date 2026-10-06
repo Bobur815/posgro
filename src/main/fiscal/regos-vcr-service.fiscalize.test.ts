@@ -36,7 +36,12 @@ const prismaMock = {
     upsert: jest.fn(async () => undefined),
   },
   sale: { findUnique: jest.fn(), update: jest.fn(async () => undefined) },
-  product: { findMany: jest.fn(), update: jest.fn(async () => undefined) },
+  product: {
+    findMany: jest.fn(),
+    update: jest.fn(async () => undefined),
+    updateMany: jest.fn(async () => ({ count: 1 })),
+  },
+  $executeRaw: jest.fn(async () => 1),
   smena: {
     update: jest.fn(async () => undefined),
     findFirst: jest.fn<Promise<unknown>, unknown[]>(async () => ({ id: 'smena-1' })),
@@ -469,5 +474,78 @@ describe('settleDiscountRemainder', () => {
     const p = [pos(100000, 0)];
     settleDiscountRemainder(p, 0);
     expect(p[0].discount).toBe(0);
+  });
+});
+
+describe('fiscalizeSale — a rejected product is marked invalid (Product.isValid)', () => {
+  // clearAllMocks keeps implementations: an earlier test leaves recovery-by-code succeeding.
+  beforeEach(() => {
+    client.getReceiptInfo.mockResolvedValue(null);
+    client.validateSale.mockResolvedValue({ validate: true });
+  });
+
+  const mxikError = () => new VcrError(705511, 'Ошибка проверки ИКПУ', 'Receipt.Sale');
+  /** Product ids the fiscal service marked invalid, across every updateMany call. */
+  const markedInvalid = () =>
+    prismaMock.product.updateMany.mock.calls.flatMap(
+      (c: unknown[]) => (c[0] as { where: { id: { in: number[] } } }).where.id.in,
+    );
+
+  it('blames the only line of a one-line receipt, without probing, and queues a report', async () => {
+    client.sale.mockRejectedValue(mxikError());
+
+    await expect(regosVcrService.fiscalizeSale('sale-1')).rejects.toBeInstanceOf(VcrError);
+
+    expect(markedInvalid()).toEqual([1]);
+    expect((prismaMock.product.updateMany.mock.calls as unknown[][])[0][0]).toMatchObject({ data: { isValid: false } });
+    expect(prismaMock.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(client.validateSale).not.toHaveBeenCalled();
+  });
+
+  // Blaming the whole receipt would mark good products invalid alongside the bad one.
+  it('probes each line of a longer receipt and blames only the line that is rejected itself', async () => {
+    prismaMock.sale.findUnique.mockImplementation(async () => saleRow(3));
+    prismaMock.product.findMany.mockImplementation(async () => products(3));
+    client.sale.mockRejectedValue(mxikError());
+    client.validateSale.mockImplementation(async (positions: unknown) => {
+      if ((positions as { barcode: string }[])[0].barcode === '1001') throw mxikError();
+      return { validate: true };
+    });
+
+    await expect(regosVcrService.fiscalizeSale('sale-1')).rejects.toBeInstanceOf(VcrError);
+
+    expect(client.validateSale).toHaveBeenCalledTimes(3);
+    expect(markedInvalid()).toEqual([2]);
+  });
+
+  it('blames nobody when the device stops answering mid-probe', async () => {
+    prismaMock.sale.findUnique.mockImplementation(async () => saleRow(3));
+    prismaMock.product.findMany.mockImplementation(async () => products(3));
+    client.sale.mockRejectedValue(mxikError());
+    client.validateSale.mockRejectedValue(new VcrError(0, 'ECONNREFUSED', 'Receipt.ValidateSale'));
+
+    await expect(regosVcrService.fiscalizeSale('sale-1')).rejects.toBeInstanceOf(VcrError);
+
+    expect(prismaMock.product.updateMany).not.toHaveBeenCalled();
+  });
+
+  // The cashier did not scan the code: a new delivery would not fix that, so the product stays valid.
+  it('does not blame the product for a marking code that was not scanned', async () => {
+    client.sale.mockRejectedValue(
+      new VcrError(701003, 'Некорректные входные данные (Код обязательной маркировки не задан)', 'Receipt.Sale'),
+    );
+
+    await expect(regosVcrService.fiscalizeSale('sale-1')).rejects.toBeInstanceOf(VcrError);
+
+    expect(prismaMock.product.updateMany).not.toHaveBeenCalled();
+    expect(prismaMock.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('does not blame a product for a device that is unreachable', async () => {
+    client.sale.mockRejectedValue(new VcrError(0, 'ECONNREFUSED', 'Receipt.Sale'));
+
+    await expect(regosVcrService.fiscalizeSale('sale-1')).rejects.toBeInstanceOf(VcrError);
+
+    expect(prismaMock.product.updateMany).not.toHaveBeenCalled();
   });
 });
