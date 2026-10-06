@@ -1,3 +1,50 @@
+# Product.isValid — REGOS rejected it until the next arrival (2026-10-05), branch feat/product-is-valid (from dev). Approved by user; done, not committed
+
+Decisions (user): both schemas, synced; blame by probing each line with Receipt.ValidateSale; only store the flag
+(no UI, no sale behaviour → no feature flag needed).
+
+## Findings
+- `isMarked` sits in both schemas; tills add columns in place via numbered migrations in `sqlite-client.ts` (25 = is_marked).
+- Products pull down (`products-sync.ts`, full rows from `GET /products?updatedAfter=`). The upload
+  `/products/sync-bulk` is CREATE-ONLY (`products.service.ts:455`) — a till cannot change an existing product
+  through it, so `isValid=false` needs its own small endpoint.
+- Arrivals: till IPC (`ipc/handlers.ts:700`), till LAN route (`local-server/routes/inventory.ts:44`), VPS single
+  (`inventory.service.ts:66`) and the till→VPS bulk upload (`inventory.service.ts:294`).
+- REGOS errors name no position; `healVatRates()` already validates one position at a time (side-effect free).
+
+## Design
+- **PostgreSQL** `Product.isValid Boolean @default(true) @map("is_valid")` after isMarked. Migration `add_product_is_valid`
+  (ADD COLUMN ... NOT NULL DEFAULT true — instant on PG 15, no backfill). Returned by the pull automatically (additive).
+- **SQLite** same field; Migration 2x `ALTER TABLE products ADD COLUMN is_valid INTEGER NOT NULL DEFAULT 1`.
+- **Outbox** (SQLite raw table, `CREATE TABLE IF NOT EXISTS product_invalid_reports`: id, barcode, invalidated_at,
+  error_code, sent_at) so a report made offline still reaches the VPS.
+- **New endpoint** `POST /api/products/invalid` (any store role, storeId from JWT) `{ items: [{ barcode, at, code }] }`.
+  Sets isValid=false **only if no arrival for that product was recorded after `at`** — so a late report from an
+  offline till cannot undo a newer arrival. Idempotent; bumps updatedAt so every till pulls it.
+- **Arrivals → true:** all four paths set `isValid: true` in the same transaction as the stock increment.
+- **Fiscal:** in `fiscalizeSaleImpl`'s failure path, for a product-type rejection only, probe each position alone with
+  `validateSale`; the products whose position fails → local `isValid=false` + outbox row + log line. One probe per
+  line, failure path only, inside the existing VCR lock. A probe that errors at the network level blames nobody.
+  - Counts as product-type: 701003 / 705511 with MXIK/ИКПУ, НДС (after the VAT heal failed), package code, or
+    "код маркировки недействителен / вне оборота" wording.
+  - **Does not count:** "код маркировки не задан" (cashier did not scan — not the product's fault), duplicate
+    code, network (0), Z-report, payment, password, licence errors.
+- **Pull:** `isValid: p.isValid ?? undefined` — a server that has not deployed yet leaves the local value alone (N-1).
+- **Upload:** new step sends unsent outbox rows; 404 from an old server → keep them, retry next cycle, never throw.
+
+## Steps
+- [x] PG schema + migration (`--create-only`, read SQL), migration-reviewer agent
+- [x] SQLite schema + Migration + outbox table; `prisma:push:sqlite` + `prisma:generate:sqlite` (local dev DB only)
+- [x] Server: endpoint + DTO + service + tests; arrivals (66, 294) set isValid=true + tests
+- [x] POS: arrivals (IPC, LAN route) set true; pull mapping; outbox upload step; tests
+- [x] POS fiscal: classify error → probe lines → mark invalid; tests (blame only the failing line; skip non-product errors;
+      network error during probe blames nobody)
+- [x] /check, /api-compat, POS compile check. Version: not bumped until you say (pending from the discount work)
+- Rollout: server first (migration + endpoint), then installer. Old tills ignore `isValid` in the pull.
+- `src/shared` NOT touched: the pull reads untyped JSON, so the shared type was not needed.
+- Known gap (accepted): an arrival recorded offline and uploaded after another till's later rejection resets the
+  flag to true — the next rejection marks it again. Fixing needs a timestamp column; not worth it for a flag.
+
 # Discount on every tender, split included (2026-10-05), branch feat/discount-all-tenders (from dev). Approved by user; done, not committed (1.32.17)
 
 Decisions (user): explicit discount field in checkout; any cashier, no limit; behind a per-till setting, default off.
