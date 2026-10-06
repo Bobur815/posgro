@@ -1016,6 +1016,28 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_debt_txn_sale ON debt_transactions(sale_id)`;
   // The upload's only query: what this till has not mirrored up yet.
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_debt_txn_synced ON debt_transactions(synced)`;
+
+  // Migration 37: products.is_valid — false once REGOS:VCR rejected a receipt line for the
+  // product, true again after its next inventory arrival. Every existing product starts valid.
+  if (!(await columnExists(prisma, 'products', 'is_valid'))) {
+    await prisma.$executeRaw`ALTER TABLE products ADD COLUMN is_valid INTEGER NOT NULL DEFAULT 1`;
+  }
+
+  // The rejections this till saw, waiting to reach the VPS (POST /products/invalid). Raw SQL, not
+  // a Prisma model: only the fiscal service writes it and only the upload reads it. Unconditional
+  // and IF NOT EXISTS, so a database from any earlier release gets it (tasks/lessons.md).
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS product_invalid_reports (
+      id TEXT PRIMARY KEY,
+      barcode TEXT NOT NULL,
+      invalidated_at DATETIME NOT NULL,
+      error_code INTEGER,
+      sent_at DATETIME
+    )
+  `;
+  await prisma.$executeRaw`
+    CREATE INDEX IF NOT EXISTS idx_product_invalid_reports_unsent ON product_invalid_reports(sent_at)
+  `;
 }
 
 /** True if `column` exists on `table` — silent (no thrown query, no prisma:error log). */

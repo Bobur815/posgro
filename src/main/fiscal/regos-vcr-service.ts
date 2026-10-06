@@ -37,6 +37,7 @@ import { toPieces } from '../../shared/utils/pack';
 import { isFiscalCashTender } from '../../shared/constants';
 import { MIXED_TENDER, tenderAmounts, type TenderLine } from '../../shared/utils/split-payment';
 import { isCodeOutOfCirculation } from '../marking/circulation-check';
+import { isProductRejection, markProductsInvalid } from './product-validity';
 
 const MAX_ATTEMPTS = 5; // cap retries for hard (business) failures
 const FISCAL_DEBUG = process.env.FISCAL_DEBUG === 'true'; // verbose position/payment logs
@@ -603,6 +604,44 @@ class RegosVcrService {
     return changed;
   }
 
+  /**
+   * Finds which products a receipt-level rejection was about, and marks them invalid.
+   *
+   * REGOS names no position, so a one-line receipt is blamed outright and a longer one is probed:
+   * each line alone through Receipt.ValidateSale (side-effect free, as healVatRates does), and only
+   * the lines that are themselves rejected for a product reason are blamed — never the innocent
+   * neighbours of a bad line. Failure path only, inside the VCR lock the sale already holds.
+   * A device that stops answering mid-probe blames nobody.
+   */
+  private async blameRejectedProducts(
+    client: RegosVcrClient,
+    rejection: VcrError,
+    positions: VcrPosition[],
+    meta: PositionMeta[],
+  ): Promise<void> {
+    if (positions.length === 0) return; // failed before the receipt was built
+    const blamed: number[] = [];
+    if (positions.length === 1) {
+      blamed.push(0);
+    } else {
+      for (let i = 0; i < positions.length; i++) {
+        const pos = positions[i];
+        try {
+          await client.validateSale([pos], [{ type: 1, value: pos.amount - pos.discount }], true);
+        } catch (e) {
+          if (e instanceof VcrError && e.code === 0) return;
+          if (isProductRejection(e)) blamed.push(i);
+        }
+      }
+    }
+
+    const products = blamed.map((i) => ({ productId: meta[i].productId, barcode: positions[i].barcode }));
+    for (const p of products) {
+      log.warn(`[fiscal] product ${p.barcode} marked invalid: [${rejection.code}] ${rejection.description}`);
+    }
+    await markProductsInvalid(products, rejection.code);
+  }
+
   private buildPayments(sale: {
     paymentMethod: string;
     finalAmount: unknown;
@@ -869,6 +908,10 @@ class RegosVcrService {
           return; // recovered — do not propagate the error
         }
       }
+
+      // A rejection about a product's own data: mark the product(s) at fault invalid until their
+      // next arrival. After the recovery above — a receipt the device already holds blames nobody.
+      if (isProductRejection(e)) await this.blameRejectedProducts(client, e, positions, meta);
 
       await prisma.sale.update({
         where: { id: saleId },
