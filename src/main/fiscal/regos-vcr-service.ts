@@ -23,8 +23,15 @@ import type {
   RegosVcrConfigInput,
   FiscalConnectionResult,
   FiscalQueueStatus,
-  FiscalBulkResult,
-  FiscalBulkProgress,
+  FiscalBacklogStep,
+  FiscalBacklogProgress,
+  FiscalBacklogClassifyResult,
+  FiscalBacklogRepairResult,
+  FiscalBacklogProductIssue,
+  FiscalBacklogVerifyResult,
+  FiscalBacklogFiscalizeResult,
+  FiscalLinePlan,
+  FiscalDuplicateCodeReceipt,
   FiscalLabel,
   FiscalZReportStatus,
   FiscalSalePreview,
@@ -32,12 +39,28 @@ import type {
   FiscalPreviewPayment,
 } from '../../shared/types/fiscal.types';
 import { repairCyrillicLayout, isLayoutCorrupted } from '../../shared/utils/keyboard-layout';
+import { duplicateCodeLines, labelsPerLine } from '../../shared/utils/fiscal-labels';
+import { pickSingleUnitPackage } from '../../shared/utils/mxik-packages';
+import { lookupMxikByBarcode, getMxikPackages } from './tasnif';
 import { productRequiresMarking } from '../../shared/utils/marking';
 import { toPieces } from '../../shared/utils/pack';
 import { isFiscalCashTender } from '../../shared/constants';
 import { MIXED_TENDER, tenderAmounts, type TenderLine } from '../../shared/utils/split-payment';
-import { isCodeOutOfCirculation } from '../marking/circulation-check';
+import { verifyMarkingCodeDetails } from '../marking/circulation-check';
+import { classifyCirculation } from '../../shared/utils/circulation';
+import {
+  SKIP_TAG,
+  SKIP_TAG_MARKING,
+  SUBSTITUTE_QUANTITY,
+  isBacklogCandidate,
+  isCashOrClickOnly,
+  maySkipFiscalisation,
+  parseLinePlan,
+} from '../../shared/utils/fiscal-backlog';
+import { isProductRejection, markProductsInvalid } from './product-validity';
 
+/** system_settings key: when this till began sending marking codes per line. */
+const LABELS_PER_LINE_SINCE = 'labels_per_line_since';
 const MAX_ATTEMPTS = 5; // cap retries for hard (business) failures
 const FISCAL_DEBUG = process.env.FISCAL_DEBUG === 'true'; // verbose position/payment logs
 const ERR_ZREPORT_EMPTY = 704020; // VCR: can't close an empty Z-report — benign no-op for us
@@ -51,6 +74,41 @@ const DEFAULT_VAT_PERCENT = 12;
 // льготники and a non-payer sending vat_value=0 is rejected with 701003 "Ставка НДС запрещена").
 // Doubles as the PositionMeta.rate marker for "без НДС" (no numeric rate applies).
 const NON_VAT_PAYER_VAT_VALUE = -1;
+
+/**
+ * Makes the positions' discounts add up to the receipt's discount exactly, in tiyin.
+ *
+ * Each line's share is rounded on its own, so three lines splitting 10 000 so'm can sum to a tiyin
+ * more or less than the payment, which is `finalAmount` to the tiyin — and the receipt no longer
+ * balances. The difference goes on the last lines, never taking a line's discount below zero or
+ * above its amount.
+ */
+export function settleDiscountRemainder(positions: VcrPosition[], totalDiscount: number): void {
+  let diff = totalDiscount - positions.reduce((s, p) => s + p.discount, 0);
+  for (let i = positions.length - 1; i >= 0 && diff !== 0; i--) {
+    const current = positions[i].discount;
+    const next = Math.min(positions[i].amount, Math.max(0, current + diff));
+    positions[i].discount = next;
+    diff -= next - current;
+  }
+}
+
+// Product names appended to a failed receipt's log line, so the admin's Telegram alert can say
+// what was being sold even before the sale reaches the server. The device does not say which
+// position it rejected, so these are the receipt's lines in order.
+const LOGGED_ITEMS_MAX = 3;
+
+/**
+ * ` items=["Coca-Cola 1L","Pepsi"] +2` — a JSON array, so a name holding a comma or bracket
+ * still parses. The server reads this back (src/server/modules/telegram/log-alerts.service.ts,
+ * LOGGED_ITEMS); change both together.
+ */
+export function loggedItems(names: string[]): string {
+  if (names.length === 0) return '';
+  const shown = names.slice(0, LOGGED_ITEMS_MAX);
+  const more = names.length - shown.length;
+  return ` items=${JSON.stringify(shown)}${more > 0 ? ` +${more}` : ''}`;
+}
 
 // Per-position bookkeeping kept alongside the VCR positions so a VAT-rate heal can map a
 // position back to its product (to persist the corrected rate) and know its current rate.
@@ -69,6 +127,13 @@ interface FiscalProduct {
   category: { nameRu: string } | null;
 }
 
+/** The substitute also lends its own name and barcode to the line it replaces. */
+interface SubstituteProduct extends FiscalProduct {
+  nameRu: string;
+  nameUz: string;
+  barcode: string;
+}
+
 interface ResolvedConfig {
   enabled: boolean;
   url: string;
@@ -83,6 +148,7 @@ interface ResolvedConfig {
   /** Spread from normalizePollOptions — always present and always sane. */
   intervalMs: number;
   timeoutMs: number;
+  substituteProductId: number | null;
 }
 
 const SETTING_KEYS = {
@@ -97,6 +163,7 @@ const SETTING_KEYS = {
   uzqrEnabled: 'regos_vcr_uzqr_enabled',
   uzqrPollMs: 'regos_vcr_uzqr_poll_ms',
   uzqrTimeoutMs: 'regos_vcr_uzqr_timeout_ms',
+  substituteProductId: 'regos_vcr_substitute_product_id',
 } as const;
 
 class RegosVcrService {
@@ -169,6 +236,7 @@ class RegosVcrService {
         intervalMs: Number(map[SETTING_KEYS.uzqrPollMs]),
         timeoutMs: Number(map[SETTING_KEYS.uzqrTimeoutMs]),
       }),
+      substituteProductId: parseProductId(map[SETTING_KEYS.substituteProductId]),
     };
   }
 
@@ -195,6 +263,7 @@ class RegosVcrService {
       uzqrEnabled: cfg.uzqrEnabled,
       uzqrPollMs: cfg.intervalMs,
       uzqrTimeoutMs: cfg.timeoutMs,
+      substituteProductId: cfg.substituteProductId,
     };
   }
 
@@ -212,6 +281,8 @@ class RegosVcrService {
     if (input.uzqrEnabled !== undefined) writes.push([SETTING_KEYS.uzqrEnabled, String(input.uzqrEnabled)]);
     if (input.uzqrPollMs !== undefined) writes.push([SETTING_KEYS.uzqrPollMs, String(input.uzqrPollMs)]);
     if (input.uzqrTimeoutMs !== undefined) writes.push([SETTING_KEYS.uzqrTimeoutMs, String(input.uzqrTimeoutMs)]);
+    if (input.substituteProductId !== undefined)
+      writes.push([SETTING_KEYS.substituteProductId, input.substituteProductId == null ? '' : String(input.substituteProductId)]);
 
     for (const [key, value] of writes) {
       await prisma.systemSetting.upsert({ where: { key }, update: { value }, create: { key, value } });
@@ -456,12 +527,34 @@ class RegosVcrService {
 
   // ── Position / payment builders ─────────────────────────────────────────────
   private async buildPositions(
-    sale: { discountAmount: unknown; regosLabels: string | null; items: Array<Record<string, unknown>> },
+    sale: {
+      discountAmount: unknown;
+      regosLabels: string | null;
+      fiscalSubstitutions?: string | null;
+      items: Array<Record<string, unknown>>;
+    },
     cfg: ResolvedConfig,
-  ): Promise<{ positions: VcrPosition[]; meta: PositionMeta[] }> {
+  ): Promise<{ positions: VcrPosition[]; meta: PositionMeta[]; partial: boolean }> {
     const prisma = getPrismaClient();
     const labels: FiscalLabel[] = sale.regosLabels ? safeParseLabels(sale.regosLabels) : [];
-    const labelByBarcode = new Map(labels.map((l) => [l.barcode, l.label]));
+    // Per line, not per barcode: two packs of one drink share a barcode but never a code.
+    const lineLabels = labelsPerLine(sale.items as Array<{ barcode: string }>, labels);
+
+    // The backlog run's per-line plan: a line with a dead or missing marking code goes out as the
+    // substitute product at its own amount (card receipts), or is left off (cash/Click receipts
+    // send only their valid marked lines). Only this payload changes; the sale itself never does.
+    const planByItem = new Map(parseLinePlan(sale.fiscalSubstitutions).map((p) => [p.itemId, p]));
+    let substitute: SubstituteProduct | null = null;
+    if ([...planByItem.values()].some((p) => p.action === 'substitute')) {
+      substitute = cfg.substituteProductId
+        ? await prisma.product.findUnique({
+            where: { id: cfg.substituteProductId },
+            include: { category: true },
+          })
+        : null;
+      // Never fall back to sending the dead code: REGOS would reject it, or worse, accept it.
+      if (!substitute) throw new Error('Товар-замена для фискализации не выбран или удалён');
+    }
 
     const orderDiscount = Number(sale.discountAmount) || 0;
     const totalSubtotal = sale.items.reduce((s, it) => s + Number(it.subtotal), 0) || 1;
@@ -480,8 +573,15 @@ class RegosVcrService {
 
     const positions: VcrPosition[] = [];
     const meta: PositionMeta[] = [];
-    for (const item of sale.items) {
-      const product = productById.get(Number(item.productId));
+    let partial = false;
+    for (const [lineIndex, item] of sale.items.entries()) {
+      const plan = planByItem.get(String(item.id));
+      if (plan?.action === 'omit') {
+        partial = true;
+        continue;
+      }
+      const sub = plan?.action === 'substitute' ? substitute : null;
+      const product = sub ?? productById.get(Number(item.productId));
       const subtotal = Number(item.subtotal);
       const amount = Math.round(subtotal * 100);
       // Non-VAT-payer store: send "Без НДС" (vat_value=-1) for every line and ignore any
@@ -506,8 +606,8 @@ class RegosVcrService {
         orderDiscount > 0 ? Math.round(((orderDiscount * subtotal) / totalSubtotal) * 100) : 0;
 
       const pos: VcrPosition = {
-        name: String(item.productName),
-        barcode: String(item.barcode),
+        name: sub ? sub.nameRu || sub.nameUz : String(item.productName),
+        barcode: sub ? sub.barcode : String(item.barcode),
         icps: product?.mxik ?? '',
         amount,
         // REGOS is told the PHYSICAL piece count, not the number of boxes. Its implied unit
@@ -516,9 +616,10 @@ class RegosVcrService {
         // Sending 1 for a box would make the implied unit price the box price and disagree with
         // the registered package. amount stays the true line total, so 2 boxes of 5 @ 45 000
         // report quantity 10 000 (10 pcs) / amount 9 000 000 → 9 000 per piece.
-        quantity: Math.round(
-          toPieces(Number(item.quantity), Number(item.piecesPerUnit ?? 1)) * 1000,
-        ),
+        // A substituted line is 1 kg of the (weighed) substitute, so its unit price is the amount.
+        quantity: sub
+          ? SUBSTITUTE_QUANTITY
+          : Math.round(toPieces(Number(item.quantity), Number(item.piecesPerUnit ?? 1)) * 1000),
         vat_value: vat,
         discount,
         unit_name: product?.unit ?? undefined,
@@ -526,12 +627,31 @@ class RegosVcrService {
         owner_type: 'BuyingAndSelling',
       };
       if (product?.packageCode) pos.package_code = product.packageCode;
-      const label = labelByBarcode.get(String(item.barcode));
+      const label = sub ? undefined : lineLabels[lineIndex];
       if (label) pos.label = label;
       positions.push(pos);
-      meta.push({ productId: Number(item.productId), rate });
+      // A VAT heal on a substituted line corrects the substitute — it is the product sent.
+      meta.push({ productId: sub ? sub.id : Number(item.productId), rate });
     }
-    return { positions, meta };
+    if (positions.length === 0) throw new Error('В чеке не осталось позиций для фискализации');
+    // A full receipt pays finalAmount to the tiyin, so its line discounts must add up to the order
+    // discount. A partial one (lines left off) pays only its sent lines (paymentsFor), which balance
+    // by construction — settling it would load the left-off lines' discount onto the sent ones.
+    if (!partial) settleDiscountRemainder(positions, Math.round(orderDiscount * 100));
+    return { positions, meta, partial };
+  }
+
+  /**
+   * Payments for what is actually sent. A receipt with lines left off (backlog, cash/Click only)
+   * pays exactly the sent lines, as cash — Click is fiscal cash too. Everything else is unchanged.
+   */
+  private paymentsFor(
+    sale: Parameters<RegosVcrService['buildPayments']>[0],
+    built: { positions: VcrPosition[]; partial: boolean },
+  ): VcrPayment[] {
+    if (!built.partial) return this.buildPayments(sale);
+    const value = built.positions.reduce((s, p) => s + p.amount - (p.discount ?? 0), 0);
+    return [{ type: 1, value }];
   }
 
   /**
@@ -582,6 +702,44 @@ class RegosVcrService {
       }
     }
     return changed;
+  }
+
+  /**
+   * Finds which products a receipt-level rejection was about, and marks them invalid.
+   *
+   * REGOS names no position, so a one-line receipt is blamed outright and a longer one is probed:
+   * each line alone through Receipt.ValidateSale (side-effect free, as healVatRates does), and only
+   * the lines that are themselves rejected for a product reason are blamed — never the innocent
+   * neighbours of a bad line. Failure path only, inside the VCR lock the sale already holds.
+   * A device that stops answering mid-probe blames nobody.
+   */
+  private async blameRejectedProducts(
+    client: RegosVcrClient,
+    rejection: VcrError,
+    positions: VcrPosition[],
+    meta: PositionMeta[],
+  ): Promise<void> {
+    if (positions.length === 0) return; // failed before the receipt was built
+    const blamed: number[] = [];
+    if (positions.length === 1) {
+      blamed.push(0);
+    } else {
+      for (let i = 0; i < positions.length; i++) {
+        const pos = positions[i];
+        try {
+          await client.validateSale([pos], [{ type: 1, value: pos.amount - pos.discount }], true);
+        } catch (e) {
+          if (e instanceof VcrError && e.code === 0) return;
+          if (isProductRejection(e)) blamed.push(i);
+        }
+      }
+    }
+
+    const products = blamed.map((i) => ({ productId: meta[i].productId, barcode: positions[i].barcode }));
+    for (const p of products) {
+      log.warn(`[fiscal] product ${p.barcode} marked invalid: [${rejection.code}] ${rejection.description}`);
+    }
+    await markProductsInvalid(products, rejection.code);
   }
 
   private buildPayments(sale: {
@@ -654,8 +812,9 @@ class RegosVcrService {
     if (!sale) return null;
 
     const cfg = await this.resolveConfig();
-    const { positions } = await this.buildPositions(sale as never, cfg);
-    const payments = this.buildPayments(sale as never);
+    const built = await this.buildPositions(sale as never, cfg);
+    const { positions } = built;
+    const payments = this.paymentsFor(sale as never, built);
     const labels: FiscalLabel[] = sale.regosLabels ? safeParseLabels(sale.regosLabels) : [];
 
     return {
@@ -740,8 +899,9 @@ class RegosVcrService {
     try {
       await this.ensureZReportOpen(client, sale.smenaId);
       timer.phase('zreport');
-      ({ positions, meta } = await this.buildPositions(sale as never, cfg));
-      const payments = this.buildPayments(sale as never);
+      const built = await this.buildPositions(sale as never, cfg);
+      ({ positions, meta } = built);
+      const payments = this.paymentsFor(sale as never, built);
       if (FISCAL_DEBUG) {
         console.log('[fiscal] positions:', JSON.stringify(positions));
         console.log('[fiscal] payments:', JSON.stringify(payments));
@@ -815,7 +975,9 @@ class RegosVcrService {
       // FAILED line for a sale that succeeded.
       // Use the electron-log instance (not raw console) so these lines land in the upload buffer
       // → terminal_logs → super-admin Logs dashboard. Main-process console is NOT captured.
-      log.error(`[fiscal] ✗ fiscalize ${saleId} failed: ${this.errText(e)}`);
+      // The SQLite client is require()d, so `sale` is untyped — name the one field read.
+      const names = sale.items.map((i: { productName: string }) => i.productName);
+      log.error(`[fiscal] ✗ fiscalize ${saleId} failed: ${this.errText(e)}${loggedItems(names)}`);
       // Log the raw REGOS code + description too — describeVcrError() collapses several distinct
       // VAT/MXIK faults into one staff message, which hides which one actually fired when debugging.
       if (e instanceof VcrError) log.error(`[fiscal] raw VCR error [${e.code}] ${e.method}: ${e.description}`);
@@ -850,6 +1012,10 @@ class RegosVcrService {
           return; // recovered — do not propagate the error
         }
       }
+
+      // A rejection about a product's own data: mark the product(s) at fault invalid until their
+      // next arrival. After the recovery above — a receipt the device already holds blames nobody.
+      if (isProductRejection(e)) await this.blameRejectedProducts(client, e, positions, meta);
 
       await prisma.sale.update({
         where: { id: saleId },
@@ -956,6 +1122,67 @@ class RegosVcrService {
     }
   }
 
+  /**
+   * When this till started sending marking codes per line (the first boot of a build that does).
+   * Written once and never moved: receipts fiscalised before it may have gone to REGOS with one
+   * code for several packs; receipts after it cannot have.
+   */
+  private async labelsPerLineSince(): Promise<Date> {
+    const prisma = getPrismaClient();
+    const row = await prisma.systemSetting.findUnique({ where: { key: LABELS_PER_LINE_SINCE } });
+    const at = row ? new Date(row.value) : null;
+    if (at && !Number.isNaN(at.getTime())) return at;
+    const now = new Date();
+    await prisma.systemSetting
+      .create({ data: { key: LABELS_PER_LINE_SINCE, value: now.toISOString() } })
+      .catch(() => {}); // another caller wrote it first — theirs stands
+    return now;
+  }
+
+  /**
+   * Read-only: fiscalised receipts in which two or more packs of one product were sent to REGOS
+   * with the same (last scanned) code, before codes were sent per line. Lists the codes REGOS never
+   * received, so the owner can decide what to do; nothing here is changed.
+   */
+  async duplicateCodeReceipts(): Promise<FiscalDuplicateCodeReceipt[]> {
+    const since = await this.labelsPerLineSince();
+    const rows: Array<{
+      id: string;
+      receiptNumber: string;
+      createdAt: Date;
+      regosReceiptNo: string | null;
+      regosFiscalAt: Date | null;
+      regosLabels: string | null;
+      items: Array<{ barcode: string; productName: string }>;
+    }> = await getPrismaClient().sale.findMany({
+      where: { fiscalStatus: 'FISCALIZED', regosLabels: { not: null }, regosFiscalAt: { lt: since } },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        receiptNumber: true,
+        createdAt: true,
+        regosReceiptNo: true,
+        regosFiscalAt: true,
+        regosLabels: true,
+        items: { select: { barcode: true, productName: true } },
+      },
+    });
+    const out: FiscalDuplicateCodeReceipt[] = [];
+    for (const s of rows) {
+      const lines = duplicateCodeLines(safeParseLabels(s.regosLabels ?? '[]'), s.items);
+      if (lines.length === 0) continue;
+      out.push({
+        saleId: s.id,
+        receiptNumber: s.receiptNumber,
+        createdAt: s.createdAt.toISOString(),
+        regosReceiptNo: s.regosReceiptNo,
+        regosFiscalAt: s.regosFiscalAt ? s.regosFiscalAt.toISOString() : null,
+        lines,
+      });
+    }
+    return out;
+  }
+
   async getQueueStatus(): Promise<FiscalQueueStatus> {
     const prisma = getPrismaClient();
     const enabled = await this.isEnabled();
@@ -967,139 +1194,418 @@ class RegosVcrService {
     return { enabled, pending, failed, fiscalized };
   }
 
-  /**
-   * One-shot admin action behind the "Fiscalise all old receipts" button — replaces the removed
-   * background retry worker for clearing a backlog:
-   *   • Receipts WITH a group-022 marked product → repair any marking labels that were captured
-   *     under a Cyrillic keyboard layout (so the VCR accepts them), reset to PENDING, fiscalise.
-   *   • Receipts WITHOUT any 022 product → mark DISABLED so they leave the pending/failed queue;
-   *     an unmarked sale predating the VCR does not need retroactive fiscalisation.
-   * Stops early (leaving the rest PENDING) if the VCR turns out to be unreachable.
-   */
-  async fiscalizeOldReceipts(
-    onProgress?: (p: FiscalBulkProgress) => void,
-  ): Promise<FiscalBulkResult> {
-    const cfg = await this.resolveConfig();
-    if (!cfg.enabled) {
-      return { enabled: false, fiscalized: 0, failed: 0, repaired: 0, disabled: 0, outOfCirculation: 0 };
-    }
-    const prisma = getPrismaClient();
+  // ── Fiscal backlog: the 4-step stepper on the Fiscal Settings screen ────────────────────────────
+  // Each step is its own call, run when the admin presses it, and recomputes the backlog from the
+  // database — nothing is carried between steps in memory, so a restart between steps is harmless.
+  // Rule #1 decides what may skip (see shared/utils/fiscal-backlog.ts); everything else is fiscalised.
 
-    // Every not-yet-fiscalised receipt, with just enough to classify it as marked goods and (for
-    // marked ones) verify its marking codes. Marking is a per-product property (the product's own
-    // MXIK group 022), NOT the category's group list — a category's list can span many groups.
-    const sales = await prisma.sale.findMany({
-      where: { fiscalStatus: { not: 'FISCALIZED' } },
+  /** Which step is running right now, so a second press (or a remounted screen) cannot overlap it. */
+  private backlogRunning: FiscalBacklogStep | null = null;
+
+  backlogBusy(): FiscalBacklogStep | null {
+    return this.backlogRunning;
+  }
+
+  private async withBacklogLock<T extends { ok: boolean; error?: string }>(
+    step: FiscalBacklogStep,
+    busy: T,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    if (this.backlogRunning) return busy;
+    this.backlogRunning = step;
+    try {
+      return await fn();
+    } finally {
+      this.backlogRunning = null;
+    }
+  }
+
+  /**
+   * Every receipt from `fromDate` (YYYY-MM-DD, local midnight) that is still a backlog candidate,
+   * oldest first, with what rule #1 and the marking checks need.
+   */
+  private async loadBacklog(fromDate: string) {
+    const [y, m, d] = fromDate.split('-').map(Number);
+    const from = new Date(y, (m || 1) - 1, d || 1);
+    if (Number.isNaN(from.getTime())) throw new Error(`bad from date: ${fromDate}`);
+    const rows = await getPrismaClient().sale.findMany({
+      where: {
+        createdAt: { gte: from },
+        // Spelled out so NULL (no status ever set) stays in: `notIn` alone drops NULL rows.
+        OR: [{ fiscalStatus: null }, { fiscalStatus: { notIn: ['FISCALIZED', 'DEFERRED_DEBT'] } }],
+      },
       orderBy: { createdAt: 'asc' },
       select: {
         id: true,
         receiptNumber: true,
+        createdAt: true,
+        finalAmount: true,
+        paymentMethod: true,
+        debtAmount: true,
+        fiscalStatus: true,
+        fiscalError: true,
         regosLabels: true,
-        items: { select: { product: { select: { mxik: true, isMarked: true } } } },
+        fiscalSubstitutions: true,
+        payments: { select: { method: true } },
+        items: {
+          select: {
+            id: true,
+            barcode: true,
+            productName: true,
+            product: {
+              select: { id: true, nameRu: true, nameUz: true, barcode: true, mxik: true, isMarked: true, packageCode: true },
+            },
+          },
+        },
       },
     });
-
-    type SaleRow = (typeof sales)[number];
-    // getPrismaClient() is dynamically required (untyped), so `sales` is `any`; annotate the
-    // marked-item shape explicitly so this classification is type-checked, not implicit-any.
-    type MarkedItem = { product: { mxik: string | null; isMarked: boolean | null } | null };
-    const isMarked = (s: SaleRow): boolean =>
-      (s.items as MarkedItem[]).some((it) => it.product != null && productRequiresMarking(it.product));
-
-    const marked = sales.filter(isMarked);
-    const unmarkedIds = sales.filter((s: SaleRow) => !isMarked(s)).map((s: SaleRow) => s.id);
-
-    // Unmarked → DISABLED in one batch so they drop out of the queue badge.
-    let disabled = 0;
-    if (unmarkedIds.length) {
-      const r = await prisma.sale.updateMany({
-        where: { id: { in: unmarkedIds }, fiscalStatus: { not: 'FISCALIZED' } },
-        data: { fiscalStatus: 'DISABLED', fiscalError: null },
-      });
-      disabled = r.count;
-    }
-
-    // Marked → for each: verify circulation (asl-belgisi) first; disable if any code is out of
-    // circulation, else repair labels, reset, and fiscalise one at a time (the VCR is
-    // single-threaded; each fiscalizeSale already serialises through runExclusive).
-    let fiscalized = 0;
-    let failed = 0;
-    let repaired = 0;
-    let outOfCirculation = 0;
-    let unreachable = false;
-    const total = marked.length;
-    let processed = 0;
-
-    const emit = (extra: Partial<FiscalBulkProgress>): void => {
-      onProgress?.({
-        phase: 'checking', processed, total, fiscalized, failed, disabled, outOfCirculation,
-        ...extra,
-      });
+    // getPrismaClient() is require()d and untyped; this is the shape selected above.
+    type BacklogRow = {
+      id: string;
+      receiptNumber: string;
+      createdAt: Date;
+      finalAmount: unknown;
+      paymentMethod: string;
+      debtAmount: unknown;
+      fiscalStatus: string | null;
+      fiscalError: string | null;
+      regosLabels: string | null;
+      fiscalSubstitutions: string | null;
+      payments: Array<{ method: string }>;
+      items: Array<{
+        id: string;
+        barcode: string;
+        productName: string;
+        product: {
+          id: number;
+          nameRu: string;
+          nameUz: string;
+          barcode: string;
+          mxik: string | null;
+          isMarked: boolean | null;
+          packageCode: string | null;
+        } | null;
+      }>;
     };
-    emit({ phase: 'checking', processed: 0 });
+    return (rows as BacklogRow[])
+      .filter((s) => isBacklogCandidate(s.fiscalStatus, s.fiscalError))
+      .map((s) => {
+        const marked = s.items.some((it) => it.product != null && productRequiresMarking(it.product));
+        const skippable = maySkipFiscalisation(
+          { paymentMethod: s.paymentMethod, debtAmount: Number(s.debtAmount ?? 0), payments: s.payments },
+          marked,
+        );
+        const cashOnly = isCashOrClickOnly({
+          paymentMethod: s.paymentMethod,
+          debtAmount: Number(s.debtAmount ?? 0),
+          payments: s.payments,
+        });
+        return { ...s, marked, skippable, cashOnly };
+      });
+  }
 
-    for (const sale of marked) {
-      const id = sale.id;
-      const receipt = sale.receiptNumber;
+  /** Step 1: DISABLE (tagged) what rule #1 lets skip; list what must be fiscalised. */
+  async backlogClassify(fromDate: string): Promise<FiscalBacklogClassifyResult> {
+    const busy: FiscalBacklogClassifyResult = { ok: false, error: 'BUSY', skipped: 0, kept: [] };
+    return this.withBacklogLock('classify', busy, async () => {
+      const prisma = getPrismaClient();
+      const sales = await this.loadBacklog(fromDate);
+      const skipIds = sales.filter((s) => s.skippable).map((s) => s.id);
 
-      // 1) Circulation gate — disable the receipt up front if a marking code is dead, so the VCR
-      // is never asked to fiscalise it (it would reject with [704030]). Offline-first: an
-      // unreachable registry leaves the receipt to the normal fiscalisation path below.
-      emit({ phase: 'checking', currentReceipt: receipt });
-      const labels = sale.regosLabels ? safeParseLabels(sale.regosLabels) : [];
-      let deadStatus: string | null = null;
-      for (const l of labels) {
-        if (!l?.label) continue;
-        const res = await isCodeOutOfCirculation(l.label);
-        if (res.reachable && res.outOfCirculation) {
-          deadStatus = res.status ?? 'OUT';
-          break;
-        }
+      let skipped = 0;
+      // Chunked: SQLite caps bound variables per statement.
+      for (let i = 0; i < skipIds.length; i += 500) {
+        const r = await prisma.sale.updateMany({
+          where: {
+            id: { in: skipIds.slice(i, i + 500) },
+            // Re-checked here: a receipt fiscalised since it was read must stay FISCALIZED.
+            OR: [{ fiscalStatus: null }, { fiscalStatus: { notIn: ['FISCALIZED', 'DEFERRED_DEBT'] } }],
+          },
+          data: { fiscalStatus: 'DISABLED', fiscalError: SKIP_TAG },
+        });
+        skipped += r.count;
       }
 
-      if (deadStatus) {
-        await prisma.sale
-          .update({
-            where: { id },
-            data: { fiscalStatus: 'DISABLED', fiscalError: `out_of_circulation:${deadStatus}` },
-          })
-          .catch(() => {});
-        outOfCirculation++;
-        processed++;
-        emit({ phase: 'disabled', processed, currentReceipt: receipt, lastDisabled: { receipt, status: deadStatus } });
-        continue;
-      }
-
-      // 2) Normal path — repair labels, reset, fiscalise.
-      emit({ phase: 'fiscalizing', currentReceipt: receipt });
-      repaired += await this.repairSaleLabels(id);
-      await prisma.sale
-        .update({ where: { id }, data: { fiscalStatus: 'PENDING', fiscalAttempts: 0, fiscalError: null } })
-        .catch(() => {});
-      try {
-        await this.fiscalizeSale(id);
-        fiscalized++;
-      } catch (e) {
-        failed++;
-        // VCR unreachable → stop hammering; the remaining receipts stay PENDING for a later run.
-        if (e instanceof VcrError && e.code === 0) {
-          unreachable = true;
-          processed++;
-          break;
-        }
-      }
-      processed++;
-      emit({ phase: 'fiscalizing', processed, currentReceipt: receipt });
-    }
-
-    onProgress?.({
-      phase: 'done', processed, total, fiscalized, failed, disabled, outOfCirculation,
+      const kept = sales
+        .filter((s) => !s.skippable)
+        .map((s) => ({
+          saleId: s.id,
+          receiptNumber: s.receiptNumber,
+          createdAt: s.createdAt.toISOString(),
+          finalAmount: Number(s.finalAmount),
+          paymentMethod: s.paymentMethod,
+          fiscalStatus: s.fiscalStatus,
+          marked: s.marked,
+        }));
+      log.info(`[fiscal] backlog classify from ${fromDate}: ${skipped} skipped (rule #1), ${kept.length} to fiscalise`);
+      return { ok: true, skipped, kept };
     });
+  }
 
-    log.info(
-      `[fiscal] bulk fiscalise: ${fiscalized} fiscalised, ${failed} failed, ${repaired} labels repaired, ${disabled} disabled, ${outOfCirculation} out-of-circulation${unreachable ? ' (VCR unreachable — stopped early)' : ''}`,
-    );
-    return { enabled: true, fiscalized, failed, repaired, disabled, outOfCirculation, unreachable };
+  /**
+   * Step 2: undo the Russian-layout corruption in stored marking codes; fill a missing MXIK from
+   * tasnif.soliq.uz (exact barcode match only) and save it on the product, with the single-unit
+   * package code for a marked one; then list products REGOS will still reject. Saving bumps
+   * updatedAt, so the corrected product syncs like the VAT heal's.
+   */
+  async backlogRepair(fromDate: string): Promise<FiscalBacklogRepairResult> {
+    const busy: FiscalBacklogRepairResult = {
+      ok: false, error: 'BUSY', labelsRepaired: 0, receiptsTouched: 0, mxikFilled: [], tasnifUnreachable: 0, productIssues: [],
+    };
+    return this.withBacklogLock('repair', busy, async () => {
+      const prisma = getPrismaClient();
+      const kept = (await this.loadBacklog(fromDate)).filter((s) => !s.skippable);
+      let labelsRepaired = 0;
+      let receiptsTouched = 0;
+      for (const s of kept) {
+        if (!s.regosLabels) continue;
+        const n = await this.repairSaleLabels(s.id);
+        labelsRepaired += n;
+        if (n > 0) receiptsTouched++;
+      }
+
+      // Every distinct product in the kept receipts, once.
+      type P = NonNullable<(typeof kept)[number]['items'][number]['product']>;
+      const products = new Map<number, { p: P; name: string }>();
+      for (const s of kept) {
+        for (const it of s.items) {
+          if (it.product && !products.has(it.product.id)) {
+            products.set(it.product.id, { p: { ...it.product }, name: it.product.nameRu || it.product.nameUz || it.productName });
+          }
+        }
+      }
+
+      const mxikFilled: FiscalBacklogRepairResult['mxikFilled'] = [];
+      let tasnifUnreachable = 0;
+      for (const { p, name } of products.values()) {
+        if (/^\d{17}$/.test(p.mxik ?? '')) continue;
+        const r = await lookupMxikByBarcode(p.barcode);
+        if (!r.ok) {
+          tasnifUnreachable++;
+          continue;
+        }
+        if (!r.match || !/^\d{17}$/.test(r.match.code)) continue;
+        const data: { mxik: string; packageCode?: string } = { mxik: r.match.code };
+        if (productRequiresMarking({ isMarked: p.isMarked, mxik: r.match.code }) && !p.packageCode) {
+          const pick = pickSingleUnitPackage(await getMxikPackages(r.match.code));
+          if (pick) data.packageCode = pick.code;
+        }
+        await prisma.product.update({ where: { id: p.id }, data });
+        p.mxik = data.mxik;
+        if (data.packageCode) p.packageCode = data.packageCode;
+        mxikFilled.push({ productId: p.id, name, barcode: p.barcode, mxik: data.mxik });
+      }
+
+      const productIssues: FiscalBacklogProductIssue[] = [];
+      for (const { p, name } of products.values()) {
+        if (!/^\d{17}$/.test(p.mxik ?? '')) {
+          productIssues.push({ productId: p.id, name, barcode: p.barcode, problem: 'NO_MXIK' });
+        } else if (productRequiresMarking(p) && !p.packageCode) {
+          productIssues.push({ productId: p.id, name, barcode: p.barcode, problem: 'NO_PACKAGE_CODE' });
+        }
+      }
+      log.info(
+        `[fiscal] backlog repair: ${labelsRepaired} labels in ${receiptsTouched} receipts, ${mxikFilled.length} MXIK from tasnif (${tasnifUnreachable} unreachable), ${productIssues.length} product issues`,
+      );
+      return { ok: true, labelsRepaired, receiptsTouched, mxikFilled, tasnifUnreachable, productIssues };
+    });
+  }
+
+  /**
+   * Step 3: ask asl-belgisi about every marking code in the kept receipts (the same lookup as the
+   * Marking Check screen) and decide each line, stored in sales.fiscal_substitutions:
+   *  - card/UzQR receipt: a dead or missing code → the line goes out as the substitute product;
+   *  - cash/Click receipt: only marked lines with a valid code are sent, everything else is left
+   *    off; with no valid code at all the receipt is DISABLED (SKIP_TAG_MARKING).
+   * Stops — without guessing — when the registry can't answer.
+   */
+  async backlogVerify(
+    fromDate: string,
+    onProgress?: (p: FiscalBacklogProgress) => void,
+  ): Promise<FiscalBacklogVerifyResult> {
+    const busy: FiscalBacklogVerifyResult = { ok: false, error: 'BUSY', checked: 0, disabled: 0, changes: [] };
+    return this.withBacklogLock('verify', busy, async () => {
+      const prisma = getPrismaClient();
+      const cfg = await this.resolveConfig();
+      const kept = (await this.loadBacklog(fromDate)).filter((s) => !s.skippable);
+      const result: FiscalBacklogVerifyResult = { ok: true, checked: 0, disabled: 0, changes: [] };
+
+      // The substitute is checked once, the first time a line needs it.
+      let substituteChecked = false;
+      const ensureSubstitute = async (): Promise<string | null> => {
+        if (substituteChecked) return null;
+        if (!cfg.substituteProductId) return 'NO_SUBSTITUTE';
+        const p = await prisma.product.findUnique({
+          where: { id: cfg.substituteProductId },
+          select: { mxik: true },
+        });
+        if (!p) return 'NO_SUBSTITUTE';
+        if (!/^\d{17}$/.test(p.mxik ?? '')) return 'SUBSTITUTE_NO_MXIK';
+        substituteChecked = true;
+        return null;
+      };
+
+      // One registry call per distinct code, however many receipts carry it.
+      const verdicts = new Map<string, { verdict: 'IN' | 'OUT' | 'UNKNOWN'; status?: string; error?: string; reachable: boolean }>();
+      const total = kept.length;
+      let processed = 0;
+
+      for (const s of kept) {
+        onProgress?.({ step: 'verify', processed, total, currentReceipt: s.receiptNumber });
+        const labels = s.regosLabels ? safeParseLabels(s.regosLabels) : [];
+        // Per line: two packs of one drink share a barcode but never a code.
+        const lineLabels = labelsPerLine(s.items, labels);
+        const plan: FiscalLinePlan[] = [];
+        const changes: FiscalBacklogVerifyResult['changes'] = [];
+        let validMarked = 0;
+
+        for (const [i, it] of s.items.entries()) {
+          const productName = it.product?.nameRu || it.product?.nameUz || it.productName;
+          if (!it.product || !productRequiresMarking(it.product)) {
+            // A cash/Click receipt sends only its valid marked lines.
+            if (s.cashOnly) plan.push({ itemId: it.id, action: 'omit', reason: 'UNMARKED' });
+            continue;
+          }
+
+          const label = lineLabels[i];
+          let reason: string | null = null;
+          if (!label) {
+            reason = 'NO_LABEL';
+          } else {
+            let v = verdicts.get(label);
+            if (!v) {
+              const lookup = await verifyMarkingCodeDetails(label);
+              v = lookup.reachable
+                ? {
+                    reachable: true,
+                    status: lookup.details?.isValid === false ? 'NOT_FOUND' : lookup.details?.status,
+                    verdict: lookup.details?.isValid === false ? 'OUT' : classifyCirculation(lookup.details?.status),
+                  }
+                : { reachable: false, verdict: 'UNKNOWN', error: lookup.error };
+              verdicts.set(label, v);
+            }
+            result.checked++;
+            if (!v.reachable) {
+              return { ...result, ok: false, error: v.error ?? 'REGISTRY_UNREACHABLE', stoppedAt: { receipt: s.receiptNumber, label } };
+            }
+            if (v.verdict === 'UNKNOWN') {
+              return { ...result, ok: false, error: `UNKNOWN_STATUS:${v.status ?? '—'}`, stoppedAt: { receipt: s.receiptNumber, label } };
+            }
+            if (v.verdict === 'OUT') reason = v.status ?? 'NOT_FOUND';
+          }
+
+          if (!reason) {
+            validMarked++;
+          } else if (s.cashOnly) {
+            plan.push({ itemId: it.id, action: 'omit', reason });
+            changes.push({ receipt: s.receiptNumber, productName, reason, action: 'omit' });
+          } else {
+            const err = await ensureSubstitute();
+            if (err) return { ...result, ok: false, error: err, stoppedAt: { receipt: s.receiptNumber } };
+            plan.push({ itemId: it.id, action: 'substitute', reason });
+            changes.push({ receipt: s.receiptNumber, productName, reason, action: 'substitute' });
+          }
+        }
+
+        if (s.cashOnly && validMarked === 0) {
+          // Rule #1: nothing in this cash/Click receipt may be fiscalised — it is skipped for good.
+          await prisma.sale.updateMany({
+            where: {
+              id: s.id,
+              OR: [{ fiscalStatus: null }, { fiscalStatus: { notIn: ['FISCALIZED', 'DEFERRED_DEBT'] } }],
+            },
+            data: { fiscalStatus: 'DISABLED', fiscalError: SKIP_TAG_MARKING, fiscalSubstitutions: null },
+          });
+          result.disabled++;
+          result.changes.push({
+            receipt: s.receiptNumber,
+            productName: '',
+            reason: changes[0]?.reason ?? 'NO_LABEL',
+            action: 'disable',
+          });
+        } else {
+          result.changes.push(...changes);
+          // Written for every kept receipt, so a code that is fine now clears an older plan.
+          const json = plan.length ? JSON.stringify(plan) : null;
+          if (json !== (s.fiscalSubstitutions ?? null)) {
+            await prisma.sale.update({ where: { id: s.id }, data: { fiscalSubstitutions: json } });
+          }
+        }
+        processed++;
+      }
+      onProgress?.({ step: 'verify', processed, total });
+      log.info(
+        `[fiscal] backlog verify: ${result.checked} codes checked, ${result.changes.length} changes, ${result.disabled} cash receipts disabled`,
+      );
+      return result;
+    });
+  }
+
+  /**
+   * Step 4: fiscalise every kept receipt, one at a time. A receipt counts as fiscalised only when
+   * its status reads FISCALIZED afterwards — fiscalizeSale returns quietly in several cases (write
+   * freeze, no password, fiscalisation off) and that must never be reported as success.
+   */
+  async backlogFiscalize(
+    fromDate: string,
+    onProgress?: (p: FiscalBacklogProgress) => void,
+  ): Promise<FiscalBacklogFiscalizeResult> {
+    const busy: FiscalBacklogFiscalizeResult = { ok: false, error: 'BUSY', fiscalized: 0, failed: [] };
+    return this.withBacklogLock('fiscalize', busy, async () => {
+      const cfg = await this.resolveConfig();
+      if (!cfg.enabled) return { ok: false, error: 'FISCAL_DISABLED', fiscalized: 0, failed: [] };
+      if (!this.buildClient(cfg)) return { ok: false, error: 'NO_PASSWORD', fiscalized: 0, failed: [] };
+
+      const prisma = getPrismaClient();
+      const kept = (await this.loadBacklog(fromDate)).filter((s) => !s.skippable);
+      const result: FiscalBacklogFiscalizeResult = { ok: true, fiscalized: 0, failed: [] };
+      const total = kept.length;
+      let processed = 0;
+
+      for (const s of kept) {
+        onProgress?.({ step: 'fiscalize', processed, total, currentReceipt: s.receiptNumber });
+        // Conditional, so a receipt fiscalised since it was read is never knocked back to PENDING.
+        await prisma.sale.updateMany({
+          where: {
+            id: s.id,
+            OR: [{ fiscalStatus: null }, { fiscalStatus: { notIn: ['FISCALIZED', 'DEFERRED_DEBT'] } }],
+          },
+          data: { fiscalStatus: 'PENDING', fiscalAttempts: 0, fiscalError: null },
+        });
+        let thrown: unknown = null;
+        try {
+          await this.fiscalizeSale(s.id);
+        } catch (e) {
+          thrown = e;
+        }
+        processed++;
+
+        const after = await prisma.sale.findUnique({
+          where: { id: s.id },
+          select: { fiscalStatus: true, fiscalError: true },
+        });
+        if (after?.fiscalStatus === 'FISCALIZED') {
+          result.fiscalized++;
+        } else {
+          result.failed.push({
+            receipt: s.receiptNumber,
+            error: after?.fiscalError || (thrown ? this.errText(thrown) : 'NOT_FISCALIZED'),
+          });
+        }
+        // The device stopped answering: the rest stay as they are for a later run.
+        if (thrown instanceof VcrError && thrown.code === 0) {
+          result.unreachable = true;
+          result.ok = false;
+          result.error = 'VCR_UNREACHABLE';
+          break;
+        }
+      }
+      onProgress?.({ step: 'fiscalize', processed, total });
+      log.info(
+        `[fiscal] backlog fiscalise: ${result.fiscalized} fiscalised, ${result.failed.length} failed${result.unreachable ? ' (VCR unreachable — stopped early)' : ''}`,
+      );
+      return result;
+    });
   }
 
   /**
@@ -1145,10 +1651,13 @@ class RegosVcrService {
     // log instead of guesswork — including whether the stored VCR password decrypted.
     this.logStartupConfig().catch(() => {});
     this.warmZReportCache().catch(() => {});
+    // Fix the per-line-codes cut-off at the first boot of this build, before any receipt is sent.
+    this.labelsPerLineSince().catch(() => {});
     // NOTE: the periodic background retry worker was removed by request. Fiscalization now happens
     // (a) immediately when a sale is created, (b) as a flush on shift close (smena:close →
     // processPending), and (c) on demand via the "Fiscalise all old receipts" admin button
-    // (fiscalizeOldReceipts). A silently-looping retry that hammers the VCR every 30s is gone.
+    // (the fiscal backlog stepper, backlog*). A silently-looping retry that hammers the VCR every
+    // 30s is gone.
   }
 
   /**
@@ -1259,6 +1768,11 @@ function parseVatPercent(raw: string | undefined): number {
   if (raw == null || raw.trim() === '') return DEFAULT_VAT_PERCENT;
   const n = Number(raw);
   return Number.isFinite(n) ? n : DEFAULT_VAT_PERCENT;
+}
+
+function parseProductId(raw: string | undefined): number | null {
+  const n = Number(raw);
+  return raw && Number.isInteger(n) && n > 0 ? n : null;
 }
 
 function safeParseLabels(json: string): FiscalLabel[] {

@@ -4,6 +4,11 @@ import type {
   DebtLedger,
   UnpaidCreditSale,
 } from "../shared/types/debt.types";
+import type {
+  LabelPrinterConfig,
+  LabelPrinterResult,
+  SerialPortInfo,
+} from "../shared/types/label-printer.types";
 
 /** Mirrors `MainLinkStatus` in lan/main-link.ts; kept here so preload imports no main-process code. */
 export interface LanLinkStatus {
@@ -117,16 +122,22 @@ contextBridge.exposeInMainWorld("electronAPI", {
     setConfig: (input: unknown) => ipcRenderer.invoke("fiscal:setConfig", input),
     testConnection: () => ipcRenderer.invoke("fiscal:testConnection"),
     getStatus: () => ipcRenderer.invoke("fiscal:getStatus"),
-    fiscalizeOld: () => ipcRenderer.invoke("fiscal:fiscalizeOld"),
-    onBulkProgress: (
-      cb: (p: import("../shared/types/fiscal.types").FiscalBulkProgress) => void,
+    backlogAllowed: () => ipcRenderer.invoke("fiscal:backlogAllowed"),
+    duplicateCodeReceipts: () => ipcRenderer.invoke("fiscal:duplicateCodeReceipts"),
+    backlogBusy: () => ipcRenderer.invoke("fiscal:backlogBusy"),
+    backlogClassify: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogClassify", fromDate),
+    backlogRepair: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogRepair", fromDate),
+    backlogVerify: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogVerify", fromDate),
+    backlogFiscalize: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogFiscalize", fromDate),
+    onBacklogProgress: (
+      cb: (p: import("../shared/types/fiscal.types").FiscalBacklogProgress) => void,
     ) => {
       const h = (
         _e: IpcRendererEvent,
-        p: import("../shared/types/fiscal.types").FiscalBulkProgress,
+        p: import("../shared/types/fiscal.types").FiscalBacklogProgress,
       ) => cb(p);
-      ipcRenderer.on("fiscal:bulkProgress", h);
-      return () => ipcRenderer.removeListener("fiscal:bulkProgress", h);
+      ipcRenderer.on("fiscal:backlogProgress", h);
+      return () => ipcRenderer.removeListener("fiscal:backlogProgress", h);
     },
     retrySale: (saleId: string) => ipcRenderer.invoke("fiscal:retrySale", saleId),
     previewPayload: (saleId: string) => ipcRenderer.invoke("fiscal:previewPayload", saleId),
@@ -260,6 +271,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getAll: (filters?: unknown) =>
       ipcRenderer.invoke("weighedItems:getAll", filters),
     delete: (id: string) => ipcRenderer.invoke("weighedItems:delete", id),
+  },
+
+  // Price-tag printer on a COM port (XP-365B over Bluetooth)
+  labelPrinter: {
+    listPorts: () => ipcRenderer.invoke("labelPrinter:listPorts"),
+    getConfig: () => ipcRenderer.invoke("labelPrinter:getConfig"),
+    setConfig: (config: LabelPrinterConfig) =>
+      ipcRenderer.invoke("labelPrinter:setConfig", config),
+    testPrint: () => ipcRenderer.invoke("labelPrinter:testPrint"),
+    print: (req: unknown) => ipcRenderer.invoke("labelPrinter:print", req),
   },
 
   // Label Scale (Rongta RLS)
@@ -677,9 +698,23 @@ declare global {
         ) => Promise<import("../shared/types/fiscal.types").RegosVcrConfig>;
         testConnection: () => Promise<import("../shared/types/fiscal.types").FiscalConnectionResult>;
         getStatus: () => Promise<import("../shared/types/fiscal.types").FiscalQueueStatus>;
-        fiscalizeOld: () => Promise<import("../shared/types/fiscal.types").FiscalBulkResult>;
-        onBulkProgress: (
-          cb: (p: import("../shared/types/fiscal.types").FiscalBulkProgress) => void,
+        backlogAllowed: () => Promise<boolean>;
+        duplicateCodeReceipts: () => Promise<import("../shared/types/fiscal.types").FiscalDuplicateCodeReceipt[]>;
+        backlogBusy: () => Promise<import("../shared/types/fiscal.types").FiscalBacklogStep | null>;
+        backlogClassify: (
+          fromDate: string,
+        ) => Promise<import("../shared/types/fiscal.types").FiscalBacklogClassifyResult>;
+        backlogRepair: (
+          fromDate: string,
+        ) => Promise<import("../shared/types/fiscal.types").FiscalBacklogRepairResult>;
+        backlogVerify: (
+          fromDate: string,
+        ) => Promise<import("../shared/types/fiscal.types").FiscalBacklogVerifyResult>;
+        backlogFiscalize: (
+          fromDate: string,
+        ) => Promise<import("../shared/types/fiscal.types").FiscalBacklogFiscalizeResult>;
+        onBacklogProgress: (
+          cb: (p: import("../shared/types/fiscal.types").FiscalBacklogProgress) => void,
         ) => () => void;
         retrySale: (saleId: string) => Promise<{ ok: boolean; error?: string }>;
         previewPayload: (
@@ -788,6 +823,13 @@ declare global {
         getAvailable: (productId: number) => Promise<unknown[]>;
         getAll: (filters?: unknown) => Promise<unknown>;
         delete: (id: string) => Promise<boolean>;
+      };
+      labelPrinter: {
+        listPorts: () => Promise<SerialPortInfo[]>;
+        getConfig: () => Promise<LabelPrinterConfig>;
+        setConfig: (config: LabelPrinterConfig) => Promise<LabelPrinterConfig>;
+        testPrint: () => Promise<LabelPrinterResult>;
+        print: (req: unknown) => Promise<LabelPrinterResult>;
       };
       scale: {
         exportTxp: () => Promise<import("../shared/utils/rongta-txp").TxpExportResult>;

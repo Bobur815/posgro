@@ -245,6 +245,12 @@
     "cashChange": "Qaytim",
     "cashInsufficient": "Yetarli emas",
     "cashDiscount": "Chegirma",
+    "addDiscount": "Chegirma",
+    "discountAmount": "Chegirma miqdori",
+    "discountPercent": "%",
+    "discountSum": "so'm",
+    "applyDiscount": "Qo'llash",
+    "removeDiscount": "Chegirmani olib tashlash",
     "customAmount": "Boshqa summa",
     "clearAmount": "Tozalash",
     "pluNotFound": "PLU {{plu}} li mahsulot topilmadi. Mahsulot sozlamalarini tekshiring.",
@@ -651,20 +657,6 @@
     "fiscalized": "Fiskallashtirildi",
     "pending": "Kutilmoqda",
     "failed": "Xatolar",
-    "bulkButton": "Barcha eski cheklarni fiskallashtirish",
-    "bulkRunning": "Cheklar qayta ishlanmoqda…",
-    "bulkHint": "Markirovkalangan tovarli (022-guruh) barcha eski cheklarni QR-belgilarini to'g'rilab fiskallashtiradi. Qolgan eski cheklar fiskallashtirish talab qilinmaydi deb belgilanadi.",
-    "bulkDone": "Tayyor: fiskallashtirildi {{fiscalized}}, xatolar {{failed}}, belgilar tuzatildi {{repaired}}, o'chirildi {{disabled}}, muomaladan tashqari {{outOfCirculation}}",
-    "bulkProgress": {
-      "checking": "Markirovka tekshirilmoqda…",
-      "fiscalizing": "Fiskallashtirilmoqda…",
-      "done": "Tayyor",
-      "disabled": "O'chirildi",
-      "outOfCirculation": "Muomaladan tashqari",
-      "outOfCirculationList": "Markirovka muomaladan chiqqani uchun o'chirilgan cheklar"
-    },
-    "bulkUnreachable": "Virtual kassa mavjud emas — qayta ishlash to'xtatildi",
-    "disabledFirst": "Avval fiskallashtirishni yoqing",
     "uzqrEnabled": "REGOS orqali UzQR to'lovi (kassa ekranida QR kod)",
     "uzqrHint": "Xaridor ekrandagi QR kodni skanerlaydi. Chek faqat to'lov tasdiqlangandan keyin yaratiladi. O'chirilgan bo'lsa — UzQR QR kodsiz oddiy to'lov turi bo'lib qoladi.",
     "uzqrPollMs": "So'rov oralig'i, ms",
@@ -706,7 +698,75 @@
     "groupUzqr": "UzQR",
     "groupClick": "Click",
     "clickEnabled": "Ushbu kassada Click orqali to'lovni qabul qilish",
-    "clickHint": "REGOS chekida Click to'lovi naqd pul sifatida yuboriladi. Kassa qutisiga tushmaydi; hisobotlarda alohida qatorda."
+    "clickHint": "REGOS chekida Click to'lovi naqd pul sifatida yuboriladi. Kassa qutisiga tushmaydi; hisobotlarda alohida qatorda.",
+    "backlog": {
+      "hint": "Faqat naqd/Click bilan to'langan va markirovkali tovarsiz cheklar fiskallashtirilmaydi. Shunday cheklarda markirovkali tovar bo'lsa, faqat kodi haqiqiy pozitsiyalar yuboriladi. Qolgan barcha cheklar to'liq fiskallashtiriladi. 4 bosqichni tartib bilan o'ting; har bir bosqich «Keyingi» tugmasini kutadi.",
+      "fromDate": "Cheklar sanasidan boshlab",
+      "busyElsewhere": "Qayta ishlash allaqachon ketmoqda — tugashini kuting",
+      "steps": {
+        "classify": "Saralash",
+        "repair": "Tuzatish",
+        "verify": "Markirovka",
+        "fiscalize": "Fiskallashtirish"
+      },
+      "about": {
+        "classify": "Faqat naqd yoki Click bilan to'langan va markirovkali tovarsiz cheklar fiskallashtirish talab qilinmaydi deb belgilanadi va boshqa qayta ishlanmaydi. Qolganlari keyingi bosqichlarga o'tadi.",
+        "repair": "Rus klaviatura tartibida o'qilgan markirovka kodlarini tuzatadi. Tovarda MXIK bo'lmasa, uni tasnif.soliq.uz'dan shtrix-kod bo'yicha topib, tovarga saqlaydi (markirovkali tovarlar uchun qadoq kodi bilan).",
+        "verify": "Har bir markirovka kodini Asl-Belgisi'da tekshiradi. Naqd/Click chek: faqat kodi haqiqiy markirovkali pozitsiyalar yuboriladi; bunday pozitsiya bo'lmasa — chek fiskallashtirilmaydi. Karta/UzQR chek: kodi haqiqiy bo'lmagan yoki skanerlanmagan pozitsiya xuddi shu summada almashtiruvchi tovar sifatida yuboriladi. Savdo tarixi va qoldiqlar o'zgarmaydi.",
+        "fiscalize": "Tayyorlangan cheklarni REGOS:VCR'ga birma-bir yuboradi."
+      },
+      "run": {
+        "classify": "Cheklarni saralash",
+        "repair": "Ma'lumotlarni tuzatish",
+        "verify": "Markirovkani tekshirish",
+        "fiscalize": "Fiskallashtirish"
+      },
+      "running": "Bajarilmoqda…",
+      "next": "Keyingi",
+      "finish": "Tayyor",
+      "restart": "Qaytadan boshlash",
+      "marked": "markirovka",
+      "classifyDone": "Fiskallashtirish talab qilinmaydi: {{skipped}}. Fiskallashtiriladi: {{kept}}.",
+      "repairDone": "Tuzatilgan markirovka kodlari: {{labels}} ({{receipts}} ta chekda).",
+      "productIssues": "Ma'lumoti to'liq bo'lmagan tovarlar ({{count}}) — bunday cheklarni REGOS rad etadi. Tovarlarni tuzatib, bosqichni qaytaring:",
+      "problem": {
+        "NO_MXIK": "MXIK yo'q",
+        "NO_PACKAGE_CODE": "qadoq kodi yo'q"
+      },
+      "substitute": "Almashtiruvchi tovar",
+      "substituteSearch": "Tovarni nomi, kodi yoki shtrix-kodi bo'yicha qidirish",
+      "substituteHint": "Tarozi tovari: REGOS chekida almashtirilgan pozitsiya summasida 1 kg bo'lib boradi.",
+      "verifyDone": "Tekshirilgan kodlar: {{checked}}. Almashtirilgan pozitsiyalar: {{substituted}}. Yuborilmaydigan pozitsiyalar: {{omitted}}. Fiskallashtirilmaydigan cheklar: {{disabled}}.",
+      "noLabel": "kod skanerlanmagan",
+      "stoppedAt": "#{{receipt}} chekda to'xtatildi",
+      "fiscalizeDone": "Fiskallashtirildi: {{fiscalized}}. Xatolar: {{failed}}.",
+      "notFiscalized": "chek fiskallashtirilmadi",
+      "errors": {
+        "BUSY": "Qayta ishlash allaqachon ketmoqda",
+        "FISCAL_DISABLED": "Avval fiskallashtirishni yoqing va sozlamalarni saqlang",
+        "NO_PASSWORD": "Kassir paroli kiritilmagan",
+        "NO_SUBSTITUTE": "Almashtiruvchi tovarni tanlang",
+        "SUBSTITUTE_NO_MXIK": "Almashtiruvchi tovarda MXIK yo'q",
+        "UNKNOWN_STATUS": "Asl-Belgisi noma'lum «{{status}}» holatini qaytardi — tekshiruv to'xtatildi",
+        "VCR_UNREACHABLE": "Virtual kassa mavjud emas — qayta ishlash to'xtatildi",
+        "IPC": "Bosqichni bajarib bo'lmadi",
+        "NOT_ENTITLED": "Eski cheklarni qayta ishlash xizmati bu do'kon uchun ulanmagan"
+      },
+      "mxikFilled": "MXIK tasnif.soliq.uz'dan topilib, tovarlarga saqlandi: {{count}}",
+      "tasnifUnreachable": "tasnif.soliq.uz mavjud emas — tekshirib bo'lmagan tovarlar: {{count}}",
+      "action": {
+        "substitute": "almashtirildi",
+        "omit": "yuborilmaydi",
+        "disable": "chek fiskallashtirilmaydi"
+      }
+    },
+    "duplicateCodes": {
+      "title": "Bir nechta qadoq uchun bitta markirovka kodi bilan yuborilgan cheklar: {{count}}",
+      "hint": "Tuzatishdan oldin bir chekdagi bir xil markirovkali tovarlar REGOS'ga bitta (oxirgi) kod bilan yuborilgan, qolgan kodlar ro'yxatdan o'tmagan. Bu cheklar allaqachon fiskallashtirilgan; ro'yxat faqat ma'lumot uchun, hech narsa o'zgartirilmaydi.",
+      "packs": "qadoqlar: {{packs}}",
+      "sent": "Hammasi uchun yuborilgan",
+      "unsent": "REGOS olmagan"
+    }
   },
   "reports": {
     "title": "Hisobotlar",
@@ -902,6 +962,7 @@
     "storeStir": "STIR/INN",
     "taxRate": "QQS (%)",
     "taxRateAsDiscount": "QQSni chekda chegirma sifatida ko'rsatish",
+    "discountAllTenders": "Har qanday to'lovda chegirma (karta, UzQR, Click, bo'lib to'lash) — shu kassa",
     "receiptSettings": "Chek sozlamalari",
     "receiptHeader": "Chek sarlavhasi",
     "receiptFooter": "Chek pastki qismi",
@@ -1210,6 +1271,27 @@
     "sampleName": "Mahsulot",
     "selectedCount": "Tanlandi: {{count}} mahsulot, {{tags}} yorliq",
     "back": "Orqaga"
+  },
+  "labelPrinter": {
+    "title": "Bluetooth yorliq printeri",
+    "hint": "Bluetooth orqali ulangan printer Windowsda chiquvchi COM port sifatida ko'rinadi (Sozlamalar → Bluetooth → Boshqa Bluetooth sozlamalari → COM portlar).",
+    "mode": "Narx yorliqlari qayerda chop etiladi",
+    "modeSpooler": "Windows printeri",
+    "modeBluetooth": "Bluetooth (COM port)",
+    "port": "COM port",
+    "noPorts": "COM portlar topilmadi",
+    "refreshPorts": "Portlar ro'yxatini yangilash",
+    "baud": "Tezlik (bod)",
+    "width": "Kengligi (mm)",
+    "height": "Balandligi (mm)",
+    "gap": "Oraliq (mm)",
+    "testPrint": "Sinov chop etish",
+    "testOk": "Sinov yorlig'i yuborildi",
+    "invalidConfig": "Port va yorliq o'lchamlarini tekshiring",
+    "printVia": "Chop etish usuli",
+    "errPortNotFound": "{{port}} portida printer topilmadi. Printerni yoqing. Agar u qayta ulangan bo'lsa, narx yorliqlari sozlamalarida yangi COM portni tanlang.",
+    "errPortBusy": "{{port}} boshqa dastur tomonidan band. Uni yopib, qayta urinib ko'ring.",
+    "errWriteFailed": "Printerga yuborib bo'lmadi. Printer yoniq va yaqinda ekanini tekshirib, qayta urinib ko'ring."
   },
   "suppliers": {
     "status": "Holat",

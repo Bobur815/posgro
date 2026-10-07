@@ -21,7 +21,9 @@ jest.mock('./secret-store', () => ({
   hasVcrPassword: async () => true,
   setVcrPassword: async () => undefined,
 }));
-jest.mock('../marking/circulation-check', () => ({ isCodeOutOfCirculation: async () => false }));
+jest.mock('../marking/circulation-check', () => ({
+  verifyMarkingCodeDetails: async () => ({ reachable: false }),
+}));
 
 const prismaMock = {
   systemSetting: {
@@ -36,7 +38,12 @@ const prismaMock = {
     upsert: jest.fn(async () => undefined),
   },
   sale: { findUnique: jest.fn(), update: jest.fn(async () => undefined) },
-  product: { findMany: jest.fn(), update: jest.fn(async () => undefined) },
+  product: {
+    findMany: jest.fn(),
+    update: jest.fn(async () => undefined),
+    updateMany: jest.fn(async () => ({ count: 1 })),
+  },
+  $executeRaw: jest.fn(async () => 1),
   smena: {
     update: jest.fn(async () => undefined),
     findFirst: jest.fn<Promise<unknown>, unknown[]>(async () => ({ id: 'smena-1' })),
@@ -60,7 +67,8 @@ jest.mock('./regos-vcr-client', () => {
 });
 
 import { VcrError } from './regos-vcr-client';
-import { regosVcrService } from './regos-vcr-service';
+import { loggedItems, regosVcrService, settleDiscountRemainder } from './regos-vcr-service';
+import { log } from '../logger';
 import { reset as resetTimings, stats } from './fiscal-timing';
 
 const OPEN_Z = { OpenTime: '2026-09-09 08:00:00', CloseTime: '' };
@@ -420,5 +428,172 @@ describe('fiscalizeSale — split payment', () => {
       { type: 1, value: 1000000 },
       { type: 2, value: 5000000, card_type: 2 },
     ]);
+  });
+});
+
+describe('fiscalizeSale — order discount', () => {
+  // Card receipts are always fiscalized, so a discount on card must balance to the tiyin.
+  it('spreads the discount so the lines add up to it exactly', async () => {
+    // 1 000 so'm off three 1 000 lines: 333.33 each rounds to 99 999 tiyin in total, not 100 000.
+    prismaMock.sale.findUnique.mockImplementation(async () => ({ ...saleRow(3), discountAmount: 1000, finalAmount: 2000 }));
+    prismaMock.product.findMany.mockImplementation(async () => products(3));
+
+    await regosVcrService.fiscalizeSale('sale-1');
+
+    const { positions, payments } = client.sale.mock.calls[0][0] as {
+      positions: { amount: number; discount: number }[];
+      payments: { value: number }[];
+    };
+    const discounts = positions.map((p) => p.discount);
+    expect(discounts.reduce((a, b) => a + b, 0)).toBe(100000);
+    // The receipt balances: what the lines come to is what was paid.
+    expect(positions.reduce((s, p) => s + p.amount - p.discount, 0)).toBe(payments[0].value);
+  });
+});
+
+describe('settleDiscountRemainder', () => {
+  const pos = (amount: number, discount: number) => ({ amount, discount }) as Parameters<typeof settleDiscountRemainder>[0][number];
+
+  it('puts a missing tiyin on the last line', () => {
+    const p = [pos(100000, 33333), pos(100000, 33333), pos(100000, 33333)];
+    settleDiscountRemainder(p, 100000);
+    expect(p.map((x) => x.discount)).toEqual([33333, 33333, 33334]);
+  });
+
+  it('takes an extra tiyin back off the last line', () => {
+    const p = [pos(100000, 50001), pos(100000, 50001)];
+    settleDiscountRemainder(p, 100001);
+    expect(p.map((x) => x.discount)).toEqual([50001, 50000]);
+  });
+
+  // A line can never be discounted past its own price.
+  it('spills onto earlier lines when the last one is full', () => {
+    const p = [pos(100000, 99999), pos(5000, 5000)];
+    settleDiscountRemainder(p, 105000);
+    expect(p.map((x) => x.discount)).toEqual([100000, 5000]);
+  });
+
+  it('leaves a receipt with no discount alone', () => {
+    const p = [pos(100000, 0)];
+    settleDiscountRemainder(p, 0);
+    expect(p[0].discount).toBe(0);
+  });
+});
+
+describe('fiscalizeSale — a rejected product is marked invalid (Product.isValid)', () => {
+  // clearAllMocks keeps implementations: an earlier test leaves recovery-by-code succeeding.
+  beforeEach(() => {
+    client.getReceiptInfo.mockResolvedValue(null);
+    client.validateSale.mockResolvedValue({ validate: true });
+  });
+
+  const mxikError = () => new VcrError(705511, 'Ошибка проверки ИКПУ', 'Receipt.Sale');
+  /** Product ids the fiscal service marked invalid, across every updateMany call. */
+  const markedInvalid = () =>
+    prismaMock.product.updateMany.mock.calls.flatMap(
+      (c: unknown[]) => (c[0] as { where: { id: { in: number[] } } }).where.id.in,
+    );
+
+  it('blames the only line of a one-line receipt, without probing, and queues a report', async () => {
+    client.sale.mockRejectedValue(mxikError());
+
+    await expect(regosVcrService.fiscalizeSale('sale-1')).rejects.toBeInstanceOf(VcrError);
+
+    expect(markedInvalid()).toEqual([1]);
+    expect((prismaMock.product.updateMany.mock.calls as unknown[][])[0][0]).toMatchObject({ data: { isValid: false } });
+    expect(prismaMock.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(client.validateSale).not.toHaveBeenCalled();
+  });
+
+  // Blaming the whole receipt would mark good products invalid alongside the bad one.
+  it('probes each line of a longer receipt and blames only the line that is rejected itself', async () => {
+    prismaMock.sale.findUnique.mockImplementation(async () => saleRow(3));
+    prismaMock.product.findMany.mockImplementation(async () => products(3));
+    client.sale.mockRejectedValue(mxikError());
+    client.validateSale.mockImplementation(async (positions: unknown) => {
+      if ((positions as { barcode: string }[])[0].barcode === '1001') throw mxikError();
+      return { validate: true };
+    });
+
+    await expect(regosVcrService.fiscalizeSale('sale-1')).rejects.toBeInstanceOf(VcrError);
+
+    expect(client.validateSale).toHaveBeenCalledTimes(3);
+    expect(markedInvalid()).toEqual([2]);
+  });
+
+  it('blames nobody when the device stops answering mid-probe', async () => {
+    prismaMock.sale.findUnique.mockImplementation(async () => saleRow(3));
+    prismaMock.product.findMany.mockImplementation(async () => products(3));
+    client.sale.mockRejectedValue(mxikError());
+    client.validateSale.mockRejectedValue(new VcrError(0, 'ECONNREFUSED', 'Receipt.ValidateSale'));
+
+    await expect(regosVcrService.fiscalizeSale('sale-1')).rejects.toBeInstanceOf(VcrError);
+
+    expect(prismaMock.product.updateMany).not.toHaveBeenCalled();
+  });
+
+  // The cashier did not scan the code: a new delivery would not fix that, so the product stays valid.
+  it('does not blame the product for a marking code that was not scanned', async () => {
+    client.sale.mockRejectedValue(
+      new VcrError(701003, 'Некорректные входные данные (Код обязательной маркировки не задан)', 'Receipt.Sale'),
+    );
+
+    await expect(regosVcrService.fiscalizeSale('sale-1')).rejects.toBeInstanceOf(VcrError);
+
+    expect(prismaMock.product.updateMany).not.toHaveBeenCalled();
+    expect(prismaMock.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('does not blame a product for a device that is unreachable', async () => {
+    client.sale.mockRejectedValue(new VcrError(0, 'ECONNREFUSED', 'Receipt.Sale'));
+
+    await expect(regosVcrService.fiscalizeSale('sale-1')).rejects.toBeInstanceOf(VcrError);
+
+    expect(prismaMock.product.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('fiscalizeSale — failure log line', () => {
+  // The admin's Telegram alert reads these names back; the device never says which line it rejected.
+  it('names the receipt\'s products so the alert can show them before the sale syncs', async () => {
+    prismaMock.sale.findUnique.mockImplementation(async () => saleRow(5));
+    prismaMock.product.findMany.mockImplementation(async () => products(5));
+    client.sale.mockRejectedValue(new VcrError(701003, 'Код обязательной маркировки не задан', 'Receipt.Sale'));
+
+    // A device rejection is logged, then rethrown to the caller.
+    await expect(regosVcrService.fiscalizeSale('sale-1')).rejects.toBeInstanceOf(VcrError);
+
+    const failed = (log.error as jest.Mock).mock.calls.map((c) => String(c[0])).find((m) => m.includes('✗ fiscalize'));
+    expect(failed).toMatch(/^\[fiscal\] ✗ fiscalize sale-1 failed: \[701003\] .* items=\["P1","P2","P3"\] \+2$/);
+  });
+});
+
+describe('loggedItems', () => {
+  it('is empty for a receipt with no lines', () => {
+    expect(loggedItems([])).toBe('');
+  });
+
+  it('writes names as JSON, so a comma or bracket in a name survives', () => {
+    expect(loggedItems(['Сок, яблоко [1L]'])).toBe(' items=["Сок, яблоко [1L]"]');
+  });
+});
+
+describe('fiscalizeSale — marking codes per line', () => {
+  it('sends each of two identical drinks with its own code', async () => {
+    const row = saleRow(2);
+    // Same drink twice: one barcode, two scans, two different codes.
+    row.items[1] = { ...row.items[0], productId: 1 };
+    prismaMock.sale.findUnique.mockImplementation(async () => ({
+      ...row,
+      regosLabels: JSON.stringify([
+        { barcode: '1000', label: 'CODE-A' },
+        { barcode: '1000', label: 'CODE-B' },
+      ]),
+    }));
+
+    await regosVcrService.fiscalizeSale('sale-1');
+
+    const positions = (client.sale.mock.calls[0][0] as { positions: Array<{ label?: string }> }).positions;
+    expect(positions.map((p) => p.label)).toEqual(['CODE-A', 'CODE-B']);
   });
 });

@@ -99,8 +99,17 @@ export type {
   RegosVcrConfigInput,
   FiscalConnectionResult,
   FiscalQueueStatus,
-  FiscalBulkResult,
-  FiscalBulkProgress,
+  FiscalBacklogReceipt,
+  FiscalBacklogClassifyResult,
+  FiscalBacklogProductIssue,
+  FiscalBacklogRepairResult,
+  FiscalLinePlan,
+  FiscalLineReason,
+  FiscalBacklogVerifyResult,
+  FiscalBacklogFiscalizeResult,
+  FiscalBacklogStep,
+  FiscalDuplicateCodeReceipt,
+  FiscalBacklogProgress,
   FiscalLabel,
   FiscalZReport,
   FiscalZReportStatus,
@@ -128,3 +137,11 @@ export {
   normalizeLandingPlans,
   normalizeLandingContact,
 } from './landing.types';
+
+export type {
+  LabelPrintMode,
+  LabelPrinterErrorCode,
+  LabelPrinterConfig,
+  SerialPortInfo,
+  LabelPrinterResult,
+} from './label-printer.types';

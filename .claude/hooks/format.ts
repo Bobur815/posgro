@@ -8,7 +8,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { norm, projectDir, readHookInput } from './_lib';
+import { norm, projectDir, readHookInput } from './_lib.ts';
 
 interface Input {
   tool_input?: { file_path?: string };

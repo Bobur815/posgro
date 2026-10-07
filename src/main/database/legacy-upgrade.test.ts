@@ -224,6 +224,13 @@ describe('upgrading a database created by an older build', () => {
    * repeating it on every boot would rewrite exactly the sales this feature exists for — a fully
    * credit sale legitimately has paid_amount 0 and must stay that way.
    */
+  // The fiscal backlog's per-line substitutions: added in place, empty on every existing receipt.
+  it('adds fiscal_substitutions to an existing sales table, NULL on old receipts', async () => {
+    const old = await getPrismaClient().sale.findUnique({ where: { id: 'old-1' } });
+    expect(old).not.toBeNull();
+    expect(old.fiscalSubstitutions).toBeNull();
+  });
+
   it('backfills paid_amount on sales that predate the split', async () => {
     const old = await getPrismaClient().sale.findUnique({ where: { id: 'old-1' } });
     expect(Number(old.paidAmount)).toBe(250_000);

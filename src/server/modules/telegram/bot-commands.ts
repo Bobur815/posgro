@@ -355,11 +355,47 @@ function clip(s: string): string {
   return flat.length > ALERT_TEXT_MAX ? `${flat.slice(0, ALERT_TEXT_MAX - 1)}…` : flat;
 }
 
+/** A receipt a fiscal failure hit. Number and products are missing when the sale has not synced. */
+export interface AlertReceipt {
+  at: string | Date;
+  receiptNumber: string | null;
+  products: string[];
+  /** Line items beyond `products`. */
+  moreProducts: number;
+}
+
 export interface AlertLine {
   level: 'info' | 'error';
   text: string;
   count: number;
   terminals: string[];
+  receipts?: AlertReceipt[];
+  /** Receipts beyond `receipts`. */
+  hiddenReceipts?: number;
+}
+
+/** Shop time, whatever zone the server runs in — the admin compares it with the till's clock. */
+function shopMoment(d: string | Date): string {
+  return new Date(d).toLocaleString('ru-RU', {
+    timeZone: 'Asia/Tashkent',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/** `   🧾 05.10, 14:32 · №T1261005042 · Coca-Cola 1L, Pepsi 0.5L +2` */
+function receiptLine(r: AlertReceipt, lang?: Lang): string {
+  const parts = [shopMoment(r.at)];
+  if (r.receiptNumber) parts.push(`№${r.receiptNumber}`);
+  if (r.products.length > 0) {
+    const more = r.moreProducts > 0 ? ` +${r.moreProducts}` : '';
+    parts.push(`${r.products.map((p) => clip(p)).join(', ')}${more}`);
+  } else if (!r.receiptNumber) {
+    parts.push(t('chek hali sinxronlanmagan', 'чек ещё не синхронизирован', lang));
+  }
+  return `   🧾 ${escapeHtml(parts.join(' · '))}`;
 }
 
 /** One batched digest of what a store's terminals logged in the last minute. HTML. */
@@ -384,7 +420,11 @@ export function msgLogAlert(
       data.terminals.length > 1 && l.terminals.length < data.terminals.length
         ? ` <i>(${escapeHtml(l.terminals.join(', '))})</i>`
         : '';
-    return `${icon}${times} ${escapeHtml(clip(l.text))}${where}`;
+    const receipts = (l.receipts ?? []).map((r) => `\n${receiptLine(r, lang)}`).join('');
+    const moreReceipts = l.hiddenReceipts
+      ? `\n   ${t(`…va yana ${l.hiddenReceipts} ta chek`, `…и ещё ${l.hiddenReceipts} чек(ов)`, lang)}`
+      : '';
+    return `${icon}${times} ${escapeHtml(clip(l.text))}${where}${receipts}${moreReceipts}`;
   });
 
   const more =

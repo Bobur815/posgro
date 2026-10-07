@@ -13,6 +13,7 @@ import { getCurrentUser } from '../ipc/auth-handlers';
 import { uploadLocalData, uploadNasiya } from './upload-sync';
 import { pullDebtLedger } from './debt-ledger-sync';
 import { syncFiscalStatus } from './fiscal-status-sync';
+import { syncInvalidProducts } from './product-validity-sync';
 import { syncSalePayments } from './payments-sync';
 import { getAppConfig } from '../config/app-config';
 import { getPrismaClient } from '../database/sqlite-client';
@@ -196,6 +197,14 @@ export class SyncService {
         await syncFiscalStatus();
       } catch (fiscalError) {
         console.error('Fiscal status sync failed (non-fatal):', fiscalError instanceof Error ? fiscalError.message : fiscalError);
+      }
+
+      // Products REGOS:VCR rejected on this till — all roles (cashiers fiscalize). Before the
+      // product pull below, so the pull already brings this till's own report back down.
+      try {
+        await syncInvalidProducts();
+      } catch (validityError) {
+        console.error('Invalid-product sync failed (non-fatal):', validityError instanceof Error ? validityError.message : validityError);
       }
 
       // Split-payment lines of sales already uploaded — all roles, on their own endpoint (an older

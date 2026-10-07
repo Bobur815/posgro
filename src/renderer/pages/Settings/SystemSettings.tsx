@@ -139,6 +139,7 @@ export function SystemSettings() {
     storeStir: "",
     taxRate: "0",
     taxRateAsDiscount: false,
+    discountAllTenders: false,
     syncInterval: "5",
   });
 
@@ -179,6 +180,7 @@ export function SystemSettings() {
         storeStir: allSettings.store_stir || "",
         taxRate: allSettings.tax_rate || "0",
         taxRateAsDiscount: allSettings.tax_rate_as_discount === "true",
+        discountAllTenders: allSettings.discount_all_tenders === "true",
         syncInterval: allSettings.sync_interval || "5",
       }));
     } catch (error) {
@@ -209,6 +211,8 @@ export function SystemSettings() {
       await window.electronAPI.settings.set("store_stir", settings.storeStir);
       await window.electronAPI.settings.set("tax_rate", settings.taxRate);
       await window.electronAPI.settings.set("tax_rate_as_discount", settings.taxRateAsDiscount ? "true" : "false");
+      // This till only (local-only setting): the Checkout's discount field for every tender.
+      await window.electronAPI.settings.set("discount_all_tenders", settings.discountAllTenders ? "true" : "false");
       showToast(t("common.saved"), "success");
     } catch (error) {
       console.error("Failed to save settings:", error);
@@ -321,6 +325,16 @@ export function SystemSettings() {
               }
             />
             {t("settings.taxRateAsDiscount")}
+          </CheckRow>
+          <CheckRow>
+            <input
+              type="checkbox"
+              checked={settings.discountAllTenders}
+              onChange={(e) =>
+                setSettings((prev) => ({ ...prev, discountAllTenders: e.target.checked }))
+              }
+            />
+            {t("settings.discountAllTenders")}
           </CheckRow>
           <Actions>
             <Button type="submit">{t("common.save")}</Button>

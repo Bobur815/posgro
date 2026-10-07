@@ -175,6 +175,7 @@ export function ProductList() {
     loadCategories,
     loadSuppliers,
     updateProduct,
+    applySavedProduct,
     deleteProduct,
     searchByBarcode,
     isLoading,
@@ -214,6 +215,20 @@ export function ProductList() {
     if (searchQuery) params.query = searchQuery;
     loadProducts(params);
   }, [loadProducts, filters, searchQuery]);
+
+  /** After a save: patch the one row the server returned; reload only when there is none (arrival). */
+  const handleSaved = useCallback(
+    (product?: Product) => {
+      if (!product) {
+        reloadWithFilters();
+        return;
+      }
+      const params: ProductFilterParams = { ...filters };
+      if (searchQuery) params.query = searchQuery;
+      applySavedProduct(product, params);
+    },
+    [reloadWithFilters, applySavedProduct, filters, searchQuery],
+  );
 
   const isMobile = typeof window !== "undefined" && window.innerWidth <= 768;
 
@@ -372,15 +387,15 @@ export function ProductList() {
 
   const handleDelete = async (product: Product) => {
     if (!window.confirm(t("common.confirmDelete"))) return;
-    const success = await deleteProduct(String(product.id));
-    if (success) reloadWithFilters();
+    // A hard delete: deleteProduct already dropped the row from the list.
+    await deleteProduct(String(product.id));
   };
 
   const handleActivate = async (product: Product) => {
     // The update DTO uses the DB field name `active` (the client type exposes it as isActive).
     const payload: Partial<Product> & { active: boolean } = { active: true };
-    const success = await updateProduct(String(product.id), payload);
-    if (success) reloadWithFilters();
+    const saved = await updateProduct(String(product.id), payload);
+    if (saved) handleSaved(saved);
   };
 
   const allColumns: ColumnDef<Product, ColumnKey>[] = [
@@ -836,10 +851,10 @@ export function ProductList() {
             setShowProductForm(false);
             setFabInitialData(null);
           }}
-          onSuccess={() => {
+          onSuccess={(saved) => {
             setShowProductForm(false);
             setFabInitialData(null);
-            reloadWithFilters();
+            handleSaved(saved);
           }}
         />
       )}
@@ -848,9 +863,9 @@ export function ProductList() {
         <ProductForm
           productId={editProductId}
           onClose={() => setEditProductId(null)}
-          onSuccess={() => {
+          onSuccess={(saved) => {
             setEditProductId(null);
-            reloadWithFilters();
+            handleSaved(saved);
           }}
         />
       )}
@@ -860,9 +875,9 @@ export function ProductList() {
           productId={fabArrivalProductId}
           openArrival
           onClose={() => setFabArrivalProductId(null)}
-          onSuccess={() => {
+          onSuccess={(saved) => {
             setFabArrivalProductId(null);
-            reloadWithFilters();
+            handleSaved(saved);
           }}
         />
       )}

@@ -32,6 +32,14 @@ export const LOCAL_ONLY_SETTINGS = new Set([
   'printer_name',
   'label_printer_name',
   'label_width_mm',
+  // The COM-port (Bluetooth) label printer: port, baud, label size and which path price tags take
+  // (printer/label-printer-config.ts). A COM number means nothing on another machine.
+  'label_print_mode',
+  'label_bt_port',
+  'label_bt_baud',
+  'label_bt_width_mm',
+  'label_bt_height_mm',
+  'label_bt_gap_mm',
 
   // ── Machine-scoped fiscal (REGOS VCR) config ──
   // The VCR is a local service: its URL must resolve to this machine (127.0.0.1, never a shared
@@ -61,6 +69,9 @@ export const LOCAL_ONLY_SETTINGS = new Set([
   // Whether the Checkout offers Click. Per till, off by default: a store turns it on at the
   // counters that actually take Click.
   'click_enabled',
+  // Whether the Checkout offers a discount on every tender, split included. Per till, off by
+  // default: off leaves only the cash shortfall courtesy, as before.
+  'discount_all_tenders',
 ]);
 
 /**

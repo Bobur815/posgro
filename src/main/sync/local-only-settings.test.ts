@@ -1,4 +1,5 @@
 import { LOCAL_ONLY_SETTINGS, isSatelliteOwnSetting } from './local-only-settings';
+import { LABEL_PRINTER_KEYS } from '../printer/label-printer-config';
 
 /**
  * Which settings a satellite may write for itself — the allowlist the write guard in
@@ -36,4 +37,10 @@ describe('LOCAL_ONLY_SETTINGS', () => {
       expect(LOCAL_ONLY_SETTINGS.has(key)).toBe(true);
     },
   );
+});
+
+describe('label printer settings', () => {
+  it.each(Object.values(LABEL_PRINTER_KEYS))('keeps %s on this machine', (key) => {
+    expect(LOCAL_ONLY_SETTINGS.has(key)).toBe(true);
+  });
 });
