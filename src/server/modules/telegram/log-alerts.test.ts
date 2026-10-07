@@ -1,5 +1,17 @@
-import { collapse, isForwardable, normalizeMessage, type BufferedLog } from './log-alerts.service';
+import {
+  collapse,
+  describeReceipts,
+  isForwardable,
+  LogAlertsService,
+  normalizeMessage,
+  splitLoggedItems,
+  type BufferedLog,
+  type ReceiptRef,
+  type SaleSummary,
+} from './log-alerts.service';
 import { msgLogAlert } from './bot-commands';
+import type { PrismaService } from '../../prisma/prisma.service';
+import type { TelegramService } from './telegram.service';
 
 /**
  * Shaping a terminal's raw log feed into something a shop owner can read.
@@ -204,5 +216,169 @@ describe('the message an admin receives', () => {
     const html = msgLogAlert({ terminals: ['T1'], shown: groups, hidden: 0 }, 'uz');
     expect(html).toContain('Terminal jurnali');
     expect(html).not.toContain('Журнал терминала');
+  });
+});
+
+describe('naming the receipts a fiscal failure hit', () => {
+  const ref = (saleId: string, ts: string): ReceiptRef => ({ saleId, ts, products: [], moreProducts: 0 });
+  const sale =(over: Partial<SaleSummary> = {}): SaleSummary => ({
+    receiptNumber: 'T1261005042',
+    createdAt: new Date('2026-10-05T09:32:00.000Z'),
+    products: ['Coca-Cola 1L', 'Pepsi 0.5L'],
+    itemCount: 2,
+    ...over,
+  });
+
+  it('records each failed sale once, in order, with when it was logged', () => {
+    const [group] = collapse(
+      [
+        line({ msg: rawVcr(701003, 'x') }),
+        line({ msg: staffVcr('saleA', 701003, 'Не отсканирован код'), ts: '2026-10-05T09:00:00.000Z' }),
+        line({ msg: staffVcr('saleB', 701003, 'Не отсканирован код'), ts: '2026-10-05T09:01:00.000Z' }),
+        line({ msg: staffVcr('saleA', 701003, 'Не отсканирован код'), ts: '2026-10-05T09:02:00.000Z' }),
+      ],
+      false,
+    );
+    expect(group.receiptRefs).toEqual([
+      { saleId: 'saleA', ts: '2026-10-05T09:00:00.000Z', products: [], moreProducts: 0 },
+      { saleId: 'saleB', ts: '2026-10-05T09:01:00.000Z', products: [], moreProducts: 0 },
+    ]);
+  });
+
+  it('has no receipts for a line that names none', () => {
+    expect(collapse([line({ msg: '[sync] upload failed' })], false)[0].receiptRefs).toEqual([]);
+  });
+
+  // Tills from 1.32.17 append the receipt's products to the failure line.
+  it('reads the products a newer till appends, and keeps them out of the incident text', () => {
+    const [group] = collapse(
+      [
+        line({ msg: staffVcr('saleA', 701003, 'Не отсканирован код items=["Сок, яблоко [1L]","Pepsi"]') }),
+        line({ msg: staffVcr('saleB', 701003, 'Не отсканирован код items=["A","B","C"] +4') }),
+      ],
+      false,
+    );
+    expect(group.text).toBe('[701003] Не отсканирован код');
+    expect(group.receiptRefs.map((r) => [r.products, r.moreProducts])).toEqual([
+      [['Сок, яблоко [1L]', 'Pepsi'], 0],
+      [['A', 'B', 'C'], 4],
+    ]);
+  });
+
+  it('leaves a suffix that does not parse in the text rather than dropping it', () => {
+    expect(splitLoggedItems('Ошибка items=[not json]')).toEqual({
+      text: 'Ошибка items=[not json]',
+      products: [],
+      moreProducts: 0,
+    });
+  });
+
+  it('takes number, time and products from the synced sale, and counts the rest', () => {
+    const { shown, hidden } = describeReceipts(
+      [ref('a', '2026-10-05T09:33:00.000Z')],
+      new Map([['a', sale({ products: ['A', 'B', 'C'], itemCount: 5 })]]),
+    );
+    expect(hidden).toBe(0);
+    expect(shown[0]).toEqual({
+      at: new Date('2026-10-05T09:32:00.000Z'),
+      receiptNumber: 'T1261005042',
+      products: ['A', 'B', 'C'],
+      moreProducts: 2,
+    });
+  });
+
+  // The till fiscalizes before the sale syncs, so the server may not have it yet.
+  it('falls back to the log time for a sale the server has not got', () => {
+    const { shown } = describeReceipts([ref('a', '2026-10-05T09:33:00.000Z')], new Map());
+    expect(shown[0]).toEqual({ at: '2026-10-05T09:33:00.000Z', receiptNumber: null, products: [], moreProducts: 0 });
+  });
+
+  it('and to the products the log line named', () => {
+    const { shown } = describeReceipts(
+      [{ ...ref('a', '2026-10-05T09:33:00.000Z'), products: ['A', 'B', 'C'], moreProducts: 4 }],
+      new Map(),
+    );
+    expect(shown[0]).toMatchObject({ receiptNumber: null, products: ['A', 'B', 'C'], moreProducts: 4 });
+  });
+
+  it('names at most three receipts and counts the rest', () => {
+    const refs = ['a', 'b', 'c', 'd', 'e'].map((saleId) => ref(saleId, '2026-10-05T09:00:00.000Z'));
+    const { shown, hidden } = describeReceipts(refs, new Map());
+    expect(shown).toHaveLength(3);
+    expect(hidden).toBe(2);
+  });
+
+  it('shows them under the incident, in shop time, escaped', () => {
+    const html = msgLogAlert(
+      {
+        terminals: ['T1'],
+        hidden: 0,
+        shown: [
+          {
+            level: 'error',
+            text: '[701003] Не отсканирован код',
+            count: 2,
+            terminals: ['T1'],
+            receipts: [
+              {
+                at: new Date('2026-10-05T09:32:00.000Z'),
+                receiptNumber: 'T1261005042',
+                products: ['Сок <Rich> 1L'],
+                moreProducts: 2,
+              },
+              { at: '2026-10-05T09:40:00.000Z', receiptNumber: null, products: [], moreProducts: 0 },
+            ],
+            hiddenReceipts: 4,
+          },
+        ],
+      },
+      'ru',
+    );
+    // 09:32 UTC is 14:32 in Tashkent.
+    expect(html).toContain('🧾 05.10, 14:32 · №T1261005042 · Сок &lt;Rich&gt; 1L +2');
+    expect(html).toContain('🧾 05.10, 14:40 · чек ещё не синхронизирован');
+    expect(html).toContain('…и ещё 4 чек(ов)');
+  });
+});
+
+describe('looking up the failed sales', () => {
+  const telegram = {} as TelegramService;
+
+  it('asks only within the store and maps what it finds', async () => {
+    const findMany = jest.fn().mockResolvedValue([
+      {
+        id: 'a',
+        receiptNumber: 'T1261005042',
+        createdAt: new Date('2026-10-05T09:32:00.000Z'),
+        items: [{ productName: 'Coca-Cola 1L' }],
+        _count: { items: 4 },
+      },
+    ]);
+    const service = new LogAlertsService({ sale: { findMany } } as unknown as PrismaService, telegram);
+
+    const sales = await service.loadSales('store-1', ['a', 'b']);
+
+    expect(findMany.mock.calls[0][0].where).toEqual({ storeId: 'store-1', id: { in: ['a', 'b'] } });
+    expect(sales.get('a')).toEqual({
+      receiptNumber: 'T1261005042',
+      createdAt: new Date('2026-10-05T09:32:00.000Z'),
+      products: ['Coca-Cola 1L'],
+      itemCount: 4,
+    });
+    expect(sales.has('b')).toBe(false);
+  });
+
+  it('skips the query when no sale was named', async () => {
+    const findMany = jest.fn();
+    const service = new LogAlertsService({ sale: { findMany } } as unknown as PrismaService, telegram);
+    expect((await service.loadSales('store-1', [])).size).toBe(0);
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  // The details are a convenience; the alert itself must still go out.
+  it('returns nothing rather than throwing when the lookup fails', async () => {
+    const findMany = jest.fn().mockRejectedValue(new Error('db down'));
+    const service = new LogAlertsService({ sale: { findMany } } as unknown as PrismaService, telegram);
+    expect((await service.loadSales('store-1', ['a'])).size).toBe(0);
   });
 });
