@@ -1,3 +1,95 @@
+# Bluetooth label printer (XP-365B over COM, TSPL) (2026-10-07), branch feat/bt-label-printer (from dev). Approved 2026-10-07; done, 1.33.0
+
+## Findings
+- **Price tags already print TSPL, not HTML.** `PrintTagsModal.tsx` → `printer.printPriceTagsTSPL` →
+  `src/main/printer/tspl-printer.ts`: builds TSPL (CODEPAGE 1251, cp1251 bytes via `toCP1251`), sends it RAW to a
+  *Windows printer* (`label_printer_name`) through a PowerShell/winspool script. The HTML `printer:printPriceTags`
+  (thermal-printer.ts:305) has no renderer caller left.
+- Template (`price_tag_templates` setting, JSON): widthMm/heightMm, elements name/price/unit/barcode/articleId/pluCode/
+  productionDate/expiryDate/customText1/2, fontSize→TSPL multiplier, fontWeight≥600→double-strike. EAN13 if the check
+  digit is valid, else Code128. Copies per product + amount for weighted goods already exist in the modal.
+- Builder is not testable today: it lives next to `getPrismaClient` / execSync in tspl-printer.ts.
+- `serialport@^13` + `@electron/rebuild` are already in package.json (uncommitted on dev); nothing in src/main uses
+  serialport yet → this is the first native module in a bundle that ships no node_modules.
+- Machine settings must be in `LOCAL_ONLY_SETTINGS` (local-only-settings.ts) or they sync to the other tills.
+- `ipcSafe` is a local helper copied per handler file (sales/weighed-items), not a shared export.
+- Receipt / ESC-POS path (thermal-printer.ts) is not touched.
+
+## Design
+1. **Pure builder** `src/main/printer/tspl-builder.ts`: move `buildOneLabelTSPL`/`buildFullTSPL`/`toCP1251`/helpers out
+   of tspl-printer.ts unchanged. tspl-printer.ts imports them → spooler output byte-identical (test proves it with a
+   fixture captured *before* the move). Options added for the COM path only: `gapMm` (2), `printCmd: "copiesFirst" |
+   "setsFirst"` → spooler keeps `PRINT <qty>,1`, Bluetooth emits `PRINT 1,<qty>`.
+2. **Codepage test first** (hardware — you run it): `scripts/label-codepage-test.ts` prints three lines: Cyrillic
+   in CODEPAGE 1251 + cp1251 bytes, the same with CODEPAGE UTF-8 + UTF-8 bytes, and Latin `O'zbekiston g'alla`.
+   You send a photo. Uzbek Latin (o', g', ʻ→') is ASCII, so only Cyrillic is at stake.
+   - 1251 prints → keep TEXT (what we already do). Recorded here.
+   - Neither prints → bitmap: render text to a 1-bit raster in main (offscreen canvas in a hidden BrowserWindow)
+     and send `BITMAP x,y,wBytes,h,0,<data>`. Bigger job; separate commits; re-plan before starting.
+3. **`LabelPrinterService`** `src/main/printer/label-printer.service.ts` (serialport): `listPorts()`, `print(job)`,
+   `testPrint()`. Each job: open → write → drain → close; a promise-chain queue so jobs never interleave. Open retried
+   once after 1500 ms. Open timeout 8 s (a sleeping BT printer can hang the open). Errors are a `LabelPrinterError`
+   with `code: 'PORT_NOT_FOUND' | 'PORT_BUSY' | 'WRITE_FAILED'`; open timeout → PORT_NOT_FOUND. Configured port absent
+   from `listPorts()` → PORT_NOT_FOUND without trying. Port is opened per job (not held), so a re-paired COM number only
+   needs re-selecting.
+4. **IPC** `src/main/ipc/label-printer-handlers.ts`: `labelPrinter:listPorts|getConfig|setConfig|testPrint|print`.
+   Handlers return `{ ok: true, ... } | { ok: false, code, message }` (Electron strips error classes across IPC), via
+   ipcSafe. Preload `window.electronAPI.labelPrinter.*` + its type block, ipc-client wrapper, hook
+   `useLabelPrinter`. Shared types `src/shared/types/label-printer.ts` (**additive new file — needs your OK**,
+   src/shared rule).
+5. **Settings** (SQLite `systemSetting`, all added to `LOCAL_ONLY_SETTINGS`): `label_bt_port` (COM3), `label_bt_baud`
+   (115200), `label_bt_width_mm` (40), `label_bt_height_mm` (30), `label_bt_gap_mm` (2), `label_print_mode`
+   (`spooler` | `bluetooth`, default **spooler** = today's behaviour, the feature flag).
+   UI: new panel on the PriceTags list page under the existing printer selector: mode radio, port dropdown + refresh,
+   baud, width/height/gap, Save, Test print. Theme tokens, virtual-keyboard props like the rest of the page.
+6. **Print path**: PrintTagsModal sends the same request; main routes by `label_print_mode`. Bluetooth path uses the
+   *template's* width/height for layout and the settings gap; settings width/height are used by Test print.
+   Per-product copies already exist.
+7. **Errors**: toast with code-specific text: PORT_NOT_FOUND → "Printer not found on COMx. Turn the printer on; if it
+   was re-paired, choose the new port in Price tags settings." PORT_BUSY → "Port busy (another program?)".
+   WRITE_FAILED → "Sending failed, check the printer and try again". ru + uz.
+8. **Packaging**: `serialport` external in electron.vite.config.ts main build; `files` + `asarUnpack` for
+   `node_modules/serialport`, `@serialport/**`, `node-gyp-build`, `debug`, `ms` in electron-builder.config.js.
+   bindings-cpp ships N-API prebuilds (win32-x64), so no electron-rebuild needed. **Conflicts with CLAUDE.md, see
+   questions.**
+9. **Tests** (Jest): builder: CRLF only, SIZE/GAP/CLS, `PRINT 1,n`, EAN13 vs 128 choice, Cyrillic → cp1251 bytes,
+   o'/g'/ʻ → ASCII, wrapping, spooler byte-identical fixture. Service: queue order + retry + error mapping with a
+   mocked `serialport` (no hardware).
+10. Version: **minor** bump at the end, 1.32.16 → 1.33.0. `npx cross-env APP_MODE=pos electron-vite build`
+    compile check; you run `npm run deploy:pos`.
+
+## Commits (feat/bt-label-printer)
+- [x] chore(pos): serialport dependency + smoke test script
+- [x] refactor(pos): pure TSPL builder + byte-identical fixture test (red-proved: 3/3 cases fail on one changed line)
+- [x] fix(pos): U+02BC (gʼ) printed as `?` — now an apostrophe (found while writing the tests)
+- [x] chore(scripts): codepage test — **result pending: user prints `npx tsx scripts/label-codepage-test.ts COM3`**
+- [x] feat(pos): LabelPrinterService + tests (queue red-proved)
+- [x] feat(pos): label-printer IPC, preload, ipc-client, hook, shared types
+- [x] feat(pos): Bluetooth printer settings panel + print mode (ru/uz)
+- [x] build(pos): externalize serialport
+- [x] chore: version 1.33.0; merge to dev
+
+## Decisions (user)
+Edit electron-builder.config.js and run build:pos — approved once, for this task. Shared types file OK. Panel on the
+PriceTags page. Branch from dev, merge to dev, minor bump.
+
+## Outcome
+- Deviations from the design: the modal routes (Windows printer vs Bluetooth select, initialised from the saved
+  mode), not main — the spooler handler stays untouched. Copies option is `copies: "sets" | "perLabel"`. Shared types
+  file is `src/shared/types/label-printer.types.ts` (matches the folder's naming).
+- Packaging: electron-builder ran @electron/rebuild on bindings-cpp → needs Visual Studio → build failed. Set
+  `npmRebuild: false`: the only native dep ships N-API prebuilds (ABI-independent). A future native dependency without
+  N-API prebuilds needs it back on. `@electron/rebuild` in devDependencies is now unused (electron-builder warns).
+- Verified here: build:pos OK; `app.asar.unpacked/node_modules/@serialport/bindings-cpp/prebuilds/win32-x64/*.node`
+  present; Electron 40.1.0 (ABI 143) run as Node required serialport from the packaged app.asar, the binding loaded and
+  `SerialPort.list()` returned COM3/COM4 (Bluetooth). **Not yet verified:** a print from the installed app, the UI.
+- Tests: full suite 1320/1322; `shift-tenders` failed once under load, passes alone. `local-server.integration`
+  passes all 79 tests but its `afterAll` (stopLocalServer/closeDatabase) hit the 30 s hook timeout in 3 of 7 runs on
+  this branch (at 0181646 and f0a1ae9) and 0 of 3 on dev; the last 2 runs on the branch passed. Its only link to this
+  branch is six new keys in `LOCAL_ONLY_SETTINGS`. Watch it.
+- Codepage: open until the test label is printed. Uzbek Cyrillic Ў Қ Ғ Ҳ are not in cp1251 and print as `?` on both
+  paths (as before).
+
 # Product.isValid — REGOS rejected it until the next arrival (2026-10-05), branch feat/product-is-valid (from dev). Approved by user; done, not committed
 
 Decisions (user): both schemas, synced; blame by probing each line with Receipt.ValidateSale; only store the flag
