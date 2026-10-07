@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import styled, { useTheme } from 'styled-components';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, XCircle, Ban, Loader2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { useVirtualKeyboard } from '../../hooks/useVirtualKeyboard';
 import {
@@ -19,9 +19,10 @@ import { useToast } from '../../context/ToastContext';
 import type {
   FiscalConnectionResult,
   FiscalQueueStatus,
-  FiscalBulkProgress,
   FiscalTimings,
 } from '@shared/types';
+import { FiscalBacklogCard } from './FiscalBacklogCard';
+import { DuplicateCodesCard } from './DuplicateCodesCard';
 import {
   PHASE_COLOR,
   phaseBreakdown,
@@ -30,7 +31,6 @@ import {
   slowestPhase,
   formatMs,
 } from './fiscalTimings';
-import { translateMarkingStatus } from '../POS/markingCirculation';
 
 const Container = styled(SettingsPage)`
   display: flex;
@@ -114,61 +114,6 @@ const StatusLine = styled.div<{ $ok?: boolean }>`
 const Muted = styled.div`
   font-size: 13px;
   color: ${({ theme }) => theme.colors.textSecondary};
-`;
-
-const ProgressHead = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: ${({ theme }) => theme.spacing.sm};
-  font-size: 13px;
-  color: ${({ theme }) => theme.colors.textSecondary};
-`;
-
-const Spin = styled(Loader2)`
-  animation: fiscal-spin 1s linear infinite;
-  @keyframes fiscal-spin {
-    to { transform: rotate(360deg); }
-  }
-`;
-
-const BarOuter = styled.div`
-  width: 100%;
-  height: 8px;
-  background: ${({ theme }) => theme.colors.border};
-  border-radius: 999px;
-  overflow: hidden;
-`;
-
-const BarInner = styled.div<{ $pct: number; $done?: boolean }>`
-  height: 100%;
-  width: ${({ $pct }) => $pct}%;
-  background: ${({ theme, $done }) => ($done ? theme.colors.success ?? theme.colors.primary : theme.colors.primary)};
-  transition: width 0.25s ease;
-`;
-
-const Chips = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: ${({ theme }) => theme.spacing.xs};
-`;
-
-const Chip = styled.div<{ $tone: 'ok' | 'error' | 'muted' | 'warn' }>`
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: ${({ theme, $tone }) =>
-    ($tone === 'ok' ? theme.colors.success ?? theme.colors.primary
-      : $tone === 'error' || $tone === 'warn' ? theme.colors.error
-      : theme.colors.textSecondary) + '18'};
-  color: ${({ theme, $tone }) =>
-    $tone === 'ok' ? theme.colors.success ?? theme.colors.primary
-      : $tone === 'error' || $tone === 'warn' ? theme.colors.error
-      : theme.colors.textSecondary};
 `;
 
 const OutList = styled.div`
@@ -279,14 +224,6 @@ const RecentRow = styled.div<{ $slow?: boolean }>`
   color: ${({ theme, $slow }) => ($slow ? theme.colors.error : theme.colors.text)};
 `;
 
-const OutItem = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: ${({ theme }) => theme.colors.text};
-`;
-
 export function FiscalSettings() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -332,9 +269,8 @@ export function FiscalSettings() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<FiscalConnectionResult | null>(null);
   const [queue, setQueue] = useState<FiscalQueueStatus | null>(null);
-  const [bulkRunning, setBulkRunning] = useState(false);
-  const [progress, setProgress] = useState<FiscalBulkProgress | null>(null);
-  const [outList, setOutList] = useState<{ receipt: string; status: string }[]>([]);
+  // The backlog stepper is a paid service: shown only while the store's license has it open.
+  const [backlogAllowed, setBacklogAllowed] = useState(false);
   const [timings, setTimings] = useState<FiscalTimings | null>(null);
 
   // Config load state. The form must NOT show its editable defaults until the real config has
@@ -387,16 +323,8 @@ export function FiscalSettings() {
     loadConfig();
     window.electronAPI.fiscal.getTimings().then(setTimings).catch(() => {});
     window.electronAPI.fiscal.getStatus().then(setQueue).catch(() => {});
+    window.electronAPI.fiscal.backlogAllowed().then(setBacklogAllowed).catch(() => setBacklogAllowed(false));
   }, [loadConfig]);
-
-  // Live progress from the bulk "fiscalize old receipts" run (streamed over fiscal:bulkProgress).
-  useEffect(() => {
-    const off = window.electronAPI.fiscal.onBulkProgress((p) => {
-      setProgress(p);
-      if (p.lastDisabled) setOutList((prev) => [...prev, p.lastDisabled!]);
-    });
-    return off;
-  }, []);
 
   const handleSave = async () => {
     setSaving(true);
@@ -420,6 +348,9 @@ export function FiscalSettings() {
       setUzqrTimeoutMs(String(cfg.uzqrTimeoutMs));
       setHasPassword(cfg.hasPassword);
       setPassword('');
+      // The backlog card is gated on the saved "enabled" flag — re-read it, or turning
+      // fiscalisation on leaves the card greyed out until the screen is reopened.
+      refreshQueue();
       toast.success(t('common.saved', 'Сохранено'));
     } catch {
       toast.error(t('common.error'));
@@ -442,44 +373,6 @@ export function FiscalSettings() {
       refreshTimings();
     } catch {
       toast.error(t('common.error'));
-    }
-  };
-
-  const handleFiscalizeOld = async () => {
-    setProgress(null);
-    setOutList([]);
-    setBulkRunning(true);
-    try {
-      const r = await window.electronAPI.fiscal.fiscalizeOld();
-      if (!r.enabled) {
-        toast.error(t('fiscalSettings.disabledFirst', 'Сначала включите фискализацию'));
-        return;
-      }
-      const summary = t('fiscalSettings.bulkDone', {
-        defaultValue:
-          'Готово: фискализировано {{fiscalized}}, ошибок {{failed}}, исправлено меток {{repaired}}, отключено {{disabled}}, вне оборота {{outOfCirculation}}',
-        fiscalized: r.fiscalized,
-        failed: r.failed,
-        repaired: r.repaired,
-        disabled: r.disabled,
-        outOfCirculation: r.outOfCirculation,
-      });
-      if (r.unreachable) {
-        toast.error(
-          t('fiscalSettings.bulkUnreachable', 'Виртуальная касса недоступна — обработка остановлена') +
-            '. ' +
-            summary,
-        );
-      } else if (r.failed > 0) {
-        toast.error(summary);
-      } else {
-        toast.success(summary);
-      }
-    } catch {
-      toast.error(t('common.error'));
-    } finally {
-      setBulkRunning(false);
-      refreshQueue();
     }
   };
 
@@ -711,88 +604,8 @@ export function FiscalSettings() {
           that used to be empty, and neither pushes the other below the fold. 430px keeps the
           timings tables readable — below that the pair collapses back to one column. */}
       <SettingsGrid $min={430}>
-      {queue && (
-        <Card>
-          <Label>{t('fiscalSettings.queueStatus', 'Очередь фискализации')}</Label>
-          <Muted>
-            {t('fiscalSettings.fiscalized', 'Фискализировано')}: {queue.fiscalized} ·{' '}
-            {t('fiscalSettings.pending', 'В ожидании')}: {queue.pending} ·{' '}
-            {t('fiscalSettings.failed', 'Ошибки')}: {queue.failed}
-          </Muted>
-          <Muted>
-            {t(
-              'fiscalSettings.bulkHint',
-              'Фискализирует все старые чеки с маркированными товарами (группа 022), исправляя QR-метки. Остальные старые чеки помечаются как не требующие фискализации.',
-            )}
-          </Muted>
-          <ButtonRow>
-            <Button
-              variant="secondary"
-              onClick={handleFiscalizeOld}
-              disabled={bulkRunning || !queue.enabled}
-            >
-              {bulkRunning
-                ? t('fiscalSettings.bulkRunning', 'Обработка чеков…')
-                : t('fiscalSettings.bulkButton', 'Фискализировать все старые чеки')}
-            </Button>
-          </ButtonRow>
-
-          {progress && (
-            <>
-              <ProgressHead>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  {progress.phase !== 'done' && <Spin size={14} />}
-                  {progress.phase === 'done'
-                    ? t('fiscalSettings.bulkProgress.done', 'Готово')
-                    : progress.phase === 'fiscalizing'
-                      ? t('fiscalSettings.bulkProgress.fiscalizing', 'Фискализация…')
-                      : t('fiscalSettings.bulkProgress.checking', 'Проверка маркировки…')}
-                  {progress.currentReceipt && progress.phase !== 'done' ? ` #${progress.currentReceipt}` : ''}
-                </span>
-                <span>{progress.processed} / {progress.total}</span>
-              </ProgressHead>
-              <BarOuter>
-                <BarInner
-                  $pct={
-                    progress.total
-                      ? Math.round((progress.processed / progress.total) * 100)
-                      : progress.phase === 'done' ? 100 : 0
-                  }
-                  $done={progress.phase === 'done'}
-                />
-              </BarOuter>
-              <Chips>
-                <Chip $tone="ok">
-                  <CheckCircle size={12} /> {t('fiscalSettings.fiscalized', 'Фискализировано')}: {progress.fiscalized}
-                </Chip>
-                <Chip $tone="error">
-                  <XCircle size={12} /> {t('fiscalSettings.failed', 'Ошибки')}: {progress.failed}
-                </Chip>
-                <Chip $tone="muted">
-                  <Ban size={12} /> {t('fiscalSettings.bulkProgress.disabled', 'Отключено')}: {progress.disabled}
-                </Chip>
-                <Chip $tone="warn">
-                  <Ban size={12} /> {t('fiscalSettings.bulkProgress.outOfCirculation', 'Вне оборота')}: {progress.outOfCirculation}
-                </Chip>
-              </Chips>
-              {outList.length > 0 && (
-                <>
-                  <Label>
-                    {t('fiscalSettings.bulkProgress.outOfCirculationList', 'Чеки, отключённые из-за маркировки вне оборота')}
-                  </Label>
-                  <OutList>
-                    {outList.map((o, i) => (
-                      <OutItem key={`${o.receipt}-${i}`}>
-                        <Ban size={12} /> #{o.receipt} — {translateMarkingStatus(o.status, t)}
-                      </OutItem>
-                    ))}
-                  </OutList>
-                </>
-              )}
-            </>
-          )}
-        </Card>
-      )}
+      {queue && backlogAllowed && <FiscalBacklogCard queue={queue} onChanged={refreshQueue} />}
+      <DuplicateCodesCard />
 
       {timings && (
         <Card>

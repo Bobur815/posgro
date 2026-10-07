@@ -30,6 +30,11 @@ export interface RegosVcrConfig {
   uzqrPollMs: number;
   /** How long to wait for the buyer before giving up and offering a retry. */
   uzqrTimeoutMs: number;
+  /**
+   * Local product id sent in place of a line whose marking code is dead or missing (fiscal
+   * backlog only). Null = not chosen; the verify step stops until it is.
+   */
+  substituteProductId: number | null;
 }
 
 /** Payload to update config; `password` only set when the user types a new one. */
@@ -46,6 +51,8 @@ export interface RegosVcrConfigInput {
   uzqrEnabled?: boolean;
   uzqrPollMs?: number;
   uzqrTimeoutMs?: number;
+  /** null clears it. */
+  substituteProductId?: number | null;
 }
 
 // ── UzQR ──────────────────────────────────────────────────────────────────────
@@ -194,37 +201,123 @@ export interface FiscalSalePreview {
   };
 }
 
-/**
- * Result of the "fiscalise all old receipts" bulk action. Only receipts containing a
- * group-022 marked product are fiscalised (their marking labels are repaired first, in case
- * they were captured under a Cyrillic keyboard layout); non-022 unfiscalised receipts are
- * marked DISABLED so they leave the queue.
- */
-export interface FiscalBulkResult {
-  enabled: boolean;
-  fiscalized: number; // 022 receipts successfully fiscalised
-  failed: number; // 022 receipts that still failed (e.g. missing/invalid label, VCR error)
-  repaired: number; // marking labels corrected from a corrupted (Cyrillic) capture
-  disabled: number; // non-022 receipts moved out of the queue
-  outOfCirculation: number; // 022 receipts disabled because a marking code is out of circulation (asl-belgisi)
-  unreachable?: boolean; // true if the VCR was unreachable and the run stopped early
+// ── Fiscal backlog (the 4-step stepper on the Fiscal Settings screen) ───────────────────────────
+// Rule #1: of the unfiscalised receipts, only cash/Click-only ones without a marked product may skip
+// fiscalisation (DISABLED, tagged so no later run takes them again). Everything else is fiscalised.
+
+/** A receipt that must be fiscalised, as listed by the classify step. */
+export interface FiscalBacklogReceipt {
+  saleId: string;
+  receiptNumber: string;
+  createdAt: string;
+  finalAmount: number;
+  paymentMethod: string;
+  fiscalStatus: string | null;
+  marked: boolean;
+}
+
+/** Step 1 — skippable receipts DISABLED, the rest listed. */
+export interface FiscalBacklogClassifyResult {
+  ok: boolean;
   error?: string;
+  skipped: number;
+  kept: FiscalBacklogReceipt[];
+}
+
+/** A product in the kept receipts whose fiscal data REGOS will reject. */
+export interface FiscalBacklogProductIssue {
+  productId: number;
+  name: string;
+  barcode: string;
+  problem: "NO_MXIK" | "NO_PACKAGE_CODE";
+}
+
+/** Step 2 — keyboard-layout repair of marking codes, missing MXIK from tasnif, product data check. */
+export interface FiscalBacklogRepairResult {
+  ok: boolean;
+  error?: string;
+  labelsRepaired: number;
+  receiptsTouched: number;
+  /** Products whose missing MXIK was found on tasnif.soliq.uz and saved. */
+  mxikFilled: { productId: number; name: string; barcode: string; mxik: string }[];
+  /** Products tasnif could not be asked about (offline/error) — they stay in productIssues. */
+  tasnifUnreachable: number;
+  productIssues: FiscalBacklogProductIssue[];
+}
+
+/** Why a line is changed on the payload: "NO_LABEL", "NOT_FOUND", "UNMARKED" or a registry status. */
+export type FiscalLineReason = string;
+
+/**
+ * What the payload does with one receipt line, stored as JSON in sales.fiscal_substitutions:
+ *  - substitute: sent as the configured substitute product at the same amount (card receipts)
+ *  - omit:       left off the payload (cash/Click receipts send only marked lines with valid codes)
+ * Keyed by sale_items.id. The sale itself, its lines and stock never change.
+ */
+export interface FiscalLinePlan {
+  itemId: string;
+  action: "substitute" | "omit";
+  reason: FiscalLineReason;
+}
+
+/** Step 3 — asl-belgisi check of every marking code; decides each line's fate. */
+export interface FiscalBacklogVerifyResult {
+  ok: boolean;
+  /** Set when the step stopped: registry unreachable/key problem, UNKNOWN status, no substitute. */
+  error?: string;
+  /** The receipt and code the step stopped on, when it stopped on one. */
+  stoppedAt?: { receipt: string; label?: string };
+  checked: number;
+  /** Cash/Click receipts with no valid marked line, DISABLED. */
+  disabled: number;
+  /** Substituted lines, omitted marked lines and disabled receipts, for the admin to review. */
+  changes: {
+    receipt: string;
+    productName: string;
+    reason: FiscalLineReason;
+    action: "substitute" | "omit" | "disable";
+  }[];
+}
+
+/** Step 4 — fiscalisation. Counts come from the status read back, never from "no exception". */
+export interface FiscalBacklogFiscalizeResult {
+  ok: boolean;
+  error?: string;
+  fiscalized: number;
+  failed: { receipt: string; error: string }[];
+  /** True if the VCR stopped answering and the run stopped early. */
+  unreachable?: boolean;
 }
 
 /**
- * Live progress for the "fiscalise all old receipts" run, streamed to the renderer over the
- * `fiscal:bulkProgress` channel so the admin can watch each receipt being checked/fiscalised.
+ * A receipt fiscalised before marking codes were sent per line: two or more packs of one product
+ * went to REGOS all carrying the last scanned code, so the other codes were never registered.
  */
-export interface FiscalBulkProgress {
-  phase: "checking" | "fiscalizing" | "disabled" | "done";
-  processed: number; // marked receipts handled so far
-  total: number; // total marked receipts to process
-  fiscalized: number;
-  failed: number;
-  disabled: number; // non-022 receipts disabled up front
-  outOfCirculation: number; // 022 receipts disabled for a dead marking code
-  currentReceipt?: string; // receiptNumber currently being processed
-  lastDisabled?: { receipt: string; status: string }; // last out-of-circulation hit, for the list
+export interface FiscalDuplicateCodeReceipt {
+  saleId: string;
+  receiptNumber: string;
+  createdAt: string;
+  regosReceiptNo: string | null;
+  regosFiscalAt: string | null;
+  lines: {
+    barcode: string;
+    productName: string;
+    packs: number;
+    /** The code every one of those packs was sent with. */
+    sentCode: string;
+    /** The codes REGOS never received. */
+    unsentCodes: string[];
+  }[];
+}
+
+export type FiscalBacklogStep ="classify" | "repair" | "verify" | "fiscalize";
+
+/** Live progress for steps 3 and 4, streamed over `fiscal:backlogProgress`. */
+export interface FiscalBacklogProgress {
+  step: FiscalBacklogStep;
+  processed: number;
+  total: number;
+  currentReceipt?: string;
 }
 
 /**

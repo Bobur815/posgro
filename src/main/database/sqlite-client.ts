@@ -1010,6 +1010,13 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
     await prisma.$executeRaw`UPDATE users SET synced = 0 WHERE role = 'CLIENT'`;
   }
 
+  // Migration 37: sales.fiscal_substitutions — which lines of an old receipt the fiscal backlog run
+  // sends as the substitute product (dead or missing marking code). Nullable; a fiscal-payload
+  // detail only, never synced.
+  if (!(await columnExists(prisma, 'sales', 'fiscal_substitutions'))) {
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN fiscal_substitutions TEXT`;
+  }
+
   await prisma.$executeRaw`
     CREATE INDEX IF NOT EXISTS idx_debt_txn_open ON debt_transactions(user_id, settled_at)
   `;

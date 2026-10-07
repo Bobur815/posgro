@@ -27,8 +27,7 @@ import {
   setupPrinterHandlers,
 } from "../printer/thermal-printer";
 import { convertUzbekText } from "../../shared/utils/transliterator";
-import { mapPackageNames } from "../../shared/utils/mxik-packages";
-import { findBarcodeMatch } from "../../shared/utils/mxik-lookup";
+import { lookupMxikByBarcode, getMxikPackages } from "../fiscal/tasnif";
 import { assertNotSatellite } from "../lan/satellite-guard";
 import { getMainLinkStatus, onMainLinkStatus } from "../lan/main-link";
 import { isSatellite } from "../lan/role";
@@ -104,70 +103,15 @@ function setupMxikHandlers(): void {
   // browser CORS; terminal is in UZ). Mirrors the web client's mxik.searchByBarcode so the
   // renderer can auto-fill MXIK on barcode entry the same way the web ProductForm does.
   ipcMain.handle("mxik:lookupByBarcode", async (_event, barcode: string) => {
-    const bc = (barcode || "").trim();
-    if (!bc) return null;
-    const TASNIF = "https://tasnif.soliq.uz/api/cls-api";
-    try {
-      const searchRes = await fetch(
-        `${TASNIF}/elasticsearch/search?lang=uz_cyrl&search=${encodeURIComponent(bc)}&size=5&page=0`,
-        { signal: AbortSignal.timeout(8000) },
-      );
-      if (!searchRes.ok) return null;
-      const searchJson = (await searchRes.json()) as {
-        success?: boolean;
-        data?: Array<{ mxikCode: string; internationalCode?: string }>;
-      };
-      if (!searchJson?.success || !searchJson.data?.length) return null;
-      // Exact barcode match only — tasnif's search is fuzzy and its first row is regularly a
-      // different product with a near-miss barcode (see findBarcodeMatch).
-      const match = findBarcodeMatch(searchJson.data, bc);
-      if (!match) return null;
-
-      const detailRes = await fetch(`${TASNIF}/integration-mxik/get/history/${match.mxikCode}`, {
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!detailRes.ok) return null;
-      const detailJson = (await detailRes.json()) as {
-        data?: {
-          mxikCode: string;
-          brandName?: string | null;
-          attributeNameUz?: string | null;
-          attributeNameRu?: string | null;
-          subPositionNameUz?: string | null;
-          subPositionNameRu?: string | null;
-        };
-      };
-      const d = detailJson?.data;
-      if (!d) return null;
-      const brand = d.brandName ? `${d.brandName} ` : "";
-      return ipcSafe({
-        code: d.mxikCode,
-        name: brand + (d.attributeNameUz ?? d.subPositionNameUz ?? ""),
-        nameRu: brand + (d.attributeNameRu ?? d.subPositionNameRu ?? ""),
-      });
-    } catch (error) {
-      console.error("mxik:lookupByBarcode failed:", error instanceof Error ? error.message : error);
-      return null;
-    }
+    const r = await lookupMxikByBarcode(barcode);
+    return r.ok && r.match ? ipcSafe(r.match) : null;
   });
 
   // Package (unit) codes for an MXIK — fetched from tasnif.soliq.uz directly. Done in the
   // main process (no browser CORS) and the terminal is in Uzbekistan, so tasnif is reachable.
-  ipcMain.handle("mxik:getPackages", async (_event, mxikCode: string) => {
-    if (!/^\d{17}$/.test(mxikCode || "")) return [];
-    try {
-      const response = await fetch(
-        `https://tasnif.soliq.uz/api/cls-api/integration-mxik/get/history/${mxikCode}`,
-        { signal: AbortSignal.timeout(8000) },
-      );
-      if (!response.ok) return [];
-      const json = (await response.json()) as { data?: { packageNames?: unknown } };
-      return ipcSafe(mapPackageNames(json?.data?.packageNames));
-    } catch (error) {
-      console.error("Failed to fetch MXIK packages:", error instanceof Error ? error.message : error);
-      return [];
-    }
-  });
+  ipcMain.handle("mxik:getPackages", async (_event, mxikCode: string) =>
+    ipcSafe(await getMxikPackages(mxikCode)),
+  );
 
   // Search the MXIK catalog by product name for the picker — queries tasnif.soliq.uz directly
   // (main process: no browser CORS, terminal is in UZ). Mirrors the web client's mxik.catalogSearch

@@ -21,7 +21,9 @@ jest.mock('./secret-store', () => ({
   hasVcrPassword: async () => true,
   setVcrPassword: async () => undefined,
 }));
-jest.mock('../marking/circulation-check', () => ({ isCodeOutOfCirculation: async () => false }));
+jest.mock('../marking/circulation-check', () => ({
+  verifyMarkingCodeDetails: async () => ({ reachable: false }),
+}));
 
 const prismaMock = {
   systemSetting: {
@@ -573,5 +575,25 @@ describe('loggedItems', () => {
 
   it('writes names as JSON, so a comma or bracket in a name survives', () => {
     expect(loggedItems(['Сок, яблоко [1L]'])).toBe(' items=["Сок, яблоко [1L]"]');
+  });
+});
+
+describe('fiscalizeSale — marking codes per line', () => {
+  it('sends each of two identical drinks with its own code', async () => {
+    const row = saleRow(2);
+    // Same drink twice: one barcode, two scans, two different codes.
+    row.items[1] = { ...row.items[0], productId: 1 };
+    prismaMock.sale.findUnique.mockImplementation(async () => ({
+      ...row,
+      regosLabels: JSON.stringify([
+        { barcode: '1000', label: 'CODE-A' },
+        { barcode: '1000', label: 'CODE-B' },
+      ]),
+    }));
+
+    await regosVcrService.fiscalizeSale('sale-1');
+
+    const positions = (client.sale.mock.calls[0][0] as { positions: Array<{ label?: string }> }).positions;
+    expect(positions.map((p) => p.label)).toEqual(['CODE-A', 'CODE-B']);
   });
 });

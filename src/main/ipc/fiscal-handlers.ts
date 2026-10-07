@@ -1,10 +1,16 @@
 import { ipcMain } from "electron";
 import { regosVcrService } from "../fiscal/regos-vcr-service";
 import { stats, recentSales, reset } from "../fiscal/fiscal-timing";
-import type { RegosVcrConfigInput } from "../../shared/types/fiscal.types";
+import type {
+  FiscalBacklogProgress,
+  RegosVcrConfigInput,
+} from "../../shared/types/fiscal.types";
 import { assertNotSatellite } from "../lan/satellite-guard";
 import { isSatellite } from "../lan/role";
 import * as satellite from "../lan/satellite-ops";
+import { runEntitled } from "../fiscal/backlog-gate";
+import { fiscalBacklogOpen } from "../license/license";
+import { getCurrentUser } from "./auth-handlers";
 
 /**
  * Actions that drive the VCR. On a satellite there is none — it is a local service on the main (LAN
@@ -60,16 +66,54 @@ export function setupFiscalHandlers(): void {
     regosVcrService.previewSalePayload(saleId),
   );
 
-  // Bulk: fiscalise all old (group-022) receipts and disable the rest. Manual replacement for
-  // the removed background retry worker. Streams live progress to the caller's window over
-  // 'fiscal:bulkProgress' so the Fiscal Settings screen can render a progress UI.
+  // Fiscal backlog stepper (Fiscal Settings). A paid service: each step runs only while the store's
+  // license has it open (backlog-gate.ts), and is written to the audit log. The long steps stream
+  // progress to the caller's window over 'fiscal:backlogProgress'.
+  const progressTo = (event: Electron.IpcMainInvokeEvent) => (p: FiscalBacklogProgress) => {
+    if (!event.sender.isDestroyed()) event.sender.send("fiscal:backlogProgress", p);
+  };
+  const actor = () => {
+    const u = getCurrentUser() as { id: string; phone: string } | null;
+    return u ? { id: u.id, phone: u.phone } : null;
+  };
+  ipcMain.handle("fiscal:backlogAllowed", async () => fiscalBacklogOpen());
+  // Free and read-only: receipts sent with one marking code for several packs (before per-line codes).
+  ipcMain.handle("fiscal:duplicateCodeReceipts", async () => regosVcrService.duplicateCodeReceipts());
+  ipcMain.handle("fiscal:backlogBusy", async () => regosVcrService.backlogBusy());
   ipcMain.handle(
-    "fiscal:fiscalizeOld",
-    mainOnly(async (event: Electron.IpcMainInvokeEvent) =>
-      regosVcrService.fiscalizeOldReceipts((p) => {
-        if (!event.sender.isDestroyed())
-          event.sender.send("fiscal:bulkProgress", p);
-      }),
+    "fiscal:backlogClassify",
+    mainOnly(async (_event, fromDate: string) =>
+      runEntitled("classify", fromDate, actor(), { ok: false, skipped: 0, kept: [] }, () =>
+        regosVcrService.backlogClassify(fromDate),
+      ),
+    ),
+  );
+  ipcMain.handle(
+    "fiscal:backlogRepair",
+    mainOnly(async (_event, fromDate: string) =>
+      runEntitled(
+        "repair",
+        fromDate,
+        actor(),
+        { ok: false, labelsRepaired: 0, receiptsTouched: 0, mxikFilled: [], tasnifUnreachable: 0, productIssues: [] },
+        () => regosVcrService.backlogRepair(fromDate),
+      ),
+    ),
+  );
+  ipcMain.handle(
+    "fiscal:backlogVerify",
+    mainOnly(async (event: Electron.IpcMainInvokeEvent, fromDate: string) =>
+      runEntitled("verify", fromDate, actor(), { ok: false, checked: 0, disabled: 0, changes: [] }, () =>
+        regosVcrService.backlogVerify(fromDate, progressTo(event)),
+      ),
+    ),
+  );
+  ipcMain.handle(
+    "fiscal:backlogFiscalize",
+    mainOnly(async (event: Electron.IpcMainInvokeEvent, fromDate: string) =>
+      runEntitled("fiscalize", fromDate, actor(), { ok: false, fiscalized: 0, failed: [] }, () =>
+        regosVcrService.backlogFiscalize(fromDate, progressTo(event)),
+      ),
     ),
   );
 

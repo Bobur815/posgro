@@ -3,6 +3,7 @@ import { getPrismaClient } from '../database/sqlite-client';
 import { getAppConfig } from '../config/app-config';
 import { getServerToken } from '../sync/queue-manager';
 import {
+  fiscalBacklogAllowed,
   holdsSeat,
   licenseState,
   publicKeyFrom,
@@ -109,6 +110,15 @@ export async function heldLicense(): Promise<LicensePayload | null> {
   // The server's clock when it signed is a moment that has certainly passed.
   if (held) await clock.raiseTo(Date.parse(held.issuedAt));
   return held;
+}
+
+/**
+ * Whether the paid fiscal backlog service is open on this till: the held license carries a
+ * `fiscalBacklogUntil` still ahead of the trusted clock. Ends on the date by itself, offline too;
+ * a super admin closing it early reaches the till with its next license.
+ */
+export async function fiscalBacklogOpen(): Promise<boolean> {
+  return fiscalBacklogAllowed(await heldLicense(), await clock.trustedNow());
 }
 
 /**
