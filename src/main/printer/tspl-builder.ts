@@ -42,6 +42,14 @@ export interface TsplPrintRequest {
   };
 }
 
+export interface TsplBuildOptions {
+  /**
+   * How a label's copies are requested. `sets` → `PRINT <n>,1` (n sets of one), what the spooler
+   * path has always sent. `perLabel` → `PRINT 1,<n>` (one set, n copies), used on the COM path.
+   * The printed result is the same; the field exists so the spooler bytes stay exactly as before.
+   */
+  copies: "sets" | "perLabel";
+}
 // XP-365B is 203 DPI → ~8 dots per mm
 const DOTS_PER_MM = 8;
 
@@ -166,7 +174,11 @@ function textCmd(
   return [cmd, `TEXT ${x + 1},${y},"${fontName}",0,${mul},${mul},"${escaped}"`];
 }
 
-function buildOneLabelTSPL(item: TsplLabelItem, req: TsplPrintRequest): string {
+function buildOneLabelTSPL(
+  item: TsplLabelItem,
+  req: TsplPrintRequest,
+  opts: TsplBuildOptions,
+): string {
   const { widthMm, heightMm, lang, elements } = req;
   const gapMm = req.gapMm ?? 3;
   const dotsH = Math.round(heightMm * DOTS_PER_MM);
@@ -331,14 +343,48 @@ function buildOneLabelTSPL(item: TsplLabelItem, req: TsplPrintRequest): string {
     // }
   }
 
-  lines.push(`PRINT ${item.copies},1`);
+  lines.push(
+    opts.copies === "perLabel" ? `PRINT 1,${item.copies}` : `PRINT ${item.copies},1`,
+  );
 
   return lines.join("\r\n");
 }
 
-export function buildFullTSPL(req: TsplPrintRequest): string {
+export function buildFullTSPL(
+  req: TsplPrintRequest,
+  opts: TsplBuildOptions = { copies: "sets" },
+): string {
   // Trailing \r\n ensures the printer flushes the last PRINT command immediately
   return (
-    req.items.map((item) => buildOneLabelTSPL(item, req)).join("\r\n") + "\r\n"
+    req.items.map((item) => buildOneLabelTSPL(item, req, opts)).join("\r\n") + "\r\n"
   );
+}
+
+export interface TsplTestLabel {
+  widthMm: number;
+  heightMm: number;
+  gapMm: number;
+  port: string;
+}
+
+/** A self-describing label for the "Test print" button: port, size, a Cyrillic line, a barcode. */
+export function buildTestLabelTSPL(t: TsplTestLabel): string {
+  const margin = 2 * DOTS_PER_MM;
+  const dotsH = Math.round(t.heightMm * DOTS_PER_MM);
+  const barcodeH = Math.max(24, Math.min(60, dotsH - margin * 2 - 3 * 24 - 28));
+  const lines = [
+    `SIZE ${t.widthMm} mm, ${t.heightMm} mm`,
+    `GAP ${t.gapMm} mm, 0 mm`,
+    `SPEED 4`,
+    `DENSITY 8`,
+    `DIRECTION 0,0`,
+    `CODEPAGE 1251`,
+    `CLS`,
+    `TEXT ${margin},${margin},"2",0,1,1,"posgro ${escapeTSPL(t.port)}"`,
+    `TEXT ${margin},${margin + 24},"2",0,1,1,"${t.widthMm}x${t.heightMm} mm, gap ${t.gapMm}"`,
+    `TEXT ${margin},${margin + 48},"2",0,1,1,"Тест O'zbek"`,
+    `BARCODE ${margin},${margin + 72},"128",${barcodeH},1,0,2,2,"1234567890"`,
+    `PRINT 1,1`,
+  ];
+  return lines.join("\r\n") + "\r\n";
 }

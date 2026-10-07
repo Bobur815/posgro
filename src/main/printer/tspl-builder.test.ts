@@ -1,4 +1,4 @@
-import { buildFullTSPL, isValidEan13, toCP1251 } from './tspl-builder';
+import { buildFullTSPL, buildTestLabelTSPL, isValidEan13, toCP1251 } from './tspl-builder';
 import { CASES } from './__fixtures__/tspl-cases';
 import spooler from './__fixtures__/tspl-spooler.json';
 
@@ -23,6 +23,22 @@ describe('tspl-builder', () => {
     const invalid = buildFullTSPL(CASES.weightedUzAllElements);
     expect(invalid).toContain('"128"');
     expect(invalid).not.toContain('"EAN13"');
+  });
+
+  it('requests copies as PRINT 1,<n> on the COM path and PRINT <n>,1 on the spooler', () => {
+    const req = CASES.weightedUzAllElements;
+    const perLabel = buildFullTSPL(req, { copies: 'perLabel' });
+    expect(perLabel).toContain('PRINT 1,3\r\n');
+    expect(perLabel).not.toContain('PRINT 3,1');
+    expect(buildFullTSPL(req)).toContain('PRINT 3,1\r\n');
+  });
+
+  it('builds a test label with the configured size and gap', () => {
+    const tspl = buildTestLabelTSPL({ widthMm: 40, heightMm: 30, gapMm: 2, port: 'COM3' });
+    expect(tspl).toMatch(/^SIZE 40 mm, 30 mm\r\nGAP 2 mm, 0 mm\r\n/);
+    expect(tspl).toContain('"posgro COM3"');
+    expect(tspl.endsWith('PRINT 1,1\r\n')).toBe(true);
+    expect(tspl.replace(/\r\n/g, '')).not.toMatch(/[\r\n]/);
   });
 
   it('encodes Cyrillic as cp1251 and Uzbek apostrophes as ASCII', () => {

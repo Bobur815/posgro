@@ -128,3 +128,11 @@ export {
   normalizeLandingPlans,
   normalizeLandingContact,
 } from './landing.types';
+
+export type {
+  LabelPrintMode,
+  LabelPrinterErrorCode,
+  LabelPrinterConfig,
+  SerialPortInfo,
+  LabelPrinterResult,
+} from './label-printer.types';
