@@ -84,8 +84,8 @@ export function toCP1251(str: string): Buffer {
       out[i] = c - 0x0430 + 0xe0; // а–я
     } else if (c === 0x00a0 || c === 0x202f) {
       out[i] = 0x20; // non-breaking / narrow no-break space → regular space
-    } else if (c === 0x02bb || c === 0x2018 || c === 0x2019) {
-      out[i] = 0x27; // Uzbek modifier letter ʻ → apostrophe
+    } else if (c === 0x02bb || c === 0x02bc || c === 0x2018 || c === 0x2019) {
+      out[i] = 0x27; // Uzbek oʻ / gʼ modifier letters and curly quotes → apostrophe
     } else {
       out[i] = 0x3f; // unknown → '?'
     }

@@ -27,6 +27,6 @@ describe('tspl-builder', () => {
 
   it('encodes Cyrillic as cp1251 and Uzbek apostrophes as ASCII', () => {
     expect([...toCP1251('АяЁё')]).toEqual([0xc0, 0xff, 0xa8, 0xb8]);
-    expect(toCP1251('oʻgʼ g‘o’').toString('latin1')).toBe("o'g? g'o'");
+    expect(toCP1251('oʻgʼ g‘o’').toString('latin1')).toBe("o'g' g'o'");
   });
 });
