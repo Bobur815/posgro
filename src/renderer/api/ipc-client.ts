@@ -1,7 +1,10 @@
+import type { LabelPrinterConfig } from '@shared/types/label-printer.types';
+
 // IPC Client wrapper for Electron communication
 // Provides typed wrappers around window.electronAPI
 
 // Re-export the electronAPI for easy access
+
 export const ipc = typeof window !== 'undefined' ? window.electronAPI : null;
 
 // Type-safe helper functions
@@ -140,6 +143,14 @@ export const images = {
   setOwn: (type: ImageOwner, key: string, bytes: Uint8Array) => ipc?.images.setOwn(type, key, bytes),
   removeOwn: (type: ImageOwner, key: string) => ipc?.images.removeOwn(type, key),
   hasOwn: (type: ImageOwner, key: string) => ipc?.images.hasOwn(type, key),
+};
+
+export const labelPrinter = {
+  listPorts: () => ipc?.labelPrinter.listPorts(),
+  getConfig: () => ipc?.labelPrinter.getConfig(),
+  setConfig: (config: LabelPrinterConfig) => ipc?.labelPrinter.setConfig(config),
+  testPrint: () => ipc?.labelPrinter.testPrint(),
+  print: (req: unknown) => ipc?.labelPrinter.print(req),
 };
 
 export const app = {

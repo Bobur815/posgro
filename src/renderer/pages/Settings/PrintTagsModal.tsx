@@ -10,6 +10,10 @@ import {
 } from "../../components/common/VirtualKeyboardControls";
 import type { PriceTagTemplate } from "./PriceTags";
 import type { Product } from "@shared/types";
+import type { LabelPrintMode } from "@shared/types/label-printer.types";
+import { labelPrinter } from "../../api/ipc-client";
+import { labelPrinterErrorKey } from "../../hooks/useLabelPrinter";
+import { useToast } from "../../context/ToastContext";
 
 interface PrintTagsModalProps {
   template: PriceTagTemplate;
@@ -154,6 +158,15 @@ const SearchRow = styled.div`
   }
 `;
 
+const ModeSelect = styled.select`
+  padding: ${({ theme }) => theme.spacing.sm};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  background-color: ${({ theme }) => theme.colors.surface};
+  color: ${({ theme }) => theme.colors.text};
+  font-size: 14px;
+`;
+
 export function PrintTagsModal({ template, onClose }: PrintTagsModalProps) {
   const { t, i18n } = useTranslation();
   const [search, setSearch] = useState("");
@@ -162,7 +175,21 @@ export function PrintTagsModal({ template, onClose }: PrintTagsModalProps) {
     new Map(),
   );
   const [printing, setPrinting] = useState(false);
-  
+  const toast = useToast();
+  // Which printer this print goes to; starts at the saved choice (Price tags settings).
+  const [mode, setMode] = useState<LabelPrintMode>("spooler");
+  const [btPort, setBtPort] = useState("");
+
+  useEffect(() => {
+    labelPrinter
+      .getConfig()
+      ?.then((c) => {
+        setMode(c.mode);
+        setBtPort(c.port);
+      })
+      .catch((err) => console.error("Failed to load label printer config:", err));
+  }, []);
+
   useEffect(() => {
     (async () => {
       const all = (await window.electronAPI.products.getAll({
@@ -248,7 +275,7 @@ export function PrintTagsModal({ template, onClose }: PrintTagsModalProps) {
     setPrinting(true);
 
     try {
-      await window.electronAPI.printer.printPriceTagsTSPL({
+      const req = {
         items: Array.from(selected.values()).map(
           ({ product, quantity, amount }) => ({
             productNameRu: product.nameRu,
@@ -284,7 +311,16 @@ export function PrintTagsModal({ template, onClose }: PrintTagsModalProps) {
           customText1Value: template.customText1Value,
           customText2Value: template.customText2Value,
         },
-      });
+      };
+      if (mode === "bluetooth") {
+        const result = await labelPrinter.print(req);
+        if (result && !result.ok) {
+          toast.error(t(labelPrinterErrorKey(result.code), { port: btPort }));
+          return;
+        }
+      } else {
+        await window.electronAPI.printer.printPriceTagsTSPL(req);
+      }
       onClose();
     } catch (err) {
       console.error("Print failed:", err);
@@ -377,6 +413,17 @@ export function PrintTagsModal({ template, onClose }: PrintTagsModalProps) {
       </ProductList>
 
       <Footer>
+        <ModeSelect
+          value={mode}
+          onChange={(e) => setMode(e.target.value as LabelPrintMode)}
+          title={t("labelPrinter.printVia")}
+        >
+          <option value="spooler">{t("labelPrinter.modeSpooler")}</option>
+          <option value="bluetooth">
+            {t("labelPrinter.modeBluetooth")}
+            {btPort ? ` · ${btPort}` : ""}
+          </option>
+        </ModeSelect>
         <SelectedCount>
           {t("priceTags.selectedCount", {
             count: selected.size,

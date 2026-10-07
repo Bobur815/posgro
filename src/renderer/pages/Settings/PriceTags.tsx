@@ -5,6 +5,7 @@ import styled from "styled-components";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import { Button as CommonButton } from "../../components/common/Button";
 import { PrintTagsModal } from "./PrintTagsModal";
+import { BluetoothLabelPrinterPanel } from "./BluetoothLabelPrinterPanel";
 import { generateId } from "../../utils/helpers";
 import { useToast } from "../../context/ToastContext";
 import { useVirtualKeyboard } from "../../hooks/useVirtualKeyboard";
@@ -652,6 +653,8 @@ export function PriceTags() {
           </Button>
         </PrinterRow>
       </Panel>
+
+      <BluetoothLabelPrinterPanel />
 
       {templates.length === 0 ? (
         <EmptyState>{t("priceTags.noTemplates")}</EmptyState>
