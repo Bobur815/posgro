@@ -1024,7 +1024,7 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   // The upload's only query: what this till has not mirrored up yet.
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_debt_txn_synced ON debt_transactions(synced)`;
 
-  // Migration 37: products.is_valid — false once REGOS:VCR rejected a receipt line for the
+  // Migration 38: products.is_valid — false once REGOS:VCR rejected a receipt line for the
   // product, true again after its next inventory arrival. Every existing product starts valid.
   if (!(await columnExists(prisma, 'products', 'is_valid'))) {
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN is_valid INTEGER NOT NULL DEFAULT 1`;
