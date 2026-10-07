@@ -42,6 +42,10 @@ export default defineConfig(({ mode }) => {
       externalizeDeps: false,
       rollupOptions: {
         input: resolve(__dirname, 'src/main/index.ts'),
+        // The exception: serialport loads a native .node binding found by path at runtime
+        // (node-gyp-build looks next to bindings-cpp's own files), which a bundle cannot carry.
+        // It stays a real require; electron-builder.config.js ships it and its dependencies.
+        external: ['serialport', '@serialport/bindings-cpp'],
       },
     },
     define: envDefines,
