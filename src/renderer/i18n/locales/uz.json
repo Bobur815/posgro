@@ -1218,6 +1218,27 @@
     "selectedCount": "Tanlandi: {{count}} mahsulot, {{tags}} yorliq",
     "back": "Orqaga"
   },
+  "labelPrinter": {
+    "title": "Bluetooth yorliq printeri",
+    "hint": "Bluetooth orqali ulangan printer Windowsda chiquvchi COM port sifatida ko'rinadi (Sozlamalar → Bluetooth → Boshqa Bluetooth sozlamalari → COM portlar).",
+    "mode": "Narx yorliqlari qayerda chop etiladi",
+    "modeSpooler": "Windows printeri",
+    "modeBluetooth": "Bluetooth (COM port)",
+    "port": "COM port",
+    "noPorts": "COM portlar topilmadi",
+    "refreshPorts": "Portlar ro'yxatini yangilash",
+    "baud": "Tezlik (bod)",
+    "width": "Kengligi (mm)",
+    "height": "Balandligi (mm)",
+    "gap": "Oraliq (mm)",
+    "testPrint": "Sinov chop etish",
+    "testOk": "Sinov yorlig'i yuborildi",
+    "invalidConfig": "Port va yorliq o'lchamlarini tekshiring",
+    "printVia": "Chop etish usuli",
+    "errPortNotFound": "{{port}} portida printer topilmadi. Printerni yoqing. Agar u qayta ulangan bo'lsa, narx yorliqlari sozlamalarida yangi COM portni tanlang.",
+    "errPortBusy": "{{port}} boshqa dastur tomonidan band. Uni yopib, qayta urinib ko'ring.",
+    "errWriteFailed": "Printerga yuborib bo'lmadi. Printer yoniq va yaqinda ekanini tekshirib, qayta urinib ko'ring."
+  },
   "suppliers": {
     "status": "Holat",
     "add": "Qo'shish",
