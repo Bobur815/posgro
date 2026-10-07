@@ -75,6 +75,23 @@ export function isValidEan13(barcode: string): boolean {
   return parseInt(barcode[12]) === expected;
 }
 
+/**
+ * Uzbek Cyrillic letters, for names typed in Uzbek Cyrillic. The XP-365B prints CODEPAGE 1251 only
+ * (UTF-8 comes out as mojibake — tested 2026-10-07). Ў/ў exist in cp1251 (0xA1/0xA2) and print as
+ * themselves; Қ Ғ Ҳ do not, so they fall back to the nearest Russian letter (К Г Х) — readable,
+ * where they used to print `?`.
+ */
+const UZ_CYRILLIC_CP1251: Record<number, number> = {
+  0x040e: 0xa1, // Ў
+  0x045e: 0xa2, // ў
+  0x049a: 0xca, // Қ → К
+  0x049b: 0xea, // қ → к
+  0x0492: 0xc3, // Ғ → Г
+  0x0493: 0xe3, // ғ → г
+  0x04b2: 0xd5, // Ҳ → Х
+  0x04b3: 0xf5, // ҳ → х
+};
+
 /** Convert a UTF-16 JS string to a Windows-1251 Buffer (Cyrillic code page). */
 export function toCP1251(str: string): Buffer {
   const out = Buffer.alloc(str.length);
@@ -86,6 +103,8 @@ export function toCP1251(str: string): Buffer {
       out[i] = 0xa8; // Ё
     } else if (c === 0x0451) {
       out[i] = 0xb8; // ё
+    } else if (UZ_CYRILLIC_CP1251[c] !== undefined) {
+      out[i] = UZ_CYRILLIC_CP1251[c];
     } else if (c >= 0x0410 && c <= 0x042f) {
       out[i] = c - 0x0410 + 0xc0; // А–Я
     } else if (c >= 0x0430 && c <= 0x044f) {

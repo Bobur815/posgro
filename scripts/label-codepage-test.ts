@@ -3,7 +3,8 @@
 // Which text encoding does the XP-365B print Cyrillic in? Prints two 40x30 labels:
 //   1. CODEPAGE 1251 + cp1251 bytes  (what the spooler path has always sent)
 //   2. CODEPAGE UTF-8 + UTF-8 bytes
-// Each has Russian, Uzbek Cyrillic (Ў Қ Ғ Ҳ — not in cp1251) and Uzbek Latin.
+// Each has Russian, Uzbek Cyrillic (Ў is in cp1251; Қ Ғ Ҳ are not and the app prints them as К Г Х)
+// and Uzbek Latin.
 //
 // Run: npx tsx scripts/label-codepage-test.ts [COM3] [115200]
 import { SerialPort } from 'serialport';
