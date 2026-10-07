@@ -41,6 +41,12 @@ describe('tspl-builder', () => {
     expect(tspl.replace(/\r\n/g, '')).not.toMatch(/[\r\n]/);
   });
 
+  it('prints Uzbek Cyrillic: Ў as itself, Қ Ғ Ҳ as К Г Х, never ?', () => {
+    expect([...toCP1251('Ўў')]).toEqual([0xa1, 0xa2]);
+    expect(toCP1251('ҚқҒғҲҳ').equals(toCP1251('КкГгХх'))).toBe(true);
+    expect(toCP1251('Қатиқ Ўғил Ҳалол').toString('latin1')).not.toContain('?');
+  });
+
   it('encodes Cyrillic as cp1251 and Uzbek apostrophes as ASCII', () => {
     expect([...toCP1251('АяЁё')]).toEqual([0xc0, 0xff, 0xa8, 0xb8]);
     expect(toCP1251('oʻgʼ g‘o’').toString('latin1')).toBe("o'g' g'o'");

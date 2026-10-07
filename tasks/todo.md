@@ -87,8 +87,11 @@ PriceTags page. Branch from dev, merge to dev, minor bump.
   passes all 79 tests but its `afterAll` (stopLocalServer/closeDatabase) hit the 30 s hook timeout in 3 of 7 runs on
   this branch (at 0181646 and f0a1ae9) and 0 of 3 on dev; the last 2 runs on the branch passed. Its only link to this
   branch is six new keys in `LOCAL_ONLY_SETTINGS`. Watch it.
-- Codepage: open until the test label is printed. Uzbek Cyrillic Ў Қ Ғ Ҳ are not in cp1251 and print as `?` on both
-  paths (as before).
+- Codepage (printed 2026-10-07, photo from user): **CODEPAGE 1251 + cp1251 bytes prints Russian correctly → keep TEXT,
+  no bitmap.** CODEPAGE UTF-8 is not supported (bytes print as cp1251 mojibake). Uzbek Cyrillic Ў Қ Ғ Ҳ print `?`
+  (not mapped). **User chose transliteration (1.33.1, fix/label-uz-cyrillic):** Ў/ў → their own cp1251 bytes 0xA1/0xA2 (they are in cp1251 — still to confirm the font has the glyph), Қ Ғ Ҳ → К Г Х. Font "3" draws `'` like a backtick.
+- The test's 2nd label started several mm low and ran across the gap: gap sensor not calibrated for the roll, or the
+  real gap is not 2 mm. Printer-side (FEED-button auto-calibration / measure the gap), not code.
 
 # Product.isValid — REGOS rejected it until the next arrival (2026-10-05), branch feat/product-is-valid (from dev). Approved by user; done, not committed
 
