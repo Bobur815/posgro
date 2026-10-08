@@ -311,6 +311,7 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
           ...failed,
           labelsRepaired: 0,
           receiptsTouched: 0,
+          mxikCleaned: 0,
           mxikFilled: [],
           tasnifUnreachable: 0,
           productIssues: [],
@@ -483,6 +484,12 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
                     receipts: repair.receiptsTouched,
                   })}
                 </Line>
+                {repair.mxikCleaned > 0 && (
+                  <Line $tone="ok">
+                    <CheckCircle size={16} />
+                    {t("fiscalSettings.backlog.mxikCleaned", { count: repair.mxikCleaned })}
+                  </Line>
+                )}
                 {repair.mxikFilled.length > 0 && (
                   <>
                     <Line $tone="ok">
