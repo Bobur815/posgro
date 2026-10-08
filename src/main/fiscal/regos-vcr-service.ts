@@ -42,6 +42,7 @@ import { repairCyrillicLayout, isLayoutCorrupted } from '../../shared/utils/keyb
 import { duplicateCodeLines, labelsPerLine } from '../../shared/utils/fiscal-labels';
 import { pickSingleUnitPackage } from '../../shared/utils/mxik-packages';
 import { lookupMxikByBarcode, getMxikPackages } from './tasnif';
+import { normalizeMxik } from '../../shared/utils/mxik-lookup';
 import { productRequiresMarking } from '../../shared/utils/marking';
 import { toPieces } from '../../shared/utils/pack';
 import { isFiscalCashTender } from '../../shared/constants';
@@ -608,7 +609,7 @@ class RegosVcrService {
       const pos: VcrPosition = {
         name: sub ? sub.nameRu || sub.nameUz : String(item.productName),
         barcode: sub ? sub.barcode : String(item.barcode),
-        icps: product?.mxik ?? '',
+        icps: normalizeMxik(product?.mxik) ?? '',
         amount,
         // REGOS is told the PHYSICAL piece count, not the number of boxes. Its implied unit
         // price is amount/quantity, and package_code registers the product in its SMALLEST
@@ -1343,17 +1344,34 @@ class RegosVcrService {
   }
 
   /**
-   * Step 2: undo the Russian-layout corruption in stored marking codes; fill a missing MXIK from
+   * Step 2: strip whitespace from every product's stored MXIK (a pasted "01905007001000000 "
+   * failed every 17-digit check, so tasnif was asked and the product reported as NO_MXIK); undo
+   * the Russian-layout corruption in stored marking codes; fill a missing MXIK from
    * tasnif.soliq.uz (exact barcode match only) and save it on the product, with the single-unit
    * package code for a marked one; then list products REGOS will still reject. Saving bumps
    * updatedAt, so the corrected product syncs like the VAT heal's.
    */
   async backlogRepair(fromDate: string): Promise<FiscalBacklogRepairResult> {
     const busy: FiscalBacklogRepairResult = {
-      ok: false, error: 'BUSY', labelsRepaired: 0, receiptsTouched: 0, mxikFilled: [], tasnifUnreachable: 0, productIssues: [],
+      ok: false, error: 'BUSY', labelsRepaired: 0, receiptsTouched: 0, mxikCleaned: 0, mxikFilled: [], tasnifUnreachable: 0, productIssues: [],
     };
     return this.withBacklogLock('repair', busy, async () => {
       const prisma = getPrismaClient();
+
+      // Every product, not just the backlog's: a dirty code fails live sales too. Runs before the
+      // backlog is read so the checks below see the cleaned values.
+      const withMxik: Array<{ id: number; mxik: string }> = await prisma.product.findMany({
+        where: { mxik: { not: null } },
+        select: { id: true, mxik: true },
+      });
+      let mxikCleaned = 0;
+      for (const p of withMxik) {
+        const clean = normalizeMxik(p.mxik);
+        if (clean === p.mxik || !clean || !/^\d{17}$/.test(clean)) continue;
+        await prisma.product.update({ where: { id: p.id }, data: { mxik: clean } });
+        mxikCleaned++;
+      }
+
       const kept = (await this.loadBacklog(fromDate)).filter((s) => !s.skippable);
       let labelsRepaired = 0;
       let receiptsTouched = 0;
@@ -1405,9 +1423,9 @@ class RegosVcrService {
         }
       }
       log.info(
-        `[fiscal] backlog repair: ${labelsRepaired} labels in ${receiptsTouched} receipts, ${mxikFilled.length} MXIK from tasnif (${tasnifUnreachable} unreachable), ${productIssues.length} product issues`,
+        `[fiscal] backlog repair: ${mxikCleaned} MXIK cleaned, ${labelsRepaired} labels in ${receiptsTouched} receipts, ${mxikFilled.length} MXIK from tasnif (${tasnifUnreachable} unreachable), ${productIssues.length} product issues`,
       );
-      return { ok: true, labelsRepaired, receiptsTouched, mxikFilled, tasnifUnreachable, productIssues };
+      return { ok: true, labelsRepaired, receiptsTouched, mxikCleaned, mxikFilled, tasnifUnreachable, productIssues };
     });
   }
 
@@ -1440,7 +1458,7 @@ class RegosVcrService {
           select: { mxik: true },
         });
         if (!p) return 'NO_SUBSTITUTE';
-        if (!/^\d{17}$/.test(p.mxik ?? '')) return 'SUBSTITUTE_NO_MXIK';
+        if (!/^\d{17}$/.test(normalizeMxik(p.mxik) ?? '')) return 'SUBSTITUTE_NO_MXIK';
         substituteChecked = true;
         return null;
       };
