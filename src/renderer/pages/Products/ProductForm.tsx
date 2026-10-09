@@ -22,6 +22,7 @@ import {
 } from "@shared/constants/payment-methods";
 import { convertUzbekText } from "@shared/utils/transliterator";
 import { pickSingleUnitPackage, type MxikPackage } from "@shared/utils/mxik-packages";
+import { normalizeMxik } from "@shared/utils/mxik-lookup";
 import { isMxikExcluded, type CatalogEntry } from "@shared/types/mxik.types";
 import {
   RefreshCw,
@@ -745,7 +746,7 @@ export function ProductForm({
         : 0,
       isOnPromotion: formData.isOnPromotion,
       active: formData.active,
-      mxik: formData.mxik,
+      mxik: normalizeMxik(formData.mxik) ?? "",
       packageCode: formData.packageCode || undefined,
       productType: formData.productType,
       internalCode: formData.internalCode || undefined,

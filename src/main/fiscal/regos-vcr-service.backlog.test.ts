@@ -219,15 +219,27 @@ const prismaMock = {
     ),
   },
   product: {
-    findMany: jest.fn(async ({ where }: { where: { id: { in: number[] } } }) =>
-      catalog
-        .filter((p) => where.id.in.includes(p.id))
-        .map((p) => ({ ...p, vatRate: 12, unit: 'шт', category: { nameRu: 'Прочее' } })),
+    findMany: jest.fn(
+      async ({ where }: { where: { id?: { in: number[] }; mxik?: { not: null } } }) =>
+        where.id
+          ? catalog
+              .filter((p) => where.id!.in.includes(p.id))
+              .map((p) => ({ ...p, vatRate: 12, unit: 'шт', category: { nameRu: 'Прочее' } }))
+          : catalog.filter((p) => p.mxik != null).map((p) => ({ id: p.id, mxik: p.mxik })),
     ),
     findUnique: jest.fn(async ({ where }: { where: { id: number } }) =>
       where.id === SUBST.id ? SUBST : null,
     ),
-    update: jest.fn(async () => undefined),
+    // Writes through to the catalog and the sale lines, like the real row both read from.
+    update: jest.fn(
+      async ({ where, data }: { where: { id: number }; data: Partial<Item['product']> }) => {
+        const hits = [
+          ...catalog.filter((p) => p.id === where.id),
+          ...sales.flatMap((s) => s.items.map((it) => it.product)).filter((p) => p.id === where.id),
+        ];
+        for (const p of new Set(hits)) Object.assign(p, data);
+      },
+    ),
   },
   smena: {
     update: jest.fn(async () => undefined),
@@ -390,6 +402,32 @@ describe('step 2 — repair', () => {
     expect(r.mxikFilled).toEqual([
       { productId: 7, name: 'Сигареты', barcode: '777', mxik: '02202001001001009' },
     ]);
+    expect(r.productIssues).toEqual([]);
+  });
+
+  it('strips whitespace from a stored MXIK instead of asking tasnif and reporting NO_MXIK', async () => {
+    // A till stored "01905007001000000 " (length 18) on 51 products; tasnif has no match for a
+    // store-made barcode, so each one came out as NO_MXIK.
+    const spaced = { ...PLAIN, id: 1410, barcode: '4001020402108', mxik: '01905007001000000 ' };
+    const elsewhere = { ...PLAIN, id: 1411, barcode: '4001095110687', mxik: '\u00A000401001001000000' };
+    catalog = [PLAIN, spaced, elsewhere];
+    sales = [sale('c', { paymentMethod: 'card', items: [item(spaced)] })];
+
+    const r = await regosVcrService.backlogRepair(FROM);
+
+    expect(lookupMxikByBarcode).not.toHaveBeenCalled();
+    expect(prismaMock.product.update).toHaveBeenCalledWith({
+      where: { id: 1410 },
+      data: { mxik: '01905007001000000' },
+    });
+    // Not in any backlog receipt, cleaned all the same.
+    expect(prismaMock.product.update).toHaveBeenCalledWith({
+      where: { id: 1411 },
+      data: { mxik: '00401001001000000' },
+    });
+    expect(prismaMock.product.update).toHaveBeenCalledTimes(2);
+    expect(r.mxikCleaned).toBe(2);
+    expect(r.mxikFilled).toEqual([]);
     expect(r.productIssues).toEqual([]);
   });
 

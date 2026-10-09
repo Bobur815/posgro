@@ -1,4 +1,4 @@
-import { findBarcodeMatch } from './mxik-lookup';
+import { findBarcodeMatch, normalizeMxik } from './mxik-lookup';
 import { mapPackageNames, pickSingleUnitPackage } from './mxik-packages';
 
 // Real tasnif `elasticsearch/search?search=4780136191983` payload (trimmed): the searched
@@ -45,5 +45,20 @@ describe('pickSingleUnitPackage on real tasnif packageNames', () => {
       { code: 1805053, nameRu: 'шт. (пэт бутылка) 1.5 литр' },
     ]);
     expect(pickSingleUnitPackage(pkgs)?.code).toBe('1805053');
+  });
+});
+
+describe('normalizeMxik', () => {
+  it('drops the trailing space a till stored on 51 products', () => {
+    expect(normalizeMxik('01905007001000000 ')).toBe('01905007001000000');
+  });
+
+  it('drops NBSP, zero-width and inner whitespace', () => {
+    expect(normalizeMxik('\u00A00190500700\u200B1000000\t')).toBe('01905007001000000');
+  });
+
+  it('returns null for empty input', () => {
+    expect(normalizeMxik(null)).toBeNull();
+    expect(normalizeMxik('  ')).toBeNull();
   });
 });

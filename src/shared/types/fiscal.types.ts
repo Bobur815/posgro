@@ -238,6 +238,8 @@ export interface FiscalBacklogRepairResult {
   error?: string;
   labelsRepaired: number;
   receiptsTouched: number;
+  /** Products whose stored MXIK had whitespace stripped (any product, not only the backlog's). */
+  mxikCleaned: number;
   /** Products whose missing MXIK was found on tasnif.soliq.uz and saved. */
   mxikFilled: { productId: number; name: string; barcode: string; mxik: string }[];
   /** Products tasnif could not be asked about (offline/error) — they stay in productIssues. */

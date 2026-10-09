@@ -752,6 +752,8 @@
         "IPC": "Bosqichni bajarib bo'lmadi",
         "NOT_ENTITLED": "Eski cheklarni qayta ishlash xizmati bu do'kon uchun ulanmagan"
       },
+      "mxikCleaned": "Tovarlarning MXIK kodidan bo'sh joylar olib tashlandi: {{count}}",
+
       "mxikFilled": "MXIK tasnif.soliq.uz'dan topilib, tovarlarga saqlandi: {{count}}",
       "tasnifUnreachable": "tasnif.soliq.uz mavjud emas — tekshirib bo'lmagan tovarlar: {{count}}",
       "action": {

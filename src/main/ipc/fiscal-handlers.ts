@@ -95,7 +95,7 @@ export function setupFiscalHandlers(): void {
         "repair",
         fromDate,
         actor(),
-        { ok: false, labelsRepaired: 0, receiptsTouched: 0, mxikFilled: [], tasnifUnreachable: 0, productIssues: [] },
+        { ok: false, labelsRepaired: 0, receiptsTouched: 0, mxikCleaned: 0, mxikFilled: [], tasnifUnreachable: 0, productIssues: [] },
         () => regosVcrService.backlogRepair(fromDate),
       ),
     ),
