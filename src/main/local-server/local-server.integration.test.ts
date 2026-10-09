@@ -735,6 +735,43 @@ describe('stocktake', () => {
     expect(res.json.message).toBe('Nothing counted yet');
     await api('POST', `/inventory-counts/${created.json.id}/cancel`);
   });
+
+  it('takes in a product moved into a CATEGORY document after it was made', async () => {
+    // Store 1234: drinks fixed into "Напитки" mid-count never reached the open document.
+    const prisma = getPrismaClient();
+    const drinks = await prisma.product.findUnique({ where: { barcode: '4780000000001' } });
+    const other = await prisma.category.create({ data: { nameRu: 'Прочее', nameUz: 'Boshqa' } });
+    const misfiled = (barcode: string) =>
+      prisma.product.create({
+        data: { barcode, nameRu: barcode, nameUz: barcode, price: 1000, stock: 4, unit: 'шт', categoryId: other.id },
+      });
+    const opened = await misfiled('TOPUP-OPEN');
+    const scanned = await misfiled('TOPUP-SCAN');
+
+    const created = await api('POST', '/inventory-counts', { scope: 'CATEGORY', categoryId: drinks!.categoryId });
+    const id = created.json.id;
+    const before = created.json.totalItems as number;
+
+    // Fixed while the count is open.
+    await prisma.product.updateMany({
+      where: { id: { in: [opened.id, scanned.id] } },
+      data: { categoryId: drinks!.categoryId },
+    });
+
+    const scan = await api('POST', `/inventory-counts/${id}/scan`, { barcode: 'TOPUP-SCAN', qty: 2 });
+    expect(scan.status).toBe(201);
+    expect(scan.json.item).toMatchObject({ productId: scanned.id, countedQty: '2', expectedQty: '4' });
+
+    const doc = (await api('GET', `/inventory-counts/${id}`)).json;
+    const barcodes = doc.items.map((i: { barcode: string }) => i.barcode);
+    expect(barcodes).toEqual(expect.arrayContaining(['4780000000001', 'TOPUP-OPEN', 'TOPUP-SCAN']));
+    expect(doc.totalItems).toBe(before + 2);
+    expect(doc.items).toHaveLength(before + 2);
+    // Opening it again adds nothing.
+    expect((await api('GET', `/inventory-counts/${id}`)).json.items).toHaveLength(before + 2);
+
+    await api('POST', `/inventory-counts/${id}/cancel`);
+  });
 });
 
 describe('reports', () => {

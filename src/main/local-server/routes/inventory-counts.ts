@@ -137,12 +137,13 @@ export const inventoryCountRoutes: Route[] = [
     path: '/inventory-counts/:id',
     roles: ADMIN_ONLY,
     handler: async ({ params }) => {
-      const count = await db().inventoryCount.findUnique({
+      const head = await db().inventoryCount.findUnique({ where: { id: params.id } });
+      if (!head) throw notFound('Stocktake not found');
+      await topUpScope(head);
+      return db().inventoryCount.findUnique({
         where: { id: params.id },
         include: { items: { orderBy: { productName: 'asc' } } },
       });
-      if (!count) throw notFound('Stocktake not found');
-      return count;
     },
   },
 
@@ -265,13 +266,17 @@ async function applyCount(
   if (!count) throw notFound('Stocktake not found');
   if (!OPEN_STATUSES.includes(count.status)) throw badRequest('Stocktake is already closed');
 
-  const item = await db().inventoryCountItem.findFirst({
-    where: {
-      countId,
-      ...(locate.itemId ? { id: locate.itemId } : {}),
-      ...(locate.barcode ? { barcode: locate.barcode } : {}),
-    },
-  });
+  const findLine = () =>
+    db().inventoryCountItem.findFirst({
+      where: {
+        countId,
+        ...(locate.itemId ? { id: locate.itemId } : {}),
+        ...(locate.barcode ? { barcode: locate.barcode } : {}),
+      },
+    });
+  let item = await findLine();
+  // Moved into the category after the document was made: its line is added here, then counted.
+  if (!item && locate.barcode && (await topUpScope(count)) > 0) item = await findLine();
   // For a scan this means the product is not in the document's scope — worth saying so rather
   // than silently ignoring the beep.
   if (!item) throw notFound(locate.barcode ? 'Product is not in this stocktake' : 'Item not found');
@@ -293,6 +298,53 @@ async function applyCount(
   }
 
   return { item: updated, countedItems, totalItems, status };
+}
+
+/**
+ * A CATEGORY document's lines are copied once, at creation. A product moved into the category
+ * afterwards (mostly a miscategorised one being fixed mid-count) never got a line, and scanning it
+ * answered "not in this stocktake". Adds the missing lines with the same snapshot the create takes,
+ * `expectedQty` being the stock at the moment of adding. Same rule as the server's topUpScope:
+ * existing lines are skipped (a counted one is never touched), a product moved OUT keeps its line,
+ * and completion does not run it, since a line nobody saw could be written off there.
+ */
+async function topUpScope(count: {
+  id: string;
+  status: string;
+  scope: string;
+  categoryId: number | null;
+}): Promise<number> {
+  if (count.scope !== 'CATEGORY' || count.categoryId == null) return 0;
+  if (!OPEN_STATUSES.includes(count.status)) return 0;
+
+  const missing = await db().product.findMany({
+    where: {
+      active: true,
+      categoryId: count.categoryId,
+      inventoryCountItems: { none: { countId: count.id } },
+    },
+  });
+  // No createMany skipDuplicates on SQLite; the local server is the only writer, so a filtered
+  // list of creates is enough.
+  for (const p of missing) {
+    await db().inventoryCountItem.create({
+      data: {
+        countId: count.id,
+        productId: p.id,
+        productName: p.nameRu,
+        productNameUz: p.nameUz,
+        barcode: p.barcode,
+        unit: p.unit,
+        expectedQty: p.stock,
+        cost: p.cost,
+      },
+    });
+  }
+  if (missing.length > 0) {
+    const totalItems = await db().inventoryCountItem.count({ where: { countId: count.id } });
+    await db().inventoryCount.update({ where: { id: count.id }, data: { totalItems } });
+  }
+  return missing.length;
 }
 
 async function displayName(userId: string): Promise<string> {
