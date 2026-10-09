@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, InventoryCountStatus } from '@prisma/client';
+import { Prisma, InventoryCountScope, InventoryCountStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateInventoryCountDto } from './dto/create-inventory-count.dto';
 import {
@@ -262,11 +262,18 @@ export class InventoryCountService {
   }
 
   async findOne(storeId: string, id: string) {
+    const head = await this.prisma.inventoryCount.findUnique({
+      where: { id },
+      select: { id: true, storeId: true, status: true, scope: true, categoryId: true },
+    });
+    if (!head || head.storeId !== storeId) throw new NotFoundException('Count not found');
+    await this.topUpScope(storeId, head);
+
     const count = await this.prisma.inventoryCount.findUnique({
       where: { id },
       include: { items: { orderBy: { productName: 'asc' } } },
     });
-    if (!count || count.storeId !== storeId) throw new NotFoundException('Count not found');
+    if (!count) throw new NotFoundException('Count not found');
     return count;
   }
 
@@ -292,11 +299,16 @@ export class InventoryCountService {
 
   /** Scan flow: barcode -> add `qty` to that line. */
   async scan(storeId: string, id: string, barcode: string, qty = 1) {
-    const count = await this.loadOpenCount(storeId, id);
+    let count = await this.loadOpenCount(storeId, id);
 
-    const item = await this.prisma.inventoryCountItem.findFirst({
-      where: { countId: id, barcode },
-    });
+    const findLine = () =>
+      this.prisma.inventoryCountItem.findFirst({ where: { countId: id, barcode } });
+    let item = await findLine();
+    // Moved into the category after the document was made: its line is added here, then counted.
+    if (!item && (await this.topUpScope(storeId, count)) > 0) {
+      count = await this.loadOpenCount(storeId, id);
+      item = await findLine();
+    }
     if (!item) throw new NotFoundException('Product not in this count');
 
     const next = (item.countedQty ? Number(item.countedQty) : 0) + qty;
@@ -471,11 +483,59 @@ export class InventoryCountService {
     return (agg._max.number ?? 0) + 1;
   }
 
+  /**
+   * A CATEGORY document's lines are copied once, at creation. A product moved into the
+   * category afterwards — mostly a miscategorised one being fixed mid-count — never got a
+   * line, and scanning it answered "not in this count". This adds the missing lines with the
+   * same snapshot create() takes, `expectedQty` being the stock at the moment of adding.
+   *
+   * Idempotent: (countId, productId) is unique and existing lines are skipped, so a counted
+   * line is never touched. A product moved OUT keeps its line (it may already be counted).
+   * Not run on completion: a line added there would be one nobody saw, and a write-off of
+   * "all uncounted" would zero it. Returns the number of lines added.
+   */
+  private async topUpScope(
+    storeId: string,
+    count: { id: string; status: InventoryCountStatus; scope: InventoryCountScope; categoryId: number | null },
+  ): Promise<number> {
+    if (count.scope !== 'CATEGORY' || count.categoryId == null) return 0;
+    if (!OPEN_STATUSES.includes(count.status)) return 0;
+
+    const missing = await this.prisma.product.findMany({
+      where: {
+        storeId,
+        active: true,
+        categoryId: count.categoryId,
+        inventoryCountItems: { none: { countId: count.id } },
+      },
+      select: { id: true, nameRu: true, nameUz: true, barcode: true, unit: true, stock: true, cost: true },
+    });
+    if (missing.length === 0) return 0;
+
+    const { count: added } = await this.prisma.inventoryCountItem.createMany({
+      data: missing.map((p) => ({
+        countId: count.id,
+        productId: p.id,
+        productName: p.nameRu,
+        productNameUz: p.nameUz,
+        barcode: p.barcode,
+        unit: p.unit,
+        expectedQty: p.stock,
+        cost: p.cost,
+      })),
+      skipDuplicates: true,
+    });
+    // Recounted rather than incremented, so two top-ups racing each other still agree.
+    const totalItems = await this.prisma.inventoryCountItem.count({ where: { countId: count.id } });
+    await this.prisma.inventoryCount.update({ where: { id: count.id }, data: { totalItems } });
+    return added;
+  }
+
   /** Load a count that belongs to this store and is still editable. */
   private async loadOpenCount(storeId: string, id: string) {
     const count = await this.prisma.inventoryCount.findUnique({
       where: { id },
-      select: { id: true, storeId: true, status: true, totalItems: true },
+      select: { id: true, storeId: true, status: true, totalItems: true, scope: true, categoryId: true },
     });
     if (!count || count.storeId !== storeId) throw new NotFoundException('Count not found');
     if (!OPEN_STATUSES.includes(count.status)) {
