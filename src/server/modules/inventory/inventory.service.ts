@@ -84,9 +84,7 @@ export class InventoryService {
     const productUpdate: Record<string, unknown> = {
       stock: { increment: createArrivalDto.quantity },
       ...(createArrivalDto.cost != null && { cost: createArrivalDto.cost }),
-      // New goods: whatever REGOS rejected about the last batch (e.g. an out-of-circulation
-      // marking code) no longer stands until a receipt says otherwise.
-      isValid: true,
+      // Not Product.isValid: only a fiscalised receipt makes a product valid again.
     };
 
     if (createArrivalDto.productionDate) {
@@ -308,10 +306,10 @@ export class InventoryService {
               createdAt: new Date(a.createdAt),
             },
           });
-          // Update stock on server too. An arrival makes the product valid again (see createArrival).
+          // Update stock on server too (Product.isValid is left alone, see createArrival).
           await tx.product.update({
             where: { id: product.id },
-            data: { stock: { increment: a.quantity }, cost: a.cost, isValid: true },
+            data: { stock: { increment: a.quantity }, cost: a.cost },
           });
 
           await this.stockMovements.emit(tx, [

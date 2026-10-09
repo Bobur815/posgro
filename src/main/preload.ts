@@ -120,6 +120,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   fiscal: {
     getConfig: () => ipcRenderer.invoke("fiscal:getConfig"),
     setConfig: (input: unknown) => ipcRenderer.invoke("fiscal:setConfig", input),
+    getCirculationCheck: () => ipcRenderer.invoke("fiscal:getCirculationCheck"),
+    setCirculationCheck: (on: boolean) =>
+      ipcRenderer.invoke("fiscal:setCirculationCheck", on),
     testConnection: () => ipcRenderer.invoke("fiscal:testConnection"),
     getStatus: () => ipcRenderer.invoke("fiscal:getStatus"),
     backlogAllowed: () => ipcRenderer.invoke("fiscal:backlogAllowed"),
@@ -563,6 +566,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   markingCodes: {
     check: (code: string) =>
       ipcRenderer.invoke("markingCodes:check", code),
+    checkCirculation: (code: string) =>
+      ipcRenderer.invoke("markingCodes:checkCirculation", code),
     record: (entries: { code: string; productBarcode?: string }[]) =>
       ipcRenderer.invoke("markingCodes:record", entries),
     removeForSale: (saleId: string) =>
@@ -696,6 +701,8 @@ declare global {
         setConfig: (
           input: import("../shared/types/fiscal.types").RegosVcrConfigInput,
         ) => Promise<import("../shared/types/fiscal.types").RegosVcrConfig>;
+        getCirculationCheck: () => Promise<boolean>;
+        setCirculationCheck: (on: boolean) => Promise<boolean>;
         testConnection: () => Promise<import("../shared/types/fiscal.types").FiscalConnectionResult>;
         getStatus: () => Promise<import("../shared/types/fiscal.types").FiscalQueueStatus>;
         backlogAllowed: () => Promise<boolean>;
@@ -1062,6 +1069,11 @@ declare global {
           soldAt?: string;
           terminalId?: string;
           source?: 'local' | 'server';
+        }>;
+        checkCirculation: (code: string) => Promise<{
+          reachable: boolean;
+          verdict: 'IN' | 'OUT' | 'UNKNOWN';
+          status?: string;
         }>;
         record: (entries: { code: string; productBarcode?: string }[]) => Promise<void>;
         removeForSale: (saleId: string) => Promise<void>;

@@ -14,6 +14,7 @@ const TENDER_ICONS: Record<string, string> = {
 import { formatDateTime } from "../../utils/formatters";
 import type { FiscalSalePreview } from "@shared/types/fiscal.types";
 import { Copy, Check, ExternalLink } from "lucide-react";
+import { markingBlockCodes } from "../../utils/marking-block";
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
 
@@ -342,7 +343,15 @@ export function ReceiptDetailsModal({ saleId, onClose }: Props) {
                 </StatusBadge>
               )}
             </div>
-            {data.fiscalError && <ErrorBox>{data.fiscalError}</ErrorBox>}
+            {data.fiscalError && (
+              <ErrorBox>
+                {markingBlockCodes(data.fiscalError) !== null
+                  ? t("reports.receiptDetails.markingBlocked", {
+                      codes: markingBlockCodes(data.fiscalError),
+                    })
+                  : data.fiscalError}
+              </ErrorBox>
+            )}
             <Grid>
               {data.regosReceiptNo && (
                 <Field>

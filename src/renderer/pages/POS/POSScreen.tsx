@@ -452,6 +452,7 @@ export function POSScreen() {
   const {
     addItem,
     removeByMarkingCode,
+    setCirculation,
     items,
     discount,
     total,
@@ -964,6 +965,28 @@ export function POSScreen() {
             }
             resetInputs();
 
+            // Background asl-belgisi circulation check (regos_vcr_circulation_check). Never blocks
+            // or reverts the line: an OUT code only marks it, and the fiscal gate keeps the receipt
+            // from REGOS until the sale is edited. The answer is cached in main for that gate.
+            if (circulationCheckRef.current) {
+              window.electronAPI.markingCodes
+                .checkCirculation(normalizedNoGS)
+                .then((c) => {
+                  setCirculation(normalizedNoGS, c.verdict, c.status);
+                  if (c.verdict === "OUT") {
+                    toast.error(
+                      t("pos.markingCodeOutOfCirculation", {
+                        name: productName,
+                        status: c.status ?? "",
+                      }),
+                    );
+                  }
+                })
+                .catch(() => {
+                  // IPC error: the fiscal gate still asks before Receipt.Sale.
+                });
+            }
+
             // Background resale check — skippable via Fiscal settings toggle. Has this exact label
             // already been sold (local/cross-terminal)? If so, revert the optimistic add and warn.
             // (Circulation / out-of-circulation is intentionally NOT checked here — such labels are
@@ -1052,6 +1075,7 @@ export function POSScreen() {
     needsSaleUnitChoice,
     addItem,
     removeByMarkingCode,
+    setCirculation,
     items,
     t,
     handleIdSubmit,
@@ -1346,11 +1370,19 @@ export function POSScreen() {
   // Group 022 resale check (SoldMarkingCode lookup) — toggleable in Fiscal settings.
   // (The unfiscalized-receipts badge lives in the Cart header.)
   const markingCheckRef = useRef(true);
+  // asl-belgisi circulation check at scan time — off unless turned on in Fiscal settings.
+  const circulationCheckRef = useRef(false);
   useEffect(() => {
     window.electronAPI.fiscal
       .getConfig()
       .then((c) => {
         markingCheckRef.current = c.markingCodeCheck;
+      })
+      .catch(() => {});
+    window.electronAPI.fiscal
+      .getCirculationCheck()
+      .then((on) => {
+        circulationCheckRef.current = on === true;
       })
       .catch(() => {});
   }, []);

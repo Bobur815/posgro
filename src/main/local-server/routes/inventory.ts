@@ -53,8 +53,8 @@ export const inventoryRoutes: Route[] = [
           },
         });
 
-        // An arrival makes the product valid again (Product.isValid), as on the till and the VPS.
-        const productUpdate: Record<string, unknown> = { stock: { increment: quantity }, isValid: true };
+        // Product.isValid is left alone: only a fiscalised receipt makes a product valid again.
+        const productUpdate: Record<string, unknown> = { stock: { increment: quantity } };
         if (cost !== undefined) productUpdate.cost = cost;
         if (newPrice !== undefined) {
           // 'deferred' holds the new price until the old stock is sold through; the till applies
