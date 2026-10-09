@@ -405,3 +405,13 @@ kept the file's CRLF and `git diff --cached --stat` showed ~3500 changed lines p
 
 **Rule:** after editing a locale file, check `git diff --stat` before committing. If it is the
 whole file, rewrite it with `\r\n` → `\n` and look again: the diff must be only the new keys.
+
+## A file-wide `sed` rename in a test file rewrote another test's fixtures
+
+To give a new integration test unique barcodes I ran `sed -i "s/'4780000000002'/'TOPUP-OPEN'/g"`
+over the whole file. An earlier test already used that barcode, so it now created `TOPUP-OPEN`
+first, and my test failed with a unique-constraint error that looked like Prisma inserting twice.
+Two debugging rounds went into a non-bug.
+
+**Rule:** rename with the Edit tool on the exact lines, or scope sed to a line range; then
+`git diff` the file and check that every changed line belongs to the change being made.
