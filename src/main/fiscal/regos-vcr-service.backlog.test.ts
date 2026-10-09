@@ -530,14 +530,36 @@ describe('step 3 — verify, card receipts (sent in full)', () => {
     expect(sales[0].fiscalSubstitutions).toBeNull();
   });
 
-  it('stops on a status it cannot classify', async () => {
+  // REGOS decides on a status we do not classify (user, 2026-10-09); the step does not stop.
+  it('sends a code with a status it cannot classify as it is', async () => {
     sales = [cardSale([{ barcode: '222', label: 'CODE-A' }])];
     verifyMarkingCodeDetails.mockResolvedValue({
       reachable: true,
       details: { isValid: true, status: 'SOMETHING_NEW' },
     });
     const r = await regosVcrService.backlogVerify(FROM);
-    expect(r).toMatchObject({ ok: false, error: 'UNKNOWN_STATUS:SOMETHING_NEW' });
+    expect(r).toMatchObject({ ok: true, checked: 1, disabled: 0, changes: [] });
+    expect(sales[0].fiscalSubstitutions).toBeNull();
+  });
+
+  it('keeps a cash receipt whose only marked line has an unknown status', async () => {
+    sales = [
+      sale('c', {
+        items: [item(MARKED, 5000), item(PLAIN, 1000)],
+        regosLabels: JSON.stringify([{ barcode: '222', label: 'CODE-A' }]),
+      }),
+    ];
+    verifyMarkingCodeDetails.mockResolvedValue({
+      reachable: true,
+      details: { isValid: true, status: 'SOMETHING_NEW' },
+    });
+
+    const r = await regosVcrService.backlogVerify(FROM);
+
+    const [, plain] = sales[0].items;
+    expect(r).toMatchObject({ ok: true, disabled: 0 });
+    expect(plan(sales[0])).toEqual([{ itemId: plain.id, action: 'omit', reason: 'UNMARKED' }]);
+    expect(sales[0].fiscalStatus).not.toBe('DISABLED');
   });
 
   it('stops when a substitute is needed but none is chosen', async () => {

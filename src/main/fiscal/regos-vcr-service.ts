@@ -1607,8 +1607,10 @@ class RegosVcrService {
             if (!v.reachable) {
               return { ...result, ok: false, error: v.error ?? 'REGISTRY_UNREACHABLE', stoppedAt: { receipt: s.receiptNumber, label } };
             }
+            // A status we do not classify is sent as it is: REGOS decides (user, 2026-10-09). Only
+            // an unreachable registry, above, still stops the step.
             if (v.verdict === 'UNKNOWN') {
-              return { ...result, ok: false, error: `UNKNOWN_STATUS:${v.status ?? '—'}`, stoppedAt: { receipt: s.receiptNumber, label } };
+              log.info(`[fiscal] backlog verify: ${s.receiptNumber} code with unknown status ${v.status ?? '—'} is sent as is`);
             }
             if (v.verdict === 'OUT') reason = v.status ?? 'NOT_FOUND';
           }
