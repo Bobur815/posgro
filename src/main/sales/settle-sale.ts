@@ -116,12 +116,15 @@ export async function settleSale(
         // fiscalAttempts/fiscalError are cleared, not just carried over. On create they are
         // already empty; on an edit the contents just changed, so failures recorded against the
         // previous version no longer apply — leaving the count would let an edited sale start
-        // at or over MAX_ATTEMPTS and be skipped by processPending forever.
+        // at or over MAX_ATTEMPTS and be skipped by processPending forever. The same goes for a
+        // marking block (fiscal/marking-gate.ts): the edit is what releases it, and the gate
+        // judges the new contents afresh.
         data: {
           fiscalStatus: onTab ? 'DEFERRED_DEBT' : 'PENDING',
           regosLabels,
           fiscalAttempts: 0,
           fiscalError: null,
+          markingBlock: null,
         },
       });
 
@@ -137,7 +140,7 @@ export async function settleSale(
     } else {
       await prisma.sale.update({
         where: { id: saleId },
-        data: { fiscalStatus: 'DISABLED', regosLabels },
+        data: { fiscalStatus: 'DISABLED', regosLabels, markingBlock: null },
       });
     }
   } catch (e) {

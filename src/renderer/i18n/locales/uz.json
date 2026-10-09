@@ -686,6 +686,7 @@
         "load": "Chekni o'qish",
         "zreport": "Z-hisobot",
         "build": "Pozitsiyalarni tayyorlash",
+        "marking": "Markirovkani tekshirish",
         "vcrSale": "REGOS kassasi",
         "persist": "Saqlash",
         "recover": "Chekni tiklash"

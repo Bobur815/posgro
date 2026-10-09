@@ -1,6 +1,6 @@
 // Product.isValid on the till: REGOS:VCR rejected a receipt line for the product, so it is invalid
-// until its next inventory arrival. Marked here at once, and queued for the VPS
-// (sync/product-validity-sync.ts), which holds the store-wide answer every till pulls back.
+// until a receipt with it is fiscalised. Both outcomes are marked here at once and queued for the
+// VPS (sync/product-validity-sync.ts), which keeps the newest report and sends it to every till.
 
 import { randomUUID } from 'crypto';
 import { getPrismaClient } from '../database/sqlite-client';
@@ -50,13 +50,48 @@ export async function markProductsInvalid(
     const invalidatedAt = at.toISOString();
     for (const p of products) {
       await prisma.$executeRaw`
-        INSERT INTO product_invalid_reports (id, barcode, invalidated_at, error_code)
-        VALUES (${randomUUID()}, ${p.barcode}, ${invalidatedAt}, ${code})
+        INSERT INTO product_invalid_reports (id, barcode, invalidated_at, error_code, valid)
+        VALUES (${randomUUID()}, ${p.barcode}, ${invalidatedAt}, ${code}, 0)
       `;
     }
   } catch (err) {
     console.error(
       '[fiscal] could not mark products invalid:',
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+/**
+ * A receipt went through REGOS: the products on it are valid. The caller passes only the products
+ * it holds as invalid (read with the receipt's own product rows) — every fiscalised receipt
+ * reporting every product would flood the outbox with answers the VPS already has. Never throws:
+ * the receipt is fiscalised whatever happens here.
+ */
+export async function markProductsValid(
+  products: RejectedProduct[],
+  at: Date = new Date(),
+): Promise<void> {
+  if (products.length === 0) return;
+  const prisma = getPrismaClient();
+  try {
+    await prisma.product.updateMany({
+      where: { id: { in: [...new Set(products.map((p) => p.productId))] } },
+      data: { isValid: true },
+    });
+    const validatedAt = at.toISOString();
+    const reported = new Set<string>();
+    for (const p of products) {
+      if (reported.has(p.barcode)) continue;
+      reported.add(p.barcode);
+      await prisma.$executeRaw`
+        INSERT INTO product_invalid_reports (id, barcode, invalidated_at, error_code, valid)
+        VALUES (${randomUUID()}, ${p.barcode}, ${validatedAt}, NULL, 1)
+      `;
+    }
+  } catch (err) {
+    console.error(
+      '[fiscal] could not mark products valid:',
       err instanceof Error ? err.message : err,
     );
   }

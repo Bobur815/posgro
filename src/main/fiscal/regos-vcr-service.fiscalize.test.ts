@@ -24,6 +24,19 @@ jest.mock('./secret-store', () => ({
 jest.mock('../marking/circulation-check', () => ({
   verifyMarkingCodeDetails: async () => ({ reachable: false }),
 }));
+// The registry's answer per marking code, for the circulation gate.
+const checkCirculation = jest.fn<Promise<unknown>, unknown[]>(async () => ({
+  reachable: true,
+  verdict: 'IN',
+  status: 'INTRODUCED',
+}));
+jest.mock('../marking/circulation-cache', () => ({
+  SALE_PATH_TIMEOUT_MS: 2000,
+  checkCirculation: (...a: unknown[]) => checkCirculation(...a),
+}));
+
+/** Store settings the tests switch: `regos_vcr_circulation_check`. */
+const settings = { circulationCheck: false };
 
 const prismaMock = {
   systemSetting: {
@@ -33,11 +46,16 @@ const prismaMock = {
       { key: 'regos_vcr_login', value: 'cassir' },
       { key: 'regos_vcr_vat', value: '12' },
       { key: 'regos_vcr_pos_id', value: 'POS1' },
+      ...(settings.circulationCheck ? [{ key: 'regos_vcr_circulation_check', value: 'true' }] : []),
     ]),
     findUnique: jest.fn(async () => null),
     upsert: jest.fn(async () => undefined),
   },
-  sale: { findUnique: jest.fn(), update: jest.fn(async () => undefined) },
+  sale: {
+    findUnique: jest.fn(),
+    findMany: jest.fn<Promise<unknown[]>, unknown[]>(async () => []),
+    update: jest.fn(async () => undefined),
+  },
   product: {
     findMany: jest.fn(),
     update: jest.fn(async () => undefined),
@@ -116,6 +134,7 @@ function products(n: number) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  settings.circulationCheck = false;
   resetTimings();
   // Each test starts from a service that has not yet confirmed the device's Z-report.
   (regosVcrService as unknown as { zReportOpen: boolean }).zReportOpen = false;
@@ -595,5 +614,155 @@ describe('fiscalizeSale — marking codes per line', () => {
 
     const positions = (client.sale.mock.calls[0][0] as { positions: Array<{ label?: string }> }).positions;
     expect(positions.map((p) => p.label)).toEqual(['CODE-A', 'CODE-B']);
+  });
+});
+
+describe('fiscalizeSale — marking-circulation gate (regos_vcr_circulation_check)', () => {
+  const LABEL = '0104780047860466215abcDEF';
+  /** A one-line receipt carrying one marking code; `block` is its current marking_block. */
+  const markedSale = (block: unknown[] | null = null) => ({
+    ...saleRow(1),
+    regosLabels: JSON.stringify([{ barcode: '1000', label: LABEL }]),
+    markingBlock: block ? JSON.stringify(block) : null,
+  });
+  const saleUpdates = () =>
+    prismaMock.sale.update.mock.calls.map(
+      (c: unknown[]) => (c[0] as { data: Record<string, unknown> }).data,
+    );
+
+  beforeEach(() => {
+    client.getReceiptInfo.mockResolvedValue(null);
+    prismaMock.sale.findUnique.mockImplementation(async () => markedSale());
+    checkCirculation.mockResolvedValue({ reachable: true, verdict: 'IN', status: 'INTRODUCED' });
+  });
+
+  it('is inert with the setting off: the code is not looked up and the receipt goes', async () => {
+    checkCirculation.mockResolvedValue({ reachable: true, verdict: 'OUT', status: 'WITHDRAWN' });
+
+    await regosVcrService.fiscalizeSale('sale-1');
+
+    expect(checkCirculation).not.toHaveBeenCalled();
+    expect(client.sale).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a receipt with an out-of-circulation code from REGOS and records why', async () => {
+    settings.circulationCheck = true;
+    checkCirculation.mockResolvedValue({ reachable: true, verdict: 'OUT', status: 'WITHDRAWN' });
+
+    await expect(regosVcrService.fiscalizeSale('sale-1')).rejects.toMatchObject({
+      name: 'MarkingBlockedError',
+    });
+
+    expect(client.sale).not.toHaveBeenCalled();
+    expect(client.getReceiptInfo).not.toHaveBeenCalled(); // no recovery: nothing was sent
+    expect(checkCirculation).toHaveBeenCalledWith(LABEL, { fresh: false, timeoutMs: 2000 });
+    const blocked = saleUpdates().find((d) => d.markingBlock);
+    expect(blocked).toMatchObject({ fiscalStatus: 'FAILED' });
+    expect(JSON.parse(blocked!.markingBlock as string)).toEqual([
+      { barcode: '1000', label: LABEL, status: 'WITHDRAWN' },
+    ]);
+    expect(blocked).not.toHaveProperty('fiscalAttempts');
+  });
+
+  // Offline-first: REGOS stays the authoritative check.
+  it.each([
+    ['an unknown status', { reachable: true, verdict: 'UNKNOWN', status: 'SOMETHING_NEW' }],
+    ['an unreachable registry', { reachable: false, verdict: 'UNKNOWN' }],
+  ])('sends a receipt on %s', async (_name, answer) => {
+    settings.circulationCheck = true;
+    checkCirculation.mockResolvedValue(answer);
+
+    await regosVcrService.fiscalizeSale('sale-1');
+
+    expect(client.sale).toHaveBeenCalledTimes(1);
+  });
+
+  // A person pressed Retry: ask the registry as it is now.
+  it('re-checks a blocked receipt fresh and sends it once the code is back in circulation', async () => {
+    settings.circulationCheck = true;
+    prismaMock.sale.findUnique.mockImplementation(async () =>
+      markedSale([{ barcode: '1000', label: LABEL, status: 'WITHDRAWN' }]),
+    );
+
+    await regosVcrService.fiscalizeSale('sale-1');
+
+    expect(checkCirculation).toHaveBeenCalledWith(LABEL, { fresh: true, timeoutMs: 8000 });
+    expect(saleUpdates()).toContainEqual({ markingBlock: null });
+    expect(client.sale).toHaveBeenCalledTimes(1);
+  });
+
+  // A block is lifted only by a positive answer.
+  it('keeps a blocked receipt blocked while asl-belgisi cannot be reached', async () => {
+    settings.circulationCheck = true;
+    prismaMock.sale.findUnique.mockImplementation(async () =>
+      markedSale([{ barcode: '1000', label: LABEL, status: 'WITHDRAWN' }]),
+    );
+    checkCirculation.mockResolvedValue({ reachable: false, verdict: 'UNKNOWN' });
+
+    await expect(regosVcrService.fiscalizeSale('sale-1')).rejects.toMatchObject({
+      name: 'MarkingBlockedError',
+    });
+    expect(client.sale).not.toHaveBeenCalled();
+  });
+
+  it('reports the block to a manual retry', async () => {
+    settings.circulationCheck = true;
+    checkCirculation.mockResolvedValue({ reachable: true, verdict: 'OUT', status: 'WITHDRAWN' });
+
+    const r = await regosVcrService.retrySale('sale-1');
+
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain('1000 (WITHDRAWN)');
+  });
+
+  it('leaves blocked receipts out of the retry sweep while the check is on', async () => {
+    settings.circulationCheck = true;
+    await regosVcrService.processPending();
+    expect((prismaMock.sale.findMany.mock.calls[0][0] as { where: object }).where).toMatchObject({
+      markingBlock: null,
+    });
+
+    settings.circulationCheck = false;
+    await regosVcrService.processPending();
+    expect(
+      (prismaMock.sale.findMany.mock.calls[1][0] as { where: object }).where,
+    ).not.toHaveProperty('markingBlock');
+  });
+});
+
+describe('fiscalizeSale — a fiscalised receipt makes its invalid products valid (Product.isValid)', () => {
+  it('marks the invalid products it carried valid and queues one report each', async () => {
+    prismaMock.sale.findUnique.mockImplementation(async () => saleRow(2));
+    prismaMock.product.findMany.mockImplementation(async () =>
+      products(2).map((p) => (p.id === 2 ? { ...p, isValid: false } : p)),
+    );
+
+    await regosVcrService.fiscalizeSale('sale-1');
+
+    expect(prismaMock.product.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: [2] } },
+      data: { isValid: true },
+    });
+    expect(prismaMock.$executeRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes nothing when every product on it is valid already', async () => {
+    await regosVcrService.fiscalizeSale('sale-1');
+
+    expect(prismaMock.product.updateMany).not.toHaveBeenCalled();
+    expect(prismaMock.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  // Only a successful fiscalisation counts (user decision 2026-10-09).
+  it('leaves an invalid product invalid when the receipt fails for another reason', async () => {
+    prismaMock.product.findMany.mockImplementation(async () =>
+      products(1).map((p) => ({ ...p, isValid: false })),
+    );
+    client.getReceiptInfo.mockResolvedValue(null);
+    client.sale.mockRejectedValue(new VcrError(704001, 'Ошибка оплаты', 'Receipt.Sale'));
+
+    await expect(regosVcrService.fiscalizeSale('sale-1')).rejects.toBeInstanceOf(VcrError);
+
+    expect(prismaMock.product.updateMany).not.toHaveBeenCalled();
   });
 });

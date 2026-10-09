@@ -242,6 +242,7 @@ export function FiscalSettings() {
       load: t('fiscalSettings.timings.phase.load', 'Чтение чека'),
       zreport: t('fiscalSettings.timings.phase.zreport', 'Z-отчёт'),
       build: t('fiscalSettings.timings.phase.build', 'Подготовка позиций'),
+      marking: t('fiscalSettings.timings.phase.marking', 'Проверка маркировки'),
       'vcr-sale': t('fiscalSettings.timings.phase.vcrSale', 'Касса REGOS'),
       persist: t('fiscalSettings.timings.phase.persist', 'Сохранение'),
       recover: t('fiscalSettings.timings.phase.recover', 'Восстановление чека'),

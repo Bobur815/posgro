@@ -1,8 +1,8 @@
-// Shared asl-belgisi circulation check for the main process. Nothing on the SALE path calls this
-// any more — scan-time and checkout guards were removed, and savePendingMarkingCodes() captures
-// codes unverified. The two remaining consumers are the staff-facing Marking Check screen
-// (verifyMarkingCodeDetails, via marking-check-handlers) and the bulk "fiscalize old receipts"
-// admin action (isCodeOutOfCirculation, via regos-vcr-service).
+// Shared asl-belgisi circulation check for the main process. Consumers: the staff-facing Marking
+// Check screen (verifyMarkingCodeDetails, via marking-check-handlers), the fiscal backlog run, and
+// — only with the `regos_vcr_circulation_check` setting on — the scan-time check and the fiscal
+// gate (verifyCirculation, via circulation-cache.ts). The sale itself never waits for any of them:
+// an out-of-circulation code only keeps its receipt from REGOS.
 //
 // The actual asl-belgisi request goes through the VPS proxy (POST /aslbelgisi/verify → xtrace.
 // aslbelgisi.uz), which strips the crypto tail and returns { isValid, status }. We classify the
@@ -104,7 +104,11 @@ export interface OutOfCirculationResult {
  * when the server can't be consulted (offline / no token / error) so callers can apply the
  * offline-first rule.
  */
-export async function verifyCirculation(code: string): Promise<CirculationVerifyResult> {
+export async function verifyCirculation(
+  code: string,
+  /** The sale path passes a short one (circulation-cache.ts); the default suits a person waiting. */
+  timeoutMs = 8000,
+): Promise<CirculationVerifyResult> {
   const config = getAppConfig();
   const token = getServerToken();
   if (!token) return { reachable: false };
@@ -116,7 +120,7 @@ export async function verifyCirculation(code: string): Promise<CirculationVerify
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ code }),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) return { reachable: false };
     const data = (await res.json()) as { isValid?: boolean; status?: string };

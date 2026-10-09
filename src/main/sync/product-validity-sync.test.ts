@@ -4,9 +4,9 @@ import { join } from 'path';
 
 /**
  * Product.isValid on the till, against a real SQLite database: the fiscal service marks a rejected
- * product invalid and queues a report; the upload sends the queue and drops what the server took.
- * The database is created by the real schema setup, so this also proves Migration 37 and the
- * outbox table exist.
+ * product invalid, and a fiscalised one valid again, and queues a report; the upload sends the
+ * queue and drops what the server took. The database is created by the real schema setup, so this
+ * also proves Migrations 38/39 and the outbox table exist.
  */
 
 const dataDir = mkdtempSync(join(tmpdir(), 'posgro-product-validity-'));
@@ -29,19 +29,26 @@ jest.mock('../logger', () => ({ log: { info: jest.fn(), warn: jest.fn(), error: 
 import { initializeDatabase, closeDatabase, getPrismaClient } from '../database/sqlite-client';
 import { resetMissingEndpoints } from './missing-endpoints';
 import { syncInvalidProducts } from './product-validity-sync';
-import { markProductsInvalid } from '../fiscal/product-validity';
+import { markProductsInvalid, markProductsValid } from '../fiscal/product-validity';
 import { syncProducts, type PullSource } from './products-sync';
 
 const db = () => getPrismaClient();
 
-let posted: { items: { barcode: string; at: string; code?: number }[] }[] = [];
-function serve(status: number, done: (barcodes: string[]) => string[] = (b) => b) {
+type Item = { barcode: string; at: string; valid?: boolean; code?: number };
+let posted: { path: string; items: Item[] }[] = [];
+/** A fake VPS: `status` for both endpoints, or per endpoint (an old server 404s /validity). */
+function serve(
+  status: number | { validity: number; invalid: number },
+  done: (barcodes: string[]) => string[] = (b) => b,
+) {
   posted = [];
-  global.fetch = jest.fn(async (_url: string, init?: { body?: string }) => {
+  global.fetch = jest.fn(async (url: string, init?: { body?: string }) => {
+    const path = url.endsWith('/products/validity') ? 'validity' : 'invalid';
+    const code = typeof status === 'number' ? status : status[path];
     const body = JSON.parse(init?.body ?? '{}');
-    posted.push(body);
-    const barcodes = (body.items ?? []).map((i: { barcode: string }) => i.barcode);
-    return { ok: status < 300, status, json: async () => ({ done: done(barcodes) }) };
+    posted.push({ path, items: body.items ?? [] });
+    const barcodes = (body.items ?? []).map((i: Item) => i.barcode);
+    return { ok: code < 300, status: code, json: async () => ({ done: done(barcodes) }) };
   }) as unknown as typeof fetch;
 }
 
@@ -119,14 +126,35 @@ describe('a product REGOS rejected', () => {
 
     await syncInvalidProducts();
 
-    expect(posted[0].items).toEqual([
+    expect(posted).toEqual([
+      {
+        path: 'validity',
+        items: [{ barcode: '4780047860466', at: '2026-10-05T10:30:00.000Z', valid: false, code: 705511 }],
+      },
+    ]);
+    expect(await unsent()).toEqual([]);
+  });
+
+  // A server from before /products/validity still takes rejections through /products/invalid.
+  it('falls back to the older endpoint for a rejection', async () => {
+    await markProductsInvalid(
+      [{ productId, barcode: '4780047860466' }],
+      705511,
+      new Date('2026-10-05T10:30:00Z'),
+    );
+    serve({ validity: 404, invalid: 200 });
+
+    await syncInvalidProducts();
+
+    expect(posted.map((p) => p.path)).toEqual(['validity', 'invalid']);
+    expect(posted[1].items).toEqual([
       { barcode: '4780047860466', at: '2026-10-05T10:30:00.000Z', code: 705511 },
     ]);
     expect(await unsent()).toEqual([]);
   });
 
-  // An older server: the till keeps the report and sends it once the server has the endpoint.
-  it('stays queued against a server from before the endpoint', async () => {
+  // A server from before isValid: the till keeps the report and sends it once the server has it.
+  it('stays queued against a server with neither endpoint', async () => {
     await markProductsInvalid([{ productId, barcode: '4780047860466' }], 705511);
     serve(404);
 
@@ -148,6 +176,45 @@ describe('a product REGOS rejected', () => {
     serve(200);
     await syncInvalidProducts();
     expect(posted).toEqual([]);
+  });
+});
+
+describe('a product on a fiscalised receipt', () => {
+  it('becomes valid again at once and is queued for the server', async () => {
+    await db().product.update({ where: { id: productId }, data: { isValid: false } });
+
+    await markProductsValid([{ productId, barcode: '4780047860466' }], new Date('2026-10-09T09:00:00Z'));
+
+    const p = await db().product.findUnique({ where: { id: productId }, select: { isValid: true } });
+    expect(p.isValid).toBe(true);
+    serve(200);
+    await syncInvalidProducts();
+    expect(posted[0]).toEqual({
+      path: 'validity',
+      items: [{ barcode: '4780047860466', at: '2026-10-09T09:00:00.000Z', valid: true }],
+    });
+    expect(await unsent()).toEqual([]);
+  });
+
+  it('reports a product once however many lines carried it', async () => {
+    await db().product.update({ where: { id: productId }, data: { isValid: false } });
+    await markProductsValid([
+      { productId, barcode: '4780047860466' },
+      { productId, barcode: '4780047860466' },
+    ]);
+    expect(await unsent()).toEqual(['4780047860466']);
+  });
+
+  // An old server cannot take it; the rejection-only fallback must leave it for the new endpoint.
+  it('stays queued against a server from before /products/validity', async () => {
+    await db().product.update({ where: { id: productId }, data: { isValid: false } });
+    await markProductsValid([{ productId, barcode: '4780047860466' }]);
+    serve({ validity: 404, invalid: 200 });
+
+    await syncInvalidProducts();
+
+    expect(posted.map((p) => p.path)).toEqual(['validity']);
+    expect(await unsent()).toEqual(['4780047860466']);
   });
 });
 

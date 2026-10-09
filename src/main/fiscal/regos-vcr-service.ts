@@ -58,7 +58,14 @@ import {
   maySkipFiscalisation,
   parseLinePlan,
 } from '../../shared/utils/fiscal-backlog';
-import { isProductRejection, markProductsInvalid } from './product-validity';
+import { isProductRejection, markProductsInvalid, markProductsValid } from './product-validity';
+import { checkCirculation, SALE_PATH_TIMEOUT_MS } from '../marking/circulation-cache';
+import {
+  MarkingBlockedError,
+  decideMarkingBlock,
+  describeMarkingBlock,
+  parseMarkingBlock,
+} from './marking-gate';
 
 /** system_settings key: when this till began sending marking codes per line. */
 const LABELS_PER_LINE_SINCE = 'labels_per_line_since';
@@ -116,6 +123,8 @@ export function loggedItems(names: string[]): string {
 interface PositionMeta {
   productId: number;
   rate: number;
+  /** The product is held invalid (Product.isValid = false); a fiscalised receipt clears it. */
+  invalid?: boolean;
 }
 
 /** The product fields a fiscal position is built from. See buildPositions(). */
@@ -126,6 +135,8 @@ interface FiscalProduct {
   unit: string;
   packageCode: string | null;
   category: { nameRu: string } | null;
+  /** Read from the same row, so a fiscalised receipt clears an invalid flag with no extra query. */
+  isValid?: boolean;
 }
 
 /** The substitute also lends its own name and barcode to the line it replaces. */
@@ -150,6 +161,8 @@ interface ResolvedConfig {
   intervalMs: number;
   timeoutMs: number;
   substituteProductId: number | null;
+  /** asl-belgisi circulation check at scan time and before Receipt.Sale. Default off. */
+  circulationCheck: boolean;
 }
 
 const SETTING_KEYS = {
@@ -165,6 +178,7 @@ const SETTING_KEYS = {
   uzqrPollMs: 'regos_vcr_uzqr_poll_ms',
   uzqrTimeoutMs: 'regos_vcr_uzqr_timeout_ms',
   substituteProductId: 'regos_vcr_substitute_product_id',
+  circulationCheck: 'regos_vcr_circulation_check',
 } as const;
 
 class RegosVcrService {
@@ -238,6 +252,8 @@ class RegosVcrService {
         timeoutMs: Number(map[SETTING_KEYS.uzqrTimeoutMs]),
       }),
       substituteProductId: parseProductId(map[SETTING_KEYS.substituteProductId]),
+      // Default OFF: until someone turns it on, marked receipts go to REGOS exactly as before.
+      circulationCheck: map[SETTING_KEYS.circulationCheck] === 'true',
     };
   }
 
@@ -290,6 +306,24 @@ class RegosVcrService {
     }
     if (input.password) await setVcrPassword(input.password);
     return this.getConfig();
+  }
+
+  /**
+   * The asl-belgisi circulation check (scan time + fiscal gate). Its own pair rather than a field
+   * of RegosVcrConfig, which lives in src/shared and is compiled into older consumers.
+   */
+  async circulationCheckEnabled(): Promise<boolean> {
+    return (await this.resolveConfig()).circulationCheck;
+  }
+
+  async setCirculationCheck(on: boolean): Promise<boolean> {
+    const value = String(on);
+    await getPrismaClient().systemSetting.upsert({
+      where: { key: SETTING_KEYS.circulationCheck },
+      update: { value },
+      create: { key: SETTING_KEYS.circulationCheck, value },
+    });
+    return on;
   }
 
   async isEnabled(): Promise<boolean> {
@@ -632,7 +666,11 @@ class RegosVcrService {
       if (label) pos.label = label;
       positions.push(pos);
       // A VAT heal on a substituted line corrects the substitute — it is the product sent.
-      meta.push({ productId: sub ? sub.id : Number(item.productId), rate });
+      meta.push({
+        productId: sub ? sub.id : Number(item.productId),
+        rate,
+        ...(product?.isValid === false ? { invalid: true } : {}),
+      });
     }
     if (positions.length === 0) throw new Error('В чеке не осталось позиций для фискализации');
     // A full receipt pays finalAmount to the tiyin, so its line discounts must add up to the order
@@ -908,6 +946,9 @@ class RegosVcrService {
         console.log('[fiscal] payments:', JSON.stringify(payments));
       }
       timer.phase('build');
+      // Nothing reaches Receipt.Sale with a code asl-belgisi calls out of circulation.
+      await this.applyMarkingGate(sale as never, positions, cfg);
+      timer.phase('marking');
       // What the device is about to be asked to verify, logged alongside how long it then took.
       timer.contents(positions.length, positions.filter((p) => p.label).length);
       let result: VcrReceiptResult | null = null;
@@ -966,11 +1007,20 @@ class RegosVcrService {
           regosReceiptNo: result.ReceiptNo,
           regosFiscalAt: new Date(),
           fiscalError: null,
+          markingBlock: null,
         },
       });
+      // REGOS took every product on it, so none of them is invalid any more (Product.isValid).
+      await markProductsValid(sentProducts(positions, meta));
       timer.phase('persist');
       timer.finish(sale.receiptNumber, true);
     } catch (e) {
+      // A blocked receipt never reached the device: nothing to recover, nobody to blame, no
+      // attempt counted. applyMarkingGate already recorded why.
+      if (e instanceof MarkingBlockedError) {
+        timer.finish(sale.receiptNumber, false);
+        throw e;
+      }
       // Note: the timer is closed at each exit below, not here — the recovery path that follows
       // can still turn this into a fiscalized receipt, and calling it a failure now would log a
       // FAILED line for a sale that succeeded.
@@ -1006,8 +1056,10 @@ class RegosVcrService {
               regosReceiptNo: recovered.ReceiptNo,
               regosFiscalAt: new Date(),
               fiscalError: null,
+              markingBlock: null,
             },
           }).catch(() => {});
+          await markProductsValid(sentProducts(positions, meta));
           timer.phase('recover');
           timer.finish(sale.receiptNumber, true);
           return; // recovered — do not propagate the error
@@ -1096,6 +1148,49 @@ class RegosVcrService {
     });
   }
 
+  /**
+   * The marking-circulation gate (marking-gate.ts), with `regos_vcr_circulation_check` on: asks
+   * asl-belgisi about every code this receipt will carry — the scan-time check has usually left
+   * the answer in the cache. Throws MarkingBlockedError after recording the block; clears a block
+   * that no longer holds. A receipt that is already blocked is asked fresh, with the roomier
+   * timeout: that is a person pressing Retry.
+   */
+  private async applyMarkingGate(
+    sale: { id: string; markingBlock?: string | null },
+    positions: VcrPosition[],
+    cfg: ResolvedConfig,
+  ): Promise<void> {
+    if (!cfg.circulationCheck) return;
+    const prior = parseMarkingBlock(sale.markingBlock);
+    const sent = positions.flatMap((p) => (p.label ? [{ barcode: p.barcode, label: p.label }] : []));
+
+    const fresh = prior.length > 0;
+    const answers = await Promise.all(
+      sent.map((l) =>
+        checkCirculation(l.label, { fresh, timeoutMs: fresh ? 8000 : SALE_PATH_TIMEOUT_MS }),
+      ),
+    );
+    const blocked = decideMarkingBlock(sent, answers, prior);
+    const prisma = getPrismaClient();
+
+    if (blocked.length > 0) {
+      log.warn(`[fiscal] marking block on ${sale.id}: ${describeMarkingBlock(blocked)}`);
+      await prisma.sale.update({
+        where: { id: sale.id },
+        data: {
+          fiscalStatus: 'FAILED',
+          markingBlock: JSON.stringify(blocked),
+          fiscalError: describeMarkingBlock(blocked),
+        },
+      });
+      throw new MarkingBlockedError(blocked);
+    }
+    if (prior.length > 0) {
+      log.info(`[fiscal] marking block lifted on ${sale.id}`);
+      await prisma.sale.update({ where: { id: sale.id }, data: { markingBlock: null } });
+    }
+  }
+
   // ── Background worker ─────────────────────────────────────────────────────────
   async processPending(): Promise<void> {
     if (this.running) return;
@@ -1105,7 +1200,13 @@ class RegosVcrService {
       if (!cfg.enabled) return;
       const prisma = getPrismaClient();
       const pending = await prisma.sale.findMany({
-        where: { fiscalStatus: { in: ['PENDING', 'FAILED'] }, fiscalAttempts: { lt: MAX_ATTEMPTS } },
+        where: {
+          fiscalStatus: { in: ['PENDING', 'FAILED'] },
+          fiscalAttempts: { lt: MAX_ATTEMPTS },
+          // A blocked receipt waits for an edit or a manual retry. With the check off, the block
+          // is inert and the receipt goes like any other.
+          ...(cfg.circulationCheck ? { markingBlock: null } : {}),
+        },
         orderBy: { createdAt: 'asc' },
         take: 20,
       });
@@ -1791,6 +1892,19 @@ function parseVatPercent(raw: string | undefined): number {
 function parseProductId(raw: string | undefined): number | null {
   const n = Number(raw);
   return raw && Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * The invalid products a fiscalised receipt carried to REGOS — a substituted line counts as its
+ * substitute. Only these need writing: everything else on the receipt is valid already.
+ */
+function sentProducts(
+  positions: VcrPosition[],
+  meta: PositionMeta[],
+): Array<{ productId: number; barcode: string }> {
+  return positions.flatMap((p, i) =>
+    meta[i]?.invalid ? [{ productId: meta[i].productId, barcode: p.barcode }] : [],
+  );
 }
 
 function safeParseLabels(json: string): FiscalLabel[] {
