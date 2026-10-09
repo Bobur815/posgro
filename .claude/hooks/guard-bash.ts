@@ -30,8 +30,10 @@ const rules: Rule[] = [
   { re: /(--force-reset|--accept-data-loss)/, why: 'Prisma data-loss flag' },
   { re: /\bprisma\s+db\s+push\b(?![^\n]*schema\.sqlite\.prisma)/i, why: 'prisma db push on the PostgreSQL schema' },
 
-  // Production actions that belong to the human
-  { re: /\bdeploy:pos\b|scripts[\\/]upload-release/i, why: 'publishes the installer to production; run it yourself' },
+   // `npm run deploy:pos` is allowed (CLAUDE.md); the "ask" rule in .claude/settings.json turns
+  // every run into a permission prompt. Calling the upload script directly stays blocked, so a
+  // publish always goes through the full build-and-check of deploy:pos.
+  { re: /scripts[\\/]upload-release/i, why: 'uploads a release directly; publish with npm run deploy:pos' },
   { re: /\bprisma(?::|\s+)migrate(?::|\s+)deploy\b/i, why: 'production migrations run via the main-branch deploy' },
   // Pushing to main is not blocked here: it needs the user's OK after staging (CLAUDE.md), which
   // the "ask" rule in .claude/settings.json turns into a permission prompt on every push.
