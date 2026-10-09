@@ -291,7 +291,8 @@ model Product {
   packageCode           String?   @map("package_code") // REGOS:VCR package (unit) code from MXIK — required for fiscalizing marked goods
   vatRate               Float?    @map("vat_rate") // VAT % registered for this product's MXIK (e.g. 0, 6 or 12). Null → use global regos_vcr_vat default
   isMarked              Boolean?  @map("is_marked") // Authoritative Asl-Belgisi marking flag from tasnif `label`. Null = unchecked → fall back to isMarkedMxik(mxik) heuristic
-  isValid               Boolean   @default(true) @map("is_valid") // False once REGOS:VCR rejected a receipt line for this product (MXIK/VAT/package/out-of-circulation code); an inventory arrival sets it back to true
+  isValid               Boolean   @default(true) @map("is_valid") // False once REGOS:VCR rejected a receipt line for this product (MXIK/VAT/package/out-of-circulation code); true again once a receipt with it is fiscalised
+  validityAt            DateTime? @map("validity_at") // When a till saw the outcome isValid holds; the newest report wins across tills (POST /products/validity)
   active                Boolean   @default(true)
   pendingPrice          Decimal?  @map("pending_price") @db.Decimal(10, 2)
   pendingPriceThreshold Decimal?  @map("pending_price_threshold") @db.Decimal(10, 3)

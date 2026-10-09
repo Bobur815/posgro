@@ -23,6 +23,7 @@ import { ProductsService } from "./products.service";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
 import { ReportInvalidProductsDto } from "./dto/report-invalid.dto";
+import { ReportProductValidityDto } from "./dto/report-validity.dto";
 import { ProductsValidityService } from "./products-validity.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
@@ -181,8 +182,23 @@ export class ProductsController {
   }
 
   /**
-   * Products REGOS:VCR rejected on a till's receipt — marked invalid until the next arrival. Any
-   * staff session, like /sales/fiscal-sync: the till of a cashier-only shift reports it too.
+   * What REGOS:VCR said about products on a till's receipts: rejected (invalid) or fiscalised
+   * (valid again); the newest report wins. Any staff session, like /sales/fiscal-sync: the till of
+   * a cashier-only shift reports it too.
+   */
+  @Post("validity")
+  @HttpCode(200)
+  @ApiOperation({ summary: "Products REGOS:VCR rejected or fiscalised, from a POS terminal" })
+  @ApiResponse({ status: 200, description: "Barcodes the till may drop from its outbox" })
+  async reportValidity(
+    @CurrentStore() storeId: string,
+    @Body() dto: ReportProductValidityDto,
+  ) {
+    return this.productsValidity.reportValidity(storeId, dto.items);
+  }
+
+  /**
+   * Products REGOS:VCR rejected on a till's receipt. Kept for tills from before /validity.
    */
   @Post("invalid")
   @HttpCode(200)
