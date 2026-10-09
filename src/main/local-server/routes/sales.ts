@@ -24,25 +24,31 @@ export const salesRoutes: Route[] = [
       // A cashier only ever sees their own receipts; an admin sees everyone's and may filter.
       const cashierId = isAdmin(user?.role) ? query.cashierId || undefined : user!.id;
 
-      return db().sale.findMany({
-        where: {
-          ...(cashierId ? { cashierId } : {}),
-          ...(hasRange
-            ? {
-                createdAt: {
-                  ...(startDate ? { gte: startDate } : {}),
-                  ...(endDate ? { lte: endDate } : {}),
-                },
-              }
-            : {}),
-          ...(query.terminalId ? { terminalId: query.terminalId } : {}),
-        },
-        include: USER_SELECT,
-        orderBy: { createdAt: 'desc' },
-        // Unbounded for an explicit range — the reports need every receipt in the period to add
-        // up — but capped for the bare list, which is only ever the recent-activity view.
-        ...(hasRange ? {} : { take: 100 }),
-      });
+      const sales: Array<Record<string, unknown> & { smena: { zReportNumber: number } | null }> =
+        await db().sale.findMany({
+          where: {
+            ...(cashierId ? { cashierId } : {}),
+            ...(hasRange
+              ? {
+                  createdAt: {
+                    ...(startDate ? { gte: startDate } : {}),
+                    ...(endDate ? { lte: endDate } : {}),
+                  },
+                }
+              : {}),
+            ...(query.terminalId ? { terminalId: query.terminalId } : {}),
+          },
+          include: { ...USER_SELECT, smena: { select: { zReportNumber: true } } },
+          orderBy: { createdAt: 'desc' },
+          // Unbounded for an explicit range — the reports need every receipt in the period to add
+          // up — but capped for the bare list, which is only ever the recent-activity view.
+          ...(hasRange ? {} : { take: 100 }),
+        });
+      // The shift's own Z-report number, flat: the same field the server derives for a synced sale.
+      return sales.map(({ smena, ...sale }) => ({
+        ...sale,
+        zReportNumber: smena?.zReportNumber ?? null,
+      }));
     },
   },
 

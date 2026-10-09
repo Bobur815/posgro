@@ -1,3 +1,48 @@
+# Receipts page: fiscal filter + Excel export (2026-10-09), branch feat/receipts-excel-export (from dev). Approved 2026-10-09
+
+## Findings
+- `src/web/src/pages/Reports/DailySummary.tsx` loads `GET /sales` for the date range and filters in the browser
+  (payment filter = `useMemo`). The same page runs against the VPS (online) and the till's local server (offline).
+- `fiscalStatus` already reaches the browser from both: server `SalesService.findAll` spreads the row; local-server
+  `routes/sales.ts` returns the raw SQLite row. Shared `Sale` type already has `fiscalStatus?: string | null`.
+  Values: FISCALIZED | PENDING | FAILED | DISABLED | DEFERRED_DEBT | null.
+- Local Z-report ID = `Smena.zReportNumber`. SQLite: `sale.smenaId` → smena. Server `Sale` has no `smenaId`;
+  synced `smenas` (CLOSED only) carry `terminalId`, `openedAt`, `closedAt`, `zReportNumber`.
+- Refund = `sales.refunded` (fiscal full refund), SQLite only; server has no column. A deleted sale leaves `sales`.
+- Web shares the renderer i18n (`@i18n` → src/renderer/i18n), so locale edits are POS files → version bump.
+- `xlsx` 0.18.5 is in the root package.json (unused); not in src/web/package.json.
+
+## Decisions (agreed)
+- Z-report on VPS derived from synced shifts by terminal + time window, no migration. Blank while the shift is open.
+- Type: Sale / Refund / Nasiya (debtAmount > 0). Refund only visible in offline mode (server has no flag).
+- File: `cheklar_<start>_<end>.xlsx`; one day → `cheklar_<date>.xlsx`.
+- Unfiscalised = every status except FISCALIZED (null included).
+- Library: `xlsx` (SheetJS) 0.18.5, lazy-loaded on first export.
+- Two sheets: Receipts (as above) + Items (Terminal ID, Receipt No, Date/Time, Z-Report ID, Product, Barcode, Qty, Unit price, Sum).
+
+## Plan
+1. **Server** (`sales.service.ts` `findAll`): one extra query for closed shifts of this store on the result's
+   terminals overlapping its time span; each sale gets additive `zReportNumber: number | null`
+   (same terminal, openedAt ≤ createdAt ≤ closedAt). No schema or request change. Tests: matched, open shift → null,
+   other terminal → null.
+2. **Local server** (`src/main/local-server/routes/sales.ts` GET /sales): include `smena { zReportNumber }`, flatten
+   to the same `zReportNumber` field. `refunded` is already in the row. POS bump 1.34.2.
+3. **Shared type**: `zReportNumber?: number | null`, `refunded?: boolean` on `Sale` (optional, additive).
+4. **Web page**:
+   - FilterSelect "Fiscal": All (default) / Fiscalised / Unfiscalised; applied together with the payment filter to the
+     table, summary cards and export. Nasiya repayments (not receipts) stay in the cards only under "All". Reset clears it.
+   - "Export to Excel" button in the FilterBar. Pressed → progress bar under the FilterBar; rows built in chunks of
+     500 with a yield between chunks (real progress, page stays responsive), then `XLSX.write` → Blob → object URL.
+     Done → "Download cheklar_….xlsx" button replaces the bar. Changing any filter discards the file (stale);
+     URL revoked on re-export/unmount. Export disabled while loading or with no receipts.
+   - Columns: Terminal ID · Receipt No · Date/Time (dd.mm.yyyy hh:mm) · Type · Amount (number cell) · Z-Report ID.
+     Header row in the UI language.
+   - Pure row builder in its own file with a unit test.
+5. i18n ru + uz: fiscal filter, export/download/progress, type labels, column headers.
+6. `src/web/package.json`: add `xlsx@0.18.5`.
+7. Checks: lint, tsc (web + server), jest, POS compile check, web build.
+8. Rollout: dev → staging (you test online and on an offline till) → your OK → main; you publish the POS installer.
+
 # Bluetooth label printer (XP-365B over COM, TSPL) (2026-10-07), branch feat/bt-label-printer (from dev). Approved 2026-10-07; done, 1.33.0
 
 ## Findings
