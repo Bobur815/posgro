@@ -7,6 +7,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
 import { ProductFilters, ProductWhereInput } from "./types/product.types";
+import { normalizeMxik } from "../../../shared/utils/mxik-lookup";
 
 @Injectable()
 export class ProductsService {
@@ -495,7 +496,7 @@ export class ProductsService {
               boxPrice: p.boxPrice ?? null,
               boxBarcode: p.boxBarcode || null,
               // A product created offline keeps its fiscal identity on the way up.
-              mxik: p.mxik || null,
+              mxik: normalizeMxik(p.mxik),
               packageCode: p.packageCode || null,
               vatRate: p.vatRate ?? null,
               isMarked: p.isMarked ?? null,
