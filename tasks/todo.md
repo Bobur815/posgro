@@ -1,3 +1,142 @@
+# Scan-time asl-belgisi check for marked goods + isValid reset on fiscalization (2026-10-09), branch feat/marking-circulation-gate (from dev). Approved 2026-10-09; implemented 1.35.0, not merged yet
+
+## Decisions (user, 2026-10-09)
+1. Block in `sales.marking_block`, status stays FAILED, no new status value. 2. Manual retry re-checks asl-belgisi and
+sends if no code is OUT any more. 3. Fix `handleEditSale` dropping marking codes, in this task. 4. `isValid=true` only
+after a successful fiscalization. 5. PG `Product.validityAt` + `POST /products/validity`; arrivals stop resetting.
+6. Flag only for the circulation check (`regos_vcr_circulation_check`, default off); isValid and backlog-UNKNOWN changes
+without a flag. 7. Backlog step 3 still stops when asl-belgisi is unreachable. Also: UNKNOWN status → sent to REGOS
+(live gate and backlog step 3).
+
+## Findings
+- A scan-time circulation guard existed and was removed in cda557f: it blocked the sale on a network call and had to
+  fail open offline anyway. This design differs: the sale is never blocked; only the REGOS send is gated.
+- Scan flow: `POSScreen.tsx:926-997` adds a marked line optimistically, then runs the resale check
+  (`markingCodes:check`, 1.5 s timeout) in the background. That is the pattern to copy.
+- Lookup already exists: `marking/circulation-check.ts` `isCodeOutOfCirculation()` → VPS `/aslbelgisi/verify`
+  (8 s timeout today), `classifyCirculation` IN/OUT/UNKNOWN, `isValid=false` → OUT (NOT_FOUND).
+- Every fiscal path goes through `fiscalizeSaleImpl` (`regos-vcr-service.ts:871`): immediate (`settle-sale.ts:133`),
+  `processPending` (PENDING/FAILED, `:1107`), manual retry (`:1056`), backlog step 4 (`:1595`), credit settle. One gate
+  there covers all of them, satellite sales included.
+- An edit re-runs `settleSale` (`sales-handlers.ts:210`), which already resets `fiscalAttempts`/`fiscalError` and
+  re-snapshots `regosLabels`, so "unblocked by an edit" fits naturally.
+- **Pre-existing bug:** `Cart.tsx:303 handleEditSale` doesn't carry `markingCode` back into the cart. An edited sale
+  loses every marking code, so REGOS would reject the marked lines ("код маркировки не задан").
+- The server accepts only `PENDING|FISCALIZED|FAILED|DISABLED|DEFERRED_DEBT` (`sync-fiscal.dto.ts:27`). A new status
+  value would fail the whole `fiscal-sync` batch.
+- `isValid=true` today: the 4 arrival paths (`ipc/handlers.ts:664`, `local-server/routes/inventory.ts:57`,
+  `inventory.service.ts:89,314`). The server ignores an invalid report older than the latest arrival
+  (`products-validity.service.ts:41`). Nothing reads `isValid` yet.
+- Server ValidationPipe is `forbidNonWhitelisted: true`, so adding a field to `/products/invalid` would make an old server
+  reject it. A "valid again" signal needs its own endpoint.
+- Fiscal settings are `regos_vcr_*` system settings (`regos-vcr-service.ts:36`), synced store-wide. SQLite migrations up
+  to 38. POS is 1.34.3.
+
+## Design (pending answers)
+### A. Scan-time check (POS)
+- Flag `regos_vcr_circulation_check`, **default off** = today's behaviour. Checkbox in Fiscal settings, ru/uz.
+- `circulation-check.ts`: `verifyCirculation(code, timeoutMs)` (default stays 8 s). New `circulation-cache.ts`:
+  in-memory `code → {verdict, status, at}`, TTL 6 h, in-flight requests de-duplicated.
+- IPC `markingCodes:checkCirculation(code)` → `{verdict, status}` (preload + ipc-client, ipcSafe). 2 s timeout.
+- `POSScreen`: after the optimistic add, only for marked lines and with the flag on, run it in parallel with the resale
+  check. The result goes on the cart line (`circulation?: 'IN'|'OUT'|'UNKNOWN'`). `Cart.tsx` shows a red badge on OUT
+  ("Вне оборота — чек не будет фискализирован" / uz). **No revert, no block**: the sale goes through.
+### B. Fiscal gate (POS main, authoritative)
+- SQLite Migration 39: `sales.marking_block TEXT NULL` (JSON `[{barcode, label, status}]`). Idempotent, unconditional
+  (lessons.md), covered by `legacy-upgrade.test.ts`.
+- `fiscalizeSaleImpl`, after load and before Z-report/Sale: flag on and the sale has labels → verdict per label (cache,
+  else a check with a 2 s timeout, all in parallel). Any OUT → `marking_block` set, `fiscalStatus: 'FAILED'`,
+  `fiscalError: 'marking:out_of_circulation …'`, return without contacting the VCR (no attempt counted).
+  UNKNOWN/unreachable → send as today.
+- `processPending`: `markingBlock: null` added to the where, so blocked sales are not retried.
+- Manual retry on a blocked sale (`retryFiscalize`, `regos-vcr-service.ts:1050`): re-checks the blocked codes fresh
+  (cache bypassed, 8 s timeout — a person is waiting). No OUT left → `marking_block` cleared, sent. Still OUT → stays
+  blocked, error names the codes. Registry unreachable → stays blocked ("asl-belgisi unreachable, try again"): a block
+  is only lifted on a positive answer.
+- Edit: `settleSale` clears `marking_block` → the next fiscalization re-runs the gate on the new contents.
+- Fix `handleEditSale`: restore `markingCode` per line from `sale.regosLabels` (k-th line ↔ k-th code per barcode, same
+  rule as the backlog) → Q3.
+- UI: ReceiptDetailsModal + fiscal queue counter show "blocked: code(s) out of circulation, edit the receipt", with the codes.
+### C. isValid reset → on fiscalization (Q4, Q5)
+- POS: after a **successful** fiscalization (incl. recover-by-code), `isValid=true` for the products actually sent on that
+  receipt (backlog lines omitted or substituted don't count — their product never reached REGOS), and queues a "valid"
+  report. A failed attempt changes nothing except blaming. Blamed
+  products still go false on a product rejection. Outbox `product_invalid_reports` gets a
+  `valid INTEGER NOT NULL DEFAULT 0` column (Migration 39). The arrival paths on the till stop setting it.
+- Server: PG `Product.validityAt DateTime?` (nullable, additive). New `POST /products/validity`
+  `{items:[{barcode, at, valid, code?}]}`: applies only if `at > validityAt` (last report wins across tills), bumps
+  updatedAt only on a real change. `/products/invalid` stays for N-1 tills (it also writes validityAt). The arrival paths
+  stop setting `isValid`. The "newer arrival" check is dropped from the new endpoint.
+- Till upload: `/products/validity` first. On 404 (old server), send only the invalid rows to `/products/invalid` as
+  today and keep the valid rows queued.
+
+### D. UNKNOWN status is sent to REGOS (user, 2026-10-09), live gate and backlog step 3
+- Live gate (B): UNKNOWN → sent, as designed above.
+- Backlog `backlogVerify` (`regos-vcr-service.ts:1509`): today a reachable registry answer with an unrecognised status stops
+  step 3 with `UNKNOWN_STATUS:<status>` (decision Q4 of 2026-10-04). Change: such a line counts as valid (`validMarked++`, no
+  substitute/omit). A cash receipt with only UNKNOWN marked lines is then sent, not DISABLED. Step 3 no longer stops on it.
+- Card (`FiscalBacklogCard.tsx:539-565`): step 3 summary adds "N codes with unknown status are sent as they are" with the
+  status values, so the admin sees them. i18n ru/uz. The `UNKNOWN_STATUS` error key stays (old results) but is no longer produced.
+- Unreachable registry (no answer at all) → step 3 still stops, as today.
+- Test: `regos-vcr-service.backlog.test.ts:537` flips: `SOMETHING_NEW` → ok, line sent, nothing substituted; plus a
+  cash-only receipt with one UNKNOWN line → not DISABLED. Red proof.
+- Not behind a flag: it reverses one rule inside a paid admin-only tool that you run by hand (Q6).
+
+## Areas / version
+- POS (`src/main`, `src/renderer`, i18n) → **minor bump 1.34.3 → 1.35.0**. Server: endpoint, DTO, service, inventory.
+  Prisma PG migration + SQLite schema. `src/shared`: not touched. Web/landing: none.
+
+## N-1 / offline
+- Old till + new server: the old `/products/invalid` keeps working. Old tills still reset on arrival locally (accepted,
+  flag-only field, nothing reads it).
+- New till + old server: `/products/validity` 404 → fallback above. The circulation gate needs only the existing
+  `/aslbelgisi/verify`.
+- Offline: the scan check returns UNKNOWN fast (no token / fetch failure) and the gate sends to REGOS as today. A sale is
+  never blocked locally.
+- No new `fiscalStatus` value, so `fiscal-sync` is unchanged.
+- Satellite: the scan check runs on the satellite if it has a token, otherwise UNKNOWN. The gate runs on the main, where
+  fiscalization happens.
+- Online/offline store modes: fiscalization only runs in the POS main process in both. Verify both on staging.
+
+## Steps
+- [x] 1. PG schema + migration `--create-only` (validityAt), read SQL, migration-reviewer
+- [x] 2. Server: `/products/validity` + DTO + service (last-report-wins) + tests; `/products/invalid` writes validityAt;
+      arrivals stop setting isValid + tests updated
+- [x] 3. SQLite schema + Migration 39 (`sales.marking_block`, outbox `valid`); legacy-upgrade test; `prisma:generate:sqlite`
+- [x] 4. POS circulation cache + timeout param + IPC/preload/ipc-client; tests (cache TTL, de-dup, timeout → UNKNOWN)
+- [x] 5. POS fiscal gate in `fiscalizeSaleImpl` + `processPending` filter + edit clears the block; tests: OUT blocks with
+      no VCR call, UNKNOWN sends, edit unblocks, flag off = untouched (red proof per lessons.md)
+- [x] 6. isValid on fiscalization + outbox valid rows + upload with 404 fallback; till arrival paths stop setting it; tests
+- [x] 7. Renderer: scan-time call + cart badge + Fiscal settings checkbox + receipt-details block notice + edit restores
+      codes; i18n ru/uz
+- [x] 7b. Backlog step 3: UNKNOWN → valid + card summary + i18n; backlog test flipped (red proof)
+- [x] 8. /check, /api-compat, `npm version minor --no-git-tag-version`, `npx cross-env APP_MODE=pos electron-vite build`
+
+## Outcome (2026-10-09)
+- Commits: f1a45de server, 71c54e9 SQLite 39, 4951c19 gate + isValid, f7f04f6 backlog UNKNOWN, 4b6a0f0 renderer + 1.35.0.
+- Red proofs: inventory arrival test (2 failed on old code), Migration 39 (6 failed), gate + valid-on-success (5 failed),
+  backlog UNKNOWN (2 failed). Full suite: 1459/1459; local-server.integration hit its known afterAll timeout once under
+  load, 81/81 alone. tsc, lint (0 errors), build:server, POS electron-vite build: OK. /api-compat: nothing breaks N-1.
+- Deviations: the flag has its own IPC pair (fiscal:get/setCirculationCheck) instead of a RegosVcrConfig field, so src/shared
+  is untouched. Not done (would need an additive src/shared type field, asking): blocked count on the fiscal queue
+  counter; "N codes with unknown status" line on the backlog step 3 card. The block reason does show in receipt details
+  and the retry toast (ru/uz). `prisma:push:sqlite` skipped: no SQLITE_DATABASE_URL here; tills upgrade via sqlite-client.
+- isValid=true is written only for products the till holds invalid, read with the receipt's own rows (no extra query).
+- Timing readout has a new `marking` phase.
+- Known, pre-existing: removing an OUT line during an edit leaves its code in sold_marking_codes.
+
+## Verify
+- Unit/integration tests above. Staging: server on dev → staging. A test till on staging with the flag on: scan a known
+  OUT code (from the Marking Check screen) → badge, the sale saves, the receipt stays blocked, the edit removes the line →
+  it fiscalizes. Offline (network off): scan → no badge, the sale fiscalizes as today. Both store modes. You run the real
+  VCR/asl-belgisi steps.
+
+## Rollout / rollback
+- Server first: feature branch → dev → staging → your OK → main (`/pg-backup` before the prod migration). Then the
+  installer (you run `deploy:pos`).
+- Rollback: flag off → gate and scan check inert. Blocked sales: one UPDATE clears `marking_block` (or edit). Server: the
+  old endpoint is untouched. The validityAt column is unused by older code.
+
 # Receipts page: fiscal filter + Excel export (2026-10-09), branch feat/receipts-excel-export (from dev). Approved 2026-10-09
 
 ## Findings
