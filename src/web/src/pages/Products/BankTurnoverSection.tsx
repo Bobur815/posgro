@@ -8,7 +8,7 @@ import { Input } from "@components/common/Input";
 import { DateInput } from "@components/common/DateInput";
 import { ConfirmDialog } from "@components/common/ConfirmDialog";
 import { useToast } from "@context/ToastContext";
-import { formatCurrency } from "@shared/utils";
+import { amountHint, formatCurrency } from "@shared/utils";
 import { formatDateTime } from "../../utils/formatters";
 import { uztStartOf, uztTodayString } from "../../utils/uzt-date";
 import { reconciliation, type BankDeposit, type BankTurnover } from "../../api/client";
@@ -88,6 +88,14 @@ const Field = styled.div<{ $grow?: boolean }>`
   min-width: 0;
 `;
 
+const AmountHint = styled.div`
+  font-size: 12px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-style: italic;
+  min-height: 16px;
+  margin-top: 2px;
+`;
+
 const Struck = styled.span<{ $voided: boolean }>`
   text-decoration: ${({ $voided }) => ($voided ? "line-through" : "none")};
   opacity: ${({ $voided }) => ($voided ? 0.6 : 1)};
@@ -121,7 +129,7 @@ interface Props {
 }
 
 export function BankTurnoverSection({ range, whenUnavailable }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const toast = useToast();
 
   const [data, setData] = useState<BankTurnover | null>(null);
@@ -312,6 +320,9 @@ export function BankTurnoverSection({ range, whenUnavailable }: Props) {
           {t("reconciliation.bank.addDeposit", "Записать сдачу в банк")}
         </Button>
       </Form>
+      {/* Under the row, not in the amount field: the words would wrap the narrow field and push
+          its input above the others. A comma decimal reads the way addDeposit parses it. */}
+      <AmountHint>{amountHint(amount.replace(",", "."), i18n.language)}</AmountHint>
 
       {data.deposits.length > 0 && (
         <Table
