@@ -396,3 +396,12 @@ refused (rolled back, nothing lost). Same class as Migration 27.
 **Rule:** after switching to a branch whose `prisma/schema.sqlite.prisma` differs, run
 `npm run prisma:generate:sqlite` before `dev:pos` or tests, and when I leave the repo on a different
 branch than the one I generated on, say so to the user in the same message.
+
+## Locale JSON is `-text` in git — a CRLF working copy commits as a whole-file rewrite
+
+`git ls-files --eol` shows `src/renderer/i18n/locales/*.json` as `i/-text w/-text`, so git does no
+line-ending conversion for them. The working copies had CRLF while HEAD stores LF; a scripted insert
+kept the file's CRLF and `git diff --cached --stat` showed ~3500 changed lines per file for 27 new keys.
+
+**Rule:** after editing a locale file, check `git diff --stat` before committing. If it is the
+whole file, rewrite it with `\r\n` → `\n` and look again: the diff must be only the new keys.
