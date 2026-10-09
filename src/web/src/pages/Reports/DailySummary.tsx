@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import styled, { type DefaultTheme } from "styled-components";
 import { useSales } from "../../hooks/useSales";
@@ -10,7 +10,14 @@ import { Button } from "@renderer/components/common/Button";
 import { Pagination } from "@components/common/Pagination";
 import { DateInput } from "@components/common/DateInput";
 import { usePagination } from "../../hooks/usePagination";
-import { Eraser } from "lucide-react";
+import { Download, Eraser, FileSpreadsheet } from "lucide-react";
+import {
+  buildExportSheets,
+  exportFileName,
+  matchesFiscalFilter,
+  type ExportLabels,
+  type FiscalFilter,
+} from "./receipts-export";
 import {
   SubNav,
   useReportsSubNav,
@@ -79,6 +86,45 @@ const FilterSelect = styled.select`
     border-color: ${({ theme }) => theme.colors.primary};
   }
 `;
+
+const ExportPanel = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.md};
+  flex-wrap: wrap;
+  background-color: ${({ theme }) => theme.colors.surface};
+  padding: ${({ theme }) => theme.spacing.md};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  box-shadow: ${({ theme }) => theme.shadows.sm};
+`;
+
+const ProgressTrack = styled.div`
+  flex: 1;
+  min-width: 160px;
+  height: 8px;
+  border-radius: 4px;
+  background-color: ${({ theme }) => theme.colors.border};
+  overflow: hidden;
+`;
+
+const ProgressFill = styled.div<{ $percent: number }>`
+  width: ${({ $percent }) => $percent}%;
+  height: 100%;
+  background-color: ${({ theme }) => theme.colors.primary};
+  transition: width 0.15s ease;
+`;
+
+const ExportText = styled.span<{ $error?: boolean }>`
+  font-size: 14px;
+  color: ${({ theme, $error }) => ($error ? theme.colors.error : theme.colors.textSecondary)};
+  white-space: nowrap;
+`;
+
+type ExportState =
+  | { status: "idle" }
+  | { status: "building"; percent: number }
+  | { status: "ready"; url: string; fileName: string }
+  | { status: "error" };
 
 const StatsGrid = styled.div`
   display: grid;
@@ -263,7 +309,13 @@ export function DailySummary() {
   const [paymentFilter, setPaymentFilter] = useState<"all" | SaleTender | "mixed">(
     "all",
   );
+  const [fiscalFilter, setFiscalFilter] = useState<FiscalFilter>("all");
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [exportState, setExportState] = useState<ExportState>({ status: "idle" });
+  // Bumped whenever the list behind a file changes: a build still running for the old list is
+  // dropped, and a finished file's URL is released.
+  const exportRun = useRef(0);
+  const exportUrl = useRef<string | null>(null);
 
   const formatCurrency = (amount: number) =>
     formatCurrencyBase(amount, i18n.language as "ru" | "uz");
@@ -279,10 +331,12 @@ export function DailySummary() {
 
   const filteredSales = useMemo(
     () =>
-      paymentFilter === "all"
-        ? sales
-        : sales.filter((s) => s.paymentMethod === paymentFilter),
-    [sales, paymentFilter],
+      sales.filter(
+        (s) =>
+          (paymentFilter === "all" || s.paymentMethod === paymentFilter) &&
+          matchesFiscalFilter(s, fiscalFilter),
+      ),
+    [sales, paymentFilter, fiscalFilter],
   );
 
   const {
@@ -297,15 +351,18 @@ export function DailySummary() {
   } = usePagination(filteredSales);
 
   // Nasiya paid back in the period counts in the tender it arrived in — so a tender filter keeps
-  // only payments in that tender, and "mixed" (a receipt shape, not a tender) keeps none.
+  // only payments in that tender, and "mixed" (a receipt shape, not a tender) keeps none. A
+  // repayment is no receipt and has no fiscal status, so a fiscal filter keeps none either.
   const filteredDebtPayments = useMemo(
     () =>
-      paymentFilter === "all"
-        ? debtPayments
-        : debtPayments.filter(
-            (p) => (p.paymentMethod ?? "").toLowerCase() === paymentFilter,
-          ),
-    [debtPayments, paymentFilter],
+      fiscalFilter !== "all"
+        ? []
+        : paymentFilter === "all"
+          ? debtPayments
+          : debtPayments.filter(
+              (p) => (p.paymentMethod ?? "").toLowerCase() === paymentFilter,
+            ),
+    [debtPayments, paymentFilter, fiscalFilter],
   );
 
   const summary = useMemo(
@@ -326,6 +383,93 @@ export function DailySummary() {
     setStartDate(todayStr);
     setEndDate(todayStr);
     setPaymentFilter("all");
+    setFiscalFilter("all");
+  };
+
+  const discardExport = () => {
+    exportRun.current++;
+    if (exportUrl.current) URL.revokeObjectURL(exportUrl.current);
+    exportUrl.current = null;
+  };
+
+  // A file describes the list it was built from; any change to that list makes it stale.
+  useEffect(() => {
+    discardExport();
+    setExportState({ status: "idle" });
+  }, [filteredSales, startDate, endDate]);
+
+  useEffect(() => discardExport, []);
+
+  const handleExport = async () => {
+    discardExport();
+    const run = exportRun.current;
+    setExportState({ status: "building", percent: 0 });
+    try {
+      const labels: ExportLabels = {
+        receiptHeader: [
+          t("reports.exportCol.terminalId"),
+          t("reports.exportCol.receiptNo"),
+          t("reports.exportCol.dateTime"),
+          t("reports.exportCol.type"),
+          t("reports.exportCol.amount"),
+          t("reports.exportCol.zReport"),
+        ],
+        itemHeader: [
+          t("reports.exportCol.terminalId"),
+          t("reports.exportCol.receiptNo"),
+          t("reports.exportCol.dateTime"),
+          t("reports.exportCol.zReport"),
+          t("reports.exportCol.product"),
+          t("reports.exportCol.barcode"),
+          t("reports.exportCol.quantity"),
+          t("reports.exportCol.unitPrice"),
+          t("reports.exportCol.subtotal"),
+        ],
+        type: {
+          sale: t("reports.receiptType.sale"),
+          refund: t("reports.receiptType.refund"),
+          nasiya: t("reports.receiptType.nasiya"),
+        },
+        formatDateTime,
+      };
+      // Loaded on first use: most visits to this page never export.
+      const [XLSX, sheets] = await Promise.all([
+        import("xlsx"),
+        buildExportSheets(filteredSales, labels, (f) => {
+          if (run === exportRun.current) {
+            setExportState({ status: "building", percent: Math.round(f * 100) });
+          }
+        }),
+      ]);
+      if (run !== exportRun.current) return;
+
+      const book = XLSX.utils.book_new();
+      const receiptsSheet = XLSX.utils.aoa_to_sheet(sheets.receipts);
+      receiptsSheet["!cols"] = [10, 14, 20, 12, 14, 12].map((wch) => ({ wch }));
+      const itemsSheet = XLSX.utils.aoa_to_sheet(sheets.items);
+      itemsSheet["!cols"] = [10, 14, 20, 12, 36, 16, 10, 12, 14].map((wch) => ({ wch }));
+      XLSX.utils.book_append_sheet(book, receiptsSheet, t("reports.exportSheetReceipts"));
+      XLSX.utils.book_append_sheet(book, itemsSheet, t("reports.exportSheetItems"));
+      const bytes: ArrayBuffer = XLSX.write(book, { bookType: "xlsx", type: "array" });
+
+      const url = URL.createObjectURL(
+        new Blob([bytes], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }),
+      );
+      exportUrl.current = url;
+      setExportState({ status: "ready", url, fileName: exportFileName(startDate, endDate) });
+    } catch (err) {
+      console.error("Receipts export failed", err);
+      if (run === exportRun.current) setExportState({ status: "error" });
+    }
+  };
+
+  const handleDownload = (url: string, fileName: string) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
   };
 
   const subNav = useReportsSubNav();
@@ -370,10 +514,61 @@ export function DailySummary() {
             <option value="mixed">{t("pos.mixed")}</option>
           </FilterSelect>
         </FilterGroup>
+        <FilterGroup>
+          <FilterLabel>{t("reports.fiscalFilter")}</FilterLabel>
+          <FilterSelect
+            value={fiscalFilter}
+            onChange={(e) => setFiscalFilter(e.target.value as FiscalFilter)}
+          >
+            <option value="all">{t("reports.allPayments")}</option>
+            <option value="fiscalised">{t("reports.fiscalised")}</option>
+            <option value="unfiscalised">{t("reports.unfiscalised")}</option>
+          </FilterSelect>
+        </FilterGroup>
         <Button variant="secondary" size="medium" onClick={handleReset}>
           <Eraser size={18} /> {t("common.refresh")}
         </Button>
+        <Button
+          variant="primary"
+          size="medium"
+          onClick={handleExport}
+          disabled={isLoading || !filteredSales.length || exportState.status === "building"}
+        >
+          <FileSpreadsheet size={18} /> {t("reports.exportExcel")}
+        </Button>
       </FilterBar>
+
+      {exportState.status !== "idle" && (
+        <ExportPanel>
+          {exportState.status === "building" && (
+            <>
+              <ProgressTrack
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={exportState.percent}
+              >
+                <ProgressFill $percent={exportState.percent} />
+              </ProgressTrack>
+              <ExportText>
+                {t("reports.exportPreparing", { percent: exportState.percent })}
+              </ExportText>
+            </>
+          )}
+          {exportState.status === "ready" && (
+            <Button
+              variant="primary"
+              size="medium"
+              onClick={() => handleDownload(exportState.url, exportState.fileName)}
+            >
+              <Download size={18} /> {t("reports.exportDownload", { file: exportState.fileName })}
+            </Button>
+          )}
+          {exportState.status === "error" && (
+            <ExportText $error>{t("reports.exportFailed")}</ExportText>
+          )}
+        </ExportPanel>
+      )}
 
       {summary && (
         <StatsGrid>

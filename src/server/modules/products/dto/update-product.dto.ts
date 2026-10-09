@@ -8,7 +8,8 @@ import {
   Min,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { stripMxik } from './create-product.dto';
 import { ProductType, ProductUnit } from '../../../../shared/types/product.types';
 
 const PRODUCT_UNITS: ProductUnit[] = ['шт', 'кг', 'л', 'м'];
@@ -103,6 +104,7 @@ export class UpdateProductDto {
 
   @ApiPropertyOptional({ example: '00000000000000000', description: 'Uzbekistan national catalog code' })
   @IsOptional()
+  @Transform(stripMxik)
   @IsString()
   mxik?: string;
 

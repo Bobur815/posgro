@@ -57,6 +57,8 @@ export class SalesService {
       linesByReceipt.set(l.receiptNumber, list);
     }
 
+    const zReportOf = await this.zReportResolver(storeId, sales);
+
     // Additive fields only (totalCost, margin, payments): the same shape the POS's sales:getAll
     // returns, so the dashboard's margin is computed like the till's — current product.cost.
     return sales.map(({ items, ...sale }) => {
@@ -76,8 +78,43 @@ export class SalesService {
         totalCost: totalCost.toDecimalPlaces(2).toNumber(),
         margin,
         payments: linesByReceipt.get(sale.receiptNumber) ?? [],
+        zReportNumber: zReportOf(sale.terminalId, sale.createdAt),
       };
     });
+  }
+
+  /**
+   * The till's own Z-report number for a sale. A synced sale carries no shift id, so it is the
+   * closed shift of the same terminal whose open–close window holds the sale; null while that
+   * shift is still open (only closed shifts sync) or never synced. One query for the whole list.
+   */
+  private async zReportResolver(
+    storeId: string,
+    sales: Array<{ terminalId: string; createdAt: Date }>,
+  ): Promise<(terminalId: string, at: Date) => number | null> {
+    // A loop, not Math.min(...times): a long range holds more receipts than a call takes arguments.
+    let first = Infinity;
+    let last = -Infinity;
+    for (const s of sales) {
+      const t = s.createdAt?.getTime();
+      if (!Number.isFinite(t)) continue;
+      if (t < first) first = t;
+      if (t > last) last = t;
+    }
+    if (first === Infinity) return () => null;
+    const shifts = await this.prisma.smena.findMany({
+      where: {
+        storeId,
+        terminalId: { in: [...new Set(sales.map((s) => s.terminalId))] },
+        openedAt: { lte: new Date(last) },
+        closedAt: { gte: new Date(first) },
+      },
+      select: { terminalId: true, openedAt: true, closedAt: true, zReportNumber: true },
+    });
+    return (terminalId, at) =>
+      shifts.find(
+        (s) => s.terminalId === terminalId && s.closedAt != null && s.openedAt <= at && at <= s.closedAt,
+      )?.zReportNumber ?? null;
   }
 
   async findById(id: string, storeId: string, user?: SaleUser) {

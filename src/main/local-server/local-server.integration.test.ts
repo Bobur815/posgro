@@ -841,6 +841,24 @@ describe('reports', () => {
     expect(Object.keys(json).sort()).toEqual(['debtor', 'sales', 'transactions']);
   });
 
+  it("lists receipts with their shift's Z-report number, flat like the VPS's", async () => {
+    const prisma = getPrismaClient();
+    const smena = await prisma.smena.create({
+      data: { terminalId: 'T1', cashierId: 'user-admin', cashierName: 'Admin', initialCash: 0, zReportNumber: 17 },
+    });
+    const base = { totalAmount: 5000, finalAmount: 5000, paymentMethod: 'cash', cashierId: 'user-admin', cashierName: 'Admin', terminalId: 'T1' };
+    await prisma.sale.create({ data: { ...base, receiptNumber: 'ZR-1', smenaId: smena.id } });
+    await prisma.sale.create({ data: { ...base, receiptNumber: 'ZR-2' } });
+
+    const day = new Date().toISOString().slice(0, 10);
+    const { status, json } = await api('GET', `/sales?startDate=${day}&endDate=${day}`);
+    expect(status).toBe(200);
+    const byNo = new Map((json as Array<Record<string, unknown>>).map((s) => [s.receiptNumber, s]));
+    expect(byNo.get('ZR-1')).toMatchObject({ zReportNumber: 17, items: [] });
+    expect(byNo.get('ZR-1')).not.toHaveProperty('smena');
+    expect(byNo.get('ZR-2')).toMatchObject({ zReportNumber: null });
+  });
+
   it('values the stock even though the ledger is unavailable', async () => {
     // Valuing the shelf needs no movement ledger, so this is the one real figure on that
     // response here — an OFFLINE_ONLY shop would otherwise never see it. Keyed exactly like the

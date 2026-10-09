@@ -9,8 +9,13 @@ import {
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { normalizeMxik } from '../../../../shared/utils/mxik-lookup';
 import { ProductType, ProductUnit } from '../../../../shared/types/product.types';
+
+/** A pasted "01905007001000000 " was stored as typed and failed every 17-digit check on the tills. */
+export const stripMxik = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? (normalizeMxik(value) ?? '') : value;
 
 const PRODUCT_UNITS: ProductUnit[] = ['шт', 'кг', 'л', 'м'];
 const PRODUCT_TYPES: ProductType[] = ['REGULAR', 'BULK_WEIGHTED', 'PREPACKAGED'];
@@ -101,6 +106,7 @@ export class CreateProductDto {
   active?: boolean;
 
   @ApiProperty({ example: '00000000000000000', description: 'Uzbekistan national catalog code' })
+  @Transform(stripMxik)
   @IsString()
   @IsNotEmpty()
   mxik!: string;
