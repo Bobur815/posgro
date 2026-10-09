@@ -224,8 +224,8 @@ model Product {
   // Authoritative Asl-Belgisi marking flag from tasnif `label` (1=marked, 0=plain).
   // Null = not yet checked → callers fall back to the isMarkedMxik(mxik) group heuristic.
   isMarked              Boolean?  @map("is_marked")
-  // False once REGOS:VCR rejected a receipt line for this product; an inventory arrival sets it
-  // back to true. Pulled from the VPS; a rejection seen here is reported up via the outbox.
+  // False once REGOS:VCR rejected a receipt line for this product; a fiscalised receipt with it
+  // sets it back to true. Pulled from the VPS; a rejection seen here is reported up via the outbox.
   isValid               Boolean   @default(true) @map("is_valid")
   active                Boolean   @default(true)
 
@@ -372,6 +372,9 @@ model Sale {
   /// set by the fiscal backlog run. On the fiscal payload only, each is sent as the configured
   /// substitute product at the same amount. sale_items, stock and totals are never touched.
   fiscalSubstitutions String? @map("fiscal_substitutions")
+  /// JSON [{barcode, label, status}]: marking codes asl-belgisi says are out of circulation. While
+  /// set, the receipt is not sent to REGOS (fiscal status FAILED); an edit clears it. Local only.
+  markingBlock    String?   @map("marking_block")
 
   // UzQR (REGOS Payment.Create). Set only when the optional UzQR integration is on and the
   // buyer actually paid — its presence is what makes buildPayments() book the receipt against
