@@ -32,6 +32,8 @@ export interface Sale {
   // receipt can no longer be edited.
   regosPaymentId?: string | null;
   refunded?: boolean;
+  /** The till's own Z-report (shift) number for this receipt; null while the shift is open. */
+  zReportNumber?: number | null;
 }
 
 export interface SaleItem {
