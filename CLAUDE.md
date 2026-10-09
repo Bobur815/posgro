@@ -6,7 +6,7 @@ Offline-first grocery POS for the Uzbek retail market. Monorepo: Electron POS te
 
 Server (`src/server`), web dashboard (`src/web`), landing (`src/landing`) **and the Electron POS** (`src/main`, `src/renderer`) are all in scope. POS work follows `.claude/rules/electron.md` and skill `ipc-feature`.
 
-- **POS changes:** bump `package.json` version (`npm version patch --no-git-tag-version`), compile-check with `npx cross-env APP_MODE=pos electron-vite build`, and tell me to run `npm run deploy:pos` — I build and publish the installer, never you.
+- **POS changes:** bump `package.json` version (`npm version patch --no-git-tag-version`), compile-check with `npx cross-env APP_MODE=pos electron-vite build`, you can run `npm run deploy:pos`
 - **Still off limits:** `electron-builder.config.js`, `scripts/build-pos.js`, build outputs (`dist*`, `release`, `build`). Don't read build outputs; they burn context.
 - **Old tills stay in the field.** Terminals update at different times, so the server must keep working with the previous POS release (N-1), and the new POS must tolerate a server that has not deployed yet. Rollout: server first (on `main`, deployed), then the installer. Every server change MUST stay backward compatible with the existing POS client:
   - never rename/remove/retype an endpoint, field, enum value, or status code the POS uses (`POST /api/sales/sync`, `GET /api/products?updatedAfter=`, `/api/auth/*`, `/api/health`);
