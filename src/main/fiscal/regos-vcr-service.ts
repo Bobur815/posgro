@@ -1288,12 +1288,13 @@ class RegosVcrService {
   async getQueueStatus(): Promise<FiscalQueueStatus> {
     const prisma = getPrismaClient();
     const enabled = await this.isEnabled();
-    const [pending, failed, fiscalized] = await Promise.all([
+    const [pending, failed, fiscalized, blocked] = await Promise.all([
       prisma.sale.count({ where: { fiscalStatus: 'PENDING' } }),
       prisma.sale.count({ where: { fiscalStatus: 'FAILED' } }),
       prisma.sale.count({ where: { fiscalStatus: 'FISCALIZED' } }),
+      prisma.sale.count({ where: { fiscalStatus: 'FAILED', markingBlock: { not: null } } }),
     ]);
-    return { enabled, pending, failed, fiscalized };
+    return { enabled, pending, failed, fiscalized, blocked };
   }
 
   // ── Fiscal backlog: the 4-step stepper on the Fiscal Settings screen ────────────────────────────
@@ -1611,6 +1612,11 @@ class RegosVcrService {
             // an unreachable registry, above, still stops the step.
             if (v.verdict === 'UNKNOWN') {
               log.info(`[fiscal] backlog verify: ${s.receiptNumber} code with unknown status ${v.status ?? '—'} is sent as is`);
+              (result.unknownStatus ??= []).push({
+                receipt: s.receiptNumber,
+                productName,
+                status: v.status ?? '—',
+              });
             }
             if (v.verdict === 'OUT') reason = v.status ?? 'NOT_FOUND';
           }

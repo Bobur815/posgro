@@ -354,6 +354,8 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
       <Muted>
         {t("fiscalSettings.fiscalized")}: {queue.fiscalized} · {t("fiscalSettings.pending")}:{" "}
         {queue.pending} · {t("fiscalSettings.failed")}: {queue.failed}
+        {(queue.blocked ?? 0) > 0 &&
+          ` (${t("fiscalSettings.blockedByMarking", { count: queue.blocked ?? 0 })})`}
       </Muted>
       <Muted>{t("fiscalSettings.backlog.hint")}</Muted>
 
@@ -555,6 +557,24 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
                   disabled: verify.disabled,
                 })}
               </Line>
+            )}
+            {(verify.unknownStatus?.length ?? 0) > 0 && (
+              <>
+                <Line $tone="warn">
+                  <AlertTriangle size={16} />
+                  {t("fiscalSettings.backlog.unknownStatusSent", {
+                    count: verify.unknownStatus?.length ?? 0,
+                  })}
+                </Line>
+                <List>
+                  {verify.unknownStatus?.map((u, i) => (
+                    <div key={`unknown-${u.receipt}-${i}`}>
+                      #{u.receipt}
+                      {u.productName ? ` · ${u.productName}` : ""} — {u.status}
+                    </div>
+                  ))}
+                </List>
+              </>
             )}
             {verify.changes.length > 0 && (
               <List>

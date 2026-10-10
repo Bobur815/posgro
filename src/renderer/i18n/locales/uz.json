@@ -277,7 +277,8 @@
     "uzqrTimeout": "To'lovni kutish vaqti tugadi",
     "uzqrPaidButSaleFailed": "To'lov o'tdi, lekin chek yaratilmadi. Administratorga xabar bering.",
     "markingCodeOutOfCirculation": "«{{name}}» markirovka kodi muomaladan chiqarilgan ({{status}}): sotuv o'tadi, lekin chek tahrirlanmaguncha fiskallashtirilmaydi",
-    "outOfCirculationBadge": "Muomaladan chiqarilgan {{status}} — chek fiskallashtirilmaydi"
+    "outOfCirculationBadge": "Muomaladan chiqarilgan {{status}} — chek fiskallashtirilmaydi",
+    "fiscalBlocked": "markirovka bloklagan: {{count}}"
   },
   "reconciliation": {
     "title": "Audit",
@@ -762,7 +763,8 @@
         "substitute": "almashtirildi",
         "omit": "yuborilmaydi",
         "disable": "chek fiskallashtirilmaydi"
-      }
+      },
+      "unknownStatusSent": "Asl-Belgisi holati noma'lum kodlar: {{count}} — REGOSga o'z holicha yuborildi"
     },
     "duplicateCodes": {
       "title": "Bir nechta qadoq uchun bitta markirovka kodi bilan yuborilgan cheklar: {{count}}",
@@ -771,7 +773,8 @@
       "sent": "Hammasi uchun yuborilgan",
       "unsent": "REGOS olmagan"
     },
-    "circulationCheck": "Markirovka kodlarini Asl-Belgisi orqali tekshirish: muomaladan chiqarilgan kodli chek tahrirlanmaguncha fiskallashtirilmaydi"
+    "circulationCheck": "Markirovka kodlarini Asl-Belgisi orqali tekshirish: muomaladan chiqarilgan kodli chek tahrirlanmaguncha fiskallashtirilmaydi",
+    "blockedByMarking": "shundan markirovka bloklagan: {{count}}"
   },
   "reports": {
     "title": "Hisobotlar",
