@@ -54,6 +54,7 @@ const prismaMock = {
   sale: {
     findUnique: jest.fn(),
     findMany: jest.fn<Promise<unknown[]>, unknown[]>(async () => []),
+    count: jest.fn<Promise<number>, unknown[]>(async () => 0),
     update: jest.fn(async () => undefined),
   },
   product: {
@@ -764,5 +765,20 @@ describe('fiscalizeSale — a fiscalised receipt makes its invalid products vali
     await expect(regosVcrService.fiscalizeSale('sale-1')).rejects.toBeInstanceOf(VcrError);
 
     expect(prismaMock.product.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('getQueueStatus', () => {
+  it('counts the receipts the marking gate holds back, among the failed ones', async () => {
+    prismaMock.sale.count.mockImplementation(async (args: unknown) => {
+      const where = (args as { where: Record<string, unknown> }).where;
+      if (where.markingBlock) return 2;
+      return where.fiscalStatus === 'FAILED' ? 5 : 1;
+    });
+
+    await expect(regosVcrService.getQueueStatus()).resolves.toMatchObject({ failed: 5, blocked: 2 });
+    expect(prismaMock.sale.count).toHaveBeenCalledWith({
+      where: { fiscalStatus: 'FAILED', markingBlock: { not: null } },
+    });
   });
 });

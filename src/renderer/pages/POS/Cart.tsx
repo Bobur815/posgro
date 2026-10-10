@@ -368,6 +368,8 @@ export function Cart() {
     enabled: boolean;
     pending: number;
     failed: number;
+    /** Of failed: held back by the asl-belgisi circulation gate until edited. */
+    blocked?: number;
   } | null>(null);
   useEffect(() => {
     let active = true;
@@ -413,6 +415,8 @@ export function Cart() {
             >
               <AlertTriangle size={16} />
               {t("pos.fiscalUnsent", { count: unfiscalized })}
+              {(fiscalQueue?.blocked ?? 0) > 0 &&
+                ` · ${t("pos.fiscalBlocked", { count: fiscalQueue?.blocked ?? 0 })}`}
             </div>
           )}
           <IconButton

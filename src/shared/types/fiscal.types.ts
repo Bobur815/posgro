@@ -94,6 +94,11 @@ export interface FiscalQueueStatus {
   pending: number;
   failed: number;
   fiscalized: number;
+  /**
+   * Of `failed`: receipts the asl-belgisi circulation gate keeps from REGOS until they are edited
+   * (sales.marking_block). Absent from a main running a build from before the gate.
+   */
+  blocked?: number;
 }
 
 /** A scanned mandatory-marking (Asl-Belgisi DataMatrix) code tied to a cart line by barcode. */
@@ -265,13 +270,18 @@ export interface FiscalLinePlan {
 /** Step 3 — asl-belgisi check of every marking code; decides each line's fate. */
 export interface FiscalBacklogVerifyResult {
   ok: boolean;
-  /** Set when the step stopped: registry unreachable/key problem, UNKNOWN status, no substitute. */
+  /** Set when the step stopped: registry unreachable/key problem, no substitute. */
   error?: string;
   /** The receipt and code the step stopped on, when it stopped on one. */
   stoppedAt?: { receipt: string; label?: string };
   checked: number;
   /** Cash/Click receipts with no valid marked line, DISABLED. */
   disabled: number;
+  /**
+   * Marked lines whose code asl-belgisi answered with a status we do not classify. They are sent
+   * to REGOS as they are; listed so the admin sees them. Absent from builds before 1.35.1.
+   */
+  unknownStatus?: { receipt: string; productName: string; status: string }[];
   /** Substituted lines, omitted marked lines and disabled receipts, for the admin to review. */
   changes: {
     receipt: string;

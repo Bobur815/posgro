@@ -539,6 +539,7 @@ describe('step 3 — verify, card receipts (sent in full)', () => {
     });
     const r = await regosVcrService.backlogVerify(FROM);
     expect(r).toMatchObject({ ok: true, checked: 1, disabled: 0, changes: [] });
+    expect(r.unknownStatus).toEqual([{ receipt: expect.any(String), productName: expect.any(String), status: 'SOMETHING_NEW' }]);
     expect(sales[0].fiscalSubstitutions).toBeNull();
   });
 
