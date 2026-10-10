@@ -8,6 +8,8 @@ import { AlertTriangle, History, ShoppingCart, Trash, X } from "lucide-react";
 import { SalesHistoryModal } from "./SalesHistoryModal";
 import type { Sale } from "@shared/types/sale.types";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
+import { labelsPerLine } from "@shared/utils/fiscal-labels";
+import type { FiscalLabel } from "@shared/types/fiscal.types";
 import { formatQuantity } from "../../utils/formatters";
 
 const Container = styled.div`
@@ -164,6 +166,21 @@ const BoxBadge = styled.span`
   white-space: nowrap;
 `;
 
+/**
+ * asl-belgisi says this line's marking code is out of circulation. The sale still goes through;
+ * the receipt waits for an edit before it is fiscalised.
+ */
+const OutOfCirculationBadge = styled.span`
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: ${({ theme }) => theme.colors.error}1a;
+  color: ${({ theme }) => theme.colors.error};
+  font-size: 12px;
+  font-weight: 700;
+`;
+
 const QuantityControls = styled.div`
   display: flex;
   align-items: center;
@@ -277,6 +294,17 @@ const TotalAmount = styled.span<{ $primary?: boolean; $negative?: boolean }>`
         : theme.colors.text};
 `;
 
+/** A JSON array column from the sale row; anything else reads as empty. */
+function parseJsonArray<T>(json: string | null | undefined): T[] {
+  if (!json) return [];
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function Cart() {
   const { t, i18n } = useTranslation();
   const {
@@ -301,19 +329,34 @@ export function Cart() {
   const [showHistory, setShowHistory] = useState(false);
 
   const handleEditSale = useCallback(
-    (sale: Sale) => {
-      const cartItems = sale.items.map((item) => ({
-        productId: Number(item.productId),
-        productName: item.productName,
-        barcode: item.barcode,
-        unitPrice: Number(item.unitPrice),
-        quantity: Number(item.quantity),
-        stock: Number(item.quantity) + 100,
-        unit: undefined,
-        // Must survive the round-trip: without it a re-saved box line would decrement stock
-        // by boxes instead of pieces, and the line would lose its "кор. x N" identity.
-        piecesPerUnit: item.piecesPerUnit ?? 1,
-      }));
+    (sale: Sale & { regosLabels?: string | null; markingBlock?: string | null }) => {
+      // The marking codes go back on their lines, k-th line of a barcode ↔ k-th code (the rule the
+      // fiscal payload uses). Without them the re-saved receipt carried no codes and REGOS
+      // rejected every marked line. Codes the fiscal gate blocked come back marked OUT, so the
+      // cashier sees which pack to take off or re-scan.
+      const lineCodes = labelsPerLine(sale.items, parseJsonArray<FiscalLabel>(sale.regosLabels));
+      const blocked = new Map(
+        parseJsonArray<{ label: string; status?: string }>(sale.markingBlock).map((b) => [b.label, b.status]),
+      );
+      const cartItems = sale.items.map((item, i) => {
+        const markingCode = lineCodes[i];
+        return {
+          productId: Number(item.productId),
+          productName: item.productName,
+          barcode: item.barcode,
+          unitPrice: Number(item.unitPrice),
+          quantity: Number(item.quantity),
+          stock: Number(item.quantity) + 100,
+          unit: undefined,
+          // Must survive the round-trip: without it a re-saved box line would decrement stock
+          // by boxes instead of pieces, and the line would lose its "кор. x N" identity.
+          piecesPerUnit: item.piecesPerUnit ?? 1,
+          ...(markingCode ? { markingCode } : {}),
+          ...(markingCode && blocked.has(markingCode)
+            ? { circulation: "OUT" as const, circulationStatus: blocked.get(markingCode) }
+            : {}),
+        };
+      });
       loadSaleForEdit(sale.id, sale.receiptNumber, cartItems);
       setShowHistory(false);
     },
@@ -325,6 +368,8 @@ export function Cart() {
     enabled: boolean;
     pending: number;
     failed: number;
+    /** Of failed: held back by the asl-belgisi circulation gate until edited. */
+    blocked?: number;
   } | null>(null);
   useEffect(() => {
     let active = true;
@@ -370,6 +415,8 @@ export function Cart() {
             >
               <AlertTriangle size={16} />
               {t("pos.fiscalUnsent", { count: unfiscalized })}
+              {(fiscalQueue?.blocked ?? 0) > 0 &&
+                ` · ${t("pos.fiscalBlocked", { count: fiscalQueue?.blocked ?? 0 })}`}
             </div>
           )}
           <IconButton
@@ -418,7 +465,9 @@ export function Cart() {
 
             return (
               <CartItem
-                key={`${item.productId}-${item.unitPrice}-${piecesPerUnit}`}
+                // Marked scans are never merged, so two packs of one product are two lines with the
+                // same id and price: the code keeps their keys (and their badges) apart.
+                key={`${item.productId}-${item.unitPrice}-${piecesPerUnit}-${item.markingCode ?? ""}`}
               >
                 <ItemRow>
                   <ItemName>
@@ -433,6 +482,13 @@ export function Cart() {
                     {formatCurrency(item.unitPrice * item.quantity)}
                   </ItemPrice>
                 </ItemRow>
+                {item.circulation === "OUT" && (
+                  <OutOfCirculationBadge>
+                    {t("pos.outOfCirculationBadge", {
+                      status: item.circulationStatus ?? "",
+                    })}
+                  </OutOfCirculationBadge>
+                )}
                 <QuantityControls>
                   <QuantityRow>
                     <QuantityButton

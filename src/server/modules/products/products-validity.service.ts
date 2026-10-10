@@ -1,10 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { InvalidProductReportDto } from './dto/report-invalid.dto';
+import type { ProductValidityReportDto } from './dto/report-validity.dto';
 
 /**
- * Product.isValid as tills report it: REGOS:VCR rejected a receipt line for the product, so it is
- * invalid until the next inventory arrival (InventoryService sets it back to true).
+ * Product.isValid as tills report it: false once REGOS:VCR rejected a receipt line for the
+ * product, true again once a receipt with it was fiscalised. Tills report late (offline) and
+ * retry, so the newest report wins (Product.validityAt) and a repeated one changes nothing.
  */
 @Injectable()
 export class ProductsValidityService {
@@ -13,51 +15,73 @@ export class ProductsValidityService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Records the rejections a till saw. Returns the barcodes it is done with, so the till can drop
-   * them from its outbox — recorded, superseded, or for a product this store does not have.
-   *
-   * A report is superseded when an arrival for the product was recorded after the rejection: a
-   * till that was offline for a day must not mark a freshly delivered batch invalid. Idempotent —
-   * a retried report finds the product already invalid and changes nothing.
+   * Records what tills saw. Returns the barcodes it is done with, so the till can drop them from
+   * its outbox — recorded, older than what is already known, or for a product this store does not
+   * have. A barcode is done only when every report for it in the batch was.
    */
-  async reportInvalid(
+  async reportValidity(
     storeId: string,
-    items: InvalidProductReportDto[],
+    items: ProductValidityReportDto[],
   ): Promise<{ done: string[] }> {
-    const done: string[] = [];
+    const seen = new Set<string>();
+    const failed = new Set<string>();
 
-    for (const item of items) {
+    // Oldest first: a batch holding a rejection and a later fiscalisation ends valid.
+    const ordered = [...items].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+    for (const item of ordered) {
+      seen.add(item.barcode);
       try {
-        const product = await this.prisma.product.findUnique({
-          where: { storeId_barcode: { storeId, barcode: item.barcode } },
-          select: { id: true },
-        });
-        if (!product) {
-          done.push(item.barcode);
-          continue;
-        }
-
-        const at = new Date(item.at);
-        const newerArrival = await this.prisma.inventoryArrival.findFirst({
-          where: { storeId, productId: product.id, createdAt: { gt: at } },
-          select: { id: true },
-        });
-        if (!newerArrival) {
-          // Only a real change bumps updatedAt — that is what sends the product down to every
-          // till, and a retried report should not trigger a store-wide re-pull.
-          await this.prisma.product.updateMany({
-            where: { id: product.id, isValid: true },
-            data: { isValid: false },
-          });
-        }
-        done.push(item.barcode);
+        await this.apply(storeId, item);
       } catch (err) {
+        failed.add(item.barcode);
         this.logger.error(
-          `Failed to record invalid product ${item.barcode}: ${err instanceof Error ? err.message : String(err)}`,
+          `Failed to record validity of ${item.barcode}: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     }
 
-    return { done };
+    return { done: [...seen].filter((b) => !failed.has(b)) };
+  }
+
+  /** The endpoint tills before /products/validity call: rejections only. */
+  async reportInvalid(
+    storeId: string,
+    items: InvalidProductReportDto[],
+  ): Promise<{ done: string[] }> {
+    return this.reportValidity(
+      storeId,
+      items.map((i) => ({ ...i, valid: false })),
+    );
+  }
+
+  private async apply(storeId: string, item: ProductValidityReportDto): Promise<void> {
+    const product = await this.prisma.product.findUnique({
+      where: { storeId_barcode: { storeId, barcode: item.barcode } },
+      select: { id: true, isValid: true, validityAt: true, updatedAt: true },
+    });
+    if (!product) return;
+
+    const at = new Date(item.at);
+    if (product.validityAt && product.validityAt >= at) return; // a newer report already stands
+
+    // Guarded on validityAt too, so a report written in between is never overwritten by an older one.
+    const where = {
+      id: product.id,
+      OR: [{ validityAt: null }, { validityAt: { lt: at } }],
+    };
+    if (product.isValid !== item.valid) {
+      // A real change bumps updatedAt — that is what sends the product down to every till.
+      await this.prisma.product.updateMany({
+        where,
+        data: { isValid: item.valid, validityAt: at },
+      });
+    } else {
+      // Same answer, newer time: keep updatedAt, or every fiscalised receipt would make every
+      // till re-pull its products.
+      await this.prisma.product.updateMany({
+        where,
+        data: { validityAt: at, updatedAt: product.updatedAt },
+      });
+    }
   }
 }

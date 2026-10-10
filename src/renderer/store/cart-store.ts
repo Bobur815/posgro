@@ -10,6 +10,10 @@ export interface CartItem {
   unit?: string;
   preWeighedItemId?: string; // Set when item came from pre-weighed inventory; never merge
   markingCode?: string;      // Set when item is a group 022 unique QR scan; never merge
+  // asl-belgisi's word on markingCode, from the scan-time check (regos_vcr_circulation_check).
+  // OUT never stops the sale; it only means the receipt will not be fiscalised until edited.
+  circulation?: 'IN' | 'OUT' | 'UNKNOWN';
+  circulationStatus?: string;
   // Pieces in one `quantity` unit: undefined/1 = a single piece, N = a box of N.
   // `quantity` and `unitPrice` are always in SALE units; stock is always in PIECES, so
   // `stock` here is pre-divided by this multiplier (see POSScreen.addProductToCart).
@@ -50,6 +54,7 @@ interface CartState {
   addItem: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => boolean;
   removeItem: (productId: number, unitPrice?: number, piecesPerUnit?: number) => void;
   removeByMarkingCode: (markingCode: string) => void;
+  setCirculation: (markingCode: string, verdict: 'IN' | 'OUT' | 'UNKNOWN', status?: string) => void;
   updateQuantity: (productId: number, quantity: number, unitPrice?: number, piecesPerUnit?: number) => void;
   setDiscount: (discount: number) => void;
   setTaxRate: (rate: number) => void;
@@ -218,6 +223,29 @@ export const useCartStore = create<CartState>((set, get) => ({
     const updatedCart = { ...cart, items: newItems, ...totals };
     const newTabs = { ...state.tabs, [state.activeTabId]: updatedCart };
     set({ tabs: newTabs, items: newItems, ...totals });
+  },
+
+  // Record the scan-time circulation answer on the line carrying this code. Searched in every tab:
+  // the answer can arrive after the cashier has switched to another one. Totals do not change.
+  setCirculation: (markingCode, verdict, status) => {
+    const state = get();
+    let touched = false;
+    const newTabs: Record<string, TabCart> = {};
+    for (const [tabId, cart] of Object.entries(state.tabs)) {
+      if (!cart.items.some((i) => i.markingCode === markingCode)) {
+        newTabs[tabId] = cart;
+        continue;
+      }
+      touched = true;
+      newTabs[tabId] = {
+        ...cart,
+        items: cart.items.map((i) =>
+          i.markingCode === markingCode ? { ...i, circulation: verdict, circulationStatus: status } : i,
+        ),
+      };
+    }
+    if (!touched) return;
+    set({ tabs: newTabs, items: newTabs[state.activeTabId]?.items ?? state.items });
   },
 
   updateQuantity: (productId, quantity, unitPrice?, piecesPerUnit?) => {

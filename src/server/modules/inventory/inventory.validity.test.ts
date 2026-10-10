@@ -4,8 +4,8 @@ import type { ProductsService } from '../products/products.service';
 import type { StockMovementService } from '../stock-movement/stock-movement.service';
 
 /**
- * An inventory arrival makes a product valid again (Product.isValid): whatever REGOS rejected
- * about the previous batch no longer stands. Both ways an arrival reaches the VPS must do it.
+ * An inventory arrival leaves Product.isValid alone: only a fiscalised receipt makes a product
+ * valid again (ProductsValidityService). Both ways an arrival reaches the VPS.
  */
 
 function setup() {
@@ -41,7 +41,7 @@ function setup() {
   return { prisma, tx, service };
 }
 
-describe('an arrival makes the product valid again', () => {
+describe('an arrival does not touch Product.isValid', () => {
   it('when recorded on the dashboard', async () => {
     const { prisma, service } = setup();
 
@@ -52,14 +52,12 @@ describe('an arrival makes the product valid again', () => {
     );
 
     expect(prisma.product.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 7 },
-        data: expect.objectContaining({ isValid: true }),
-      }),
+      expect.objectContaining({ where: { id: 7 } }),
     );
+    expect(prisma.product.update.mock.calls[0][0].data).not.toHaveProperty('isValid');
   });
 
-  it('when uploaded by a till, in the same transaction as the stock', async () => {
+  it('when uploaded by a till', async () => {
     const { tx, service } = setup();
 
     await service.syncBulkArrivals('store-1', [
@@ -73,8 +71,7 @@ describe('an arrival makes the product valid again', () => {
       },
     ]);
 
-    expect(tx.product.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ isValid: true }) }),
-    );
+    expect(tx.product.update).toHaveBeenCalledTimes(1);
+    expect(tx.product.update.mock.calls[0][0].data).not.toHaveProperty('isValid');
   });
 });

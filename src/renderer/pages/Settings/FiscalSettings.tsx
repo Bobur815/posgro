@@ -242,6 +242,7 @@ export function FiscalSettings() {
       load: t('fiscalSettings.timings.phase.load', 'Чтение чека'),
       zreport: t('fiscalSettings.timings.phase.zreport', 'Z-отчёт'),
       build: t('fiscalSettings.timings.phase.build', 'Подготовка позиций'),
+      marking: t('fiscalSettings.timings.phase.marking', 'Проверка маркировки'),
       'vcr-sale': t('fiscalSettings.timings.phase.vcrSale', 'Касса REGOS'),
       persist: t('fiscalSettings.timings.phase.persist', 'Сохранение'),
       recover: t('fiscalSettings.timings.phase.recover', 'Восстановление чека'),
@@ -257,6 +258,8 @@ export function FiscalSettings() {
   const [posId, setPosId] = useState('');
   const [vcrPrintsReceipt, setVcrPrintsReceipt] = useState(false);
   const [markingCodeCheck, setMarkingCodeCheck] = useState(true);
+  // asl-belgisi circulation check (scan time + before REGOS). Off by default.
+  const [circulationCheck, setCirculationCheck] = useState(false);
   // Held as strings so the number inputs stay editable while being typed (an empty field must
   // not snap back to 0). Parsed on save; the main process floors them anyway.
   const [uzqrEnabled, setUzqrEnabled] = useState(false);
@@ -307,6 +310,7 @@ export function FiscalSettings() {
       setPosId(cfg.posId);
       setVcrPrintsReceipt(cfg.vcrPrintsReceipt);
       setMarkingCodeCheck(cfg.markingCodeCheck);
+      setCirculationCheck((await window.electronAPI.fiscal.getCirculationCheck()) === true);
       setUzqrEnabled(cfg.uzqrEnabled);
       setUzqrPollMs(String(cfg.uzqrPollMs));
       setUzqrTimeoutMs(String(cfg.uzqrTimeoutMs));
@@ -344,6 +348,7 @@ export function FiscalSettings() {
         ...(password ? { password } : {}),
       });
       await window.electronAPI.settings.set('click_enabled', String(clickEnabled));
+      await window.electronAPI.fiscal.setCirculationCheck(circulationCheck);
       setUzqrPollMs(String(cfg.uzqrPollMs));
       setUzqrTimeoutMs(String(cfg.uzqrTimeoutMs));
       setHasPassword(cfg.hasPassword);
@@ -511,6 +516,18 @@ export function FiscalSettings() {
             onChange={(e) => setMarkingCodeCheck(e.target.checked)}
           />
           {t('fiscalSettings.markingCodeCheck', 'Проверять повторную продажу маркированных товаров (группа 022)')}
+        </Row>
+
+        <Row>
+          <input
+            type="checkbox"
+            checked={circulationCheck}
+            onChange={(e) => setCirculationCheck(e.target.checked)}
+          />
+          {t(
+            'fiscalSettings.circulationCheck',
+            'Проверять коды маркировки в Asl-Belgisi: чек с кодом вне оборота не фискализируется, пока его не отредактируют',
+          )}
         </Row>
 
         <GroupTitle>{t('fiscalSettings.groupUzqr', 'UzQR')}</GroupTitle>

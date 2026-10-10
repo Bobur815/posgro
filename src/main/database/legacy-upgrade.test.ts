@@ -103,6 +103,20 @@ beforeAll(async () => {
       created_at     DATETIME NOT NULL DEFAULT (datetime('now'))
     )
   `);
+  // The validity outbox as 1.34 created it — no `valid` column — holding one unsent rejection.
+  await seed.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS product_invalid_reports (
+      id TEXT PRIMARY KEY,
+      barcode TEXT NOT NULL,
+      invalidated_at DATETIME NOT NULL,
+      error_code INTEGER,
+      sent_at DATETIME
+    )
+  `);
+  await seed.$executeRawUnsafe(`
+    INSERT INTO product_invalid_reports (id, barcode, invalidated_at, error_code)
+    VALUES ('rep-1', '4780047860466', '2026-10-05T10:30:00.000Z', 705511)
+  `);
   await seed.$disconnect();
 
   await initializeDatabase();
@@ -229,6 +243,22 @@ describe('upgrading a database created by an older build', () => {
     const old = await getPrismaClient().sale.findUnique({ where: { id: 'old-1' } });
     expect(old).not.toBeNull();
     expect(old.fiscalSubstitutions).toBeNull();
+  });
+
+  // The marking-circulation block: added in place, no existing receipt is blocked.
+  it('adds marking_block to an existing sales table, NULL on old receipts', async () => {
+    const old = await getPrismaClient().sale.findUnique({ where: { id: 'old-1' } });
+    expect(old).not.toBeNull();
+    expect(old.markingBlock).toBeNull();
+  });
+
+  // A rejection queued by 1.34 must still go up as a rejection.
+  it('adds valid to the 1.34 validity outbox, keeping its rows as rejections', async () => {
+    const rows = (await getPrismaClient().$queryRawUnsafe(
+      "SELECT id, valid FROM product_invalid_reports WHERE id = 'rep-1'",
+    )) as Array<{ id: string; valid: number | bigint }>;
+    expect(rows).toHaveLength(1);
+    expect(Number(rows[0].valid)).toBe(0);
   });
 
   it('backfills paid_amount on sales that predate the split', async () => {

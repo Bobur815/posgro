@@ -1025,26 +1025,42 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_debt_txn_synced ON debt_transactions(synced)`;
 
   // Migration 38: products.is_valid — false once REGOS:VCR rejected a receipt line for the
-  // product, true again after its next inventory arrival. Every existing product starts valid.
+  // product, true again once a receipt with it is fiscalised. Every existing product starts valid.
   if (!(await columnExists(prisma, 'products', 'is_valid'))) {
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN is_valid INTEGER NOT NULL DEFAULT 1`;
   }
 
-  // The rejections this till saw, waiting to reach the VPS (POST /products/invalid). Raw SQL, not
-  // a Prisma model: only the fiscal service writes it and only the upload reads it. Unconditional
-  // and IF NOT EXISTS, so a database from any earlier release gets it (tasks/lessons.md).
+  // What REGOS:VCR said about products on this till, waiting to reach the VPS
+  // (POST /products/validity): a rejection (valid = 0) or a fiscalised receipt (valid = 1). Raw SQL,
+  // not a Prisma model: only the fiscal service writes it and only the upload reads it.
+  // Unconditional and IF NOT EXISTS, so a database from any earlier release gets it
+  // (tasks/lessons.md). The name predates the valid rows.
   await prisma.$executeRaw`
     CREATE TABLE IF NOT EXISTS product_invalid_reports (
       id TEXT PRIMARY KEY,
       barcode TEXT NOT NULL,
       invalidated_at DATETIME NOT NULL,
       error_code INTEGER,
-      sent_at DATETIME
+      sent_at DATETIME,
+      valid INTEGER NOT NULL DEFAULT 0
     )
   `;
   await prisma.$executeRaw`
     CREATE INDEX IF NOT EXISTS idx_product_invalid_reports_unsent ON product_invalid_reports(sent_at)
   `;
+
+  // Migration 39a: the outbox as 1.34 created it has no `valid` column; every row in it is a
+  // rejection, which is what the default says.
+  if (!(await columnExists(prisma, 'product_invalid_reports', 'valid'))) {
+    await prisma.$executeRaw`ALTER TABLE product_invalid_reports ADD COLUMN valid INTEGER NOT NULL DEFAULT 0`;
+  }
+
+  // Migration 39b: sales.marking_block — JSON [{barcode, label, status}] of the marking codes
+  // asl-belgisi says are out of circulation. While set, the receipt is not sent to REGOS; an edit
+  // clears it. Nullable, local only, never synced.
+  if (!(await columnExists(prisma, 'sales', 'marking_block'))) {
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN marking_block TEXT`;
+  }
 }
 
 /** True if `column` exists on `table` — silent (no thrown query, no prisma:error log). */

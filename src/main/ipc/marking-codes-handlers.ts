@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { getPrismaClient } from '../database/sqlite-client';
 import { getAppConfig } from '../config/app-config';
 import { getServerToken } from '../sync/queue-manager';
+import { checkCirculation, type CirculationAnswer } from '../marking/circulation-cache';
 
 interface MarkingCodeCheckResult {
   alreadySold: boolean;
@@ -71,6 +72,14 @@ export function setupMarkingCodesHandlers(): void {
 
     return { alreadySold: false };
   });
+
+  // Scan-time asl-belgisi circulation check (regos_vcr_circulation_check on). Runs behind the
+  // optimistic cart add and never blocks it; the answer is remembered for the fiscal gate, which
+  // is what actually keeps an out-of-circulation receipt from REGOS. Never throws.
+  ipcMain.handle(
+    'markingCodes:checkCirculation',
+    async (_event, code: string): Promise<CirculationAnswer> => checkCirculation(String(code ?? '')),
+  );
 
   // Free the marking codes tied to a sale (called when a sale is deleted or refunded) so the
   // group-022 items can be sold again. The codes are gathered from both the sale's regosLabels

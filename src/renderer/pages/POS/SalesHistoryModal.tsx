@@ -17,6 +17,7 @@ import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../context/ToastContext';
 import { useSuperAdminGate } from '../../components/gate/SuperAdminGate';
 import { useModeStore } from '../../store/mode-store';
+import { markingBlockCodes } from '../../utils/marking-block';
 
 // Date-range options for the history filter. Lets the cashier reach older receipts so they can
 // be (re-)fiscalized from here — e.g. after enabling the non-VAT-payer mode or fixing an MXIK.
@@ -360,7 +361,15 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
       const res = await window.electronAPI.fiscal.retrySale(sale.id);
       await reload();
       if (res.ok) toast.success(t('fiscalSettings.fiscalized', 'Фискализировано'));
-      else toast.error(res.error || t('common.error'));
+      else {
+        // Still blocked by the asl-belgisi circulation gate: say so in the UI language.
+        const codes = markingBlockCodes(res.error);
+        toast.error(
+          codes !== null
+            ? t('reports.receiptDetails.markingBlocked', { codes })
+            : res.error || t('common.error'),
+        );
+      }
     } finally {
       setFiscalizingId(null);
     }

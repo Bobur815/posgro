@@ -275,7 +275,10 @@
     "uzqrScanHint": "To'lov uchun QR kodni skanerlang",
     "uzqrCreating": "QR kod yaratilmoqda…",
     "uzqrTimeout": "To'lovni kutish vaqti tugadi",
-    "uzqrPaidButSaleFailed": "To'lov o'tdi, lekin chek yaratilmadi. Administratorga xabar bering."
+    "uzqrPaidButSaleFailed": "To'lov o'tdi, lekin chek yaratilmadi. Administratorga xabar bering.",
+    "markingCodeOutOfCirculation": "«{{name}}» markirovka kodi muomaladan chiqarilgan ({{status}}): sotuv o'tadi, lekin chek tahrirlanmaguncha fiskallashtirilmaydi",
+    "outOfCirculationBadge": "Muomaladan chiqarilgan {{status}} — chek fiskallashtirilmaydi",
+    "fiscalBlocked": "markirovka bloklagan: {{count}}"
   },
   "reconciliation": {
     "title": "Audit",
@@ -686,6 +689,7 @@
         "load": "Chekni o'qish",
         "zreport": "Z-hisobot",
         "build": "Pozitsiyalarni tayyorlash",
+        "marking": "Markirovkani tekshirish",
         "vcrSale": "REGOS kassasi",
         "persist": "Saqlash",
         "recover": "Chekni tiklash"
@@ -753,14 +757,14 @@
         "NOT_ENTITLED": "Eski cheklarni qayta ishlash xizmati bu do'kon uchun ulanmagan"
       },
       "mxikCleaned": "Tovarlarning MXIK kodidan bo'sh joylar olib tashlandi: {{count}}",
-
       "mxikFilled": "MXIK tasnif.soliq.uz'dan topilib, tovarlarga saqlandi: {{count}}",
       "tasnifUnreachable": "tasnif.soliq.uz mavjud emas — tekshirib bo'lmagan tovarlar: {{count}}",
       "action": {
         "substitute": "almashtirildi",
         "omit": "yuborilmaydi",
         "disable": "chek fiskallashtirilmaydi"
-      }
+      },
+      "unknownStatusSent": "Asl-Belgisi holati noma'lum kodlar: {{count}} — REGOSga o'z holicha yuborildi"
     },
     "duplicateCodes": {
       "title": "Bir nechta qadoq uchun bitta markirovka kodi bilan yuborilgan cheklar: {{count}}",
@@ -768,7 +772,9 @@
       "packs": "qadoqlar: {{packs}}",
       "sent": "Hammasi uchun yuborilgan",
       "unsent": "REGOS olmagan"
-    }
+    },
+    "circulationCheck": "Markirovka kodlarini Asl-Belgisi orqali tekshirish: muomaladan chiqarilgan kodli chek tahrirlanmaguncha fiskallashtirilmaydi",
+    "blockedByMarking": "shundan markirovka bloklagan: {{count}}"
   },
   "reports": {
     "title": "Hisobotlar",
@@ -888,7 +894,8 @@
       "noMarking": "Markirovka kodlari yo'q",
       "rawBody": "So'rov tanasi (JSON-RPC)",
       "copy": "Nusxa olish",
-      "copied": "Nusxalandi"
+      "copied": "Nusxalandi",
+      "markingBlocked": "REGOSga yuborilmadi: markirovka kodi muomaladan chiqarilgan — {{codes}}. Chekni tahrirlang (tovarni olib tashlang yoki qayta skanerlang)"
     },
     "productRankings": "Mahsulotlar reytingi",
     "rankByQuantity": "Soni bo'yicha",

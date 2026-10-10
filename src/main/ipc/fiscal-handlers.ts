@@ -33,6 +33,19 @@ export function setupFiscalHandlers(): void {
     ),
   );
 
+  // The asl-belgisi circulation check (scan time + fiscal gate), default off. Read anywhere — a
+  // satellite's scan screen needs it — and written on the main, like the rest of the fiscal config.
+  ipcMain.handle("fiscal:getCirculationCheck", async () =>
+    regosVcrService.circulationCheckEnabled(),
+  );
+
+  ipcMain.handle(
+    "fiscal:setCirculationCheck",
+    mainOnly(async (_event, on: boolean) =>
+      regosVcrService.setCirculationCheck(on === true),
+    ),
+  );
+
   ipcMain.handle(
     "fiscal:testConnection",
     mainOnly(async () => regosVcrService.testConnection()),
