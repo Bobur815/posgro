@@ -54,6 +54,9 @@ services:
       # unless given a token of its own — the empty default trips the `if (!token)` guard in
       # TelegramService, which is exactly the "bot disabled" path production ran on for months.
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN_STAGING:-}"
+      # Telegram bot: store admins and cashiers in Uzbek only, no language picker for them (todo #6).
+      # Production stays off until this is checked here.
+      TELEGRAM_UZ_ONLY: "true"
       DOWNLOADS_DIR: "/app/downloads"
       RELEASES_DIR: "/app/releases"
     volumes:
