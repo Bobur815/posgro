@@ -60,4 +60,3 @@ for (const { re, why } of rules) {
     );
   }
 }
-process.exit(0);
