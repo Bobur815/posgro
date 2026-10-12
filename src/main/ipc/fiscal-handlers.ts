@@ -2,6 +2,7 @@ import { ipcMain } from "electron";
 import { regosVcrService } from "../fiscal/regos-vcr-service";
 import { stats, recentSales, reset } from "../fiscal/fiscal-timing";
 import type {
+  FiscalBacklogMergeSettings,
   FiscalBacklogProgress,
   RegosVcrConfigInput,
 } from "../../shared/types/fiscal.types";
@@ -124,6 +125,22 @@ export function setupFiscalHandlers(): void {
     mainOnly(async (event: Electron.IpcMainInvokeEvent, fromDate: string) =>
       runEntitled("verify", fromDate, actor(), { ok: false, checked: 0, disabled: 0, changes: [] }, () =>
         regosVcrService.backlogVerify(fromDate, progressTo(event)),
+      ),
+    ),
+  );
+  // The merge setting behind step "group" (per till, default off). Read anywhere, written on the main.
+  ipcMain.handle("fiscal:getBacklogMerge", async () => regosVcrService.backlogMergeSettings());
+  ipcMain.handle(
+    "fiscal:setBacklogMerge",
+    mainOnly(async (_event, input: Partial<FiscalBacklogMergeSettings>) =>
+      regosVcrService.setBacklogMergeSettings(input ?? {}),
+    ),
+  );
+  ipcMain.handle(
+    "fiscal:backlogGroup",
+    mainOnly(async (_event, fromDate: string) =>
+      runEntitled("group", fromDate, actor(), { ok: false, groups: [] }, () =>
+        regosVcrService.backlogGroup(fromDate),
       ),
     ),
   );

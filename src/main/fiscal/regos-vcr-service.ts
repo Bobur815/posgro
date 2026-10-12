@@ -30,6 +30,10 @@ import type {
   FiscalBacklogProductIssue,
   FiscalBacklogVerifyResult,
   FiscalBacklogFiscalizeResult,
+  FiscalBacklogGroupResult,
+  FiscalBacklogMergeSettings,
+  FiscalBacklogSums,
+  FiscalBacklogTender,
   FiscalLinePlan,
   FiscalDuplicateCodeReceipt,
   FiscalLabel,
@@ -53,11 +57,18 @@ import {
   SKIP_TAG,
   SKIP_TAG_MARKING,
   SUBSTITUTE_QUANTITY,
+  NO_BATCH,
+  backlogSums,
+  backlogTender,
   isBacklogCandidate,
   isCashOrClickOnly,
+  isMergedBatchId,
   maySkipFiscalisation,
   parseLinePlan,
+  parseMergeSize,
+  planCashBatches,
 } from '../../shared/utils/fiscal-backlog';
+import { randomUUID } from 'crypto';
 import { isProductRejection, markProductsInvalid, markProductsValid } from './product-validity';
 import { checkCirculation, SALE_PATH_TIMEOUT_MS } from '../marking/circulation-cache';
 import {
@@ -77,6 +88,8 @@ const ERR_ZREPORT_NOT_OPEN = 704010; // VCR: no open Z-report — recoverable, w
 // regos_vcr_vat setting is configured. A 0% fallback would send vat_value=0 for goods that
 // are registered as VAT-able at soliq → REGOS rejects with 701003 "Ставка НДС не найдена".
 const DEFAULT_VAT_PERCENT = 12;
+/** Refund / duplicate refused on a sale merged into one REGOS receipt with others (backlog). */
+export const MERGED_NO_REFUND = 'MERGED_RECEIPT';
 // REGOS sentinel for "Без НДС" sent in a position's vat_value when the store is NOT a VAT payer.
 // Confirmed by REGOS support (2026-06-19): non-payers must send -1, NOT 0 (0% is reserved for
 // льготники and a non-payer sending vat_value=0 is rejected with 701003 "Ставка НДС запрещена").
@@ -163,6 +176,9 @@ interface ResolvedConfig {
   substituteProductId: number | null;
   /** asl-belgisi circulation check at scan time and before Receipt.Sale. Default off. */
   circulationCheck: boolean;
+  /** Fiscal backlog step "group": merge old cash receipts. Default off (4 steps, as before). */
+  backlogMerge: boolean;
+  backlogMergeSize: number;
 }
 
 const SETTING_KEYS = {
@@ -179,6 +195,8 @@ const SETTING_KEYS = {
   uzqrTimeoutMs: 'regos_vcr_uzqr_timeout_ms',
   substituteProductId: 'regos_vcr_substitute_product_id',
   circulationCheck: 'regos_vcr_circulation_check',
+  backlogMerge: 'regos_vcr_backlog_merge',
+  backlogMergeSize: 'regos_vcr_backlog_merge_size',
 } as const;
 
 class RegosVcrService {
@@ -254,6 +272,8 @@ class RegosVcrService {
       substituteProductId: parseProductId(map[SETTING_KEYS.substituteProductId]),
       // Default OFF: until someone turns it on, marked receipts go to REGOS exactly as before.
       circulationCheck: map[SETTING_KEYS.circulationCheck] === 'true',
+      backlogMerge: map[SETTING_KEYS.backlogMerge] === 'true',
+      backlogMergeSize: parseMergeSize(map[SETTING_KEYS.backlogMergeSize]),
     };
   }
 
@@ -324,6 +344,24 @@ class RegosVcrService {
       create: { key: SETTING_KEYS.circulationCheck, value },
     });
     return on;
+  }
+
+  /** The backlog merge setting (step "group"). Its own pair, like the circulation check. */
+  async backlogMergeSettings(): Promise<FiscalBacklogMergeSettings> {
+    const cfg = await this.resolveConfig();
+    return { enabled: cfg.backlogMerge, size: cfg.backlogMergeSize };
+  }
+
+  async setBacklogMergeSettings(
+    input: Partial<FiscalBacklogMergeSettings>,
+  ): Promise<FiscalBacklogMergeSettings> {
+    const writes: Array<[string, string]> = [];
+    if (input.enabled !== undefined) writes.push([SETTING_KEYS.backlogMerge, String(input.enabled === true)]);
+    if (input.size !== undefined) writes.push([SETTING_KEYS.backlogMergeSize, String(parseMergeSize(String(input.size)))]);
+    for (const [key, value] of writes) {
+      await getPrismaClient().systemSetting.upsert({ where: { key }, update: { value }, create: { key, value } });
+    }
+    return this.backlogMergeSettings();
   }
 
   async isEnabled(): Promise<boolean> {
@@ -930,6 +968,12 @@ class RegosVcrService {
       include: { items: true, payments: true },
     });
     if (!sale || sale.fiscalStatus === 'FISCALIZED') return;
+    // A merged backlog receipt may already be on the device under its batch code (the answer got
+    // lost). Sending this sale alone now would fiscalise it twice.
+    if (isMergedBatchId(sale.fiscalBatchId) && (await this.adoptRegisteredBatch(client, sale.fiscalBatchId, cfg))) {
+      timer.finish(sale.receiptNumber, true);
+      return;
+    }
     timer.phase('load');
 
     // Hoisted so the catch block can log the VAT rates / amounts actually sent to the VCR.
@@ -1008,6 +1052,7 @@ class RegosVcrService {
           regosFiscalAt: new Date(),
           fiscalError: null,
           markingBlock: null,
+          fiscalSentTiyin: sentTiyin(positions),
         },
       });
       // REGOS took every product on it, so none of them is invalid any more (Product.isValid).
@@ -1057,6 +1102,8 @@ class RegosVcrService {
               regosFiscalAt: new Date(),
               fiscalError: null,
               markingBlock: null,
+              // Unknown when it failed before the payload was built.
+              fiscalSentTiyin: positions.length ? sentTiyin(positions) : null,
             },
           }).catch(() => {});
           await markProductsValid(sentProducts(positions, meta));
@@ -1118,6 +1165,7 @@ class RegosVcrService {
     const cfg = await this.resolveConfig();
     const client = this.buildClient(cfg);
     const sale = await getPrismaClient().sale.findUnique({ where: { id: saleId } });
+    if (isMergedBatchId(sale?.fiscalBatchId)) return { ok: false, error: MERGED_NO_REFUND };
     if (!sale?.regosReceiptId) return { ok: false, error: 'Чек не фискализирован' };
     if (!client) return { ok: false, error: 'Виртуальная касса не настроена' };
     return this.runExclusive(async () => {
@@ -1135,6 +1183,8 @@ class RegosVcrService {
     const cfg = await this.resolveConfig();
     const client = this.buildClient(cfg);
     const sale = await getPrismaClient().sale.findUnique({ where: { id: saleId } });
+    // Its QR code is the merged receipt's: a full refund would reverse every sale on it.
+    if (isMergedBatchId(sale?.fiscalBatchId)) return { ok: false, error: MERGED_NO_REFUND };
     if (!sale?.regosQrCodeUrl) return { ok: false, error: 'Чек не фискализирован' };
     if (!client) return { ok: false, error: 'Виртуальная касса не настроена' };
     return this.runExclusive(async () => {
@@ -1359,6 +1409,7 @@ class RegosVcrService {
         fiscalError: true,
         regosLabels: true,
         fiscalSubstitutions: true,
+        fiscalBatchId: true,
         payments: { select: { method: true } },
         items: {
           select: {
@@ -1384,6 +1435,7 @@ class RegosVcrService {
       fiscalError: string | null;
       regosLabels: string | null;
       fiscalSubstitutions: string | null;
+      fiscalBatchId: string | null;
       payments: Array<{ method: string }>;
       items: Array<{
         id: string;
@@ -1408,13 +1460,25 @@ class RegosVcrService {
           { paymentMethod: s.paymentMethod, debtAmount: Number(s.debtAmount ?? 0), payments: s.payments },
           marked,
         );
-        const cashOnly = isCashOrClickOnly({
-          paymentMethod: s.paymentMethod,
-          debtAmount: Number(s.debtAmount ?? 0),
-          payments: s.payments,
-        });
-        return { ...s, marked, skippable, cashOnly };
+        const shape = { paymentMethod: s.paymentMethod, debtAmount: Number(s.debtAmount ?? 0), payments: s.payments };
+        const cashOnly = isCashOrClickOnly(shape);
+        return { ...s, marked, skippable, cashOnly, tender: backlogTender(shape) };
       });
+  }
+
+  /** Fiscalised / total from `fromDate` (see backlogSums), in so'm. */
+  private async backlogSumsFrom(fromDate: string): Promise<FiscalBacklogSums> {
+    const [y, m, d] = fromDate.split('-').map(Number);
+    const rows = await getPrismaClient().sale.findMany({
+      where: { createdAt: { gte: new Date(y, (m || 1) - 1, d || 1) } },
+      select: { finalAmount: true, fiscalStatus: true, fiscalError: true, fiscalSentTiyin: true },
+    });
+    const { totalTiyin, fiscalizedTiyin } = backlogSums(
+      (rows as Array<{ finalAmount: unknown; fiscalStatus: string | null; fiscalError: string | null; fiscalSentTiyin?: number | null }>).map(
+        (r) => ({ ...r, finalAmount: Number(r.finalAmount) }),
+      ),
+    );
+    return { totalAmount: totalTiyin / 100, fiscalizedAmount: fiscalizedTiyin / 100 };
   }
 
   /** Step 1: DISABLE (tagged) what rule #1 lets skip; list what must be fiscalised. */
@@ -1679,9 +1743,224 @@ class RegosVcrService {
   }
 
   /**
-   * Step 4: fiscalise every kept receipt, one at a time. A receipt counts as fiscalised only when
-   * its status reads FISCALIZED afterwards — fiscalizeSale returns quietly in several cases (write
-   * freeze, no password, fiscalisation off) and that must never be reported as success.
+   * Step "group" (merge setting on): sorts the receipts left after verify by tender, and gives each
+   * cash/Click receipt without a batch a merged-receipt id — up to the set size per calendar day
+   * (planCashBatches). Card, UzQR and split receipts are only counted: they still go one by one.
+   * An assigned batch id is never changed, since it may already name a receipt on the device.
+   */
+  async backlogGroup(fromDate: string): Promise<FiscalBacklogGroupResult> {
+    const busy: FiscalBacklogGroupResult = { ok: false, error: 'BUSY', groups: [] };
+    return this.withBacklogLock('group', busy, async () => {
+      const cfg = await this.resolveConfig();
+      if (!cfg.backlogMerge) return { ok: false, error: 'MERGE_OFF', groups: [] };
+      const prisma = getPrismaClient();
+      const kept = (await this.loadBacklog(fromDate)).filter((s) => !s.skippable);
+
+      const plan = planCashBatches(
+        kept
+          .filter((s) => s.tender === 'CASH')
+          .map((s) => ({
+            id: s.id,
+            createdAt: s.createdAt,
+            lines:
+              s.items.length -
+              parseLinePlan(s.fiscalSubstitutions).filter((p) => p.action === 'omit').length,
+            batchId: s.fiscalBatchId,
+          })),
+        cfg.backlogMergeSize,
+        randomUUID,
+      );
+      const byBatch = new Map<string, string[]>();
+      for (const [saleId, batchId] of plan) byBatch.set(batchId, [...(byBatch.get(batchId) ?? []), saleId]);
+      for (const [batchId, ids] of byBatch) {
+        // Only rows still without a batch: a concurrent assignment is never overwritten.
+        await prisma.sale.updateMany({
+          where: { id: { in: ids }, fiscalBatchId: null },
+          data: { fiscalBatchId: batchId },
+        });
+      }
+
+      const batchOf = (s: { id: string; fiscalBatchId: string | null }) => plan.get(s.id) ?? s.fiscalBatchId;
+      const groups = (['CASH', 'CARD', 'UZQR'] as FiscalBacklogTender[]).map((tender) => {
+        const rows = kept.filter((s) => s.tender === tender);
+        const merged = rows.filter((s) => isMergedBatchId(batchOf(s)));
+        return {
+          tender,
+          receipts: rows.length,
+          amount: rows.reduce((sum, s) => sum + Math.round(Number(s.finalAmount) * 100), 0) / 100,
+          batches: new Set(merged.map(batchOf)).size,
+          singles: rows.length - merged.length,
+        };
+      });
+      log.info(
+        `[fiscal] backlog group from ${fromDate}: ${groups
+          .map((g) => `${g.tender} ${g.receipts} (${g.batches} merged, ${g.singles} single)`)
+          .join(', ')}; ${byBatch.size} new batches of up to ${cfg.backlogMergeSize}`,
+      );
+      return { ok: true, groups, sums: await this.backlogSumsFrom(fromDate) };
+    });
+  }
+
+  /**
+   * Positions of a merged receipt: every member's own positions (its verify plan applied, its
+   * discount settled), one after another. Paid as one cash payment of exactly what the lines come
+   * to, so the receipt balances whatever each member's rounding did. `shares` is each sale's part.
+   */
+  private async buildBatch(
+    members: Array<{ id: string } & Record<string, unknown>>,
+    cfg: ResolvedConfig,
+  ): Promise<{ positions: VcrPosition[]; meta: PositionMeta[]; payments: VcrPayment[]; shares: Map<string, number> }> {
+    const positions: VcrPosition[] = [];
+    const meta: PositionMeta[] = [];
+    const shares = new Map<string, number>();
+    for (const m of members) {
+      const built = await this.buildPositions(m as never, cfg);
+      positions.push(...built.positions);
+      meta.push(...built.meta);
+      shares.set(m.id, sentTiyin(built.positions));
+    }
+    return { positions, meta, payments: [{ type: 1, value: sentTiyin(positions) }], shares };
+  }
+
+  /** Every member FISCALIZED with the merged receipt's fiscal data, and its own share. */
+  private async persistBatch(
+    batchId: string,
+    memberIds: string[],
+    r: VcrReceiptResult,
+    shares: Map<string, number> | null,
+  ): Promise<void> {
+    const prisma = getPrismaClient();
+    await prisma.sale.updateMany({
+      where: { id: { in: memberIds }, fiscalBatchId: batchId },
+      data: {
+        fiscalStatus: 'FISCALIZED',
+        fiscalSynced: false,
+        regosReceiptId: r.Id,
+        regosFiscalSign: r.FiscalSign,
+        regosQrCodeUrl: r.QRCodeURL,
+        regosTerminalId: r.TerminalID,
+        regosReceiptNo: r.ReceiptNo,
+        regosFiscalAt: new Date(),
+        fiscalError: null,
+        markingBlock: null,
+      },
+    });
+    for (const id of memberIds) {
+      await prisma.sale
+        .update({ where: { id }, data: { fiscalSentTiyin: shares?.get(id) ?? null } })
+        .catch(() => {});
+    }
+  }
+
+  /**
+   * A merged receipt the device already holds under its batch code (an answer got lost): adopt it
+   * for every member not yet FISCALIZED. False when the device does not know the code.
+   */
+  private async adoptRegisteredBatch(
+    client: RegosVcrClient,
+    batchId: string,
+    cfg: ResolvedConfig,
+  ): Promise<boolean> {
+    const recovered = await this.tryRecoverByCode(client, batchId);
+    if (!recovered) return false;
+    const members = (
+      await getPrismaClient().sale.findMany({
+        where: { fiscalBatchId: batchId },
+        include: { items: true, payments: true },
+      })
+    ).filter((s: { fiscalStatus: string | null }) => s.fiscalStatus !== 'FISCALIZED');
+    const shares = await this.buildBatch(members, cfg)
+      .then((b) => b.shares)
+      .catch(() => null);
+    await this.persistBatch(batchId, members.map((s: { id: string }) => s.id), recovered, shares);
+    log.info(`[fiscal] merged receipt ${batchId} found on the device → ReceiptNo=${recovered.ReceiptNo}, ${members.length} sales`);
+    return true;
+  }
+
+  /**
+   * One merged REGOS receipt for the given sales of one batch. `rejected`: the device refused it
+   * (the caller falls back to sending the sales one by one); `skipped`: nothing was sent (write
+   * freeze). A device that stops answering throws VcrError code 0 with every sale untouched.
+   */
+  private fiscalizeBatch(
+    batchId: string,
+    saleIds: string[],
+  ): Promise<
+    | { status: 'ok'; fiscalized: number; sentTiyin: number }
+    | { status: 'rejected'; error: string }
+    | { status: 'skipped' }
+  > {
+    return this.runExclusive(async () => {
+      if (isWriteFrozen()) return { status: 'skipped' as const };
+      const cfg = await this.resolveConfig();
+      const client = this.buildClient(cfg);
+      if (!cfg.enabled || !client) return { status: 'skipped' as const };
+      const prisma = getPrismaClient();
+      const members = (
+        await prisma.sale.findMany({ where: { id: { in: saleIds } }, include: { items: true, payments: true } })
+      ).filter((s: { fiscalStatus: string | null }) => s.fiscalStatus !== 'FISCALIZED');
+      if (members.length === 0) return { status: 'ok' as const, fiscalized: 0, sentTiyin: 0 };
+      const ids: string[] = members.map((s: { id: string }) => s.id);
+
+      if (await this.adoptRegisteredBatch(client, batchId, cfg)) {
+        const after = await prisma.sale.findMany({ where: { id: { in: ids } } });
+        const done = after.filter((s: { fiscalStatus: string | null }) => s.fiscalStatus === 'FISCALIZED');
+        return {
+          status: 'ok' as const,
+          fiscalized: done.length,
+          sentTiyin: done.reduce((t: number, s: { fiscalSentTiyin?: number | null; finalAmount: unknown }) => t + (s.fiscalSentTiyin ?? Math.round(Number(s.finalAmount) * 100)), 0),
+        };
+      }
+
+      let built: Awaited<ReturnType<RegosVcrService['buildBatch']>>;
+      try {
+        built = await this.buildBatch(members, cfg);
+      } catch (e) {
+        return { status: 'rejected' as const, error: this.errText(e) };
+      }
+      const first = members[0] as { smenaId: string | null; cashierName: string };
+      await this.ensureZReportOpen(client, first.smenaId);
+      const send = () =>
+        client.sale({
+          positions: built.positions,
+          payments: built.payments,
+          code: batchId, // idempotency key of the merged receipt
+          session_code: first.smenaId ?? undefined,
+          cashier_name: first.cashierName,
+          pos_id: cfg.posId,
+        });
+      let result: VcrReceiptResult;
+      try {
+        try {
+          result = await send();
+        } catch (e) {
+          if (!(e instanceof VcrError && e.code === ERR_ZREPORT_NOT_OPEN)) throw e;
+          this.zReportOpen = false;
+          await this.ensureZReportOpen(client, first.smenaId, true);
+          result = await send();
+        }
+      } catch (e) {
+        if (e instanceof VcrError && e.code === 0) throw e;
+        if (await this.adoptRegisteredBatch(client, batchId, cfg)) {
+          return { status: 'ok' as const, fiscalized: ids.length, sentTiyin: sentTiyin(built.positions) };
+        }
+        log.error(`[fiscal] ✗ merged receipt ${batchId} (${ids.length} sales) rejected: ${this.errText(e)}`);
+        if (e instanceof VcrError) log.error(`[fiscal] raw VCR error [${e.code}] ${e.method}: ${e.description}`);
+        return { status: 'rejected' as const, error: this.errText(e) };
+      }
+      await this.persistBatch(batchId, ids, result, built.shares);
+      await markProductsValid(sentProducts(built.positions, built.meta));
+      console.log(`[fiscal] FISCALIZED merged ${batchId} (${ids.length} sales, ${built.positions.length} lines) → ReceiptNo=${result.ReceiptNo}`);
+      return { status: 'ok' as const, fiscalized: ids.length, sentTiyin: sentTiyin(built.positions) };
+    });
+  }
+
+  /**
+   * Step 4: fiscalise every kept receipt. A merged cash batch (step "group") goes as one receipt;
+   * everything else one at a time. A receipt counts as fiscalised only when its status reads
+   * FISCALIZED afterwards — fiscalizeSale returns quietly in several cases (write freeze, no
+   * password, fiscalisation off) and that must never be reported as success. Batches assigned
+   * earlier are honoured even with the setting off: their code may already be on the device.
    */
   async backlogFiscalize(
     fromDate: string,
@@ -1700,14 +1979,34 @@ class RegosVcrService {
       const total = kept.length;
       let processed = 0;
 
+      // Running fiscalised / total: the total does not move during this step, the fiscalised part
+      // grows by what each receipt sent. Re-read from the database at the end.
+      const start = await this.backlogSumsFrom(fromDate);
+      let fiscalizedTiyin = Math.round(start.fiscalizedAmount * 100);
+      const sums = (): FiscalBacklogSums => ({ totalAmount: start.totalAmount, fiscalizedAmount: fiscalizedTiyin / 100 });
+
+      // Units in the order their first receipt was sold: a batch, or one receipt.
+      type Kept = (typeof kept)[number];
+      const units: Array<{ batchId: string | null; sales: Kept[] }> = [];
+      const unitOf = new Map<string, { batchId: string | null; sales: Kept[] }>();
       for (const s of kept) {
-        // Checked before the next receipt is touched: the previous one has finished and been counted,
-        // and this one stays exactly as it was for the next run.
-        if (this.backlogStopRequested) {
-          result.stopped = true;
-          break;
+        const batchId = s.fiscalBatchId;
+        if (!isMergedBatchId(batchId)) {
+          units.push({ batchId: null, sales: [s] });
+          continue;
         }
-        onProgress?.({ step: 'fiscalize', processed, total, currentReceipt: s.receiptNumber });
+        const u = unitOf.get(batchId);
+        if (u) u.sales.push(s);
+        else {
+          const nu = { batchId, sales: [s] };
+          unitOf.set(batchId, nu);
+          units.push(nu);
+        }
+      }
+
+      /** One receipt the usual way. True when the device stopped answering. */
+      const sendSingle = async (s: Kept): Promise<boolean> => {
+        onProgress?.({ step: 'fiscalize', processed, total, currentReceipt: s.receiptNumber, sums: sums() });
         // Conditional, so a receipt fiscalised since it was read is never knocked back to PENDING.
         await prisma.sale.updateMany({
           where: {
@@ -1726,18 +2025,83 @@ class RegosVcrService {
 
         const after = await prisma.sale.findUnique({
           where: { id: s.id },
-          select: { fiscalStatus: true, fiscalError: true },
+          select: { fiscalStatus: true, fiscalError: true, fiscalSentTiyin: true },
         });
         if (after?.fiscalStatus === 'FISCALIZED') {
           result.fiscalized++;
+          fiscalizedTiyin += after.fiscalSentTiyin ?? Math.round(Number(s.finalAmount) * 100);
         } else {
           result.failed.push({
             receipt: s.receiptNumber,
             error: after?.fiscalError || (thrown ? this.errText(thrown) : 'NOT_FISCALIZED'),
           });
         }
+        return thrown instanceof VcrError && thrown.code === 0;
+      };
+
+      let unreachable = false;
+      for (const u of units) {
+        // Checked before the next receipt is touched: the previous one has finished and been counted,
+        // and this one stays exactly as it was for the next run.
+        if (this.backlogStopRequested) {
+          result.stopped = true;
+          break;
+        }
+        if (!u.batchId) {
+          unreachable = await sendSingle(u.sales[0]);
+        } else {
+          const first = u.sales[0].receiptNumber;
+          const last = u.sales[u.sales.length - 1].receiptNumber;
+          onProgress?.({
+            step: 'fiscalize',
+            processed,
+            total,
+            currentReceipt: u.sales.length > 1 ? `${first}…${last}` : first,
+            sums: sums(),
+          });
+          let r: Awaited<ReturnType<RegosVcrService['fiscalizeBatch']>> | null = null;
+          try {
+            r = await this.fiscalizeBatch(u.batchId, u.sales.map((s) => s.id));
+          } catch (e) {
+            if (e instanceof VcrError && e.code === 0) {
+              unreachable = true;
+            } else {
+              r = { status: 'rejected', error: this.errText(e) };
+            }
+          }
+          if (!r) {
+            // The device stopped answering; nothing of the batch was touched: it goes as it is next run.
+          } else if (r.status === 'ok') {
+            processed += u.sales.length;
+            result.fiscalized += r.fiscalized;
+            fiscalizedTiyin += r.sentTiyin;
+            result.batches = (result.batches ?? 0) + 1;
+            const missing = u.sales.length - r.fiscalized;
+            if (missing > 0) log.warn(`[fiscal] merged ${u.batchId}: ${missing} of ${u.sales.length} sales not marked fiscalised`);
+          } else if (r.status === 'skipped') {
+            processed += u.sales.length;
+            for (const s of u.sales) result.failed.push({ receipt: s.receiptNumber, error: 'NOT_FISCALIZED' });
+          } else {
+            // Rejected: never merge these again — each goes alone now, where the usual recovery,
+            // VAT heal and product blame apply and only the bad receipt fails.
+            log.warn(`[fiscal] merged ${u.batchId} rejected (${r.error}) — sending its ${u.sales.length} receipts one by one`);
+            await prisma.sale.updateMany({
+              where: { id: { in: u.sales.map((s) => s.id) }, fiscalBatchId: u.batchId },
+              data: { fiscalBatchId: NO_BATCH },
+            });
+            for (const s of u.sales) {
+              if (this.backlogStopRequested) {
+                result.stopped = true;
+                break;
+              }
+              unreachable = await sendSingle(s);
+              if (unreachable) break;
+            }
+            if (result.stopped) break;
+          }
+        }
         // The device stopped answering: the rest stay as they are for a later run.
-        if (thrown instanceof VcrError && thrown.code === 0) {
+        if (unreachable) {
           result.unreachable = true;
           result.ok = false;
           result.error = 'VCR_UNREACHABLE';
@@ -1746,9 +2110,10 @@ class RegosVcrService {
       }
       if (processed < total) result.remaining = total - processed;
       this.backlogStopRequested = false;
-      onProgress?.({ step: 'fiscalize', processed, total });
+      result.sums = await this.backlogSumsFrom(fromDate);
+      onProgress?.({ step: 'fiscalize', processed, total, sums: result.sums });
       log.info(
-        `[fiscal] backlog fiscalise: ${result.fiscalized} fiscalised, ${result.failed.length} failed${result.unreachable ? ' (VCR unreachable — stopped early)' : ''}${result.stopped ? ` (stopped by admin, ${result.remaining ?? 0} left)` : ''}`,
+        `[fiscal] backlog fiscalise: ${result.fiscalized} fiscalised${result.batches ? ` (${result.batches} merged receipts)` : ''}, ${result.failed.length} failed${result.unreachable ? ' (VCR unreachable — stopped early)' : ''}${result.stopped ? ` (stopped by admin, ${result.remaining ?? 0} left)` : ''}; ${result.sums.fiscalizedAmount} / ${result.sums.totalAmount}`,
       );
       return result;
     });
@@ -1925,6 +2290,11 @@ function parseProductId(raw: string | undefined): number | null {
  * The invalid products a fiscalised receipt carried to REGOS — a substituted line counts as its
  * substitute. Only these need writing: everything else on the receipt is valid already.
  */
+/** What REGOS receives for these positions, in tiyin: each line's amount less its discount. */
+function sentTiyin(positions: VcrPosition[]): number {
+  return positions.reduce((s, p) => s + p.amount - (p.discount ?? 0), 0);
+}
+
 function sentProducts(
   positions: VcrPosition[],
   meta: PositionMeta[],
