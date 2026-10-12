@@ -361,7 +361,13 @@ export async function syncDeletedProducts(source: PullSource = vpsSource): Promi
       select: {
         id: true,
         _count: {
-          select: { sales: true, inventoryMovements: true, preWeighedItems: true, inventoryCountItems: true },
+          select: {
+            sales: true,
+            inventoryMovements: true,
+            preWeighedItems: true,
+            inventoryCountItems: true,
+            writeOffItems: true,
+          },
         },
       },
     });

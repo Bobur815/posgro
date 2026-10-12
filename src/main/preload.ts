@@ -216,6 +216,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("debtors:voidTransaction", data),
   },
 
+  // Write-offs (expired / damaged / other) — OFFLINE_ONLY store, admin only.
+  writeOffs: {
+    list: (filters?: { search?: string; reason?: string; page?: number; limit?: number }) =>
+      ipcRenderer.invoke("writeOffs:list", filters),
+    get: (id: string) => ipcRenderer.invoke("writeOffs:get", id),
+    create: (data: WriteOffCreateRequest) => ipcRenderer.invoke("writeOffs:create", data),
+  },
+
   // Sync
   sync: {
     trigger: () => ipcRenderer.invoke("sync:trigger"),
@@ -603,6 +611,57 @@ export interface MarkingApiKeyResult {
 }
 
 // Type declarations for the exposed API
+/** Write-off shapes after IPC serialisation (Decimal → string, Date → ISO string). */
+export type WriteOffReason = "EXPIRY" | "DAMAGE" | "OTHER";
+export interface WriteOffCreateRequest {
+  /** Client-generated, so a double submit returns the document already written. */
+  id?: string;
+  reason: WriteOffReason;
+  note?: string | null;
+  items: { productId: number; quantity: number }[];
+}
+export interface WriteOffSummary {
+  id: string;
+  number: number;
+  reason: WriteOffReason;
+  note: string | null;
+  createdByName: string;
+  createdAt: string;
+  totalItems: number;
+  totalValue: string;
+}
+export interface WriteOffLine {
+  id: string;
+  productId: number;
+  productName: string;
+  productNameUz: string;
+  barcode: string;
+  unit: string;
+  quantity: string;
+  cost: string | null;
+}
+export interface WriteOffPage {
+  rows: WriteOffSummary[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+export type WriteOffRefusalCode =
+  | "NOTE_REQUIRED"
+  | "DUPLICATE_LINE"
+  | "UNKNOWN_PRODUCT"
+  | "NOT_POSITIVE"
+  | "EXCEEDS_STOCK";
+export type WriteOffResponse =
+  | { ok: true; value: WriteOffSummary & { items: WriteOffLine[] } }
+  | {
+      ok: false;
+      status: number;
+      message: string;
+      refusal?: { code: WriteOffRefusalCode; product?: string; stock?: string; quantity?: string };
+    };
+
 declare global {
   interface Window {
     electronAPI: {
@@ -795,6 +854,17 @@ declare global {
           transactionId: string;
           reason?: string;
         }) => Promise<Debtor>;
+      };
+      writeOffs: {
+        list: (filters?: {
+          search?: string;
+          reason?: WriteOffReason;
+          page?: number;
+          limit?: number;
+        }) => Promise<WriteOffPage>;
+        get: (id: string) => Promise<WriteOffResponse>;
+        /** Refusals come back as `ok: false`, never thrown. */
+        create: (data: WriteOffCreateRequest) => Promise<WriteOffResponse>;
       };
       sync: {
         trigger: () => Promise<void>;

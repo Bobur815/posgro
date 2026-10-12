@@ -4,6 +4,7 @@ import { authRoutes } from './auth';
 import { categoryRoutes, settingsRoutes } from './catalog';
 import { inventoryRoutes } from './inventory';
 import { inventoryCountRoutes } from './inventory-counts';
+import { writeOffRoutes } from './write-offs';
 import { handoffRoutes } from './handoff';
 import { invoiceRoutes, logRoutes, markingRoutes, mxikRoutes, siteConfigRoutes, storeRoutes } from './misc';
 import { productRoutes } from './products';
@@ -33,6 +34,7 @@ export function buildRouter(): Router {
     ...settingsRoutes,
     ...inventoryRoutes,
     ...inventoryCountRoutes,
+    ...writeOffRoutes,
     ...supplierRoutes,
     ...analyticsRoutes,
     ...reconciliationRoutes,
