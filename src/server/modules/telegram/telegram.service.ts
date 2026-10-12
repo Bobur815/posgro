@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Telegraf, Markup } from 'telegraf';
+import { Telegraf, Markup, type Context } from 'telegraf';
 import { UsersService } from '../users/users.service';
 import { SuppliersService } from '../suppliers/suppliers.service';
 import { InventoryService } from '../inventory/inventory.service';
@@ -127,7 +127,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           supplierId: c.supplierId ?? undefined,
           storeId: c.storeId ?? '',
           name: c.name,
-          lang: c.lang === 'uz' ? 'uz' : 'ru',
+          lang: this.langOf(c),
           alerts: c.alerts,
           verbose: c.verbose,
         });
@@ -242,7 +242,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     try {
       const chats = await this.alertChats(storeId);
       for (const chat of chats) {
-        await this.sendAlert(chat.chatId, render(chat.lang as Lang));
+        await this.sendAlert(chat.chatId, render(this.langOf(chat)));
       }
     } catch (err) {
       this.logger.error(`Notifying admins of store ${storeId} failed`, err as Error);
@@ -258,7 +258,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     try {
       const chats = await this.prisma.telegramChat.findMany({ where: { role: 'SUPER_ADMIN' } });
       for (const chat of chats) {
-        await this.sendHtml(chat.chatId, render(chat.lang as Lang));
+        await this.sendHtml(chat.chatId, render(this.langOf(chat)));
       }
     } catch (err) {
       this.logger.error('Notifying super admins failed', err as Error);
@@ -351,6 +351,50 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     return Markup.inlineKeyboard([Markup.button.url('🌐 Veb-panel / Открыть веб-панель', url)]);
   }
 
+  /**
+   * TELEGRAM_UZ_ONLY: a store's admins and cashiers are written to in Uzbek and are not asked for a
+   * language; the super admin and suppliers choose after they log in. Off (default) = as before.
+   */
+  private get uzOnly(): boolean {
+    return this.configService.get<string>('TELEGRAM_UZ_ONLY') === 'true';
+  }
+
+  /** The language to write to a stored chat in — see effectiveLang. */
+  langOf(chat: { role: string; lang: string | null }): Lang {
+    return fmt.effectiveLang(chat.role, chat.lang, this.uzOnly);
+  }
+
+  /** The role's main menu, in the session's language. */
+  private async replyMenu(ctx: Context, session: BotSession): Promise<void> {
+    const lang = session.lang;
+    if (session.role === 'SUPPLIER') {
+      await ctx.reply(fmt.msgSupplierMenu(session.name, lang), this.kbSupplier(lang));
+    } else if (session.role === 'SUPER_ADMIN') {
+      await ctx.reply(fmt.msgSuperAdminMenu(session.name, lang), this.kbSuperAdmin(lang));
+    } else {
+      await ctx.reply(fmt.msgAdminMenu(session.name, lang), this.kbAdmin(lang, session.role));
+    }
+  }
+
+  /**
+   * A logged-in chat answering the language picker — under TELEGRAM_UZ_ONLY the super admin and
+   * suppliers get it after login. True when handled; false for the ordinary pre-login picker,
+   * which /start always reaches without a session.
+   */
+  private async chooseAfterLogin(ctx: Context, chosen: Lang): Promise<boolean> {
+    const chatId = ctx.chat?.id;
+    const session = chatId === undefined ? undefined : this.sessions.get(chatId);
+    if (chatId === undefined || !session) return false;
+    session.lang = fmt.effectiveLang(session.role, chosen, this.uzOnly);
+    await this.persistSession(chatId, session);
+    await ctx.answerCbQuery();
+    await ctx
+      .editMessageText(session.lang === 'uz' ? "O'zbek tili tanlandi ✅" : 'Выбран русский язык ✅')
+      .catch(() => undefined);
+    await this.replyMenu(ctx, session);
+    return true;
+  }
+
   private getLang(chatId: number): Lang {
     return this.sessions.get(chatId)?.lang ?? this.langPrefs.get(chatId) ?? 'ru';
   }
@@ -363,6 +407,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       // /start is a full re-auth, so the stored link goes too — including its alert settings.
       await this.forgetSession(ctx.chat.id);
       this.langPrefs.delete(ctx.chat.id);
+      // Uzbek-only: no picker before login — who this is (and so whether they may choose) is only
+      // known once they share their number.
+      if (this.uzOnly) {
+        this.langPrefs.set(ctx.chat.id, 'uz');
+        await ctx.reply(fmt.msgAskPhone('uz'), this.kbAskPhone('uz'));
+        return;
+      }
       await ctx.reply(
         fmt.msgSelectLanguage(),
         Markup.inlineKeyboard([
@@ -375,6 +426,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     // Language selection callbacks
     bot.action('lang_uz', async (ctx) => {
       if (!ctx.chat) return;
+      if (await this.chooseAfterLogin(ctx, 'uz')) return;
       this.langPrefs.set(ctx.chat.id, 'uz');
       await ctx.answerCbQuery();
       await ctx.editMessageText("O'zbek tili tanlandi ✅");
@@ -384,6 +436,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
     bot.action('lang_ru', async (ctx) => {
       if (!ctx.chat) return;
+      if (await this.chooseAfterLogin(ctx, 'ru')) return;
       this.langPrefs.set(ctx.chat.id, 'ru');
       await ctx.answerCbQuery();
       await ctx.editMessageText('Выбран русский язык ✅');
@@ -393,7 +446,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
     // Contact shared — identify user
     bot.on('contact', async (ctx) => {
-      const lang = this.getLang(ctx.chat.id);
+      let lang = this.getLang(ctx.chat.id);
       const rawPhone = ctx.message.contact.phone_number;
       try {
         const identity = await this.resolveIdentity(rawPhone);
@@ -401,6 +454,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           await ctx.reply(fmt.msgUnknownPhone(lang), this.inlineWebButton());
           return;
         }
+        // Uzbek-only: a store's own people get Uzbek; the super admin and suppliers are asked below.
+        if (this.uzOnly) lang = fmt.effectiveLang(identity.role, lang, true);
         const session: BotSession = {
           ...identity,
           lang,
@@ -411,13 +466,17 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         };
         this.sessions.set(ctx.chat.id, session);
         await this.persistSession(ctx.chat.id, session);
-        if (session.role === 'SUPPLIER') {
-          await ctx.reply(fmt.msgSupplierMenu(session.name, lang), this.kbSupplier(lang));
-        } else if (session.role === 'SUPER_ADMIN') {
-          await ctx.reply(fmt.msgSuperAdminMenu(session.name, lang), this.kbSuperAdmin(lang));
-        } else {
-          await ctx.reply(fmt.msgAdminMenu(session.name, lang), this.kbAdmin(lang, session.role));
+        if (this.uzOnly && !fmt.uzOnlyRole(session.role)) {
+          await ctx.reply(
+            fmt.msgSelectLanguage(),
+            Markup.inlineKeyboard([
+              Markup.button.callback("O'zbek 🇺🇿", 'lang_uz'),
+              Markup.button.callback('Русский 🇷🇺', 'lang_ru'),
+            ]),
+          );
+          return;
         }
+        await this.replyMenu(ctx, session);
       } catch (err) {
         this.logger.error('Contact handler error', err);
         await ctx.reply(fmt.msgError('auth', lang));

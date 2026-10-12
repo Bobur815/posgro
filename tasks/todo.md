@@ -1,3 +1,54 @@
+# Telegram bot: Uzbek only for store admins — messages and log alerts (2026-10-12), branch feat/telegram-uz (from dev). Todo #6. Approved 2026-10-12: admins + cashiers only, picker removed for them
+
+## Findings
+- `src/server/modules/telegram`: `telegram.service.ts` (bot, sessions, keyboards), `bot-commands.ts` (all texts via
+  `t(uz, ru, lang)`), `log-alerts.service.ts` (terminal log lines → batched alerts).
+- The bot is bilingual by design: `/start` asks the language; it is stored per chat (`TelegramChat.lang`, default
+  'ru'); menus, reports, shift opened/closed, alerts are rendered per chat language (`notifyStoreAdmins(render)`).
+- Alert **framing** (title, terminals, ×count, "…and N more", receipt lines) is already translated. The alert
+  **body** is the till's raw log line: English (`[sync] …`) or REGOS's Russian wording
+  (`[fiscal] ✗ fiscalize … failed: [701003] Не отсканирован код…`). Making "logs" Uzbek means translating
+  those lines, which can only be done for known patterns (REGOS codes, our own fixed messages); an unknown line
+  can only be shown as written.
+- No translation table for REGOS error codes exists today.
+
+## Design (pending answers)
+- A flag `TELEGRAM_UZ_ONLY` (env, like `DEBT_BALANCE_FROM_LEDGER`, default off = today; set to "true" in
+  docker-compose to switch). When on, every message to the chats in scope renders with `lang = 'uz'`, ignoring
+  the stored choice (no schema change; `lang` column stays).
+- Language picker on `/start`: skipped for the users in scope (goes straight to "share your phone").
+- Log alerts: a translation table `log-uz.ts` (pure, tested) for the known line patterns found in production
+  (Q3) — REGOS error codes and our own fixed messages → Uzbek, with the receipt / product details kept; unknown
+  lines pass through unchanged, prefixed by nothing.
+- Server-only; no POS, no API, no N-1 impact. Tests for the formatter and the table.
+
+## Decisions (user, 2026-10-12)
+- Admins and cashiers only; remove the language picker for them. (Q3 log sample not run — the table was built
+  from the till source instead, see below.)
+
+## Outcome (2026-10-12) — server only
+- `TELEGRAM_UZ_ONLY` (default off). `bot-commands.ts` `effectiveLang(role, stored, uzOnly)` / `uzOnlyRole`: ADMIN + USER
+  → 'uz', SUPER_ADMIN + SUPPLIER keep their choice; off = old behaviour. Stored `lang` is never overwritten for existing
+  chats, so turning the flag off restores everyone's choice.
+- `telegram.service.ts`: `langOf(chat)` used by session restore, `notifyStoreAdmins` (shift opened/closed),
+  `notifySuperAdmins`, log alerts. `/start` under the flag skips the picker (asks the phone in Uzbek); after login
+  the super admin / a supplier gets the picker (`chooseAfterLogin`), admins and cashiers go straight to the menu.
+- `log-uz.ts`: the till's fiscal wording (`describeVcrError` sentences + `VCR_ERROR_HINTS` by code) → Uzbek, applied
+  to alerts for Uzbek chats. Unknown REGOS descriptions and non-fiscal lines (`[sync] …`) stay as written.
+  `uz-only.test.ts` imports the till's table: a new Russian sentence without Uzbek fails it (red: 2 of 10).
+- `docker-compose.staging.yml`: `TELEGRAM_UZ_ONLY: "true"`; production stays off until checked. Staging only runs a
+  bot with its own `TELEGRAM_BOT_TOKEN_STAGING`.
+- Not tested end to end: the /start → phone → menu flow (no bot tests exist); check by hand.
+
+## Open questions
+1. **Who is in scope?** Only store admins (ADMIN)? Or everyone the bot talks to — cashiers (USER), suppliers, and
+   you as super admin (stores list, new leads)? (my default: store admins and cashiers; super admin and suppliers
+   keep their choice)
+2. **Language picker:** remove it for those users (my default), or keep it and just ignore it?
+3. **Log lines:** run `scratchpad\log-patterns.sql` (read-only) and paste the output, so the translation table
+   covers what actually reaches admins:
+   `Get-Content "<scratchpad>\log-patterns.sql" | ssh posgro-vps "docker exec -i posgro-postgres-1 sh -c 'psql -U \`"\`$POSTGRES_USER\`" -d \`"\`$POSTGRES_DB\`"'"`
+
 # Fiscal backlog step 4: Stop button that stops after the current receipt (2026-10-12), branch feat/backlog-stop (from dev). Todo #2. Approved 2026-10-12 (shared fields OK)
 
 ## Findings
