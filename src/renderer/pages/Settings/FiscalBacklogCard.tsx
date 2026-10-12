@@ -1,7 +1,9 @@
-// Fiscal backlog — four steps, each started by the admin and each waiting for "Next":
+// Fiscal backlog — four steps (five with the merge setting), each started by the admin and each
+// waiting for "Next":
 //   1. classify   cash/Click-only receipts without marked goods → DISABLED (rule #1); list the rest
 //   2. repair     marking codes captured under a Russian layout; products REGOS will reject
 //   3. verify     every marking code against asl-belgisi; dead/missing ones → substitute product
+//   (group)       merge setting on: sort by tender, merge one day's cash receipts into one
 //   4. fiscalize  send what is left to REGOS:VCR
 // Every step recomputes from the database in the main process, so nothing here is authoritative:
 // leaving the screen mid-run is safe, and the main process refuses a second concurrent run.
@@ -14,15 +16,25 @@ import { Stepper } from "../../components/common/Stepper";
 import type {
   FiscalBacklogClassifyResult,
   FiscalBacklogFiscalizeResult,
+  FiscalBacklogGroupResult,
+  FiscalBacklogMergeSettings,
   FiscalBacklogProgress,
   FiscalBacklogRepairResult,
   FiscalBacklogStep,
+  FiscalBacklogSums,
   FiscalBacklogVerifyResult,
   FiscalQueueStatus,
 } from "@shared/types";
 import { translateMarkingStatus } from "../POS/markingCirculation";
 
 const STEPS: FiscalBacklogStep[] = ["classify", "repair", "verify", "fiscalize"];
+const STEPS_WITH_GROUP: FiscalBacklogStep[] = [
+  "classify",
+  "repair",
+  "verify",
+  "group",
+  "fiscalize",
+];
 
 /** Registry failures share their wording with the Marking Check screen. */
 const MARKING_ERRORS = new Set([
@@ -192,7 +204,13 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
   const [classify, setClassify] = useState<FiscalBacklogClassifyResult | null>(null);
   const [repair, setRepair] = useState<FiscalBacklogRepairResult | null>(null);
   const [verify, setVerify] = useState<FiscalBacklogVerifyResult | null>(null);
+  const [group, setGroup] = useState<FiscalBacklogGroupResult | null>(null);
   const [fiscalize, setFiscalize] = useState<FiscalBacklogFiscalizeResult | null>(null);
+
+  /** Merge old cash receipts (step "group"). Off until read: the four steps as before. */
+  const [merge, setMerge] = useState<FiscalBacklogMergeSettings>({ enabled: false, size: 100 });
+  const [sizeDraft, setSizeDraft] = useState("100");
+  const steps = merge.enabled ? STEPS_WITH_GROUP : STEPS;
 
   const [substitute, setSubstitute] = useState<PickedProduct | null>(null);
   const [subQuery, setSubQuery] = useState("");
@@ -237,6 +255,41 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
   }, [busyElsewhere, running, checkBusy, onChanged]);
 
   useEffect(() => window.electronAPI.fiscal.onBacklogProgress(setProgress), []);
+
+  // ── Merge setting (per till; changing it starts the stepper over, as its steps change) ──────
+  useEffect(() => {
+    window.electronAPI.fiscal
+      .getBacklogMerge()
+      .then((m) => {
+        setMerge(m);
+        setSizeDraft(String(m.size));
+      })
+      .catch(() => {});
+  }, []);
+
+  const saveMerge = async (input: Partial<FiscalBacklogMergeSettings>) => {
+    try {
+      const m = await window.electronAPI.fiscal.setBacklogMerge(input);
+      setMerge(m);
+      setSizeDraft(String(m.size));
+      reset();
+    } catch {
+      setSizeDraft(String(merge.size));
+    }
+  };
+
+  const money = (n: number) =>
+    n.toLocaleString(i18n.language === "uz" ? "uz-UZ" : "ru-RU", { maximumFractionDigits: 2 });
+
+  const sumsLine = (s: FiscalBacklogSums) => (
+    <Line $tone={s.fiscalizedAmount >= s.totalAmount ? "ok" : undefined}>
+      {t("fiscalSettings.backlog.sums", {
+        fiscalized: money(s.fiscalizedAmount),
+        total: money(s.totalAmount),
+        pct: s.totalAmount > 0 ? Math.floor((s.fiscalizedAmount / s.totalAmount) * 100) : 100,
+      })}
+    </Line>
+  );
 
   // ── Substitute product (saved straight away; it is a fiscal setting of this till) ──────────
   useEffect(() => {
@@ -292,6 +345,7 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
     setClassify(null);
     setRepair(null);
     setVerify(null);
+    setGroup(null);
     setFiscalize(null);
     setProgress(null);
   };
@@ -305,6 +359,7 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
       if (step === "classify") setClassify(await api.backlogClassify(fromDate));
       if (step === "repair") setRepair(await api.backlogRepair(fromDate));
       if (step === "verify") setVerify(await api.backlogVerify(fromDate));
+      if (step === "group") setGroup(await api.backlogGroup(fromDate));
       if (step === "fiscalize") setFiscalize(await api.backlogFiscalize(fromDate));
     } catch {
       const failed = { ok: false, error: "IPC" };
@@ -320,6 +375,7 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
           productIssues: [],
         });
       if (step === "verify") setVerify({ ...failed, checked: 0, disabled: 0, changes: [] });
+      if (step === "group") setGroup({ ...failed, groups: [] });
       if (step === "fiscalize") setFiscalize({ ...failed, fiscalized: 0, failed: [] });
     } finally {
       setRunning(false);
@@ -349,15 +405,16 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
     classify: !!classify?.ok,
     repair: !!repair?.ok,
     verify: !!verify?.ok,
+    group: !!group?.ok,
     fiscalize: !!fiscalize && fiscalize.failed.length === 0 && fiscalize.ok,
   };
 
-  const step = STEPS[current];
+  const step = steps[current];
   const blocked = running || !!busyElsewhere || !queue.enabled;
   const pct = progress?.total ? Math.round((progress.processed / progress.total) * 100) : 0;
 
   const next = () => {
-    if (current < STEPS.length - 1) setCurrent(current + 1);
+    if (current < steps.length - 1) setCurrent(current + 1);
     else setFinished(true);
   };
 
@@ -406,8 +463,40 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
         />
       </Row>
 
+      <Row>
+        <Label htmlFor="backlog-merge">
+          <input
+            id="backlog-merge"
+            type="checkbox"
+            checked={merge.enabled}
+            disabled={blocked}
+            onChange={(e) => void saveMerge({ enabled: e.target.checked })}
+          />{" "}
+          {t("fiscalSettings.backlog.merge")}
+        </Label>
+        {merge.enabled && (
+          <>
+            <Label htmlFor="backlog-merge-size">{t("fiscalSettings.backlog.mergeSize")}</Label>
+            <Input
+              id="backlog-merge-size"
+              type="number"
+              min={2}
+              max={1000}
+              style={{ width: 90 }}
+              value={sizeDraft}
+              disabled={blocked}
+              onChange={(e) => setSizeDraft(e.target.value)}
+              onBlur={() => {
+                if (Number(sizeDraft) !== merge.size) void saveMerge({ size: Number(sizeDraft) });
+              }}
+            />
+          </>
+        )}
+      </Row>
+      {merge.enabled && <Muted>{t("fiscalSettings.backlog.mergeHint")}</Muted>}
+
       <Stepper
-        steps={STEPS.map((s) => t(`fiscalSettings.backlog.steps.${s}`))}
+        steps={steps.map((s) => t(`fiscalSettings.backlog.steps.${s}`))}
         current={current}
         finished={finished}
       />
@@ -465,6 +554,7 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
             <BarOuter>
               <BarInner $pct={pct} />
             </BarOuter>
+            {progress.sums && sumsLine(progress.sums)}
             {step === "fiscalize" && <Row>{stopButton}</Row>}
           </>
         )}
@@ -618,6 +708,34 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
           </>
         )}
 
+        {step === "group" && group && (
+          <>
+            {errorLine(group)}
+            {group.ok && (
+              <>
+                <Line $tone="ok">
+                  <CheckCircle size={16} />
+                  {t("fiscalSettings.backlog.groupDone")}
+                </Line>
+                <List>
+                  {group.groups.map((g) => (
+                    <div key={g.tender}>
+                      {t("fiscalSettings.backlog.groupLine", {
+                        tender: t(`fiscalSettings.backlog.tender.${g.tender}`),
+                        receipts: g.receipts,
+                        amount: money(g.amount),
+                        batches: g.batches,
+                        singles: g.singles,
+                      })}
+                    </div>
+                  ))}
+                </List>
+                {group.sums && sumsLine(group.sums)}
+              </>
+            )}
+          </>
+        )}
+
         {step === "fiscalize" && fiscalize && (
           <>
             {errorLine(fiscalize)}
@@ -628,6 +746,10 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
                 failed: fiscalize.failed.length,
               })}
             </Line>
+            {(fiscalize.batches ?? 0) > 0 && (
+              <Muted>{t("fiscalSettings.backlog.batchesSent", { count: fiscalize.batches })}</Muted>
+            )}
+            {fiscalize.sums && sumsLine(fiscalize.sums)}
             {fiscalize.stopped && (
               <Line $tone="warn">
                 <AlertTriangle size={16} />
@@ -663,7 +785,7 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
           )}
           {!finished && (
             <Button variant="primary" onClick={next} disabled={running || !stepDone[step]}>
-              {current === STEPS.length - 1
+              {current === steps.length - 1
                 ? t("fiscalSettings.backlog.finish")
                 : t("fiscalSettings.backlog.next")}
             </Button>

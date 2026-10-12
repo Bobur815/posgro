@@ -32,7 +32,11 @@ import { lookupMxikByBarcode, getMxikPackages } from "../fiscal/tasnif";
 import { assertNotSatellite } from "../lan/satellite-guard";
 import { getMainLinkStatus, onMainLinkStatus } from "../lan/main-link";
 import { isSatellite } from "../lan/role";
-import { isSatelliteOwnSetting } from "../sync/local-only-settings";
+import {
+  RECEIPT_LAYOUT_SETTINGS,
+  SATELLITE_OWN_RECEIPT,
+  isSatelliteOwnSetting,
+} from "../sync/local-only-settings";
 
 /** Host probed by `app:isOnline` when the caller names none. */
 const DEFAULT_ONLINE_PROBE_URL = "https://pos.bobur-dev.uz";
@@ -784,6 +788,14 @@ function setupSettingsHandlers(): void {
       update: { value },
       create: { key, value },
     });
+    // A satellite's own receipt layout: from now on its main's stops overwriting it on the pull.
+    if (RECEIPT_LAYOUT_SETTINGS.has(key) && (await isSatellite())) {
+      await prisma.systemSetting.upsert({
+        where: { key: SATELLITE_OWN_RECEIPT },
+        update: { value: "true" },
+        create: { key: SATELLITE_OWN_RECEIPT, value: "true" },
+      });
+    }
     if (key === "printer_name") {
       setPrinterConfig({ name: value });
     }

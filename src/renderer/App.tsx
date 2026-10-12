@@ -183,9 +183,8 @@ function App() {
           path="settings/receipt"
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
-              <MainOnlyGuard>
-                <ReceiptSettings />
-              </MainOnlyGuard>
+              {/* Open on a satellite too: it may keep its own receipt layout. */}
+              <ReceiptSettings />
             </RoleGuard>
           }
         />

@@ -280,7 +280,9 @@
     "uzqrPaidButSaleFailed": "To'lov o'tdi, lekin chek yaratilmadi. Administratorga xabar bering.",
     "markingCodeOutOfCirculation": "«{{name}}» markirovka kodi muomaladan chiqarilgan ({{status}}): sotuv o'tadi, lekin chek tahrirlanmaguncha fiskallashtirilmaydi",
     "outOfCirculationBadge": "Muomaladan chiqarilgan {{status}} — chek fiskallashtirilmaydi",
-    "fiscalBlocked": "markirovka bloklagan: {{count}}"
+    "fiscalBlocked": "markirovka bloklagan: {{count}}",
+    "mergedReceipt": "Birlashtirilgan",
+    "mergedNoRefund": "Chek eski cheklarni fiskallashtirishda boshqalari bilan birlashtirilgan — qaytarish va dublikat mumkin emas"
   },
   "reconciliation": {
     "title": "Audit",
@@ -713,19 +715,22 @@
         "classify": "Saralash",
         "repair": "Tuzatish",
         "verify": "Markirovka",
-        "fiscalize": "Fiskallashtirish"
+        "fiscalize": "Fiskallashtirish",
+        "group": "Birlashtirish"
       },
       "about": {
         "classify": "Faqat naqd yoki Click bilan to'langan va markirovkali tovarsiz cheklar fiskallashtirish talab qilinmaydi deb belgilanadi va boshqa qayta ishlanmaydi. Qolganlari keyingi bosqichlarga o'tadi.",
         "repair": "Rus klaviatura tartibida o'qilgan markirovka kodlarini tuzatadi. Tovarda MXIK bo'lmasa, uni tasnif.soliq.uz'dan shtrix-kod bo'yicha topib, tovarga saqlaydi (markirovkali tovarlar uchun qadoq kodi bilan).",
         "verify": "Har bir markirovka kodini Asl-Belgisi'da tekshiradi. Naqd/Click chek: faqat kodi haqiqiy markirovkali pozitsiyalar yuboriladi; bunday pozitsiya bo'lmasa — chek fiskallashtirilmaydi. Karta/UzQR chek: kodi haqiqiy bo'lmagan yoki skanerlanmagan pozitsiya xuddi shu summada almashtiruvchi tovar sifatida yuboriladi. Savdo tarixi va qoldiqlar o'zgarmaydi.",
-        "fiscalize": "Tayyorlangan cheklarni REGOS:VCR'ga birma-bir yuboradi."
+        "fiscalize": "Tayyorlangan cheklarni REGOS:VCR'ga birma-bir yuboradi.",
+        "group": "Qolgan cheklarni to'lov turi bo'yicha saralaydi. Bir kunlik naqd/Click cheklar bitta fiskal chekka birlashtiriladi (belgilangan sonigacha). Karta, UzQR va aralash to'lovli cheklar birma-bir yuboriladi. Birlashtirilgan cheklarni qaytarib bo'lmaydi."
       },
       "run": {
         "classify": "Cheklarni saralash",
         "repair": "Ma'lumotlarni tuzatish",
         "verify": "Markirovkani tekshirish",
-        "fiscalize": "Fiskallashtirish"
+        "fiscalize": "Fiskallashtirish",
+        "group": "Cheklarni guruhlash"
       },
       "running": "Bajarilmoqda…",
       "next": "Keyingi",
@@ -756,7 +761,8 @@
         "UNKNOWN_STATUS": "Asl-Belgisi noma'lum «{{status}}» holatini qaytardi — tekshiruv to'xtatildi",
         "VCR_UNREACHABLE": "Virtual kassa mavjud emas — qayta ishlash to'xtatildi",
         "IPC": "Bosqichni bajarib bo'lmadi",
-        "NOT_ENTITLED": "Eski cheklarni qayta ishlash xizmati bu do'kon uchun ulanmagan"
+        "NOT_ENTITLED": "Eski cheklarni qayta ishlash xizmati bu do'kon uchun ulanmagan",
+        "MERGE_OFF": "Cheklarni birlashtirish o'chirilgan"
       },
       "mxikCleaned": "Tovarlarning MXIK kodidan bo'sh joylar olib tashlandi: {{count}}",
       "mxikFilled": "MXIK tasnif.soliq.uz'dan topilib, tovarlarga saqlandi: {{count}}",
@@ -770,7 +776,19 @@
       "stop": "To'xtatish",
       "stopping": "To'xtatilmoqda…",
       "stoppingAfter": "#{{receipt}} chekdan keyin to'xtatiladi…",
-      "stoppedLeft": "Qo'lda to'xtatildi. Qolgan cheklar: {{remaining}} — davom etish uchun «Fiskallashtirish»ni bosing."
+      "stoppedLeft": "Qo'lda to'xtatildi. Qolgan cheklar: {{remaining}} — davom etish uchun «Fiskallashtirish»ni bosing.",
+      "tender": {
+        "CASH": "Naqd / Click",
+        "CARD": "Karta va boshqalar",
+        "UZQR": "UzQR"
+      },
+      "groupLine": "{{tender}}: {{receipts}} ta chek, {{amount}} — {{batches}} ta fiskal chekka birlashtirildi, birma-bir: {{singles}}",
+      "groupDone": "Cheklar guruhlandi.",
+      "sums": "Fiskallashtirildi: {{fiscalized}} / {{total}} ({{pct}}%)",
+      "batchesSent": "Birlashtirilgan fiskal cheklar: {{count}}",
+      "merge": "Eski naqd cheklarni birlashtirish",
+      "mergeSize": "Bitta fiskal chekdagi cheklar soni",
+      "mergeHint": "Fiskallashtirishdan oldin «Birlashtirish» bosqichini qo'shadi. Faqat bir kunlik naqd/Click cheklar birlashtiriladi; ularni qaytarib bo'lmaydi."
     },
     "duplicateCodes": {
       "title": "Bir nechta qadoq uchun bitta markirovka kodi bilan yuborilgan cheklar: {{count}}",
@@ -1432,7 +1450,8 @@
     "showStoreAddress": "Do'kon manzili",
     "showStorePhone": "Do'kon telefoni",
     "showStoreStir": "Do'kon STIR raqami",
-    "showPayment": "To'lov turi"
+    "showPayment": "To'lov turi",
+    "satelliteOwn": "Bu yordamchi kassa: saqlangandan so'ng u chekni o'z sozlamalari bo'yicha chop etadi va asosiy kassadagi o'zgarishlar unga endi qo'llanilmaydi."
   },
   "printer": {
     "availablePrinters": "Mavjud printerlar",

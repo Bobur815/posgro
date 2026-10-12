@@ -1,3 +1,5 @@
+import { RECEIPT_SHOW_KEYS } from '../../shared/receipt-html';
+
 /**
  * System-setting keys that never cross the wire in either direction.
  *
@@ -50,6 +52,10 @@ export const LOCAL_ONLY_SETTINGS = new Set([
   // Syncing it lets another terminal's blob overwrite the local row, after which decryption
   // throws and the cashier password silently resolves to ''.
   'regos_vcr_password_enc',
+  // Whether this till's fiscal backlog merges old cash receipts, and how many per REGOS receipt
+  // (fiscal/regos-vcr-service.ts, step "group"). A choice made at the till that runs the backlog.
+  'regos_vcr_backlog_merge',
+  'regos_vcr_backlog_merge_size',
 
   // ── LAN credentials (tasks/LAN_MAIN_TERMINAL_PLAN.md) ──
   // The key this main signs LAN tokens with, and a satellite's device secret. Either one leaving
@@ -93,7 +99,40 @@ export const SATELLITE_MACHINE_SETTINGS = new Set([
   'price_tag_templates',
 ]);
 
-/** Whether a satellite owns this setting itself, rather than taking its main's. */
+/**
+ * The receipt layout (Settings → Receipt). A satellite may set its own; until it does, it follows
+ * its main's like any store setting, so a newly paired satellite prints the store's receipt.
+ */
+export const RECEIPT_LAYOUT_SETTINGS = new Set<string>([
+  'receipt_width',
+  'receipt_language',
+  'receipt_header',
+  'receipt_footer',
+  'receipt_logo_top',
+  'receipt_logo_top_size',
+  'receipt_logo_bottom',
+  'receipt_logo_bottom_size',
+  ...RECEIPT_SHOW_KEYS,
+]);
+
+/** 'true' on a satellite once its own receipt layout was saved: its main's no longer overwrites it. */
+export const SATELLITE_OWN_RECEIPT = 'satellite_own_receipt';
+
+/** Whether a satellite may write this setting itself (the `settings:set` guard). */
 export function isSatelliteOwnSetting(key: string): boolean {
-  return LOCAL_ONLY_SETTINGS.has(key) || SATELLITE_MACHINE_SETTINGS.has(key);
+  return (
+    LOCAL_ONLY_SETTINGS.has(key) ||
+    SATELLITE_MACHINE_SETTINGS.has(key) ||
+    RECEIPT_LAYOUT_SETTINGS.has(key) ||
+    key === SATELLITE_OWN_RECEIPT
+  );
+}
+
+/**
+ * Whether a satellite's pull from its main skips this key. The receipt layout is skipped only once
+ * the satellite has its own (`ownReceipt`); before that it takes the main's.
+ */
+export function satelliteKeepsOnPull(key: string, ownReceipt: boolean): boolean {
+  if (RECEIPT_LAYOUT_SETTINGS.has(key)) return ownReceipt;
+  return isSatelliteOwnSetting(key);
 }

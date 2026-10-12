@@ -1,3 +1,165 @@
+# Receipt settings on a satellite till (2026-10-12), branch feat/satellite-receipt-settings (from dev). Option 1 chosen by user: the satellite keeps its own layout; done 1.38.1
+
+## Outcome
+- `RECEIPT_LAYOUT_SETTINGS` (receipt_width/language/header/footer/logos/sizes + RECEIPT_SHOW_KEYS) are writable on a
+  satellite (`isSatelliteOwnSetting`). Saving one sets `satellite_own_receipt=true` (main process, `settings:set`).
+- Pull from the main (`syncSettings`): receipt keys are taken from the main **until** that flag is set, then skipped
+  (`satelliteKeepsOnPull`). So a new or untouched satellite still prints the store layout; one that saved its own keeps it.
+  Deviation from the plain "add to SATELLITE_MACHINE_SETTINGS" (that would have skipped them from the first pull).
+- Route `/settings/receipt` no longer behind MainOnlyGuard; Settings tile shown on satellites; notice on the page (ru/uz).
+- Not in SATELLITE_MACHINE_SETTINGS, so a takeover (satellite → main) keeps the old main's store layout. No way back to
+  "follow the main" from the UI yet (delete `satellite_own_receipt` on the till).
+- Tests: local-only-settings +5 (red 1/27). POS compile OK. Not seen on a real satellite.
+
+# Fiscal backlog: new step "group" between verify and fiscalise — sort by tender, merge 100 receipts into 1 (2026-10-12), branch feat/backlog-merge (from dev). Approved 2026-10-12 (all defaults); done 1.38.0, not merged
+
+## Outcome (2026-10-12, POS 1.38.0) — commits 8d2cbc5..482017f on feat/backlog-merge
+- Deviation: **no `fiscal_batches` table**. The batch id lives on each sale (`sales.fiscal_batch_id`, `batch:<uuid>`,
+  or `single` after a rejected batch fell back); status and REGOS fields are per sale as before. Migration 41 = two
+  nullable columns + index.
+- Deviation: batches already assigned are sent merged **even with the setting off** (their code may already be on the
+  device). Turning it off only stops new batches. Also every fiscalisation path (live retry, shift-close sweep) first
+  asks the device for the sale's batch code and adopts the merged receipt if it is there — no double fiscalisation.
+- Merged payload: each member's own positions (verify plan, discounts settled per sale) concatenated; one cash payment =
+  sum of lines. Batch check `adoptRegisteredBatch` before and after a failed send. The marking circulation gate is not
+  run on a merged receipt (step 3 has just checked every code).
+- Setting: `regos_vcr_backlog_merge` + `_size` (LOCAL_ONLY), checkbox + size on the card itself; IPC
+  `fiscal:get/setBacklogMerge`, `fiscal:backlogGroup` (license-gated, audit `FISCAL_BACKLOG_GROUP`).
+- `fiscal_sent_tiyin` written on every successful fiscalisation (live too), so the sums are exact from now on.
+- Sales history: merged sales show "· Birlashtirilgan/Объединён", refund/duplicate/delete hidden; main refuses with
+  `MERGED_RECEIPT` anyway.
+- Tests: shared planner + sums (red 4/41), legacy upgrade (red 18/18 file), service (red 6/36: merge send, partial
+  sums, fallback, adoption incl. retrySale, unreachable, refund guard). Lint, tsc, POS compile OK.
+- Not verified: real VCR (REGOS's limit on positions per receipt is unknown — start with a small size, e.g. 5), card on
+  screen.
+
+## Changes (user, 2026-10-12) — override the design below where they differ
+- **Only cash receipts are merged** (cash/Click-only, incl. the partial marked-only ones). Card, UzQR (with or without
+  `payment_id`) and split-tender receipts are only sorted into their group and go out **one by one, as today**.
+  Old Q1, Q2 dropped.
+- **No refund for merged cash sales** (the admin merges old receipts; nobody refunds them). Refund and fiscal duplicate
+  are refused for a sale with `fiscal_batch_id`, and the refund button is hidden for it in the receipt UI. Old Q5 dropped.
+- **Sum readout "fiscalised / total"**:
+  - `total` = sum of `finalAmount` of every kept receipt from `fromDate` (after classify/verify, i.e. what still had
+    to be fiscalised, DISABLED excluded) — Q-A.
+  - `fiscalised` = sum of what REGOS actually received for those receipts (payments sent, tiyin → UZS). For a partial
+    cash receipt that is only its valid marked lines, so fiscalised < total is expected there.
+  - Shown on step "group" (per group: receipts, batches, sum) and on step 4: live during the run
+    (`FiscalBacklogProgress.fiscalizedAmount?`, `totalAmount?`) and in the result
+    (`FiscalBacklogFiscalizeResult.fiscalizedAmount?`, `totalAmount?`, additive). Format
+    `12 345 000 / 15 000 000 so'm (82%)`.
+  - Computed with integer tiyin, no float money math. Recomputed from the DB on each run, so a second run after Stop
+    still shows the cumulative figure (it counts sales FISCALIZED from `fromDate`, not just this run) — Q-B.
+  - Needs the amount sent per sale: new nullable `sales.fiscal_sent_tiyin INTEGER` in Migration 41, written on success
+    (single and batch; for a batch each sale gets its own share). Older FISCALIZED sales without it count as
+    `finalAmount`.
+
+### Open questions after the change
+- Q-A. `total` = only receipts still kept for fiscalisation (my default), or every sale from `fromDate` including the
+  ones rule #1 DISABLED and the ones already fiscalised before the run?
+- Q-B. `fiscalised` cumulative from `fromDate` (my default) or only this run?
+- Still open from below: Q3 (day boundaries), Q4 (rejected batch → one by one), Q6 (flag, src/shared, Migration 41),
+  Q7 (batch size setting + positions cap).
+
+## Findings
+- Card: `src/renderer/pages/Settings/FiscalBacklogCard.tsx`, `STEPS = classify, repair, verify, fiscalize`; each step
+  is one IPC call that recomputes from SQLite (`loadBacklog`), results typed in `src/shared/types/fiscal.types.ts`
+  (`FiscalBacklogStep` union, `Fiscal*Result`), progress via `fiscal:backlogProgress`, one step at a time
+  (`withBacklogLock`).
+- Service: `src/main/fiscal/regos-vcr-service.ts` — `backlogVerify` (:1552) writes the per-line plan to
+  `sales.fiscal_substitutions`; `backlogFiscalize` (:1686) sends kept receipts **one by one** through
+  `fiscalizeSale` → `fiscalizeSaleImpl` (:909). One Receipt.Sale per sale, `code: sale.id` = idempotency key, and
+  `tryRecoverByCode` adopts a receipt REGOS already holds.
+- Builders are per sale and reusable: `buildPositions` (honours the verify plan: omit / substitute, per-line
+  discount, VAT, labels) and `paymentsFor` / `buildPayments` / `buildSplitPayments` (cash+Click → type 1, card +
+  plain UzQR → type 2, REGOS-backed UzQR → `payment_id` **alone; one per receipt, never reusable**).
+- After success each sale stores `regosReceiptId / FiscalSign / QrCodeUrl / TerminalID / ReceiptNo / FiscalAt` and
+  `fiscalSynced=false` → `fiscal-status-sync` uploads per sale. PG has no unique constraint on these fields, so
+  100 sales sharing one fiscal receipt sync fine — **no server change**.
+- **Danger:** `refundSale` (:1134) does a *full* refund by the stored QR URL, and `printDuplicate` prints by
+  `regosReceiptId`. On a merged sale, refunding one customer's receipt would refund all 100.
+- Grouping keys already exist: `isCashOrClickOnly` / `maySkipFiscalisation` (`shared/utils/fiscal-backlog.ts`),
+  `paymentMethod`, `payments[]`, `regosPaymentId`.
+- SQLite migrations go to 40; POS is 1.37.1. Rule #1 memory: cash/Click receipts here are already partial (only
+  valid marked lines); card/UzQR are full.
+- REGOS limits on positions / labels per Receipt.Sale are not documented in the repo (skill `regos-vcr` is silent).
+
+## Design (pending answers)
+### Flag
+- Per-till setting `regos_vcr_backlog_merge` (in `LOCAL_ONLY_SETTINGS`), **default off** → the card shows the 4 steps
+  and step 4 sends one receipt per sale, exactly as today. On → 5 steps: classify, repair, verify, **group**,
+  fiscalise. Checkbox in Fiscal settings (ru/uz).
+
+### Data (SQLite only, additive — Migration 41, unconditional `IF NOT EXISTS`, legacy-upgrade test)
+- `fiscal_batches`: `id TEXT PK` (sent as Receipt.Sale `code` → retry / lost response recovers by code),
+  `tender TEXT` (`CASH` | `CARD` | `UZQR`), `created_at`, `status` (`PLANNED` | `FISCALIZED` | `FAILED`), `error`,
+  `sale_count`, `total_tiyin`, REGOS result fields.
+- `sales.fiscal_batch_id TEXT NULL`. Sale history and stock untouched; only the payload changes (rule #1).
+- No PostgreSQL change, no server change.
+
+### Step "group" (main: `backlogGroup(fromDate)`)
+- Reads the kept receipts after verify (same `loadBacklog` filter), skips ones already FISCALIZED/DISABLED.
+- Sort: CASH = cash/Click only (incl. partial marked-only); CARD = card + split tenders; UZQR = UzQR. Only CASH is
+  batched; CARD and UZQR are listed (count + sum) and sent singly in step 4.
+- CASH: oldest first, chunks of **100** (Q3 boundaries, Q7 size). Re-running replaces PLANNED batches only;
+  FISCALIZED ones are never touched. Stale plan (verify re-run) → batches rebuilt.
+- Pure planner `planBacklogBatches(rows, size)` in `src/shared/utils/fiscal-backlog.ts` (or `src/main/fiscal/` if
+  src/shared is not OK) — unit-tested.
+- Result: per tender `{ receipts, batches, total }` + singles count; card shows a table (cash / card / uzqr / single).
+
+### Step 4 with batches
+- Batches first, then singles via today's path. `fiscalizeBatch(batchId)` inside `runExclusive`: `buildPositions` per
+  sale (plan respected) → concat; payments = sum per type over the sales' `paymentsFor` (cash type 1, card type 2).
+  Receipt-level discount stays per position (already settled per sale).
+- Success → one transaction: batch FISCALIZED + every sale `FISCALIZED`, same REGOS fields, `fiscalSynced=false`.
+- Failure → recovery by code first (as today), then Q4. Unreachable VCR → stop, batch stays PLANNED.
+- Stop button, progress (`processed` = batches + singles), `remaining` work as today.
+- Live sales, `processPending`, manual retry: unchanged (merging only ever happens in the backlog run).
+
+### Refund / duplicate guard
+- `refundSale` / `printDuplicate` on a sale with `fiscal_batch_id` → refused (ru/uz message); refund button hidden for
+  it. Receipt details shows "merged into fiscal receipt №X with N receipts" (user: merged cash sales are never refunded).
+
+### Shared types (additive, needs your OK)
+- `FiscalBacklogStep` += `"group"`; new `FiscalBacklogGroupResult`; `FiscalBacklogFiscalizeResult.batches?: number`.
+- IPC `fiscal:backlogGroup` → preload `fiscal.backlogGroup()` → card (`STEPS` built from the flag).
+- i18n ru + uz: `steps.group`, `about.group`, `run.group`, `groupDone`, tender names, refund-blocked text, setting.
+
+## N-1 / offline / modes
+- POS-only feature on data that already exists; no API field, endpoint or status value added (FISCALIZED as today).
+  Old server receives the same per-sale fiscal sync.
+- Fully offline until step 4, which needs the VCR as today. Backlog runs only on a main till (satellites don't fiscalise).
+- ONLINE and OFFLINE_ONLY stores: fiscalisation lives in the POS main process in both → same path; check both.
+- Flag off = byte-identical behaviour (test asserts step 4 call sequence unchanged).
+
+## Steps
+- [ ] 1. Migration 41 (`fiscal_batches`, `sales.fiscal_batch_id`, `sales.fiscal_sent_tiyin`) + `schema.sqlite.prisma` + `legacy-upgrade.test.ts` case; `prisma:generate:sqlite`. Red proof.
+- [ ] 2. Pure planner + tests (sorting per tender, only CASH batched, 100 boundary, card/UzQR/split stay single, rebuild
+      leaves FISCALIZED alone) + pure sum helper (tiyin, fiscalised/total, fallback to finalAmount). Red proof.
+- [ ] 3. `backlogGroup` + `fiscalizeBatch` + step 4 branching + refund/duplicate guard; tests in
+      `regos-vcr-service.backlog.test.ts` with a mocked VCR: 250 cash → 3 batches, one Receipt.Sale per batch, payments sum
+      to the sales, all sales FISCALIZED with shared fields; retry recovers by batch id; failure path per Q4; flag off →
+      unchanged; refund of a merged sale refused; card/UzQR sent singly; `fiscal_sent_tiyin` written and the
+      fiscalised/total sums correct for full + partial cash receipts. Red proof.
+- [ ] 4. Shared types, IPC, preload, ipc-client, card step + result table, setting checkbox, receipt-details line, i18n ru/uz.
+- [ ] 5. `npm version minor --no-git-tag-version` → 1.38.0, `/check`, `npx cross-env APP_MODE=pos electron-vite build`.
+- [ ] 6. Commits per concern; merge to dev; **you** test on a till with a real VCR (start with a small batch, see Q7),
+      then `deploy:pos` (yours).
+
+## Rollout / rollback
+- No server deploy needed. Installer only, flag off by default — tills behave as today until you tick it.
+- Rollback: untick the flag → step disappears, step 4 sends singles. PLANNED batches are ignored when the flag is off
+  (sales still non-FISCALIZED, picked up singly). Already merged receipts stay fiscalised (correct; refunds stay guarded).
+
+## Open questions
+1. ~~Split tenders~~ — dropped: only cash is merged; split goes to CARD, sent singly.
+2. ~~UzQR~~ — dropped: UzQR is sent singly.
+3. Batch boundaries: 100 in order regardless of date, or never mix calendar days / shifts in one batch (my default: never cross a day)?
+4. REGOS rejects a merged receipt: fall back to sending its sales one by one in the same run (my default), or mark the batch FAILED and move on?
+5. ~~Refund~~ — decided: no refund for merged cash sales (refused + button hidden).
+6. Flag (per-till setting, default off, step hidden) OK, and OK to touch `src/shared` (additive types, maybe the planner) + SQLite Migration 41?
+7. REGOS's max positions/labels per receipt is unknown and 100 receipts can be 1000+ lines: fixed 100, or a setting (default 100) plus a positions cap that splits a batch early (my default: setting + cap 500 positions)?
+
 # Telegram bot: Uzbek only for store admins — messages and log alerts (2026-10-12), branch feat/telegram-uz (from dev). Todo #6. Approved 2026-10-12: admins + cashiers only, picker removed for them
 
 ## Findings
