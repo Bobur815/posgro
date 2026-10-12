@@ -18,10 +18,11 @@ import {
   CheckCircle,
   ShieldCheck,
   HandCoins,
+  PackageX,
 } from "lucide-react";
 import { SyncButton } from "../common/SyncButton";
 import { useAuthStore } from "../../store/auth-store";
-import { useAdminLocked, useCashierOnly, useModeStore } from "../../store/mode-store";
+import { useAdminLocked, useCashierOnly, useModeStore, useOfflineMain } from "../../store/mode-store";
 import { useSidebar } from "../../context/SidebarContext";
 import { useSync } from "../../hooks/useSync";
 import { APP_BAR_HEIGHT } from "./AppBar";
@@ -216,6 +217,7 @@ export function Sidebar() {
   const isAdmin = user?.role === "ADMIN";
   const adminLocked = useAdminLocked();
   const cashierOnly = useCashierOnly();
+  const offlineMain = useOfflineMain();
   const isSatellite = useModeStore((s) => s.isSatellite);
   // See AppBar: an OFFLINE_ONLY store has no server to sync with. The whole status line goes with
   // the button — a permanent "not synced" is worse than saying nothing, because it reads as a
@@ -307,6 +309,8 @@ export function Sidebar() {
                   machine's own config. A cashier-only store still lists its suppliers, read-only. */}
               {!adminLocked &&
                 renderNavItem("/products/stock", ClipboardList, t("nav.inventory"))}
+              {/* Write-offs are made here only where this terminal owns the stock. */}
+              {offlineMain && renderNavItem("/write-offs", PackageX, t("nav.writeOffs"))}
               {(!adminLocked || cashierOnly) &&
                 renderNavItem("/suppliers", Truck, t("suppliers.title"))}
               {/* Debts are this shop's own book — they exist whether or not the store keeps its

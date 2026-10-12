@@ -153,6 +153,15 @@ export const labelPrinter = {
   print: (req: unknown) => ipc?.labelPrinter.print(req),
 };
 
+/** Write-offs (expired / damaged / other) — OFFLINE_ONLY store, admin only. */
+export const writeOffs = {
+  list: (filters?: Parameters<NonNullable<typeof ipc>['writeOffs']['list']>[0]) =>
+    ipc?.writeOffs.list(filters),
+  get: (id: string) => ipc?.writeOffs.get(id),
+  create: (data: Parameters<NonNullable<typeof ipc>['writeOffs']['create']>[0]) =>
+    ipc?.writeOffs.create(data),
+};
+
 export const app = {
   getVersion: () => ipc?.app.getVersion(),
   getTerminalId: () => ipc?.app.getTerminalId(),
