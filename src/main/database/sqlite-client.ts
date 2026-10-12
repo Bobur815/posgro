@@ -1061,6 +1061,41 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   if (!(await columnExists(prisma, 'sales', 'marking_block'))) {
     await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN marking_block TEXT`;
   }
+
+  // Migration 40: write-offs outside a stocktake (expired / damaged / other), for an OFFLINE_ONLY
+  // store — from the POS page or the dashboard its terminal serves. Local only, never synced.
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS write_offs (
+      id              TEXT PRIMARY KEY,
+      number          INTEGER NOT NULL UNIQUE,
+      reason          TEXT NOT NULL,
+      note            TEXT,
+      created_by_id   TEXT NOT NULL,
+      created_by_name TEXT NOT NULL,
+      total_items     INTEGER NOT NULL DEFAULT 0,
+      total_value     DECIMAL NOT NULL DEFAULT 0,
+      created_at      DATETIME NOT NULL DEFAULT (datetime('now'))
+    )
+  `;
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_write_offs_created ON write_offs(created_at)`;
+
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS write_off_items (
+      id              TEXT PRIMARY KEY,
+      write_off_id    TEXT NOT NULL,
+      product_id      INTEGER NOT NULL,
+      product_name    TEXT NOT NULL,
+      product_name_uz TEXT NOT NULL,
+      barcode         TEXT NOT NULL,
+      unit            TEXT NOT NULL,
+      quantity        DECIMAL NOT NULL,
+      cost            DECIMAL,
+      FOREIGN KEY (write_off_id) REFERENCES write_offs(id) ON DELETE CASCADE
+    )
+  `;
+  await prisma.$executeRaw`CREATE UNIQUE INDEX IF NOT EXISTS idx_write_off_items_unique ON write_off_items(write_off_id, product_id)`;
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_write_off_items_write_off ON write_off_items(write_off_id)`;
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_write_off_items_product ON write_off_items(product_id)`;
 }
 
 /** True if `column` exists on `table` — silent (no thrown query, no prisma:error log). */

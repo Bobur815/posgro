@@ -264,6 +264,7 @@ model Product {
   inventoryMovements  InventoryArrival[]
   preWeighedItems     PreWeighedItem[]
   inventoryCountItems InventoryCountItem[]
+  writeOffItems       WriteOffItem[]
 
   @@index([mxik]) // Fast MXIK lookup
   @@map("products")
@@ -645,4 +646,49 @@ model InventoryCountItem {
   @@index([countId])
   @@index([countId, barcode])
   @@map("inventory_count_items")
+}
+
+/// Goods removed from stock outside a stocktake (expired / damaged / other) — the till copy of
+/// the server model, for an OFFLINE_ONLY store, which never syncs. Posted on save, no undo.
+/// Created in place on existing tills by the unconditional schema setup in sqlite-client.ts.
+model WriteOff {
+  id     String @id @default(cuid())
+  number Int    @unique // human-readable doc №, sequential
+
+  reason String  // EXPIRY | DAMAGE | OTHER
+  note   String? // required when reason = OTHER
+
+  createdById   String @map("created_by_id")
+  createdByName String @map("created_by_name") // denormalized for the list
+
+  totalItems Int     @default(0) @map("total_items")
+  totalValue Decimal @default(0) @map("total_value") // at cost
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  items WriteOffItem[]
+
+  @@index([createdAt])
+  @@map("write_offs")
+}
+
+model WriteOffItem {
+  id         String   @id @default(cuid())
+  writeOffId String   @map("write_off_id")
+  writeOff   WriteOff @relation(fields: [writeOffId], references: [id], onDelete: Cascade)
+
+  productId Int     @map("product_id")
+  product   Product @relation(fields: [productId], references: [id])
+
+  productName   String   @map("product_name") // nameRu
+  productNameUz String   @map("product_name_uz")
+  barcode       String
+  unit          String
+  quantity      Decimal  // positive: how much left stock
+  cost          Decimal? // unit cost at the time; null when unknown
+
+  @@unique([writeOffId, productId])
+  @@index([writeOffId])
+  @@index([productId])
+  @@map("write_off_items")
 }
