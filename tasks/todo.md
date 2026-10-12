@@ -1,3 +1,50 @@
+# Fiscal backlog step 4: Stop button that stops after the current receipt (2026-10-12), branch feat/backlog-stop (from dev). Todo #2. Approved 2026-10-12 (shared fields OK)
+
+## Findings
+- Step 4 = `regosVcrService.backlogFiscalize(fromDate, onProgress)` (`src/main/fiscal/regos-vcr-service.ts:1676`):
+  behind `withBacklogLock` (one step at a time, `backlogBusy()`), loops over the kept receipts one by one: reset to
+  PENDING (conditional) → `fiscalizeSale` → read the status back. It already breaks early when the VCR stops
+  answering (`unreachable`). Progress goes to the screen over `fiscal:backlogProgress`.
+- The card (`src/renderer/pages/Settings/FiscalBacklogCard.tsx`) shows "running" + progress + current receipt №,
+  and a remounted screen sees a run in progress through `backlogBusy()` (`busyElsewhere`).
+- Result type `FiscalBacklogFiscalizeResult` lives in `src/shared/types/fiscal.types.ts`.
+
+## Design
+- Service: `private backlogStopRequested = false`; `requestBacklogStop(): boolean` sets it only while step 4 runs
+  (returns false otherwise). The flag is cleared when a run starts. The loop checks it **at the top of each
+  iteration**, before the next receipt is reset to PENDING — so the receipt being fiscalised always finishes and
+  is counted, and nothing after it is touched. Then `result.stopped = true`, `result.remaining = total − processed`.
+- `src/shared/types/fiscal.types.ts`: `stopped?: boolean; remaining?: number` on the result (optional, additive).
+- IPC `fiscal:backlogStop` → preload `fiscal.backlogStop()` (admin, like the other backlog calls).
+- Card: while step 4 runs (here, or `busyElsewhere === 'fiscalize'` after a remount) a **Stop** button next to
+  the progress. Pressed → disabled "Stopping after receipt #N…". Result line when stopped: "Stopped: X fiscalised,
+  Y failed, Z left — press Run to continue" (ru + uz). Running step 4 again simply picks up the rest (it
+  recomputes from the database).
+- Steps 1–3 unchanged (the todo is step 4 only).
+- No server, schema or sync change; N-1 not affected. POS 1.37.0 (feature).
+
+## Steps
+1. Service flag + check + result fields; tests in `regos-vcr-service.backlog.test.ts`: stop during receipt 1 →
+   receipt 1 fiscalised and counted, receipts 2..n untouched (not reset to PENDING), `stopped` + `remaining`; stop
+   when nothing runs → false; next run starts with the flag cleared. Prove red first.
+2. IPC + preload + card button/state + i18n ru/uz.
+3. Bump 1.37.0, `/check`, POS compile. Commit per concern; you test on a till with a real VCR.
+
+## Outcome (2026-10-12, POS 1.37.0)
+- `regos-vcr-service.ts`: `requestBacklogStop()` (true only while step 4 runs) + `backlogStopRequested`, cleared when
+  a run starts and when it ends; checked at the top of each iteration. Result `stopped` / `remaining` (also set
+  when the VCR goes quiet). `fiscal.types.ts`: two optional fields (approved).
+- IPC `fiscal:backlogStop` (mainOnly, not license-gated: stopping costs nothing) → preload `fiscal.backlogStop()`.
+- Card: Stop under the progress bar while step 4 runs, and on a reopened screen while it runs (`busyElsewhere`);
+  "Stopping after receipt #N…" once pressed; result line "Stopped manually, N left — press Fiscalise". ru + uz.
+- Tests (`regos-vcr-service.backlog.test.ts` +3): Stop during receipt 1 → 1 fiscalised, 2 and 3 untouched
+  (still FAILED/3 attempts), `stopped` + `remaining: 2`; Stop with nothing running → false; a Stop does not leak
+  into the next run. Red: 2 of 28 fail without the check.
+- Needs a real VCR to see on screen (yours).
+
+## Open question
+1. OK to add the two optional fields to `src/shared/types/fiscal.types.ts`?
+
 # Write-offs (expired / damaged goods) without a stocktake: web + POS offline mode (2026-10-12), branch feat/write-offs (from dev). Todo #1. Approved 2026-10-12
 
 ## Findings
