@@ -113,7 +113,6 @@ export function SettingsPage() {
       title: t("receipt.title"),
       description: t("receipt.description"),
       path: "/settings/receipt",
-      hidden: isSatellite,
     },
     {
       icon: <RefreshCw size={32} />,

@@ -1,4 +1,10 @@
-import { LOCAL_ONLY_SETTINGS, isSatelliteOwnSetting } from './local-only-settings';
+import {
+  LOCAL_ONLY_SETTINGS,
+  RECEIPT_LAYOUT_SETTINGS,
+  SATELLITE_OWN_RECEIPT,
+  isSatelliteOwnSetting,
+  satelliteKeepsOnPull,
+} from './local-only-settings';
 import { LABEL_PRINTER_KEYS } from '../printer/label-printer-config';
 
 /**
@@ -17,7 +23,7 @@ describe('isSatelliteOwnSetting', () => {
     (key) => expect(isSatelliteOwnSetting(key)).toBe(true),
   );
 
-  it.each(['receipt_header', 'store_name', 'tax_rate', 'regos_vcr_enabled'])(
+  it.each(['store_name', 'store_address', 'tax_rate', 'regos_vcr_enabled'])(
     'leaves the store setting %s to the main',
     (key) => expect(isSatelliteOwnSetting(key)).toBe(false),
   );
@@ -42,5 +48,29 @@ describe('LOCAL_ONLY_SETTINGS', () => {
 describe('label printer settings', () => {
   it.each(Object.values(LABEL_PRINTER_KEYS))('keeps %s on this machine', (key) => {
     expect(LOCAL_ONLY_SETTINGS.has(key)).toBe(true);
+  });
+});
+
+describe('receipt layout on a satellite', () => {
+  it.each(['receipt_header', 'receipt_logo_top', 'receipt_show_payment', SATELLITE_OWN_RECEIPT])(
+    'lets a satellite set %s',
+    (key) => expect(isSatelliteOwnSetting(key)).toBe(true),
+  );
+
+  it('follows the main until the satellite saved its own layout', () => {
+    for (const key of RECEIPT_LAYOUT_SETTINGS) {
+      expect(satelliteKeepsOnPull(key, false)).toBe(false);
+      expect(satelliteKeepsOnPull(key, true)).toBe(true);
+    }
+  });
+
+  it('changes nothing for other keys', () => {
+    expect(satelliteKeepsOnPull('cash_drawer_enabled', false)).toBe(true);
+    expect(satelliteKeepsOnPull('store_name', true)).toBe(false);
+  });
+
+  // Satellites only: the fleet's VPS sync is untouched.
+  it('keeps the layout off the VPS exclusion list', () => {
+    for (const key of RECEIPT_LAYOUT_SETTINGS) expect(LOCAL_ONLY_SETTINGS.has(key)).toBe(false);
   });
 });

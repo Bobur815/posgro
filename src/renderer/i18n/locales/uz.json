@@ -1450,7 +1450,8 @@
     "showStoreAddress": "Do'kon manzili",
     "showStorePhone": "Do'kon telefoni",
     "showStoreStir": "Do'kon STIR raqami",
-    "showPayment": "To'lov turi"
+    "showPayment": "To'lov turi",
+    "satelliteOwn": "Bu yordamchi kassa: saqlangandan so'ng u chekni o'z sozlamalari bo'yicha chop etadi va asosiy kassadagi o'zgarishlar unga endi qo'llanilmaydi."
   },
   "printer": {
     "availablePrinters": "Mavjud printerlar",
