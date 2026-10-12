@@ -5,6 +5,7 @@ import { Modal } from '../../components/common/Modal';
 import { useSales } from '../../hooks/useSales';
 import type { Sale } from '@shared/types/sale.types';
 import { formatCurrency as formatCurrencyBase } from '@shared/utils';
+import { isMergedBatchId } from '@shared/utils/fiscal-backlog';
 import {
   CLICK_BRAND_COLOR,
   UZQR_BRAND_COLOR,
@@ -308,6 +309,15 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
 
   const formatCurrency = (amount: number) => formatCurrencyBase(amount, i18n.language as 'ru' | 'uz');
 
+  // Merged into one REGOS receipt with other old cash receipts (fiscal backlog): its fiscal receipt
+  // is not its own, so it is never refunded, duplicated, or deleted from here.
+  const isMerged = (sale: Sale) => isMergedBatchId(sale.fiscalBatchId);
+  const refundError = useCallback(
+    (error?: string) =>
+      error === 'MERGED_RECEIPT' ? t('pos.mergedNoRefund') : error || t('common.error'),
+    [t],
+  );
+
   // Deleting a receipt removes it from the record and puts its goods back on the shelf, so it is
   // gated on the manager-override password when the store has one. `require` runs the action
   // straight through for a store that has not configured one.
@@ -322,7 +332,7 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
     if (sale?.fiscalStatus === 'FISCALIZED' && !sale.refunded) {
       const res = await window.electronAPI.fiscal.refund(sale.id);
       if (!res.ok) {
-        toast.error(res.error || t('common.error'));
+        toast.error(refundError(res.error));
         setDeleteConfirmId(null);
         return;
       }
@@ -389,13 +399,13 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
         toast.success(t('pos.refunded', 'Возврат оформлен'));
         window.dispatchEvent(new Event('stock-updated'));
       } else {
-        toast.error(res.error || t('common.error'));
+        toast.error(refundError(res.error));
       }
       await reload();
     } finally {
       setRefundingId(null);
     }
-  }, [refundConfirmId, reload, t, toast]);
+  }, [refundConfirmId, reload, refundError, t, toast]);
 
   // Reprint a fiscal duplicate (Receipt.Duplicate).
   const handleDuplicate = useCallback(async (sale: Sale, e: React.MouseEvent) => {
@@ -404,11 +414,11 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
     try {
       const res = await window.electronAPI.fiscal.printDuplicate(sale.id);
       if (res.ok) toast.success(t('pos.duplicatePrinted', 'Дубликат напечатан'));
-      else toast.error(res.error || t('common.error'));
+      else toast.error(refundError(res.error));
     } finally {
       setDuplicatingId(null);
     }
-  }, [t, toast]);
+  }, [refundError, t, toast]);
 
   // Load on mount and whenever the selected range changes (reload depends on `range`).
   useEffect(() => {
@@ -480,8 +490,9 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
                             <RotateCcw size={12} /> {t('pos.refunded', 'Возврат оформлен')}
                           </RefundedBadge>
                         ) : (
-                          <FiscalBadge $ok>
+                          <FiscalBadge $ok title={isMerged(sale) ? t('pos.mergedNoRefund') : undefined}>
                             <ShieldCheck size={12} /> {t('fiscalSettings.fiscalized', 'Фискализирован')}
+                            {isMerged(sale) && ` · ${t('pos.mergedReceipt')}`}
                           </FiscalBadge>
                         )
                       )}
@@ -504,7 +515,7 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
                         {fiscalizingId === sale.id ? t('common.processing') : t('pos.fiscalize', 'Фискализировать')}
                       </FiscalizeButton>
                     )}
-                    {!isSatellite && sale.fiscalStatus === 'FISCALIZED' && (
+                    {!isSatellite && sale.fiscalStatus === 'FISCALIZED' && !isMerged(sale) && (
                       <>
                         {!sale.refunded && (
                           <RefundButton
@@ -546,7 +557,8 @@ export function SalesHistoryModal({ onClose, onEditSale }: SalesHistoryModalProp
                         <Pencil size={16} />
                       </EditButton>
                     )}
-                    {!(isSatellite && sale.fiscalStatus === 'FISCALIZED' && !sale.refunded) && (
+                    {!(isSatellite && sale.fiscalStatus === 'FISCALIZED' && !sale.refunded) &&
+                      !(isMerged(sale) && sale.fiscalStatus === 'FISCALIZED') && (
                       <DeleteButton
                         onClick={(e) => {
                           e.stopPropagation();
