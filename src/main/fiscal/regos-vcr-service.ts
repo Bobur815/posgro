@@ -1309,6 +1309,16 @@ class RegosVcrService {
     return this.backlogRunning;
   }
 
+  /** Set by Stop while step 4 runs; read before each receipt, so the one being sent always finishes. */
+  private backlogStopRequested = false;
+
+  /** Ask a running step 4 to stop after its current receipt. False when step 4 is not running. */
+  requestBacklogStop(): boolean {
+    if (this.backlogRunning !== 'fiscalize') return false;
+    this.backlogStopRequested = true;
+    return true;
+  }
+
   private async withBacklogLock<T extends { ok: boolean; error?: string }>(
     step: FiscalBacklogStep,
     busy: T,
@@ -1679,6 +1689,7 @@ class RegosVcrService {
   ): Promise<FiscalBacklogFiscalizeResult> {
     const busy: FiscalBacklogFiscalizeResult = { ok: false, error: 'BUSY', fiscalized: 0, failed: [] };
     return this.withBacklogLock('fiscalize', busy, async () => {
+      this.backlogStopRequested = false;
       const cfg = await this.resolveConfig();
       if (!cfg.enabled) return { ok: false, error: 'FISCAL_DISABLED', fiscalized: 0, failed: [] };
       if (!this.buildClient(cfg)) return { ok: false, error: 'NO_PASSWORD', fiscalized: 0, failed: [] };
@@ -1690,6 +1701,12 @@ class RegosVcrService {
       let processed = 0;
 
       for (const s of kept) {
+        // Checked before the next receipt is touched: the previous one has finished and been counted,
+        // and this one stays exactly as it was for the next run.
+        if (this.backlogStopRequested) {
+          result.stopped = true;
+          break;
+        }
         onProgress?.({ step: 'fiscalize', processed, total, currentReceipt: s.receiptNumber });
         // Conditional, so a receipt fiscalised since it was read is never knocked back to PENDING.
         await prisma.sale.updateMany({
@@ -1727,9 +1744,11 @@ class RegosVcrService {
           break;
         }
       }
+      if (processed < total) result.remaining = total - processed;
+      this.backlogStopRequested = false;
       onProgress?.({ step: 'fiscalize', processed, total });
       log.info(
-        `[fiscal] backlog fiscalise: ${result.fiscalized} fiscalised, ${result.failed.length} failed${result.unreachable ? ' (VCR unreachable — stopped early)' : ''}`,
+        `[fiscal] backlog fiscalise: ${result.fiscalized} fiscalised, ${result.failed.length} failed${result.unreachable ? ' (VCR unreachable — stopped early)' : ''}${result.stopped ? ` (stopped by admin, ${result.remaining ?? 0} left)` : ''}`,
       );
       return result;
     });

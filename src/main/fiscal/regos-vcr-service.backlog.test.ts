@@ -768,6 +768,42 @@ describe('step 4 — fiscalize', () => {
     expect(second).toMatchObject({ ok: false, error: 'BUSY' });
     await first;
   });
+  it('Stop finishes the receipt being sent and leaves the rest exactly as they were', async () => {
+    sales = [
+      sale('a', { paymentMethod: 'card' }),
+      sale('b', { paymentMethod: 'card', fiscalStatus: 'FAILED', fiscalAttempts: 3 }),
+      sale('c', { paymentMethod: 'card', fiscalStatus: 'FAILED', fiscalAttempts: 3 }),
+    ];
+    // The admin presses Stop while receipt a is with the device.
+    client.sale.mockImplementationOnce(async () => {
+      expect(regosVcrService.requestBacklogStop()).toBe(true);
+      return { Id: 'v', FiscalSign: 'S', QRCodeURL: 'q', TerminalID: 'T', ReceiptNo: '1' };
+    });
+    const r = await regosVcrService.backlogFiscalize(FROM);
+    expect(r).toMatchObject({ ok: true, stopped: true, remaining: 2, fiscalized: 1, failed: [] });
+    expect(client.sale).toHaveBeenCalledTimes(1);
+    expect(sales[0].fiscalStatus).toBe('FISCALIZED');
+    // Not reset to PENDING: the next run finds them as they were.
+    expect(sales[1]).toMatchObject({ fiscalStatus: 'FAILED', fiscalAttempts: 3 });
+    expect(sales[2]).toMatchObject({ fiscalStatus: 'FAILED', fiscalAttempts: 3 });
+  });
+
+  it('Stop does nothing when step 4 is not running', async () => {
+    expect(regosVcrService.requestBacklogStop()).toBe(false);
+  });
+
+  it('a Stop from the previous run does not cut the next one short', async () => {
+    sales = [sale('a', { paymentMethod: 'card' }), sale('b', { paymentMethod: 'card' })];
+    client.sale.mockImplementationOnce(async () => {
+      regosVcrService.requestBacklogStop();
+      return { Id: 'v', FiscalSign: 'S', QRCodeURL: 'q', TerminalID: 'T', ReceiptNo: '1' };
+    });
+    await regosVcrService.backlogFiscalize(FROM);
+    const again = await regosVcrService.backlogFiscalize(FROM);
+    expect(again.stopped).toBeUndefined();
+    expect(again).toMatchObject({ ok: true, fiscalized: 1 });
+    expect(sales.every((x) => x.fiscalStatus === 'FISCALIZED')).toBe(true);
+  });
 });
 
 describe('receipts sent with one code for several packs (read-only)', () => {

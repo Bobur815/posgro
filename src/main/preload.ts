@@ -128,6 +128,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     backlogAllowed: () => ipcRenderer.invoke("fiscal:backlogAllowed"),
     duplicateCodeReceipts: () => ipcRenderer.invoke("fiscal:duplicateCodeReceipts"),
     backlogBusy: () => ipcRenderer.invoke("fiscal:backlogBusy"),
+    backlogStop: () => ipcRenderer.invoke("fiscal:backlogStop"),
     backlogClassify: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogClassify", fromDate),
     backlogRepair: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogRepair", fromDate),
     backlogVerify: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogVerify", fromDate),
@@ -767,6 +768,8 @@ declare global {
         backlogAllowed: () => Promise<boolean>;
         duplicateCodeReceipts: () => Promise<import("../shared/types/fiscal.types").FiscalDuplicateCodeReceipt[]>;
         backlogBusy: () => Promise<import("../shared/types/fiscal.types").FiscalBacklogStep | null>;
+        /** Stop a running step 4 after its current receipt; false when it is not running. */
+        backlogStop: () => Promise<boolean>;
         backlogClassify: (
           fromDate: string,
         ) => Promise<import("../shared/types/fiscal.types").FiscalBacklogClassifyResult>;

@@ -766,7 +766,11 @@
         "omit": "yuborilmaydi",
         "disable": "chek fiskallashtirilmaydi"
       },
-      "unknownStatusSent": "Asl-Belgisi holati noma'lum kodlar: {{count}} — REGOSga o'z holicha yuborildi"
+      "unknownStatusSent": "Asl-Belgisi holati noma'lum kodlar: {{count}} — REGOSga o'z holicha yuborildi",
+      "stop": "To'xtatish",
+      "stopping": "To'xtatilmoqda…",
+      "stoppingAfter": "#{{receipt}} chekdan keyin to'xtatiladi…",
+      "stoppedLeft": "Qo'lda to'xtatildi. Qolgan cheklar: {{remaining}} — davom etish uchun «Fiskallashtirish»ni bosing."
     },
     "duplicateCodes": {
       "title": "Bir nechta qadoq uchun bitta markirovka kodi bilan yuborilgan cheklar: {{count}}",

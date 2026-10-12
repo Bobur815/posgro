@@ -186,6 +186,8 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
   /** A run already going in the main process (e.g. started before the screen was reopened). */
   const [busyElsewhere, setBusyElsewhere] = useState<FiscalBacklogStep | null>(null);
   const [progress, setProgress] = useState<FiscalBacklogProgress | null>(null);
+  /** Stop was pressed: step 4 ends after the receipt being sent now. */
+  const [stopping, setStopping] = useState(false);
 
   const [classify, setClassify] = useState<FiscalBacklogClassifyResult | null>(null);
   const [repair, setRepair] = useState<FiscalBacklogRepairResult | null>(null);
@@ -296,6 +298,7 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
 
   const run = async (step: FiscalBacklogStep) => {
     setRunning(true);
+    setStopping(false);
     setProgress(null);
     try {
       const api = window.electronAPI.fiscal;
@@ -320,9 +323,27 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
       if (step === "fiscalize") setFiscalize({ ...failed, fiscalized: 0, failed: [] });
     } finally {
       setRunning(false);
+      setStopping(false);
       onChanged();
     }
   };
+
+  /** Step 4 only. The receipt being sent finishes and is counted; nothing after it is touched. */
+  const stop = async () => {
+    setStopping(true);
+    const accepted = await window.electronAPI.fiscal.backlogStop().catch(() => false);
+    if (!accepted) setStopping(false);
+  };
+
+  const stopButton = (
+    <Button variant="danger" onClick={() => void stop()} disabled={stopping}>
+      {stopping
+        ? progress?.currentReceipt
+          ? t("fiscalSettings.backlog.stoppingAfter", { receipt: progress.currentReceipt })
+          : t("fiscalSettings.backlog.stopping")
+        : t("fiscalSettings.backlog.stop")}
+    </Button>
+  );
 
   const stepDone: Record<FiscalBacklogStep, boolean> = {
     classify: !!classify?.ok,
@@ -368,6 +389,8 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
           {t("fiscalSettings.backlog.busyElsewhere")}
         </Line>
       )}
+      {/* A step 4 started before this screen was opened can be stopped from here too. */}
+      {busyElsewhere === "fiscalize" && !running && <Row>{stopButton}</Row>}
 
       <Row>
         <Label htmlFor="backlog-from">{t("fiscalSettings.backlog.fromDate")}</Label>
@@ -442,6 +465,7 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
             <BarOuter>
               <BarInner $pct={pct} />
             </BarOuter>
+            {step === "fiscalize" && <Row>{stopButton}</Row>}
           </>
         )}
 
@@ -604,6 +628,12 @@ export function FiscalBacklogCard({ queue, onChanged }: Props) {
                 failed: fiscalize.failed.length,
               })}
             </Line>
+            {fiscalize.stopped && (
+              <Line $tone="warn">
+                <AlertTriangle size={16} />
+                {t("fiscalSettings.backlog.stoppedLeft", { remaining: fiscalize.remaining ?? 0 })}
+              </Line>
+            )}
             {fiscalize.failed.length > 0 && (
               <List>
                 {fiscalize.failed.map((f) => (
