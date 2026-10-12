@@ -1,3 +1,87 @@
+# Write-offs (expired / damaged goods) without a stocktake: web + POS offline mode (2026-10-12), branch feat/write-offs (from dev). Todo #1. Approved 2026-10-12
+
+## Findings
+- Today stock only leaves by write-off inside a stocktake: `InventoryCountService.complete` (server) and its port
+  `local-server/routes/inventory-counts.ts` (till) zero "uncounted" lines the operator selects (`WriteOffList.tsx` is
+  that selection list inside the stocktake, not a page).
+- `StockMovementType` already reserves `WRITE_OFF_DAMAGE` and `WRITE_OFF_EXPIRY` ("no writer yet"). The ledger is
+  off unless `RECONCILIATION_LEDGER_ENABLED`; reconciliation sums signed rows of any type, so negative write-off rows
+  count with no reconciliation change. The ledger can't be the write-off history (off by default, absent on SQLite)
+  → write-offs need their own document table, like `InventoryCount`.
+- Two backends serve the same web page: the VPS for ONLINE stores, the till's local server
+  (`src/main/local-server/routes/*`) for OFFLINE_ONLY stores (the web bundle ships inside the installer, so page and
+  routes always match). The stocktake already works this way.
+- ONLINE tills learn server stock changes from the product pull (overwrites local stock for changed products), so a
+  server-side write-off reaches them like a stocktake. OFFLINE_ONLY never syncs → its write-offs live in SQLite only.
+- POS renderer has no stock pages beyond StockManagement (arrivals); stocktake is web-only. Satellites edit nothing
+  (`ModeGuard`).
+- Note: `src/web/src/pages/Products/WriteOffList.tsx` has an uncommitted edit (not mine) with a stray character:
+  `justify-content: space-between;s` (line 17), which breaks the next CSS rule. Fix or discard before committing.
+
+## Design (pending answers)
+### Data (additive; both schemas)
+- `WriteOff`: id (cuid), storeId, number (per store, sequential), reason (`EXPIRY` | `DAMAGE`), note?, createdById,
+  createdByName, createdAt, totalItems, totalValue Decimal(14,2) (at cost).
+- `WriteOffItem`: id, writeOffId, productId, name/barcode/unit snapshot, quantity Decimal(10,3), unitCost Decimal(10,2)?.
+- PG migration via skill `prisma-migration`, reviewed by `migration-reviewer`. SQLite: same tables `IF NOT EXISTS` in
+  the unconditional schema setup + a legacy-upgrade test (lessons.md).
+### Server (`src/server/modules/write-offs`, skill `nest-module`)
+- `GET /write-offs` (list, paged, filter by reason/date), `GET /write-offs/:id`, `POST /write-offs` (ADMIN).
+- POST in one `$transaction`: create document + items, `Product.stock` decrement per line, emit
+  `WRITE_OFF_EXPIRY|DAMAGE` movements (when the ledger is on), AuditLog row. Idempotent on a client-generated id, so a
+  double-click / retry never writes off twice.
+### Till (one service in `src/main`, two callers)
+- `write-off-service.ts`: the same transaction on SQLite (no ledger, as for stocktake).
+- Local-server routes `/write-offs` (same shape as the VPS) → the web page works for offline stores.
+- IPC `writeOffs:list|get|create` → preload → ipc-client → hook → renderer page, shown only when
+  `mode === 'OFFLINE_ONLY'` and not a satellite (skill `ipc-feature`). Version bump.
+### Web page (like `InventoryCountList`)
+- Stock tab "Write-offs" / "Hisobdan chiqarish" (`/products/stock/write-offs`, admin), list with number, date, reason,
+  lines, value, author; "New write-off" modal: reason, note, product search/scan, quantity per line, totals; detail
+  page. Mobile cards (`MobileCard`). ru + uz.
+### Renderer page (offline stores)
+- Same list + create modal in the POS's own UI (styled-components, theme tokens, ru + uz), barcode scan to add a line.
+
+## N-1 / rollout
+- New tables and endpoints only; nothing existing changes shape. Old POS ignores them; the web page ships with its
+  backend (server deploy / installer), so it never calls a route that is missing.
+- Server first on dev → staging → your OK → main. Then the installer (1.36.0) for offline stores.
+- Prod migration needs `/pg-backup` first (CLAUDE.md hard rule 3).
+
+## Decisions (user, 2026-10-12)
+- Posted on save (no draft). Reasons: EXPIRY, DAMAGE, OTHER (note required for OTHER).
+- A line above current stock is refused. No undo: a mistake is corrected with an arrival.
+- Both Prisma schemas may be touched (additive).
+
+## Outcome (2026-10-12, POS 1.36.0) — commits 3debae5..cc56c19 on feat/write-offs, on top of feat/cashier-only-readonly
+- Schema: `WriteOff` + `WriteOffItem` in both Prisma schemas; PG migration `20261012000001_write_offs` (CREATE only, generated
+  offline with `prisma migrate diff`, no local DB); SQLite "Migration 40" (IF NOT EXISTS). migration-reviewer: safe to apply.
+- Server `modules/write-offs`: pure `planWriteOff` + service (idempotent on client id, conditional stock decrement,
+  ledger rows EXPIRY/DAMAGE→WRITE_OFF_*, OTHER→MANUAL_ADJUSTMENT when the ledger is on), ADMIN-only controller.
+  Product hard delete and store purge now clear write-offs (the purge guard test caught the latter).
+- Till: `src/main/write-offs` (port of the rules + service, refuses on ONLINE and on a satellite), local-server
+  `/write-offs` routes (web dashboard for offline stores), IPC `writeOffs:*`, POS page `/write-offs` behind
+  `OfflineMainGuard`, sidebar item. Web: Stock tab + sidebar item, `WriteOffsPage` (cards / table / detail modal) and
+  `WriteOffFormModal` (catalog loaded once, filtered in the browser — the VPS ignores `/products?query`).
+- No server AuditLog table exists (CLAUDE.md says otherwise); the write-off document is the record.
+- Tests: server plan + service + hard-delete (red: 4 of 20 fail without the safeguards); till integration on real
+  SQLite (red: 2 of 8); schema upgrade (red: 3 of 41). Full run 1490/1491: the one failure is the known
+  `local-server.integration.test.ts` afterAll 30 s timeout (passes alone, 81/81). Builds: server, web, POS OK.
+- Web page rendered with fixtures at 375 and 1280 (list, tab, form with scanned line). POS page not seen on screen.
+- Staging checks: migration applies on posgro_staging; a product hard delete works after a write-off.
+- Rollback note: an older server image cannot hard-delete a product that has write-off lines (FK; nothing lost).
+
+## Follow-up (separate todo): `local-server.integration.test.ts` afterAll (stopLocalServer + closeDatabase) exceeds 30 s in full runs
+Seen twice on 2026-10-12; passes alone. Raise the hook timeout or find what keeps the server/DB open.
+
+## Open questions
+1. **Flow:** post immediately on save (my default; a write-off is one decision), or draft → complete like a stocktake?
+2. **Reasons:** only Expired / Damaged, or also "Other" with a required note?
+3. **More than in stock:** refuse a line whose quantity exceeds the product's current stock (my default), or allow
+   stock to go negative?
+4. **Undo:** none — a mistake is corrected with an arrival (my default), or "cancel" restoring stock (same day only)?
+5. OK to add the two tables to `prisma/schema.prisma` and `schema.sqlite.prisma` (CLAUDE.md asks me to confirm)?
+
 # "Cashier-only POS": Users and Suppliers become read-only instead of blocked (2026-10-12), branch feat/cashier-only-readonly (from dev). Todo #5. Approved 2026-10-12 (SupplierDetails stays blocked)
 
 ## Decisions (user, 2026-10-12)
