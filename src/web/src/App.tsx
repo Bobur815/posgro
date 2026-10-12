@@ -8,6 +8,7 @@ import { ProductList } from './pages/Products/ProductList';
 import { ProductDetails } from './pages/Products/ProductDetails';
 import { StockManagement } from './pages/Products/StockManagement';
 import { InventoryCountList } from './pages/Products/InventoryCountList';
+import { WriteOffsPage } from './pages/Products/WriteOffsPage';
 import { ReconciliationPage } from './pages/Products/ReconciliationPage';
 import { BankTurnoverPage } from './pages/Products/BankTurnoverPage';
 import { InventoryCountDetail } from './pages/Products/InventoryCountDetail';
@@ -96,6 +97,7 @@ export function App() {
           <Route path="products" element={<PrivateRoute excludeSuperAdmin><ProductList /></PrivateRoute>} />
           <Route path="products/stock" element={<PrivateRoute excludeSuperAdmin><StockManagement /></PrivateRoute>} />
           <Route path="products/stock/inventarizatsiya" element={<PrivateRoute adminOnly excludeSuperAdmin><InventoryCountList /></PrivateRoute>} />
+          <Route path="products/stock/write-offs" element={<PrivateRoute adminOnly excludeSuperAdmin><WriteOffsPage /></PrivateRoute>} />
           <Route path="products/stock/reconciliation" element={<PrivateRoute adminOnly excludeSuperAdmin><ReconciliationPage /></PrivateRoute>} />
           <Route path="products/stock/bank" element={<PrivateRoute adminOnly excludeSuperAdmin><BankTurnoverPage /></PrivateRoute>} />
           <Route path="products/stock/inventarizatsiya/:id" element={<PrivateRoute adminOnly excludeSuperAdmin><InventoryCountDetail /></PrivateRoute>} />

@@ -24,6 +24,7 @@ import {
   Newspaper,
   Scale,
   Landmark,
+  PackageX,
   type LucideIcon,
 } from "lucide-react";
 import { useAuthStore } from "../../store/auth-store";
@@ -380,6 +381,7 @@ export function Sidebar() {
                     ClipboardCheck,
                     t("nav.stocktake"),
                   )}
+                  {renderNavItem("/products/stock/write-offs", PackageX, t("nav.writeOffs"))}
                   {renderNavItem(
                     "/products/stock/reconciliation",
                     Scale,

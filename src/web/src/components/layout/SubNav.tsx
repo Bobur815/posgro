@@ -115,6 +115,7 @@ export function useStockSubNav(): SubNavItem[] {
     ...(isAdmin
       ? [
           { to: "/products/stock/inventarizatsiya", label: t("nav.stocktake") },
+          { to: "/products/stock/write-offs", label: t("nav.writeOffs") },
           { to: "/products/stock/reconciliation", label: t("nav.reconciliation") },
           { to: "/products/stock/bank", label: t("nav.bank") },
         ]
