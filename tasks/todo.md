@@ -169,7 +169,7 @@
 - Staging checks: migration applies on posgro_staging; a product hard delete works after a write-off.
 - Rollback note: an older server image cannot hard-delete a product that has write-off lines (FK; nothing lost).
 
-## Follow-up (separate todo): `local-server.integration.test.ts` afterAll (stopLocalServer + closeDatabase) exceeds 30 s in full runs
+## Follow-up (separate todo): `local-server.integration.test.ts` afterAll (stopLocalServer + closeDatabase) exceeds 30 s in full runs — **fixed 2026-10-12** (branch fix/local-server-test-teardown): `closeServer()` closes idle keep-alive sockets at once and cuts in-flight ones after 2 s; teardown 6.7 s → 2.0 s. See lessons.md.
 Seen twice on 2026-10-12; passes alone. Raise the hook timeout or find what keeps the server/DB open.
 
 ## Open questions
