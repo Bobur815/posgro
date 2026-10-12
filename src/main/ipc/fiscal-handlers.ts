@@ -93,6 +93,12 @@ export function setupFiscalHandlers(): void {
   // Free and read-only: receipts sent with one marking code for several packs (before per-line codes).
   ipcMain.handle("fiscal:duplicateCodeReceipts", async () => regosVcrService.duplicateCodeReceipts());
   ipcMain.handle("fiscal:backlogBusy", async () => regosVcrService.backlogBusy());
+  // Stop a running step 4 after the receipt being sent now. Stopping costs nothing, so it is not
+  // license-gated or logged as a step; false when step 4 is not running.
+  ipcMain.handle(
+    "fiscal:backlogStop",
+    mainOnly(async () => regosVcrService.requestBacklogStop()),
+  );
   ipcMain.handle(
     "fiscal:backlogClassify",
     mainOnly(async (_event, fromDate: string) =>
