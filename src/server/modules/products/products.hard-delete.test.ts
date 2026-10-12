@@ -38,6 +38,7 @@ function build(failAt?: string) {
     sale: table('sale'),
     inventoryArrival: table('inventoryArrival'),
     inventoryCountItem: table('inventoryCountItem'),
+    writeOffItem: table('writeOffItem'),
     stockMovement: table('stockMovement'),
     product: table('product'),
     deletedProduct: table('deletedProduct'),
@@ -67,7 +68,7 @@ describe('ProductsService.hardDelete', () => {
     await service.hardDelete(7, 'st');
     const order = calls.map((c) => c.table);
     const productAt = order.indexOf('product');
-    for (const t of ['saleItem', 'sale', 'inventoryArrival', 'inventoryCountItem', 'stockMovement']) {
+    for (const t of ['saleItem', 'sale', 'inventoryArrival', 'inventoryCountItem', 'writeOffItem', 'stockMovement']) {
       expect(order.indexOf(t)).toBeGreaterThanOrEqual(0);
       expect(order.indexOf(t)).toBeLessThan(productAt);
     }

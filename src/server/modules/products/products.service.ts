@@ -289,6 +289,8 @@ export class ProductsService {
         // delete below would fail otherwise. Each document's stored summary totals are
         // unaffected; only the per-product line disappears.
         await tx.inventoryCountItem.deleteMany({ where: { productId: id } });
+        // Same for write-off lines (RESTRICT too); the document keeps its stored totals.
+        await tx.writeOffItem.deleteMany({ where: { productId: id } });
 
         // Its stock-ledger rows (stock_movements.product_id is RESTRICT too). They describe a
         // product, and sales, that no longer exist.
