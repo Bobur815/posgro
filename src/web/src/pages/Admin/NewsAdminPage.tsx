@@ -4,6 +4,7 @@ import styled from "styled-components";
 import { Eye, EyeOff, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { news } from "../../api/client";
 import type { NewsAdminRow } from "../../components/news/types";
+import { SubNav, ADMIN_CONTENT_TABS } from "../../components/layout/SubNav";
 
 /**
  * Posts for posgro.uz/news and the dashboard's news button. Readers only see published posts —
@@ -222,6 +223,7 @@ export function NewsAdminPage() {
         <div style={{ display: "flex", gap: 8, color: "#6b7280" }}>
           <RefreshCw
             size={16}
+      <SubNav items={ADMIN_CONTENT_TABS} />
             style={{ animation: "spin 1s linear infinite" }}
           />
           Loading…

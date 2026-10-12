@@ -1,5 +1,5 @@
 import React from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import {
@@ -28,6 +28,15 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../../store/auth-store";
 import { useSidebar } from "@context/SidebarContext";
+import { ADMIN_CONTENT_TABS, ADMIN_STORES_TABS } from "./SubNav";
+
+interface MobileNavEntry {
+  to: string;
+  icon: LucideIcon;
+  label: string;
+  /** Other paths that belong to this section and should light it up too. */
+  match?: string[];
+}
 
 const SIDEBAR_WIDTH = 220;
 const MINI_SIDEBAR_WIDTH = 70;
@@ -235,6 +244,7 @@ export function Sidebar() {
   const { isCollapsed, toggleSidebar } = useSidebar();
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
+  const { pathname } = useLocation();
 
   const renderNavItem = (
     to: string,
@@ -261,15 +271,23 @@ export function Sidebar() {
    * Signing out is not here either: it is in the top bar's profile menu (TopBar.tsx), behind a
    * deliberate tap rather than one thumb-slip away from the Reports tab.
    */
-  const mobileNavItems = isSuperAdmin
+  const mobileNavItems: MobileNavEntry[] = isSuperAdmin
     ? [
-        { to: "/admin/stores", icon: Store, label: "Stores" },
+        // Super-admin sections; their pages are the tabs in SubNav's ADMIN_*_TABS. `match` keeps
+        // the section lit on every one of its pages, whose paths share no common prefix.
+        {
+          to: "/admin/stores",
+          icon: Store,
+          label: "Stores",
+          match: ADMIN_STORES_TABS.map((tab) => tab.to),
+        },
+        {
+          to: "/admin/login-banner",
+          icon: Newspaper,
+          label: "Content",
+          match: ADMIN_CONTENT_TABS.map((tab) => tab.to),
+        },
         { to: "/admin/logs", icon: ScrollText, label: "Logs" },
-        { to: "/admin/login-banner", icon: Image, label: "Banner" },
-        { to: "/admin/subscription-plans", icon: CreditCard, label: "Plans" },
-        // Landing Page and Downloads are deliberately absent: five icons is the documented
-        // limit above, and neither is a phone task — one is long-form bilingual copy, the other
-        // uploads installers of hundreds of megabytes. Both are in the desktop sidebar.
         { to: "/settings/user", icon: Settings, label: t("nav.settings") },
       ]
     : [
@@ -415,8 +433,14 @@ export function Sidebar() {
 
       {/* Mobile bottom nav — five sections; sub-pages are tabs within each. */}
       <MobileBottomNav>
-        {mobileNavItems.map(({ to, icon: Icon, label }) => (
-          <MobileNavItem key={to} to={to}>
+        {mobileNavItems.map(({ to, icon: Icon, label, match }) => (
+          <MobileNavItem
+            key={to}
+            to={to}
+            // A string, not NavLink's className callback: styled() concatenates className, so a
+            // function would be lost. NavLink still adds "active" itself on its own route.
+            className={match?.some((path) => pathname.startsWith(path)) ? "active" : undefined}
+          >
             <Icon size={22} />
             <MobileNavLabel>{label}</MobileNavLabel>
           </MobileNavItem>

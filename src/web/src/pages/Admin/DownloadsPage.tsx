@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import { RefreshCw, Upload, Trash2, Eye, EyeOff, ExternalLink } from "lucide-react";
 import { downloads, type DownloadItem, type LatestApp } from "../../api/client";
+import { SubNav, ADMIN_CONTENT_TABS } from "../../components/layout/SubNav";
 
 /**
  * Manages what panel.posgro.uz offers: printer drivers, scale utilities, manuals.
@@ -269,6 +270,7 @@ export function DownloadsPage() {
   return (
     <Page>
       <Header>
+      <SubNav items={ADMIN_CONTENT_TABS} />
         <div>
           <Title>Downloads</Title>
           <Subtitle>Files offered on panel.posgro.uz.</Subtitle>

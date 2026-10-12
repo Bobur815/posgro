@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import { siteConfig, type LoginBanner } from "../../api/client";
+import { SubNav, ADMIN_CONTENT_TABS } from "../../components/layout/SubNav";
 
 // ─── Styled Components ────────────────────────────────────────────────────────
 
@@ -409,6 +410,7 @@ function BannerEditor({ heading, description, load, save }: BannerEditorProps) {
 export function LoginBannerPage() {
   return (
     <Page>
+      <SubNav items={ADMIN_CONTENT_TABS} />
       <Header>
         <Title>Login Page Banners</Title>
       </Header>
