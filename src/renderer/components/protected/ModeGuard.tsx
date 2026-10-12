@@ -1,9 +1,14 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
-import { useAdminLocked } from '../../store/mode-store';
+import { blocksRoute, useModeStore } from '../../store/mode-store';
 
 interface ModeGuardProps {
   children: React.ReactNode;
+  /**
+   * The page stays open on a cashier-only store, which shows it read-only (users, suppliers).
+   * A satellite is still turned away.
+   */
+  allowCashierOnly?: boolean;
 }
 
 /**
@@ -15,10 +20,10 @@ interface ModeGuardProps {
  * today. Route-level gating alone is not enough for surfaces opened as modals — those hide their
  * trigger buttons instead.
  */
-export function ModeGuard({ children }: ModeGuardProps) {
-  const adminLocked = useAdminLocked();
+export function ModeGuard({ children, allowCashierOnly = false }: ModeGuardProps) {
+  const blocked = useModeStore((s) => blocksRoute(s, allowCashierOnly));
 
-  if (adminLocked) {
+  if (blocked) {
     return <Navigate to="/" replace />;
   }
 
