@@ -2,7 +2,7 @@ import { Product, Supplier } from '@shared/types';
 import { create } from 'zustand';
 
 export interface Category {
-  id: string;
+  id: number;
   nameUz: string;
   nameRu: string;
   mxikGroupCode?: string | null;
