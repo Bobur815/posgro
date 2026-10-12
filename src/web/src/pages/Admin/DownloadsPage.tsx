@@ -148,7 +148,8 @@ const RowMeta = styled.div`
   font-size: 12px;
   color: ${({ theme }) => theme.colors.textSecondary};
   margin-top: 3px;
-  word-break: break-all;
+  /* Wraps a long file name, never splits an ordinary word. */
+  overflow-wrap: anywhere;
 `;
 
 const IconBtn = styled.button<{ $danger?: boolean }>`
@@ -269,8 +270,8 @@ export function DownloadsPage() {
 
   return (
     <Page>
-      <Header>
       <SubNav items={ADMIN_CONTENT_TABS} />
+      <Header>
         <div>
           <Title>Downloads</Title>
           <Subtitle>Files offered on panel.posgro.uz.</Subtitle>

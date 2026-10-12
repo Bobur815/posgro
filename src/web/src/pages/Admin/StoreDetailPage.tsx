@@ -25,6 +25,11 @@ import {
   type SubscriptionState,
 } from "@shared/utils/subscription";
 import { StoreBreadcrumb } from "./StoreBreadcrumb";
+import {
+  MobileCard,
+  MobileCardList,
+  DesktopOnly,
+} from "../../components/common/MobileCard";
 
 const Page = styled.div`
   padding: 32px;
@@ -96,6 +101,11 @@ const Ledger = styled.table`
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
+`;
+
+/** The ledger as cards on a phone, with the spacing the table had. */
+const LedgerCards = styled(MobileCardList)`
+  margin-top: 12px;
 `;
 
 const LedgerScroll = styled.div`
@@ -912,6 +922,8 @@ function StoreDetails({ store, onUpdated }: Props) {
           {creditError && <ErrorMsg style={{ marginTop: 6 }}>{creditError}</ErrorMsg>}
 
           {ledger && ledger.length > 0 && (
+            <>
+            <DesktopOnly>
             <LedgerScroll>
               <Ledger>
                 <thead>
@@ -947,6 +959,41 @@ function StoreDetails({ store, onUpdated }: Props) {
                 </tbody>
               </Ledger>
             </LedgerScroll>
+            </DesktopOnly>
+            <LedgerCards>
+              {ledger.map((row) => (
+                <MobileCard
+                  key={row.id}
+                  title={
+                    <>
+                      {LEDGER_LABEL[row.type] ?? row.type}
+                      {row.type === "SUBSCRIPTION" && row.periodStart && (
+                        <> — from {new Date(row.periodStart).toLocaleDateString()}</>
+                      )}
+                    </>
+                  }
+                  subtitle={
+                    <>
+                      {moment(row.createdAt)}
+                      {row.note && <div>{row.note}</div>}
+                    </>
+                  }
+                  fields={[
+                    {
+                      label: "Amount",
+                      value: (
+                        <Amount $in={row.amount >= 0}>
+                          {row.amount >= 0 ? "+" : "−"}
+                          {uzs(Math.abs(row.amount))}
+                        </Amount>
+                      ),
+                    },
+                    { label: "Balance", value: uzs(row.balanceAfter) },
+                  ]}
+                />
+              ))}
+            </LedgerCards>
+            </>
           )}
           {ledger && ledger.length === 0 && (
             <PlanNote style={{ marginTop: 12 }}>No balance movements yet.</PlanNote>

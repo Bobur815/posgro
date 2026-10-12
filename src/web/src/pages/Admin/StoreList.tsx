@@ -13,29 +13,45 @@ import {
 } from "lucide-react";
 import { stores, siteConfig, StoreRecord } from "../../api/client";
 import { formatPhone } from "@shared/utils/phone";
+import { MobileCard, MobileCardList, DesktopOnly } from "../../components/common/MobileCard";
 import {
   DEFAULT_SUBSCRIPTION_RULES,
   storeSubscriptionFacts,
   subscriptionStatus,
   type SubscriptionRules,
 } from "@shared/utils/subscription";
+import { SubNav, ADMIN_STORES_TABS } from "../../components/layout/SubNav";
 
 const Page = styled.div`
   padding: 32px;
   max-width: 1400px;
+
+  @media (max-width: 600px) {
+    padding: 16px;
+  }
 `;
 
 const Header = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-bottom: 32px;
+
+  @media (max-width: 768px) {
+    margin-bottom: 16px;
+  }
 `;
 
 const Title = styled.h1`
   margin: 0;
   font-size: 28px;
   color: ${({ theme }) => theme.colors.text};
+
+  @media (max-width: 768px) {
+    font-size: 22px;
+  }
 `;
 
 const Actions = styled.div`
@@ -89,6 +105,11 @@ const IconBtn = styled.button<{ $color?: string }>`
   cursor: pointer;
   &:hover {
     opacity: 0.7;
+  }
+
+  @media (max-width: 768px) {
+    width: 44px;
+    height: 44px;
   }
 `;
 
@@ -211,6 +232,39 @@ const DeletedNote = styled.div`
   margin-top: 4px;
 `;
 
+const CardAddress = styled.div`
+  font-size: 13px;
+  font-weight: 400;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  margin-top: 2px;
+`;
+
+/** Plan badge plus the subscription line under it; the same in the table and on a card. */
+function PlanCell({ store, rules }: { store: StoreRecord; rules: SubscriptionRules }) {
+  const line = subscriptionLine(store, rules);
+  return (
+    <>
+      {store.subscriptionPlan === "VIP" ? (
+        <Badge $purple>VIP</Badge>
+      ) : store.subscriptionPlan === "PRO" ? (
+        <Badge $blue>PRO</Badge>
+      ) : store.subscriptionPlan === "STARTER" ? (
+        <Badge $green>STARTER</Badge>
+      ) : store.subscriptionPlan === "TRIAL" ? (
+        <Badge $amber>TRIAL</Badge>
+      ) : (
+        <Badge $gray>No Plan</Badge>
+      )}
+      {line && <SubscriptionNote $color={line.color}>{line.text}</SubscriptionNote>}
+    </>
+  );
+}
+
+function StatusBadge({ store }: { store: StoreRecord }) {
+  if (store.scheduledDeleteAt) return <Badge $red>Pending delete</Badge>;
+  return store.active ? <Badge $green>Active</Badge> : <Badge $gray>Inactive</Badge>;
+}
+
 export function StoreList() {
   const [list, setList] = useState<StoreRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -279,8 +333,42 @@ export function StoreList() {
     }
   };
 
+  const renderActions = (store: StoreRecord) => (
+    <RowActions>
+      <IconBtn title="Stats / AI plan" onClick={() => navigate(`/admin/stores/${store.id}`)}>
+        <BarChart2 size={17} />
+      </IconBtn>
+      <IconBtn title="Edit" onClick={() => navigate(`/admin/stores/${store.id}/edit`)}>
+        <Pencil size={17} />
+      </IconBtn>
+      {store.scheduledDeleteAt ? (
+        <IconBtn title="Cancel deletion" $color="#16a34a" onClick={() => handleCancelDelete(store)}>
+          <Undo2 size={17} />
+        </IconBtn>
+      ) : (
+        <>
+          <IconBtn
+            title={store.active ? "Deactivate" : "Activate"}
+            onClick={() => handleToggleActive(store)}
+            $color={store.active ? "#f59e0b" : "#16a34a"}
+          >
+            {store.active ? <ToggleRight size={17} /> : <ToggleLeft size={17} />}
+          </IconBtn>
+          <IconBtn
+            title="Schedule deletion (30 days)"
+            $color="#ef4444"
+            onClick={() => handleDelete(store)}
+          >
+            <Trash2 size={17} />
+          </IconBtn>
+        </>
+      )}
+    </RowActions>
+  );
+
   return (
     <Page>
+      <SubNav items={ADMIN_STORES_TABS} />
       <Header>
         <Title>Stores</Title>
         <Actions>
@@ -297,132 +385,102 @@ export function StoreList() {
 
       {error && <ErrorMsg>{error}</ErrorMsg>}
 
-      <Table>
-        <thead>
-          <tr>
-            <Th>#</Th>
-            <Th>ID</Th>
-            <Th>Name</Th>
-            <Th>Phone</Th>
-            <Th>Plan</Th>
-            <Th>Users</Th>
-            <Th>Products</Th>
-            <Th>Terminals</Th>
-            <Th>Status</Th>
-            <Th>Actions</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? (
+      <DesktopOnly>
+        <Table>
+          <thead>
             <tr>
-              <Td colSpan={10}>
-                <Empty>Loading…</Empty>
-              </Td>
+              <Th>#</Th>
+              <Th>ID</Th>
+              <Th>Name</Th>
+              <Th>Phone</Th>
+              <Th>Plan</Th>
+              <Th>Users</Th>
+              <Th>Products</Th>
+              <Th>Terminals</Th>
+              <Th>Status</Th>
+              <Th>Actions</Th>
             </tr>
-          ) : list.length === 0 ? (
-            <tr>
-              <Td colSpan={10}>
-                <Empty>No stores yet. Create one.</Empty>
-              </Td>
-            </tr>
-          ) : (
-            list.map((store, i) => (
-              <tr key={store.id}>
-                <Td>{i + 1}</Td>
-                <Td>{store.id}</Td>
-                <Td>
-                  <div style={{ fontWeight: 600 }}>{store.name}</div>
-                  {store.address && (
-                    <div style={{ fontSize: 13, color: "#6b7280" }}>
-                      {store.address}
-                    </div>
-                  )}
-                  {store.scheduledDeleteAt && (
-                    <DeletedNote>
-                      Deletes{" "}
-                      {new Date(store.scheduledDeleteAt).toLocaleDateString()}
-                    </DeletedNote>
-                  )}
-                </Td>
-                <Td>{store.phone ? formatPhone(store.phone) : "—"}</Td>
-                <Td>
-                  {store.subscriptionPlan === "VIP" ? (
-                    <Badge $purple>VIP</Badge>
-                  ) : store.subscriptionPlan === "PRO" ? (
-                    <Badge $blue>PRO</Badge>
-                  ) : store.subscriptionPlan === "STARTER" ? (
-                    <Badge $green>STARTER</Badge>
-                  ) : store.subscriptionPlan === "TRIAL" ? (
-                    <Badge $amber>TRIAL</Badge>
-                  ) : (
-                    <Badge $gray>No Plan</Badge>
-                  )}
-                  {(() => {
-                    const line = subscriptionLine(store, rules);
-                    return line && <SubscriptionNote $color={line.color}>{line.text}</SubscriptionNote>;
-                  })()}
-                </Td>
-                <Td>{store._count?.users ?? "—"}</Td>
-                <Td>{store._count?.products ?? "—"}</Td>
-                <Td>{store._count?.terminalHeartbeats ?? "—"}</Td>
-                <Td>
-                  {store.scheduledDeleteAt ? (
-                    <Badge $red>Pending delete</Badge>
-                  ) : store.active ? (
-                    <Badge $green>Active</Badge>
-                  ) : (
-                    <Badge $gray>Inactive</Badge>
-                  )}
-                </Td>
-                <Td>
-                  <RowActions>
-                    <IconBtn
-                      title="Stats / AI plan"
-                      onClick={() => navigate(`/admin/stores/${store.id}`)}
-                    >
-                      <BarChart2 size={17} />
-                    </IconBtn>
-                    <IconBtn title="Edit" onClick={() => navigate(`/admin/stores/${store.id}/edit`)}>
-                      <Pencil size={17} />
-                    </IconBtn>
-                    {store.scheduledDeleteAt ? (
-                      <IconBtn
-                        title="Cancel deletion"
-                        $color="#16a34a"
-                        onClick={() => handleCancelDelete(store)}
-                      >
-                        <Undo2 size={17} />
-                      </IconBtn>
-                    ) : (
-                      <>
-                        <IconBtn
-                          title={store.active ? "Deactivate" : "Activate"}
-                          onClick={() => handleToggleActive(store)}
-                          $color={store.active ? "#f59e0b" : "#16a34a"}
-                        >
-                          {store.active ? (
-                            <ToggleRight size={17} />
-                          ) : (
-                            <ToggleLeft size={17} />
-                          )}
-                        </IconBtn>
-                        <IconBtn
-                          title="Schedule deletion (30 days)"
-                          $color="#ef4444"
-                          onClick={() => handleDelete(store)}
-                        >
-                          <Trash2 size={17} />
-                        </IconBtn>
-                      </>
-                    )}
-                  </RowActions>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <Td colSpan={10}>
+                  <Empty>Loading…</Empty>
                 </Td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </Table>
+            ) : list.length === 0 ? (
+              <tr>
+                <Td colSpan={10}>
+                  <Empty>No stores yet. Create one.</Empty>
+                </Td>
+              </tr>
+            ) : (
+              list.map((store, i) => (
+                <tr key={store.id}>
+                  <Td>{i + 1}</Td>
+                  <Td>{store.id}</Td>
+                  <Td>
+                    <div style={{ fontWeight: 600 }}>{store.name}</div>
+                    {store.address && (
+                      <div style={{ fontSize: 13, color: "#6b7280" }}>{store.address}</div>
+                    )}
+                    {store.scheduledDeleteAt && (
+                      <DeletedNote>
+                        Deletes {new Date(store.scheduledDeleteAt).toLocaleDateString()}
+                      </DeletedNote>
+                    )}
+                  </Td>
+                  <Td>{store.phone ? formatPhone(store.phone) : "—"}</Td>
+                  <Td>
+                    <PlanCell store={store} rules={rules} />
+                  </Td>
+                  <Td>{store._count?.users ?? "—"}</Td>
+                  <Td>{store._count?.products ?? "—"}</Td>
+                  <Td>{store._count?.terminalHeartbeats ?? "—"}</Td>
+                  <Td>
+                    <StatusBadge store={store} />
+                  </Td>
+                  <Td>{renderActions(store)}</Td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </Table>
+      </DesktopOnly>
 
+      <MobileCardList>
+        {loading ? (
+          <Empty>Loading…</Empty>
+        ) : list.length === 0 ? (
+          <Empty>No stores yet. Create one.</Empty>
+        ) : (
+          list.map((store) => (
+            <MobileCard
+              key={store.id}
+              title={
+                <>
+                  {store.name}
+                  {store.address && <CardAddress>{store.address}</CardAddress>}
+                  {store.scheduledDeleteAt && (
+                    <DeletedNote>
+                      Deletes {new Date(store.scheduledDeleteAt).toLocaleDateString()}
+                    </DeletedNote>
+                  )}
+                </>
+              }
+              subtitle={`#${store.id}${store.phone ? ` · ${formatPhone(store.phone)}` : ""}`}
+              fields={[
+                { label: "Plan", value: <PlanCell store={store} rules={rules} /> },
+                { label: "Status", value: <StatusBadge store={store} /> },
+                { label: "Users", value: store._count?.users ?? "—" },
+                { label: "Products", value: store._count?.products ?? "—" },
+                { label: "Terminals", value: store._count?.terminalHeartbeats ?? "—" },
+              ]}
+              actions={renderActions(store)}
+            />
+          ))
+        )}
+      </MobileCardList>
     </Page>
   );
 }
