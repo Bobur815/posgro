@@ -1096,6 +1096,17 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   await prisma.$executeRaw`CREATE UNIQUE INDEX IF NOT EXISTS idx_write_off_items_unique ON write_off_items(write_off_id, product_id)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_write_off_items_write_off ON write_off_items(write_off_id)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_write_off_items_product ON write_off_items(product_id)`;
+
+  // Migration 41: the fiscal backlog merges old cash receipts — sales.fiscal_batch_id (which merged
+  // REGOS receipt a sale went out on) and sales.fiscal_sent_tiyin (what REGOS received for it, for
+  // the fiscalised / total readout). Nullable, local only, never synced.
+  if (!(await columnExists(prisma, 'sales', 'fiscal_batch_id'))) {
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN fiscal_batch_id TEXT`;
+  }
+  if (!(await columnExists(prisma, 'sales', 'fiscal_sent_tiyin'))) {
+    await prisma.$executeRaw`ALTER TABLE sales ADD COLUMN fiscal_sent_tiyin INTEGER`;
+  }
+  await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_sales_fiscal_batch ON sales(fiscal_batch_id)`;
 }
 
 /** True if `column` exists on `table` — silent (no thrown query, no prisma:error log). */

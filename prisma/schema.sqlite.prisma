@@ -376,6 +376,13 @@ model Sale {
   /// JSON [{barcode, label, status}]: marking codes asl-belgisi says are out of circulation. While
   /// set, the receipt is not sent to REGOS (fiscal status FAILED); an edit clears it. Local only.
   markingBlock    String?   @map("marking_block")
+  /// Fiscal backlog: "batch:<id>" when this old cash receipt is merged with others of its day into
+  /// one REGOS receipt (the id is that receipt's Receipt.Sale code); "single" once a rejected batch
+  /// fell back to sending it alone. A merged sale is never refunded. Local only.
+  fiscalBatchId   String?   @map("fiscal_batch_id")
+  /// What REGOS received for this sale, in tiyin (its share of a merged receipt; only the sent
+  /// lines of a partial one). Null on sales fiscalised before 1.38. Local only.
+  fiscalSentTiyin Int?      @map("fiscal_sent_tiyin")
 
   // UzQR (REGOS Payment.Create). Set only when the optional UzQR integration is on and the
   // buyer actually paid — its presence is what makes buildPayments() book the receipt against
