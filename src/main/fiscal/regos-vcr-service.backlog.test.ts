@@ -74,6 +74,10 @@ interface Row {
   fiscalSubstitutions: string | null;
   regosFiscalAt?: Date | null;
   regosReceiptNo?: string | null;
+  fiscalBatchId?: string | null;
+  fiscalSentTiyin?: number | null;
+  regosQrCodeUrl?: string | null;
+  regosReceiptId?: string | null;
   smenaId: string | null;
   cashierName: string;
   discountAmount: number;
@@ -161,8 +165,10 @@ type Where = {
   OR?: Array<{ fiscalStatus: null | { notIn: string[] } }>;
   fiscalStatus?: string;
   regosFiscalAt?: { lt: Date };
+  fiscalBatchId?: string | null;
 };
 function matches(r: Row, where: Where): boolean {
+  if ('fiscalBatchId' in where && (r.fiscalBatchId ?? null) !== where.fiscalBatchId) return false;
   if (typeof where.id === 'string' && r.id !== where.id) return false;
   if (where.id && typeof where.id === 'object' && !where.id.in.includes(r.id)) return false;
   if (where.createdAt && r.createdAt < where.createdAt.gte) return false;
@@ -262,7 +268,7 @@ jest.mock('./regos-vcr-client', () => {
 
 import { VcrError } from './regos-vcr-client';
 import { regosVcrService } from './regos-vcr-service';
-import { SKIP_TAG, SKIP_TAG_MARKING } from '../../shared/utils/fiscal-backlog';
+import { NO_BATCH, SKIP_TAG, SKIP_TAG_MARKING } from '../../shared/utils/fiscal-backlog';
 
 const FROM = '2026-10-01';
 const RU_LABEL =
@@ -803,6 +809,175 @@ describe('step 4 — fiscalize', () => {
     expect(again.stopped).toBeUndefined();
     expect(again).toMatchObject({ ok: true, fiscalized: 1 });
     expect(sales.every((x) => x.fiscalStatus === 'FISCALIZED')).toBe(true);
+  });
+});
+
+describe('step "group" — old cash receipts merged into one REGOS receipt', () => {
+  type SaleCall = { code: string; payments: Array<{ type: number; value?: number }>; positions: unknown[] };
+  const calls = () => client.sale.mock.calls.map((c) => c[0] as unknown as SaleCall);
+  const merged = () => calls().filter((c) => c.code.startsWith('batch:'));
+
+  /** `n` cash receipts of 1 000 so'm on 2 Oct, a second apart, plus the given others. */
+  function cashDay(n: number, others: Row[] = []): void {
+    sales = [
+      ...Array.from({ length: n }, (_, i) =>
+        sale(`c${i}`, { createdAt: new Date(2026, 9, 2, 8, 0, i), items: [item(MARKED)] }),
+      ),
+      ...others,
+    ];
+  }
+  const on = () => {
+    settings.regos_vcr_backlog_merge = 'true';
+  };
+
+  it('does nothing with the setting off', async () => {
+    cashDay(3);
+    const r = await regosVcrService.backlogGroup(FROM);
+    expect(r).toMatchObject({ ok: false, error: 'MERGE_OFF' });
+    expect(sales.every((s) => !s.fiscalBatchId)).toBe(true);
+  });
+
+  it('sorts by tender and merges only cash, 100 per receipt', async () => {
+    on();
+    cashDay(250, [
+      sale('card', { paymentMethod: 'card', finalAmount: 5000 }),
+      sale('split', { paymentMethod: 'mixed', payments: [{ method: 'cash' }, { method: 'card' }] }),
+      sale('qr', { paymentMethod: 'uzqr' }),
+    ]);
+
+    const r = await regosVcrService.backlogGroup(FROM);
+
+    expect(r.ok).toBe(true);
+    expect(r.groups).toEqual([
+      { tender: 'CASH', receipts: 250, amount: 250_000, batches: 3, singles: 0 },
+      { tender: 'CARD', receipts: 2, amount: 6000, batches: 0, singles: 2 },
+      { tender: 'UZQR', receipts: 1, amount: 1000, batches: 0, singles: 1 },
+    ]);
+    const ids = new Set(sales.filter((s) => /^c[0-9]/.test(s.id)).map((s) => s.fiscalBatchId));
+    expect(ids.size).toBe(3);
+    expect(sales.find((s) => s.id === 'card')?.fiscalBatchId ?? null).toBeNull();
+    expect(r.sums).toEqual({ fiscalizedAmount: 0, totalAmount: 257_000 });
+  });
+
+  it('sends each batch as one cash receipt and marks every sale in it fiscalised', async () => {
+    on();
+    cashDay(250, [sale('card', { paymentMethod: 'card' })]);
+    await regosVcrService.backlogGroup(FROM);
+    client.sale.mockImplementation(async (p) => ({
+      Id: `id-${(p as unknown as SaleCall).code}`,
+      FiscalSign: 'S',
+      QRCodeURL: 'q',
+      TerminalID: 'T',
+      ReceiptNo: (p as unknown as SaleCall).code,
+    }));
+
+    const r = await regosVcrService.backlogFiscalize(FROM);
+
+    expect(r).toMatchObject({ ok: true, fiscalized: 251, failed: [], batches: 3 });
+    expect(calls()).toHaveLength(4); // 3 merged + the card receipt alone
+    expect(merged().map((c) => c.positions.length)).toEqual([100, 100, 50]);
+    expect(merged()[0].payments).toEqual([{ type: 1, value: 100 * 100_000 }]);
+    const first = sales.find((s) => s.id === 'c0')!;
+    const hundredth = sales.find((s) => s.id === 'c99')!;
+    expect(first.fiscalStatus).toBe('FISCALIZED');
+    expect(hundredth.regosReceiptNo).toBe(first.regosReceiptNo);
+    expect(first.regosReceiptNo).toBe(first.fiscalBatchId);
+    expect(first.fiscalSentTiyin).toBe(100_000);
+    expect(r.sums).toEqual({ fiscalizedAmount: 251_000, totalAmount: 251_000 });
+  });
+
+  it('counts only the lines a partial cash receipt really sent', async () => {
+    on();
+    const plain = item(PLAIN, 4000);
+    sales = [
+      sale('partial', {
+        finalAmount: 5000,
+        items: [item(MARKED), plain],
+        fiscalSubstitutions: JSON.stringify([{ itemId: plain.id, action: 'omit', reason: 'UNMARKED' }]),
+      }),
+      sale('full', { createdAt: new Date(2026, 9, 2, 13), items: [item(MARKED)] }),
+    ];
+    await regosVcrService.backlogGroup(FROM);
+
+    const r = await regosVcrService.backlogFiscalize(FROM);
+
+    expect(merged()).toHaveLength(1);
+    expect(merged()[0].payments).toEqual([{ type: 1, value: 200_000 }]);
+    expect(sales[0].fiscalSentTiyin).toBe(100_000);
+    expect(r.sums).toEqual({ fiscalizedAmount: 2000, totalAmount: 6000 });
+  });
+
+  it('falls back to one by one when REGOS rejects the merged receipt, and never merges them again', async () => {
+    on();
+    cashDay(3);
+    await regosVcrService.backlogGroup(FROM);
+    client.sale.mockImplementation(async (p) => {
+      if ((p as unknown as SaleCall).code.startsWith('batch:')) {
+        throw new VcrError(701003, 'Ставка НДС не найдена', 'Receipt.Sale');
+      }
+      return { Id: 'v', FiscalSign: 'S', QRCodeURL: 'q', TerminalID: 'T', ReceiptNo: '1' };
+    });
+
+    const r = await regosVcrService.backlogFiscalize(FROM);
+
+    expect(r).toMatchObject({ ok: true, fiscalized: 3, failed: [] });
+    expect(r.batches).toBeUndefined();
+    expect(calls().map((c) => c.code)).toEqual([expect.stringMatching(/^batch:/), 'c0', 'c1', 'c2']);
+    expect(sales.every((s) => s.fiscalBatchId === NO_BATCH)).toBe(true);
+
+    for (const s of sales) Object.assign(s, { fiscalStatus: 'FAILED' });
+    await regosVcrService.backlogGroup(FROM);
+    expect(sales.every((s) => s.fiscalBatchId === NO_BATCH)).toBe(true);
+  });
+
+  it('adopts a merged receipt the device already holds instead of sending it again', async () => {
+    on();
+    cashDay(2);
+    await regosVcrService.backlogGroup(FROM);
+    const batchId = sales[0].fiscalBatchId!;
+    client.getReceiptInfo.mockImplementation((async (q: { Code: string }) =>
+      q.Code === batchId
+        ? { Id: 'old', FiscalSign: 'S', QRCodeURL: 'q', TerminalID: 'T', ReceiptNo: '77', Code: batchId }
+        : null) as never);
+
+    const r = await regosVcrService.backlogFiscalize(FROM);
+
+    expect(client.sale).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ fiscalized: 2, batches: 1 });
+    expect(sales.map((s) => s.regosReceiptNo)).toEqual(['77', '77']);
+
+    // The usual retry of one of its sales adopts it too, rather than sending that sale alone.
+    Object.assign(sales[1], { fiscalStatus: 'FAILED', regosReceiptNo: null });
+    await regosVcrService.retrySale('c1');
+    expect(client.sale).not.toHaveBeenCalled();
+    expect(sales[1]).toMatchObject({ fiscalStatus: 'FISCALIZED', regosReceiptNo: '77' });
+  });
+
+  it('stops with the batch untouched when the device stops answering', async () => {
+    on();
+    cashDay(3);
+    await regosVcrService.backlogGroup(FROM);
+    const before = sales.map((s) => s.fiscalBatchId);
+    client.sale.mockRejectedValueOnce(new VcrError(0, 'fetch failed', 'Receipt.Sale'));
+
+    const r = await regosVcrService.backlogFiscalize(FROM);
+
+    expect(r).toMatchObject({ ok: false, error: 'VCR_UNREACHABLE', fiscalized: 0, remaining: 3 });
+    expect(sales.map((s) => s.fiscalBatchId)).toEqual(before);
+    expect(sales.every((s) => s.fiscalStatus === 'PENDING')).toBe(true);
+  });
+
+  it('refuses a refund or a duplicate of a merged sale', async () => {
+    sales = [
+      sale('m', {
+        fiscalStatus: 'FISCALIZED',
+        fiscalBatchId: 'batch:x',
+        regosQrCodeUrl: 'q',
+        regosReceiptId: 'r',
+      }),
+    ];
+    expect(await regosVcrService.refundSale('m')).toEqual({ ok: false, error: 'MERGED_RECEIPT' });
+    expect(await regosVcrService.printDuplicate('m')).toEqual({ ok: false, error: 'MERGED_RECEIPT' });
   });
 });
 

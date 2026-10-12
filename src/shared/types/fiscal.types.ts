@@ -303,6 +303,45 @@ export interface FiscalBacklogFiscalizeResult {
   stopped?: boolean;
   /** Receipts not reached because the run stopped early (Stop, or the VCR went quiet). */
   remaining?: number;
+  /** Merged REGOS receipts sent in this run (each counts its sales in `fiscalized`). From 1.38. */
+  batches?: number;
+  /** Fiscalised / total from the run's date, after the run. From 1.38. */
+  sums?: FiscalBacklogSums;
+}
+
+/**
+ * Fiscalised / total in so'm, from the run's date: total = every receipt that had to be fiscalised
+ * (still in the backlog, or FISCALIZED); fiscalised = what REGOS actually received.
+ */
+export interface FiscalBacklogSums {
+  fiscalizedAmount: number;
+  totalAmount: number;
+}
+
+export type FiscalBacklogTender = "CASH" | "CARD" | "UZQR";
+
+/** Step "group" (merge setting on) — receipts sorted by tender; only cash ones are merged. */
+export interface FiscalBacklogGroupResult {
+  ok: boolean;
+  error?: string;
+  groups: {
+    tender: FiscalBacklogTender;
+    receipts: number;
+    /** Sum of the group's receipts, so'm. */
+    amount: number;
+    /** Merged REGOS receipts the group will go out as (cash only). */
+    batches: number;
+    /** Receipts sent one by one. */
+    singles: number;
+  }[];
+  sums?: FiscalBacklogSums;
+}
+
+/** The per-till setting behind step "group": off = the 4 steps as before 1.38. */
+export interface FiscalBacklogMergeSettings {
+  enabled: boolean;
+  /** Cash receipts per merged REGOS receipt (2–1000, default 100). */
+  size: number;
 }
 
 /**
@@ -326,14 +365,16 @@ export interface FiscalDuplicateCodeReceipt {
   }[];
 }
 
-export type FiscalBacklogStep ="classify" | "repair" | "verify" | "fiscalize";
+export type FiscalBacklogStep = "classify" | "repair" | "verify" | "group" | "fiscalize";
 
-/** Live progress for steps 3 and 4, streamed over `fiscal:backlogProgress`. */
+/** Live progress for verify and fiscalize, streamed over `fiscal:backlogProgress`. */
 export interface FiscalBacklogProgress {
   step: FiscalBacklogStep;
   processed: number;
   total: number;
   currentReceipt?: string;
+  /** Step fiscalize: fiscalised / total so far. From 1.38. */
+  sums?: FiscalBacklogSums;
 }
 
 /**

@@ -32,6 +32,8 @@ export interface Sale {
   // receipt can no longer be edited.
   regosPaymentId?: string | null;
   refunded?: boolean;
+  /** "batch:<id>" once the fiscal backlog merged this old cash receipt with others; never refunded. */
+  fiscalBatchId?: string | null;
   /** The till's own Z-report (shift) number for this receipt; null while the shift is open. */
   zReportNumber?: number | null;
 }

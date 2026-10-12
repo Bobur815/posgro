@@ -50,6 +50,10 @@ export const LOCAL_ONLY_SETTINGS = new Set([
   // Syncing it lets another terminal's blob overwrite the local row, after which decryption
   // throws and the cashier password silently resolves to ''.
   'regos_vcr_password_enc',
+  // Whether this till's fiscal backlog merges old cash receipts, and how many per REGOS receipt
+  // (fiscal/regos-vcr-service.ts, step "group"). A choice made at the till that runs the backlog.
+  'regos_vcr_backlog_merge',
+  'regos_vcr_backlog_merge_size',
 
   // ── LAN credentials (tasks/LAN_MAIN_TERMINAL_PLAN.md) ──
   // The key this main signs LAN tokens with, and a satellite's device secret. Either one leaving

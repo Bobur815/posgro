@@ -132,6 +132,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     backlogClassify: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogClassify", fromDate),
     backlogRepair: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogRepair", fromDate),
     backlogVerify: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogVerify", fromDate),
+    getBacklogMerge: () => ipcRenderer.invoke("fiscal:getBacklogMerge"),
+    setBacklogMerge: (input: unknown) => ipcRenderer.invoke("fiscal:setBacklogMerge", input),
+    backlogGroup: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogGroup", fromDate),
     backlogFiscalize: (fromDate: string) => ipcRenderer.invoke("fiscal:backlogFiscalize", fromDate),
     onBacklogProgress: (
       cb: (p: import("../shared/types/fiscal.types").FiscalBacklogProgress) => void,
@@ -779,6 +782,13 @@ declare global {
         backlogVerify: (
           fromDate: string,
         ) => Promise<import("../shared/types/fiscal.types").FiscalBacklogVerifyResult>;
+        getBacklogMerge: () => Promise<import("../shared/types/fiscal.types").FiscalBacklogMergeSettings>;
+        setBacklogMerge: (
+          input: Partial<import("../shared/types/fiscal.types").FiscalBacklogMergeSettings>,
+        ) => Promise<import("../shared/types/fiscal.types").FiscalBacklogMergeSettings>;
+        backlogGroup: (
+          fromDate: string,
+        ) => Promise<import("../shared/types/fiscal.types").FiscalBacklogGroupResult>;
         backlogFiscalize: (
           fromDate: string,
         ) => Promise<import("../shared/types/fiscal.types").FiscalBacklogFiscalizeResult>;

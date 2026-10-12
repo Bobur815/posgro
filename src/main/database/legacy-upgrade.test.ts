@@ -254,6 +254,14 @@ describe('upgrading a database created by an older build', () => {
     expect(old.markingBlock).toBeNull();
   });
 
+  // The backlog merge: added in place, no existing receipt is merged or has a sent amount.
+  it('adds fiscal_batch_id and fiscal_sent_tiyin to an existing sales table, NULL on old receipts', async () => {
+    const old = await getPrismaClient().sale.findUnique({ where: { id: 'old-1' } });
+    expect(old).not.toBeNull();
+    expect(old.fiscalBatchId).toBeNull();
+    expect(old.fiscalSentTiyin).toBeNull();
+  });
+
   // A rejection queued by 1.34 must still go up as a rejection.
   it('adds valid to the 1.34 validity outbox, keeping its rows as rejections', async () => {
     const rows = (await getPrismaClient().$queryRawUnsafe(
