@@ -1,3 +1,152 @@
+# Super-admin web pages mobile-responsive, cards instead of tables (2026-10-12), branch feat/admin-mobile (from dev). Todo #4. Approved 2026-10-12 (keep English; grouping Stores / Content / Logs / Settings, Landing + Downloads reachable); done 3af33d5 + a143208, awaiting staging OK
+
+## Findings
+- Super-admin routes (`App.tsx:126-137`): stores (list, new, detail, edit), logs, login-banner, subscription-plans,
+  landing, downloads, leads, news (list, editor). All in `src/web/src/pages/Admin`.
+- The pattern already exists: `components/common/MobileCard.tsx` (`MobileCard`, `MobileCardList` shown ≤768px,
+  `DesktopOnly` hidden ≤768px). `LogsPage` and `StockManagement` use it. `LogsPage` is done.
+- Tables left:
+  - `StoreList.tsx`: 10-column `<table>` (#, ID, name+address+deletion note, phone, plan+subscription line, users,
+    products, terminals, status, 4 icon actions), `white-space: nowrap`, no breakpoint. Unusable on a phone.
+  - `StoreDetailPage.tsx:915`: subscription ledger table (when, what, amount, balance) inside a horizontal scroll.
+- Every other page already has breakpoints (forms, grids collapse to 1 column at 600–700px). Possible leftovers to
+  confirm on a real 375px render, not guessed: `LoginBannerPage` preview `width: 340px; min-width: 280px`,
+  `LeadsPage` `1fr 160px` grid, `LogsPage` 180px filter, nowrap headers in `NewsAdminPage`/`LoginBannerPage`.
+- **Navigation gap:** the super-admin mobile bar (`Sidebar.tsx:264`) has Stores, Logs, Banner, Plans, Settings.
+  Leads and News can't be reached on a phone at all. Landing and Downloads are left out on purpose (comment: not
+  phone tasks).
+- Admin pages are hardcoded English, not ru/uz (CLAUDE.md wants bilingual UI).
+- Web-only: no server, no POS, no schema, no version bump, no N-1 impact. No large assets.
+
+## Design
+1. `StoreList`: `DesktopOnly` around the table + `MobileCardList` of `MobileCard`s. Title = name (+ deletion note),
+   subtitle = `#id · phone`; fields = plan badge + subscription line, status, users / products / terminals; actions =
+   the same 4 buttons, with tap targets ≥ 40px. Loading/empty states in both views. Header buttons wrap.
+2. `StoreDetailPage` ledger: same switch; one card per entry (title = what, subtitle = when, fields = amount ± colour,
+   balance after).
+3. Navigation: an admin `SubNav` (the existing `SubNav` + `useStockSubNav` pattern) so every page is two taps:
+   - Stores section: Stores · Leads · Plans
+   - Content section: Banner · News · Landing · Downloads
+   - Mobile bar becomes: Stores, Content, Logs, Settings (4 icons, under the 5-icon limit).
+   Desktop sidebar unchanged.
+4. Fix whatever the 375px pass finds on the other pages (overflow, fixed widths, nowrap), CSS only, smallest change.
+
+## Steps
+1. Render every super-admin page at 375×812 and 768px (web dev server + Chrome) and list the real overflows before
+   touching CSS. Per lessons: `MSYS_NO_PATHCONV=1` for route arguments from Git Bash.
+2. StoreList cards. 3. StoreDetailPage ledger cards. 4. Admin SubNav + mobile bar. 5. Fixes from step 1.
+6. Re-render at 375 / 768 / 1280 in light and dark; desktop must look unchanged.
+7. `npm --prefix src/web run build`, lint + `tsc` for `src/web`, `/check`.
+8. Commits: one per page/concern. Merge to dev → staging (`dev.pos.bobur-dev.uz/web`) → stop for your OK on a phone.
+
+## Outcome (2026-10-12)
+- `3af33d5` navigation: `ADMIN_STORES_TABS` / `ADMIN_CONTENT_TABS` in `SubNav.tsx`, strips on the 7 list pages,
+  mobile bar Stores / Content / Logs / Settings with `match` so a section stays lit on all its pages (`Sidebar.tsx`).
+  Gotcha: `styled(NavLink)` drops a function `className`, so the bar passes a string.
+- `a143208` cards: StoreList (≤768px), StoreDetail ledger (≤768px), News rows wrap (≤600px), Downloads meta uses
+  `overflow-wrap: anywhere` (was splitting words).
+- Verified with headless Chrome + fixture API (scratchpad `admin-mobile/check.mjs`): all 10 super-admin routes at
+  375 / 768 / 1280 light and 375 dark, scrollWidth = viewport everywhere, correct tab + bar highlight. Lint 0 errors,
+  tsc root + server, 1460 tests, `npm --prefix src/web run build`.
+- Left as is: at exactly 768px the desktop sidebar (≤767px breakpoint) shows with the card layout (MobileCard ≤768px),
+  pre-existing one-pixel mismatch. Content tab strip scrolls sideways at 375px ("Downloads" partly hidden), by design.
+
+## Open questions
+1. Keep admin pages English (only you use them), or move them to ru/uz i18n keys while I'm in there? (my default:
+   keep English, separate todo if wanted)
+2. Navigation grouping above (Stores / Content / Logs / Settings) OK, and should Landing and Downloads become
+   reachable on mobile too, or stay desktop-only as the comment intends? (my default: reachable through the Content
+   tabs; the pages themselves only get overflow fixes)
+
+# Debt amount differs between tills: match ledger rows by phone when the user id is unknown (2026-10-12), branch fix/debt-ledger-phone-match (from dev). Todo #3. Option 2 chosen by user; PARKED 2026-10-12 by user (plan kept, not approved, step 0 not done)
+
+## Findings (VPS, read-only, 2026-10-12)
+- Prod has `DEBT_BALANCE_FROM_LEDGER: "true"` (`docker-compose.yml:62`): every till's balance is the sum of the debt
+  records it holds (`debt-ledger-sync.ts` `alignBalances`).
+- PG: "Boburshoh" = `cmowt5i3n0005ykgru7ldpn7e`, store 1234, role `USER`, phone 998911234602, debt 0.00, no due date,
+  **0 rows in `debt_transactions`**. Store-wide drift (stored debt vs ledger sum) is empty: only rows that never
+  arrived are missing, which the server cannot see.
+- Pull cursor `2026-10-11 13:09:47.100 / cmv3uab…` is just "caught up": no rows after it. Not a stuck pull.
+- The due date is not the cause: it never enters a balance, and PG has none for this user.
+- API logs: 544 `users/sync-bulk` + 544 `debtors/sync-bulk` in 48 h, none failed. Skips are silent: both endpoints answer
+  200/201 and report skips only in the body.
+- Mechanism: `syncFromTerminal` (`debtors.service.ts:167`) skips a row whose `userId` is not a user of the store, no log.
+  The till keeps it `synced=false` and resends forever (`upload-sync.ts` `uploadDebtTransactions`). A till keeps its own
+  id for a person indefinitely: `syncUsers` (`products-sync.ts`) matches by id, then by phone, and on a phone match
+  updates the local row but never takes the server's id. `users/sync-bulk` also falls back to phone, so the profile
+  syncs fine while the ledger never does.
+- **Not yet confirmed on a till:** that its Boburshoh id differs from `cmowt5i…` and has `synced=0` rows
+  (`scratchpad/till-boburshoh.sql`). Step 0 below.
+
+## Design
+### Server (additive, flag `DEBT_LEDGER_MATCH_BY_PHONE`, default off = today's behaviour)
+- `SyncDebtTransactionDto.userPhone?: string` (optional, `@IsOptional() @IsString()`). Accepted whether the flag is on or
+  off, so a new till never gets a 400 from `forbidNonWhitelisted`.
+- `syncFromTerminal`: user not found by id in this store **and** flag on **and** `userPhone` present → look up
+  `storeId_phone`. Found → store the row under the **server's** user id, count it in `syncedIds`, recompute that user.
+  Not found → skip as today. Same rule for the existing-row check (a row is matched by its own id, unchanged).
+- `pullLedger`: each row gains `userPhone` (the user's phone, additive). The page gains `acceptsUserPhone: true`
+  (server capability, independent of the flag) and `matchByPhone: <flag>`.
+- `Logger.warn` on every skip and every phone match: row id + user id + reason. No phone numbers in logs.
+
+### POS (1.35.2)
+- Pull, `applyLedgerRows`: user not found by id → if `row.userPhone`, find the local user by phone; store / merge the
+  row under the **local** id and add the local id to `touchedUsers`. Still not found → block as today. Without this, a
+  till that knows the person under another id would stop at the first remapped row, and its whole ledger pull would
+  freeze (this includes the till that wrote the row).
+- Upload, `uploadDebtTransactions`: send `userPhone` (the local user's phone) only once the server has said
+  `acceptsUserPhone` (saved in `system_settings` like `debt_ledger_balance_mode`). An old server never sees the field.
+- Log the server's skip count when it is above 0 (`console.warn`, per lessons: no app logger on the sync path).
+
+## N-1 / rollout (the flag is what makes it safe)
+- **Old POS + new server, flag off:** identical to today. Field is optional, response fields are additive.
+- **Old POS + new server, flag ON:** an old till that knows a person under another id cannot map a remapped row and its
+  ledger pull freezes for everyone. So the flag goes on **only after every till runs ≥ 1.35.2**. The server does not
+  record till versions; you confirm per till.
+- **New POS + old server:** no `acceptsUserPhone` → no `userPhone` sent → today's behaviour.
+- No schema change, no migration, SQLite untouched.
+- Order: server on dev → staging → your OK → main (flag off) → POS 1.35.2 via `deploy:pos` (yours) → every till updated
+  → you set `DEBT_LEDGER_MATCH_BY_PHONE: "true"` in `docker-compose.yml` (prod + staging) → nightly deploy.
+- Rollback: set the flag back off. Rows already remapped stay (correct data); new mismatches go back to being skipped.
+- After the flag: the stuck rows upload on the next cycle, both tills pull them, balances align. Check with
+  `ledger/drift` + the till query.
+
+## Steps
+0. Confirm on a till copy with `till-boburshoh.sql`: Boburshoh id ≠ `cmowt5i…`, rows `synced=0`. If not, stop and rethink.
+1. Server: DTO field + `syncFromTerminal` phone fallback behind the flag + pull fields + logs. Tests in
+   `debtors.sync.test.ts`: unknown id + phone + flag on → stored under server id; flag off → skipped; phone of another
+   store → skipped; known id → unchanged; pull rows carry `userPhone`, page carries `acceptsUserPhone`. Prove red first.
+2. POS: pull fallback + capability setting + upload field + skip log. Tests in `debt-ledger-sync.test.ts`: remapped row
+   applied under the local id, own row merged not duplicated, unknown phone still blocks; upload sends `userPhone` only
+   after the capability. Bump 1.35.2.
+3. `/check`, `/api-compat`, `npx cross-env APP_MODE=pos electron-vite build`.
+4. Commits: server, POS, docs (one concern each). Merge to dev → staging. Stop for your OK.
+
+## Open questions
+1. Flag via env var in `docker-compose.yml`, like `DEBT_BALANCE_FROM_LEDGER`? (my default)
+2. Option 2 leaves each till with its own id for the person. Fine long-term, or also queue option 1 (re-key on the
+   till) as a later todo?
+
+# Todos for 2026-10-12 (not started; each one gets its own plan and approval before code)
+
+1. **Separate write-off page (POS offline mode only + web).** A store admin should be able to write off expired or
+   damaged products. Today a write-off is only possible at the end of an inventory count. Model the page on
+   `InventoryCountList.tsx`; build it in both the renderer (`src/renderer`, offline mode only) and the web dashboard
+   (`src/web`).
+2. **Stop button for fiscal backlog step 4** (`src/renderer/pages/Settings/FiscalBacklogCard.tsx`). Show it while step 4
+   is running. Pressing it must not abort mid-receipt: the run stops after the receipt currently being fiscalised is
+   done.
+3. **Debtor sync bug for "Boburshoh"** (`src/renderer/pages/Debtors/DebtorList.tsx`). This debtor's data does not sync.
+   Suspected cause: setting a due date for "Boburshoh". Check on the VPS (`ssh posgro-vps`). **Parked**: analysis and plan in the section above.
+4. **Super-admin web pages fully mobile-responsive** (`src/web/src/pages/Admin`). On mobile, show cards instead of
+   tables.
+5. **Online-mode stores: read-only product, user and supplier pages; no stock management.** In online mode, remove
+   adding, editing and deleting from `src/renderer/pages/Products/ProductList.tsx`, `Products/ProductDetails.tsx`,
+   `Users/UserList.tsx` and `Suppliers/SupplierList.tsx`. Disable `Products/StockManagement.tsx` entirely in online
+   mode. Offline-mode stores keep everything as today.
+6. **Telegram bot: Uzbek only.** Logs and messages the bot sends to a store admin
+   (`src/server/modules/telegram`) must be in Uzbek only.
+
 # Scan-time asl-belgisi check for marked goods + isValid reset on fiscalization (2026-10-09), branch feat/marking-circulation-gate (from dev). Approved 2026-10-09; implemented 1.35.0, not merged yet
 
 ## Decisions (user, 2026-10-09)
