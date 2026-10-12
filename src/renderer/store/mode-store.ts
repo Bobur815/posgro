@@ -68,3 +68,26 @@ export function isAdminLocked(state: Pick<ModeState, 'posAdminLocked' | 'isSatel
 }
 
 export const useAdminLocked = (): boolean => useModeStore(isAdminLocked);
+
+/**
+ * A cashier-only store, as opposed to a satellite. Its users and suppliers are pulled from the
+ * server on every cycle, so the till can show them — read-only, since they are edited on the web.
+ * A satellite's live on its main terminal, and those screens stay closed there.
+ */
+export function isCashierOnly(state: Pick<ModeState, 'posAdminLocked' | 'isSatellite'>): boolean {
+  return state.posAdminLocked && !state.isSatellite;
+}
+
+export const useCashierOnly = (): boolean => useModeStore(isCashierOnly);
+
+/**
+ * Whether ModeGuard turns a route away. Every guarded route is closed on a locked terminal, except
+ * the read-only ones (`allowCashierOnly`), which a cashier-only store may still open.
+ */
+export function blocksRoute(
+  state: Pick<ModeState, 'posAdminLocked' | 'isSatellite'>,
+  allowCashierOnly: boolean,
+): boolean {
+  if (!isAdminLocked(state)) return false;
+  return !(allowCashierOnly && isCashierOnly(state));
+}

@@ -231,7 +231,7 @@ function App() {
           path="users"
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
-              <ModeGuard>
+              <ModeGuard allowCashierOnly>
                 <UserList />
               </ModeGuard>
             </RoleGuard>
@@ -243,7 +243,7 @@ function App() {
           path="suppliers"
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
-              <ModeGuard>
+              <ModeGuard allowCashierOnly>
                 <SupplierList />
               </ModeGuard>
             </RoleGuard>
