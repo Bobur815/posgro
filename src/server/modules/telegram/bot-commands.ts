@@ -3,6 +3,21 @@
 
 export type Lang = 'uz' | 'ru';
 
+/**
+ * The language a chat is written to. Under TELEGRAM_UZ_ONLY a store's own people — its admins and
+ * cashiers — are written to in Uzbek whatever they chose; the super admin and suppliers keep their
+ * choice. Off, everyone keeps theirs (anything but 'uz' is Russian, as before).
+ */
+export function effectiveLang(role: string, stored: string | null | undefined, uzOnly: boolean): Lang {
+  if (uzOnly && uzOnlyRole(role)) return 'uz';
+  return stored === 'uz' ? 'uz' : 'ru';
+}
+
+/** Whether a role is written to in Uzbek only under TELEGRAM_UZ_ONLY (and so is not asked). */
+export function uzOnlyRole(role: string): boolean {
+  return role === 'ADMIN' || role === 'USER';
+}
+
 /** Return the string in the requested language, or both bilingual if lang is unknown. */
 export function t(uz: string, ru: string, lang?: Lang): string {
   if (lang === 'uz') return uz;

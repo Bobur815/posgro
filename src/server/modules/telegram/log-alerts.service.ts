@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { TelegramService } from './telegram.service';
 import * as fmt from './bot-commands';
 import type { Lang } from './bot-commands';
+import { toUzbekLogText } from './log-uz';
 
 /**
  * Forwards terminal log lines to the Telegram chats of a store's admins.
@@ -329,7 +330,7 @@ export class LogAlertsService implements OnModuleDestroy {
         if (groups.length === 0) continue;
         // Only the fleet-wide subscriber needs telling which store this is.
         const from = chat.role === 'SUPER_ADMIN' ? storeId : null;
-        await this.deliver(chat.chatId, chat.lang as Lang, groups, entries, sales, from);
+        await this.deliver(chat.chatId, this.telegram.langOf(chat), groups, entries, sales, from);
       }
     } catch (err) {
       this.logger.error(`Log alert flush failed for store ${storeId}`, err as Error);
@@ -388,7 +389,13 @@ export class LogAlertsService implements OnModuleDestroy {
         terminals,
         shown: groups.slice(0, MAX_GROUPS_PER_MESSAGE).map((g) => {
           const receipts = describeReceipts(g.receiptRefs, sales);
-          return { ...g, receipts: receipts.shown, hiddenReceipts: receipts.hidden };
+          return {
+            ...g,
+            // The till words fiscal failures in Russian; an Uzbek chat gets them in Uzbek.
+            text: lang === 'uz' ? toUzbekLogText(g.text) : g.text,
+            receipts: receipts.shown,
+            hiddenReceipts: receipts.hidden,
+          };
         }),
         hidden: Math.max(0, groups.length - MAX_GROUPS_PER_MESSAGE),
       },
