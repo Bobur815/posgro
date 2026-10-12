@@ -60,6 +60,10 @@ services:
       # and tills on >= 1.32.2 align themselves on their next ledger pull. Set "false" to return
       # to till totals — the tills switch back on their next pull too.
       DEBT_BALANCE_FROM_LEDGER: "true"
+      # Telegram bot: a store's admins and cashiers are written to in Uzbek only and are not asked
+      # for a language; the super admin and suppliers keep their choice. Set "false" to go back to
+      # everyone's own choice (stored choices were never overwritten).
+      TELEGRAM_UZ_ONLY: "true"
       # Drivers, tools and manuals uploaded from the dashboard and served on panel.posgro.uz.
       DOWNLOADS_DIR: "/app/downloads"
       # Read-only view of the installer feed, so the portal reports the same version the
