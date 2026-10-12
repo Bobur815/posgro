@@ -4,6 +4,7 @@ import styled from "styled-components";
 import { Eye, EyeOff, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { news } from "../../api/client";
 import type { NewsAdminRow } from "../../components/news/types";
+import { SubNav, ADMIN_CONTENT_TABS } from "../../components/layout/SubNav";
 
 /**
  * Posts for posgro.uz/news and the dashboard's news button. Readers only see published posts —
@@ -71,6 +72,12 @@ const Row = styled.div`
   &:last-child {
     border-bottom: none;
   }
+
+  /* On a phone the text takes the full width and the actions drop below it. */
+  @media (max-width: 600px) {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
 `;
 
 const Thumb = styled.div`
@@ -93,6 +100,10 @@ const Thumb = styled.div`
 const Main = styled.div`
   flex: 1;
   min-width: 0;
+
+  @media (max-width: 600px) {
+    flex-basis: 100%;
+  }
 `;
 
 const RowTitle = styled.div`
@@ -102,6 +113,10 @@ const RowTitle = styled.div`
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+
+  @media (max-width: 600px) {
+    white-space: normal;
+  }
 `;
 
 const Meta = styled.div`
@@ -143,6 +158,11 @@ const IconBtn = styled.button<{ $danger?: boolean }>`
       $danger ? theme.colors.error : theme.colors.primary};
     border-color: ${({ theme, $danger }) =>
       $danger ? theme.colors.error : theme.colors.primary};
+  }
+
+  @media (max-width: 600px) {
+    width: 44px;
+    height: 44px;
   }
 `;
 
@@ -203,6 +223,7 @@ export function NewsAdminPage() {
 
   return (
     <Page>
+      <SubNav items={ADMIN_CONTENT_TABS} />
       <Header>
         <div>
           <Title>News</Title>

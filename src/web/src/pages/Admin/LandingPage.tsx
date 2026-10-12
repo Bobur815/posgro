@@ -17,6 +17,7 @@ import {
   type LandingHeroVideo,
   type LandingHeroVideoFile,
 } from "@shared/types/landing.types";
+import { SubNav, ADMIN_CONTENT_TABS } from "../../components/layout/SubNav";
 
 /**
  * Edits the parts of posgro.uz that change without a release: how the three tiers are described,
@@ -448,6 +449,7 @@ export function LandingPage() {
 
   return (
     <Page>
+      <SubNav items={ADMIN_CONTENT_TABS} />
       <Header>
         <div>
           <Title>Landing Page</Title>

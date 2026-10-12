@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import { RefreshCw, Upload, Trash2, Eye, EyeOff, ExternalLink } from "lucide-react";
 import { downloads, type DownloadItem, type LatestApp } from "../../api/client";
+import { SubNav, ADMIN_CONTENT_TABS } from "../../components/layout/SubNav";
 
 /**
  * Manages what panel.posgro.uz offers: printer drivers, scale utilities, manuals.
@@ -147,7 +148,8 @@ const RowMeta = styled.div`
   font-size: 12px;
   color: ${({ theme }) => theme.colors.textSecondary};
   margin-top: 3px;
-  word-break: break-all;
+  /* Wraps a long file name, never splits an ordinary word. */
+  overflow-wrap: anywhere;
 `;
 
 const IconBtn = styled.button<{ $danger?: boolean }>`
@@ -268,6 +270,7 @@ export function DownloadsPage() {
 
   return (
     <Page>
+      <SubNav items={ADMIN_CONTENT_TABS} />
       <Header>
         <div>
           <Title>Downloads</Title>
