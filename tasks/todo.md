@@ -1,3 +1,16 @@
+# Receipt settings on a satellite till (2026-10-12), branch feat/satellite-receipt-settings (from dev). Option 1 chosen by user: the satellite keeps its own layout; done 1.38.1
+
+## Outcome
+- `RECEIPT_LAYOUT_SETTINGS` (receipt_width/language/header/footer/logos/sizes + RECEIPT_SHOW_KEYS) are writable on a
+  satellite (`isSatelliteOwnSetting`). Saving one sets `satellite_own_receipt=true` (main process, `settings:set`).
+- Pull from the main (`syncSettings`): receipt keys are taken from the main **until** that flag is set, then skipped
+  (`satelliteKeepsOnPull`). So a new or untouched satellite still prints the store layout; one that saved its own keeps it.
+  Deviation from the plain "add to SATELLITE_MACHINE_SETTINGS" (that would have skipped them from the first pull).
+- Route `/settings/receipt` no longer behind MainOnlyGuard; Settings tile shown on satellites; notice on the page (ru/uz).
+- Not in SATELLITE_MACHINE_SETTINGS, so a takeover (satellite → main) keeps the old main's store layout. No way back to
+  "follow the main" from the UI yet (delete `satellite_own_receipt` on the till).
+- Tests: local-only-settings +5 (red 1/27). POS compile OK. Not seen on a real satellite.
+
 # Fiscal backlog: new step "group" between verify and fiscalise — sort by tender, merge 100 receipts into 1 (2026-10-12), branch feat/backlog-merge (from dev). Approved 2026-10-12 (all defaults); done 1.38.0, not merged
 
 ## Outcome (2026-10-12, POS 1.38.0) — commits 8d2cbc5..482017f on feat/backlog-merge

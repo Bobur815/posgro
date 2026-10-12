@@ -1,7 +1,7 @@
 import { getPrismaClient } from "../database/sqlite-client";
 import { getAppConfig } from "../config/app-config";
 import { getServerToken } from "./queue-manager";
-import { LOCAL_ONLY_SETTINGS, isSatelliteOwnSetting } from "./local-only-settings";
+import { LOCAL_ONLY_SETTINGS, SATELLITE_OWN_RECEIPT, satelliteKeepsOnPull } from "./local-only-settings";
 import { readDirtyDueDates } from "./debt-due-dates";
 
 /**
@@ -692,10 +692,15 @@ export async function syncSettings(source: PullSource = vpsSource): Promise<void
       }
     }
 
+    // A satellite whose own receipt layout was saved keeps it (Settings → Receipt on the satellite).
+    const ownReceipt =
+      !source.isVps &&
+      (await prisma.systemSetting.findUnique({ where: { key: SATELLITE_OWN_RECEIPT } }))?.value === "true";
+
     for (const [key, value] of Object.entries(settings)) {
       // From the VPS, only this machine's own keys are skipped. From a main, a satellite also keeps
       // its till's hardware toggles — the main's drawer and scale say nothing about this till's.
-      if (source.isVps ? LOCAL_ONLY_SETTINGS.has(key) : isSatelliteOwnSetting(key)) continue;
+      if (source.isVps ? LOCAL_ONLY_SETTINGS.has(key) : satelliteKeepsOnPull(key, ownReceipt)) continue;
       if (typeof value !== "string") continue;
 
       await prisma.systemSetting.upsert({

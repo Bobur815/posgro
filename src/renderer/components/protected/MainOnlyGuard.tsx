@@ -4,7 +4,7 @@ import { useModeStore } from '../../store/mode-store';
 
 /**
  * Blocks a route that has nothing to do on a satellite (tasks/LAN_MAIN_TERMINAL_PLAN.md §4): store
- * settings and receipt layout (its main's), fiscal settings (no VCR here), VPS sync diagnostics and
+ * settings (its main's), fiscal settings (no VCR here), VPS sync diagnostics and
  * the terminal list (the main talks to the VPS), and shop-wide reports (a satellite holds only its
  * own sales). Mirrors ModeGuard: a silent redirect home.
  *

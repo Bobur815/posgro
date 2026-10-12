@@ -14,6 +14,7 @@ import {
 } from '../../../shared/receipt-html';
 import type { ReceiptSettings as ReceiptSettingsType } from '../../../shared/receipt-html';
 import { useToast } from '../../context/ToastContext';
+import { useModeStore } from '../../store/mode-store';
 import { useVirtualKeyboard } from '../../hooks/useVirtualKeyboard';
 import {
   KeyboardToggle,
@@ -285,6 +286,7 @@ export function ReceiptSettings() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const isSatellite = useModeStore((s) => s.isSatellite);
 
   const [settings, setSettings] = useState<ReceiptSettingsType>({
     receipt_width: '80',
@@ -400,6 +402,7 @@ export function ReceiptSettings() {
         {/* Left panel — Settings */}
         <Panel>
           <PanelTitle>{t('receipt.title')}</PanelTitle>
+          {isSatellite && <StoreInfo>{t('receipt.satelliteOwn')}</StoreInfo>}
           <Form onSubmit={handleSave}>
             <Row>
               <Select
