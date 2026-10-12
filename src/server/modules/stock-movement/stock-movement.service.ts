@@ -12,6 +12,7 @@ export const MovementSource = {
   COUNT: 'COUNT',
   SUPPLIER_TX: 'SUPPLIER_TX',
   OPENING: 'OPENING',
+  WRITE_OFF: 'WRITE_OFF',
 } as const;
 
 export type MovementSourceType = (typeof MovementSource)[keyof typeof MovementSource];

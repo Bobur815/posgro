@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import styled from "styled-components";
 import { Phone, RefreshCw } from "lucide-react";
 import { leads, type Lead, type LeadStatus } from "../../api/client";
+import { SubNav, ADMIN_STORES_TABS } from "../../components/layout/SubNav";
 
 /**
  * Requests left through the "So'rov qoldiring" form on posgro.uz. Each one also arrives in the
@@ -196,6 +197,7 @@ export function LeadsPage() {
 
   return (
     <Page>
+      <SubNav items={ADMIN_STORES_TABS} />
       <Header>
         <div>
           <Title>Leads</Title>

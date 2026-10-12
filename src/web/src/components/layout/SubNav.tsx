@@ -115,6 +115,7 @@ export function useStockSubNav(): SubNavItem[] {
     ...(isAdmin
       ? [
           { to: "/products/stock/inventarizatsiya", label: t("nav.stocktake") },
+          { to: "/products/stock/write-offs", label: t("nav.writeOffs") },
           { to: "/products/stock/reconciliation", label: t("nav.reconciliation") },
           { to: "/products/stock/bank", label: t("nav.bank") },
         ]
@@ -141,3 +142,21 @@ export function useReportsSubNav(): SubNavItem[] {
       : []),
   ];
 }
+
+/**
+ * The super-admin sections. English, like the admin pages themselves. On a phone the bottom bar
+ * carries Stores, Content, Logs and Settings, and these strips are the only way to the rest —
+ * Leads and Plans under Stores; News, Landing and Downloads under Content.
+ */
+export const ADMIN_STORES_TABS: SubNavItem[] = [
+  { to: "/admin/stores", label: "Stores" },
+  { to: "/admin/leads", label: "Leads" },
+  { to: "/admin/subscription-plans", label: "Plans" },
+];
+
+export const ADMIN_CONTENT_TABS: SubNavItem[] = [
+  { to: "/admin/login-banner", label: "Banner" },
+  { to: "/admin/news", label: "News" },
+  { to: "/admin/landing", label: "Landing" },
+  { to: "/admin/downloads", label: "Downloads" },
+];

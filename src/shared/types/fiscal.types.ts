@@ -299,6 +299,10 @@ export interface FiscalBacklogFiscalizeResult {
   failed: { receipt: string; error: string }[];
   /** True if the VCR stopped answering and the run stopped early. */
   unreachable?: boolean;
+  /** True if the admin pressed Stop: the run ended after the receipt being sent at the time. */
+  stopped?: boolean;
+  /** Receipts not reached because the run stopped early (Stop, or the VCR went quiet). */
+  remaining?: number;
 }
 
 /**

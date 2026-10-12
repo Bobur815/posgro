@@ -5,6 +5,7 @@ import { Layout } from "./components/layout/Layout";
 import { ProtectedRoute } from "./components/protected/ProtectedRoute";
 import { RoleGuard } from "./components/protected/RoleGuard";
 import { ModeGuard } from "./components/protected/ModeGuard";
+import { OfflineMainGuard } from "./components/protected/OfflineMainGuard";
 import { MainOnlyGuard } from "./components/protected/MainOnlyGuard";
 import { useAuthStore } from "./store/auth-store";
 import { ConfirmDialog } from "./components/common/ConfirmDialog";
@@ -29,6 +30,7 @@ import { ReceiptSettings } from "./pages/Settings/ReceiptSettings";
 import { UserList } from "./pages/Users/UserList";
 import { SupplierList, SupplierDetails } from "./pages/Suppliers";
 import { DebtorList } from "./pages/Debtors/DebtorList";
+import { WriteOffsPage } from "./pages/WriteOffs/WriteOffsPage";
 import { WeighedInventoryPage } from "./pages/Inventory/WeighedInventoryPage";
 import { ScaleSettings } from "./pages/Settings/ScaleSettings";
 import { FiscalSettings } from "./pages/Settings/FiscalSettings";
@@ -231,7 +233,7 @@ function App() {
           path="users"
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
-              <ModeGuard>
+              <ModeGuard allowCashierOnly>
                 <UserList />
               </ModeGuard>
             </RoleGuard>
@@ -243,7 +245,7 @@ function App() {
           path="suppliers"
           element={
             <RoleGuard allowedRoles={["ADMIN"]}>
-              <ModeGuard>
+              <ModeGuard allowCashierOnly>
                 <SupplierList />
               </ModeGuard>
             </RoleGuard>
@@ -264,6 +266,18 @@ function App() {
             as putting a sale on one. Editing a due date or correcting a balance stays an admin's —
             the handlers check that, and the page hides what a cashier may not do. */}
         <Route path="debtors" element={<DebtorList />} />
+
+        {/* Write-offs (Admin, OFFLINE_ONLY main terminal only — an ONLINE store writes off on the web) */}
+        <Route
+          path="write-offs"
+          element={
+            <RoleGuard allowedRoles={["ADMIN"]}>
+              <OfflineMainGuard>
+                <WriteOffsPage />
+              </OfflineMainGuard>
+            </RoleGuard>
+          }
+        />
 
         {/* Weighed Inventory (Admin only) */}
         <Route

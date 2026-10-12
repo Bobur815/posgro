@@ -68,3 +68,38 @@ export function isAdminLocked(state: Pick<ModeState, 'posAdminLocked' | 'isSatel
 }
 
 export const useAdminLocked = (): boolean => useModeStore(isAdminLocked);
+
+/**
+ * A cashier-only store, as opposed to a satellite. Its users and suppliers are pulled from the
+ * server on every cycle, so the till can show them — read-only, since they are edited on the web.
+ * A satellite's live on its main terminal, and those screens stay closed there.
+ */
+export function isCashierOnly(state: Pick<ModeState, 'posAdminLocked' | 'isSatellite'>): boolean {
+  return state.posAdminLocked && !state.isSatellite;
+}
+
+export const useCashierOnly = (): boolean => useModeStore(isCashierOnly);
+
+/**
+ * Whether ModeGuard turns a route away. Every guarded route is closed on a locked terminal, except
+ * the read-only ones (`allowCashierOnly`), which a cashier-only store may still open.
+ */
+export function blocksRoute(
+  state: Pick<ModeState, 'posAdminLocked' | 'isSatellite'>,
+  allowCashierOnly: boolean,
+): boolean {
+  if (!isAdminLocked(state)) return false;
+  return !(allowCashierOnly && isCashierOnly(state));
+}
+
+/**
+ * The terminal that owns an OFFLINE_ONLY store's stock: its write-offs happen here. An ONLINE
+ * store writes off on the web dashboard (the next product pull would overwrite a till's figure),
+ * and a satellite's stock lives on its main. A mode not learned yet counts as not offline: the
+ * page is new, so hiding it is today's behaviour.
+ */
+export function isOfflineMain(state: Pick<ModeState, 'mode' | 'isSatellite'>): boolean {
+  return state.mode === 'OFFLINE_ONLY' && !state.isSatellite;
+}
+
+export const useOfflineMain = (): boolean => useModeStore(isOfflineMain);

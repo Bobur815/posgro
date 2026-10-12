@@ -396,6 +396,8 @@ export class StoresService {
         // Before products: both point at them (InventoryCountItem cascades with its count).
         this.prisma.stockMovement.deleteMany({ where: { storeId: id } }),
         this.prisma.inventoryCount.deleteMany({ where: { storeId: id } }),
+        // Lines go with the document (CASCADE); both before products (lines reference them).
+        this.prisma.writeOff.deleteMany({ where: { storeId: id } }),
         this.prisma.supplierTransaction.deleteMany({ where: { storeId: id } }),
         this.prisma.inventoryArrival.deleteMany({ where: { storeId: id } }),
         this.prisma.sale.deleteMany({ where: { storeId: id } }),

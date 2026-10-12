@@ -13,6 +13,7 @@ import {
   type PlanTerminals,
   type SubscriptionRules,
 } from "@shared/utils/subscription";
+import { SubNav, ADMIN_STORES_TABS } from "../../components/layout/SubNav";
 
 const Page = styled.div`
   padding: 32px;
@@ -267,6 +268,7 @@ export function SubscriptionPlansPage() {
 
   return (
     <Page>
+      <SubNav items={ADMIN_STORES_TABS} />
       <Header>
         <div>
           <Title>Subscription Plans</Title>

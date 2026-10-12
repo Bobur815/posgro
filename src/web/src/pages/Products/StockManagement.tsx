@@ -15,7 +15,7 @@ import { usePagination } from "../../hooks/usePagination";
 import { Button } from "@components/common/Button";
 import { Input } from "@components/common/Input";
 import { ProductFilters } from "@components/products/ProductFilters";
-import { Product, ProductFilterParams } from "@shared/types";
+import { Category, Product, ProductFilterParams } from "@shared/types";
 import { useToast } from "@context/ToastContext";
 import {
   Camera,
@@ -312,7 +312,7 @@ export function StockManagement() {
       toast.error(t("products.noResults"));
       setBarcodeInput("");
     }
-  }, [barcodeInput, searchByBarcode, t]);
+  }, [barcodeInput, searchByBarcode, t, toast]);
 
   const handleIdSubmit = useCallback(async () => {
     const raw = idInput.trim();
@@ -325,7 +325,7 @@ export function StockManagement() {
       toast.error(t("products.noResults"));
       setIdInput("");
     }
-  }, [idInput, getById, t]);
+  }, [idInput, getById, t, toast]);
 
   const handlePluSubmit = useCallback(async () => {
     const raw = pluInput.trim();
@@ -339,7 +339,7 @@ export function StockManagement() {
       toast.error(t("products.noResults"));
       setPluInput("");
     }
-  }, [pluInput, findByInternalCode, t]);
+  }, [pluInput, findByInternalCode, t, toast]);
 
   const {
     pageData,
@@ -527,7 +527,8 @@ export function StockManagement() {
       <ProductFilters
         filters={filters}
         onChange={setFilters}
-        categories={categories as any}
+        // Shared Category also requires createdAt/updatedAt; ProductFilters only reads id/nameUz/nameRu.
+        categories={categories as unknown as Category[]}
         suppliers={suppliers}
         isOpen={isFilterOpen}
       />

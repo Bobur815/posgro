@@ -146,6 +146,8 @@ describe('upgrading a database created by an older build', () => {
       'inventory_count_items',
       '_CategoryToSupplier',
       'debt_transactions',
+      'write_offs',
+      'write_off_items',
     ]) {
       expect(names).toContain(table);
     }

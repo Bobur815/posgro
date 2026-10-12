@@ -8,6 +8,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { SalesModule } from './modules/sales/sales.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { InventoryCountModule } from './modules/inventory-count/inventory-count.module';
+import { WriteOffsModule } from './modules/write-offs/write-offs.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
@@ -49,6 +50,7 @@ import { NewsModule } from './modules/news/news.module';
     SalesModule,
     InventoryModule,
     InventoryCountModule,
+    WriteOffsModule,
     AnalyticsModule,
     TelegramModule,
     SuppliersModule,

@@ -171,7 +171,31 @@ export async function stopLocalServer(): Promise<void> {
   if (!instance) return;
   server = null;
   listeningPort = null;
-  await new Promise<void>((resolve) => instance.close(() => resolve()));
+  await closeServer(instance, STOP_GRACE_MS);
+}
+
+/** How long a request already in flight may take to finish once the server is stopping. */
+export const STOP_GRACE_MS = 2_000;
+
+/**
+ * Stop listening and end every connection, without waiting on keep-alive.
+ *
+ * `close()` resolves only when the last connection is gone, and idle keep-alive sockets are held for
+ * KEEP_ALIVE_MS (65 s) on purpose — so a stop waited until each client happened to let go: 6.7 s in
+ * isolation, past the test hook's 30 s under a loaded full run. Idle sockets are closed at once; a
+ * request still being answered gets `graceMs` to finish, then its socket is closed too. Every caller
+ * is shutting this server down (app quit, hand-off, mode change), so nothing should outlive that.
+ */
+export function closeServer(instance: Server, graceMs: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const cut = setTimeout(() => instance.closeAllConnections(), graceMs);
+    cut.unref();
+    instance.close(() => {
+      clearTimeout(cut);
+      resolve();
+    });
+    instance.closeIdleConnections();
+  });
 }
 
 async function handle(

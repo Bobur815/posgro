@@ -415,3 +415,15 @@ Two debugging rounds went into a non-bug.
 
 **Rule:** rename with the Edit tool on the exact lines, or scope sed to a line range; then
 `git diff` the file and check that every changed line belongs to the change being made.
+
+## `server.close()` waits for keep-alive — and the local server holds them for 65 s
+
+`stopLocalServer` awaited `instance.close()`, which resolves only when the last connection is gone.
+The local server keeps idle keep-alive sockets for 65 s on purpose (satellite ECONNRESET race), so a
+stop waited for each client to let go: 6.7 s in isolation, and past the 30 s `afterAll` limit in
+every loaded full run — the "flaky" `local-server.integration.test.ts` failure seen all day on
+2026-10-12, with all 81 tests green.
+
+**Rule:** stopping a server we own closes idle connections at once and caps in-flight ones
+(`closeServer(instance, STOP_GRACE_MS)`). A suite that only fails its hook under load is a real
+bug in the code being torn down, not a timeout to raise — time each teardown step before deciding.

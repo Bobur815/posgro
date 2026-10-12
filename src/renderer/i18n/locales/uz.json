@@ -1,5 +1,6 @@
 {
   "common": {
+    "managedOnWeb": "Faqat ko'rish uchun — o'zgartirishlar saytdagi boshqaruv panelida kiritiladi.",
     "add": "Qo'shish",
     "confirm": "Tasdiqlash",
     "store": "Do'kon",
@@ -108,7 +109,8 @@
     "markingCheck": "Markirovka tekshiruvi",
     "collapse": "Yig'ish",
     "expand": "Kengaytirish",
-    "bank": "Bank"
+    "bank": "Bank",
+    "writeOffs": "Hisobdan chiqarish"
   },
   "markingCheck": {
     "title": "Markirovka tekshiruvi",
@@ -764,7 +766,11 @@
         "omit": "yuborilmaydi",
         "disable": "chek fiskallashtirilmaydi"
       },
-      "unknownStatusSent": "Asl-Belgisi holati noma'lum kodlar: {{count}} — REGOSga o'z holicha yuborildi"
+      "unknownStatusSent": "Asl-Belgisi holati noma'lum kodlar: {{count}} — REGOSga o'z holicha yuborildi",
+      "stop": "To'xtatish",
+      "stopping": "To'xtatilmoqda…",
+      "stoppingAfter": "#{{receipt}} chekdan keyin to'xtatiladi…",
+      "stoppedLeft": "Qo'lda to'xtatildi. Qolgan cheklar: {{remaining}} — davom etish uchun «Fiskallashtirish»ni bosing."
     },
     "duplicateCodes": {
       "title": "Bir nechta qadoq uchun bitta markirovka kodi bilan yuborilgan cheklar: {{count}}",
@@ -1785,5 +1791,48 @@
       "voidPaymentSettled": "Bu to'lov cheklarni yopgan — qarzni tuzatish orqali to'g'rilang",
       "voidChargeSettled": "Bu xarid allaqachon to'langan — qarzni tuzatish orqali to'g'rilang"
     }
+  },
+  "writeOffs": {
+    "title": "Hisobdan chiqarish",
+    "subtitle": "Muddati o'tgan, buzilgan va boshqa mahsulotlar — inventarizatsiyasiz",
+    "new": "Yangi hisobdan chiqarish",
+    "empty": "Hali hisobdan chiqarishlar yo'q",
+    "number": "№",
+    "date": "Sana",
+    "reason": "Sabab",
+    "reasons": {
+      "EXPIRY": "Yaroqlilik muddati o'tgan",
+      "DAMAGE": "Shikastlangan",
+      "OTHER": "Boshqa"
+    },
+    "note": "Izoh",
+    "notePlaceholder": "Ixtiyoriy",
+    "noteRequiredPlaceholder": "Majburiy: nima bo'ldi",
+    "lines": "Pozitsiyalar",
+    "value": "Tannarx bo'yicha summa",
+    "author": "Xodim",
+    "addProduct": "Mahsulot shtrix-kodi yoki nomi",
+    "inStock": "Omborda: {{qty}} {{unit}}",
+    "quantity": "Miqdor",
+    "total": "Jami",
+    "remove": "Olib tashlash",
+    "save": "Hisobdan chiqarish",
+    "noLines": "Kamida bitta mahsulot qo'shing",
+    "saved": "№{{number}} hisobdan chiqarildi",
+    "notFound": "Mahsulot topilmadi",
+    "alreadyAdded": "Bu mahsulot ro'yxatda bor",
+    "detailTitle": "Hisobdan chiqarish №{{number}}",
+    "noCost": "tannarxsiz",
+    "errors": {
+      "NOTE_REQUIRED": "«Boshqa» sababi uchun izoh kerak",
+      "DUPLICATE_LINE": "Mahsulot ikki marta ko'rsatilgan",
+      "UNKNOWN_PRODUCT": "Mahsulot topilmadi",
+      "NOT_POSITIVE": "Miqdor noldan katta bo'lishi kerak",
+      "EXCEEDS_STOCK": "«{{product}}»dan {{quantity}} chiqarib bo'lmaydi: omborda faqat {{stock}}",
+      "generic": "Hisobdan chiqarib bo'lmadi: {{message}}"
+    },
+    "allReasons": "Barcha sabablar",
+    "search": "Qidiruv: №, izoh, xodim",
+    "loadingProducts": "Mahsulotlar yuklanmoqda…"
   }
 }

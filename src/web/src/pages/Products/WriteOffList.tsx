@@ -20,8 +20,7 @@ const Row = styled.div<{ $selectable: boolean; $selected: boolean }>`
   border-bottom: 1px solid ${({ theme }) => theme.colors.border};
   cursor: ${({ $selectable }) => ($selectable ? "pointer" : "default")};
   /* Deselected lines stay legible but visibly out of the write-off. */
-  opacity: ${({ $selectable, $selected }) =>
-    $selectable && !$selected ? 0.45 : 1};
+  opacity: ${({ $selectable, $selected }) => ($selectable && !$selected ? 0.45 : 1)};
 
   &:last-of-type {
     border-bottom: none;
@@ -60,8 +59,7 @@ const Amounts = styled.div<{ $muted: boolean }>`
   text-align: right;
   font-size: 14px;
   font-weight: 500;
-  color: ${({ theme, $muted }) =>
-    $muted ? theme.colors.textSecondary : theme.colors.error};
+  color: ${({ theme, $muted }) => ($muted ? theme.colors.textSecondary : theme.colors.error)};
   /* A line that will NOT be zeroed must not read as a loss. */
   text-decoration: ${({ $muted }) => ($muted ? "line-through" : "none")};
 `;
@@ -138,9 +136,7 @@ export function WriteOffList({
   const sorted = useMemo(
     () =>
       [...items].sort(
-        (a, b) =>
-          lineValue(b) - lineValue(a) ||
-          Number(b.expectedQty) - Number(a.expectedQty),
+        (a, b) => lineValue(b) - lineValue(a) || Number(b.expectedQty) - Number(a.expectedQty),
       ),
     [items],
   );
@@ -177,9 +173,7 @@ export function WriteOffList({
             <Amounts $muted={!isSelected}>
               −{Number(item.expectedQty)} {item.unit}
               {item.cost && (
-                <Value>
-                  −{formatCurrency(lineValue(item), i18n.language as "ru" | "uz")}
-                </Value>
+                <Value>−{formatCurrency(lineValue(item), i18n.language as "ru" | "uz")}</Value>
               )}
             </Amounts>
           </Row>

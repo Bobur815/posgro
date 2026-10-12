@@ -1,3 +1,388 @@
+# Telegram bot: Uzbek only for store admins — messages and log alerts (2026-10-12), branch feat/telegram-uz (from dev). Todo #6. Approved 2026-10-12: admins + cashiers only, picker removed for them
+
+## Findings
+- `src/server/modules/telegram`: `telegram.service.ts` (bot, sessions, keyboards), `bot-commands.ts` (all texts via
+  `t(uz, ru, lang)`), `log-alerts.service.ts` (terminal log lines → batched alerts).
+- The bot is bilingual by design: `/start` asks the language; it is stored per chat (`TelegramChat.lang`, default
+  'ru'); menus, reports, shift opened/closed, alerts are rendered per chat language (`notifyStoreAdmins(render)`).
+- Alert **framing** (title, terminals, ×count, "…and N more", receipt lines) is already translated. The alert
+  **body** is the till's raw log line: English (`[sync] …`) or REGOS's Russian wording
+  (`[fiscal] ✗ fiscalize … failed: [701003] Не отсканирован код…`). Making "logs" Uzbek means translating
+  those lines, which can only be done for known patterns (REGOS codes, our own fixed messages); an unknown line
+  can only be shown as written.
+- No translation table for REGOS error codes exists today.
+
+## Design (pending answers)
+- A flag `TELEGRAM_UZ_ONLY` (env, like `DEBT_BALANCE_FROM_LEDGER`, default off = today; set to "true" in
+  docker-compose to switch). When on, every message to the chats in scope renders with `lang = 'uz'`, ignoring
+  the stored choice (no schema change; `lang` column stays).
+- Language picker on `/start`: skipped for the users in scope (goes straight to "share your phone").
+- Log alerts: a translation table `log-uz.ts` (pure, tested) for the known line patterns found in production
+  (Q3) — REGOS error codes and our own fixed messages → Uzbek, with the receipt / product details kept; unknown
+  lines pass through unchanged, prefixed by nothing.
+- Server-only; no POS, no API, no N-1 impact. Tests for the formatter and the table.
+
+## Decisions (user, 2026-10-12)
+- Admins and cashiers only; remove the language picker for them. (Q3 log sample not run — the table was built
+  from the till source instead, see below.)
+
+## Outcome (2026-10-12) — server only
+- `TELEGRAM_UZ_ONLY` (default off). `bot-commands.ts` `effectiveLang(role, stored, uzOnly)` / `uzOnlyRole`: ADMIN + USER
+  → 'uz', SUPER_ADMIN + SUPPLIER keep their choice; off = old behaviour. Stored `lang` is never overwritten for existing
+  chats, so turning the flag off restores everyone's choice.
+- `telegram.service.ts`: `langOf(chat)` used by session restore, `notifyStoreAdmins` (shift opened/closed),
+  `notifySuperAdmins`, log alerts. `/start` under the flag skips the picker (asks the phone in Uzbek); after login
+  the super admin / a supplier gets the picker (`chooseAfterLogin`), admins and cashiers go straight to the menu.
+- `log-uz.ts`: the till's fiscal wording (`describeVcrError` sentences + `VCR_ERROR_HINTS` by code) → Uzbek, applied
+  to alerts for Uzbek chats. Unknown REGOS descriptions and non-fiscal lines (`[sync] …`) stay as written.
+  `uz-only.test.ts` imports the till's table: a new Russian sentence without Uzbek fails it (red: 2 of 10).
+- `docker-compose.staging.yml`: `TELEGRAM_UZ_ONLY: "true"`; production stays off until checked. Staging only runs a
+  bot with its own `TELEGRAM_BOT_TOKEN_STAGING`.
+- Not tested end to end: the /start → phone → menu flow (no bot tests exist); check by hand.
+
+## Open questions
+1. **Who is in scope?** Only store admins (ADMIN)? Or everyone the bot talks to — cashiers (USER), suppliers, and
+   you as super admin (stores list, new leads)? (my default: store admins and cashiers; super admin and suppliers
+   keep their choice)
+2. **Language picker:** remove it for those users (my default), or keep it and just ignore it?
+3. **Log lines:** run `scratchpad\log-patterns.sql` (read-only) and paste the output, so the translation table
+   covers what actually reaches admins:
+   `Get-Content "<scratchpad>\log-patterns.sql" | ssh posgro-vps "docker exec -i posgro-postgres-1 sh -c 'psql -U \`"\`$POSTGRES_USER\`" -d \`"\`$POSTGRES_DB\`"'"`
+
+# Fiscal backlog step 4: Stop button that stops after the current receipt (2026-10-12), branch feat/backlog-stop (from dev). Todo #2. Approved 2026-10-12 (shared fields OK)
+
+## Findings
+- Step 4 = `regosVcrService.backlogFiscalize(fromDate, onProgress)` (`src/main/fiscal/regos-vcr-service.ts:1676`):
+  behind `withBacklogLock` (one step at a time, `backlogBusy()`), loops over the kept receipts one by one: reset to
+  PENDING (conditional) → `fiscalizeSale` → read the status back. It already breaks early when the VCR stops
+  answering (`unreachable`). Progress goes to the screen over `fiscal:backlogProgress`.
+- The card (`src/renderer/pages/Settings/FiscalBacklogCard.tsx`) shows "running" + progress + current receipt №,
+  and a remounted screen sees a run in progress through `backlogBusy()` (`busyElsewhere`).
+- Result type `FiscalBacklogFiscalizeResult` lives in `src/shared/types/fiscal.types.ts`.
+
+## Design
+- Service: `private backlogStopRequested = false`; `requestBacklogStop(): boolean` sets it only while step 4 runs
+  (returns false otherwise). The flag is cleared when a run starts. The loop checks it **at the top of each
+  iteration**, before the next receipt is reset to PENDING — so the receipt being fiscalised always finishes and
+  is counted, and nothing after it is touched. Then `result.stopped = true`, `result.remaining = total − processed`.
+- `src/shared/types/fiscal.types.ts`: `stopped?: boolean; remaining?: number` on the result (optional, additive).
+- IPC `fiscal:backlogStop` → preload `fiscal.backlogStop()` (admin, like the other backlog calls).
+- Card: while step 4 runs (here, or `busyElsewhere === 'fiscalize'` after a remount) a **Stop** button next to
+  the progress. Pressed → disabled "Stopping after receipt #N…". Result line when stopped: "Stopped: X fiscalised,
+  Y failed, Z left — press Run to continue" (ru + uz). Running step 4 again simply picks up the rest (it
+  recomputes from the database).
+- Steps 1–3 unchanged (the todo is step 4 only).
+- No server, schema or sync change; N-1 not affected. POS 1.37.0 (feature).
+
+## Steps
+1. Service flag + check + result fields; tests in `regos-vcr-service.backlog.test.ts`: stop during receipt 1 →
+   receipt 1 fiscalised and counted, receipts 2..n untouched (not reset to PENDING), `stopped` + `remaining`; stop
+   when nothing runs → false; next run starts with the flag cleared. Prove red first.
+2. IPC + preload + card button/state + i18n ru/uz.
+3. Bump 1.37.0, `/check`, POS compile. Commit per concern; you test on a till with a real VCR.
+
+## Outcome (2026-10-12, POS 1.37.0)
+- `regos-vcr-service.ts`: `requestBacklogStop()` (true only while step 4 runs) + `backlogStopRequested`, cleared when
+  a run starts and when it ends; checked at the top of each iteration. Result `stopped` / `remaining` (also set
+  when the VCR goes quiet). `fiscal.types.ts`: two optional fields (approved).
+- IPC `fiscal:backlogStop` (mainOnly, not license-gated: stopping costs nothing) → preload `fiscal.backlogStop()`.
+- Card: Stop under the progress bar while step 4 runs, and on a reopened screen while it runs (`busyElsewhere`);
+  "Stopping after receipt #N…" once pressed; result line "Stopped manually, N left — press Fiscalise". ru + uz.
+- Tests (`regos-vcr-service.backlog.test.ts` +3): Stop during receipt 1 → 1 fiscalised, 2 and 3 untouched
+  (still FAILED/3 attempts), `stopped` + `remaining: 2`; Stop with nothing running → false; a Stop does not leak
+  into the next run. Red: 2 of 28 fail without the check.
+- Needs a real VCR to see on screen (yours).
+
+## Open question
+1. OK to add the two optional fields to `src/shared/types/fiscal.types.ts`?
+
+# Write-offs (expired / damaged goods) without a stocktake: web + POS offline mode (2026-10-12), branch feat/write-offs (from dev). Todo #1. Approved 2026-10-12
+
+## Findings
+- Today stock only leaves by write-off inside a stocktake: `InventoryCountService.complete` (server) and its port
+  `local-server/routes/inventory-counts.ts` (till) zero "uncounted" lines the operator selects (`WriteOffList.tsx` is
+  that selection list inside the stocktake, not a page).
+- `StockMovementType` already reserves `WRITE_OFF_DAMAGE` and `WRITE_OFF_EXPIRY` ("no writer yet"). The ledger is
+  off unless `RECONCILIATION_LEDGER_ENABLED`; reconciliation sums signed rows of any type, so negative write-off rows
+  count with no reconciliation change. The ledger can't be the write-off history (off by default, absent on SQLite)
+  → write-offs need their own document table, like `InventoryCount`.
+- Two backends serve the same web page: the VPS for ONLINE stores, the till's local server
+  (`src/main/local-server/routes/*`) for OFFLINE_ONLY stores (the web bundle ships inside the installer, so page and
+  routes always match). The stocktake already works this way.
+- ONLINE tills learn server stock changes from the product pull (overwrites local stock for changed products), so a
+  server-side write-off reaches them like a stocktake. OFFLINE_ONLY never syncs → its write-offs live in SQLite only.
+- POS renderer has no stock pages beyond StockManagement (arrivals); stocktake is web-only. Satellites edit nothing
+  (`ModeGuard`).
+- Note: `src/web/src/pages/Products/WriteOffList.tsx` has an uncommitted edit (not mine) with a stray character:
+  `justify-content: space-between;s` (line 17), which breaks the next CSS rule. Fix or discard before committing.
+
+## Design (pending answers)
+### Data (additive; both schemas)
+- `WriteOff`: id (cuid), storeId, number (per store, sequential), reason (`EXPIRY` | `DAMAGE`), note?, createdById,
+  createdByName, createdAt, totalItems, totalValue Decimal(14,2) (at cost).
+- `WriteOffItem`: id, writeOffId, productId, name/barcode/unit snapshot, quantity Decimal(10,3), unitCost Decimal(10,2)?.
+- PG migration via skill `prisma-migration`, reviewed by `migration-reviewer`. SQLite: same tables `IF NOT EXISTS` in
+  the unconditional schema setup + a legacy-upgrade test (lessons.md).
+### Server (`src/server/modules/write-offs`, skill `nest-module`)
+- `GET /write-offs` (list, paged, filter by reason/date), `GET /write-offs/:id`, `POST /write-offs` (ADMIN).
+- POST in one `$transaction`: create document + items, `Product.stock` decrement per line, emit
+  `WRITE_OFF_EXPIRY|DAMAGE` movements (when the ledger is on), AuditLog row. Idempotent on a client-generated id, so a
+  double-click / retry never writes off twice.
+### Till (one service in `src/main`, two callers)
+- `write-off-service.ts`: the same transaction on SQLite (no ledger, as for stocktake).
+- Local-server routes `/write-offs` (same shape as the VPS) → the web page works for offline stores.
+- IPC `writeOffs:list|get|create` → preload → ipc-client → hook → renderer page, shown only when
+  `mode === 'OFFLINE_ONLY'` and not a satellite (skill `ipc-feature`). Version bump.
+### Web page (like `InventoryCountList`)
+- Stock tab "Write-offs" / "Hisobdan chiqarish" (`/products/stock/write-offs`, admin), list with number, date, reason,
+  lines, value, author; "New write-off" modal: reason, note, product search/scan, quantity per line, totals; detail
+  page. Mobile cards (`MobileCard`). ru + uz.
+### Renderer page (offline stores)
+- Same list + create modal in the POS's own UI (styled-components, theme tokens, ru + uz), barcode scan to add a line.
+
+## N-1 / rollout
+- New tables and endpoints only; nothing existing changes shape. Old POS ignores them; the web page ships with its
+  backend (server deploy / installer), so it never calls a route that is missing.
+- Server first on dev → staging → your OK → main. Then the installer (1.36.0) for offline stores.
+- Prod migration needs `/pg-backup` first (CLAUDE.md hard rule 3).
+
+## Decisions (user, 2026-10-12)
+- Posted on save (no draft). Reasons: EXPIRY, DAMAGE, OTHER (note required for OTHER).
+- A line above current stock is refused. No undo: a mistake is corrected with an arrival.
+- Both Prisma schemas may be touched (additive).
+
+## Outcome (2026-10-12, POS 1.36.0) — commits 3debae5..cc56c19 on feat/write-offs, on top of feat/cashier-only-readonly
+- Schema: `WriteOff` + `WriteOffItem` in both Prisma schemas; PG migration `20261012000001_write_offs` (CREATE only, generated
+  offline with `prisma migrate diff`, no local DB); SQLite "Migration 40" (IF NOT EXISTS). migration-reviewer: safe to apply.
+- Server `modules/write-offs`: pure `planWriteOff` + service (idempotent on client id, conditional stock decrement,
+  ledger rows EXPIRY/DAMAGE→WRITE_OFF_*, OTHER→MANUAL_ADJUSTMENT when the ledger is on), ADMIN-only controller.
+  Product hard delete and store purge now clear write-offs (the purge guard test caught the latter).
+- Till: `src/main/write-offs` (port of the rules + service, refuses on ONLINE and on a satellite), local-server
+  `/write-offs` routes (web dashboard for offline stores), IPC `writeOffs:*`, POS page `/write-offs` behind
+  `OfflineMainGuard`, sidebar item. Web: Stock tab + sidebar item, `WriteOffsPage` (cards / table / detail modal) and
+  `WriteOffFormModal` (catalog loaded once, filtered in the browser — the VPS ignores `/products?query`).
+- No server AuditLog table exists (CLAUDE.md says otherwise); the write-off document is the record.
+- Tests: server plan + service + hard-delete (red: 4 of 20 fail without the safeguards); till integration on real
+  SQLite (red: 2 of 8); schema upgrade (red: 3 of 41). Full run 1490/1491: the one failure is the known
+  `local-server.integration.test.ts` afterAll 30 s timeout (passes alone, 81/81). Builds: server, web, POS OK.
+- Web page rendered with fixtures at 375 and 1280 (list, tab, form with scanned line). POS page not seen on screen.
+- Staging checks: migration applies on posgro_staging; a product hard delete works after a write-off.
+- Rollback note: an older server image cannot hard-delete a product that has write-off lines (FK; nothing lost).
+
+## Follow-up (separate todo): `local-server.integration.test.ts` afterAll (stopLocalServer + closeDatabase) exceeds 30 s in full runs — **fixed 2026-10-12** (branch fix/local-server-test-teardown): `closeServer()` closes idle keep-alive sockets at once and cuts in-flight ones after 2 s; teardown 6.7 s → 2.0 s. See lessons.md.
+Seen twice on 2026-10-12; passes alone. Raise the hook timeout or find what keeps the server/DB open.
+
+## Open questions
+1. **Flow:** post immediately on save (my default; a write-off is one decision), or draft → complete like a stocktake?
+2. **Reasons:** only Expired / Damaged, or also "Other" with a required note?
+3. **More than in stock:** refuse a line whose quantity exceeds the product's current stock (my default), or allow
+   stock to go negative?
+4. **Undo:** none — a mistake is corrected with an arrival (my default), or "cancel" restoring stock (same day only)?
+5. OK to add the two tables to `prisma/schema.prisma` and `schema.sqlite.prisma` (CLAUDE.md asks me to confirm)?
+
+# "Cashier-only POS": Users and Suppliers become read-only instead of blocked (2026-10-12), branch feat/cashier-only-readonly (from dev). Todo #5. Approved 2026-10-12 (SupplierDetails stays blocked)
+
+## Decisions (user, 2026-10-12)
+- Option 3: change what "Cashier-only POS" (`posAdminLocked`) does; no server change, no new switch.
+- Live store is ONLINE but does not add or edit products, users or suppliers on the till.
+- Stocktake / inventory count: nothing to do; the POS has no such pages (they exist only on the web, so todo #1's
+  `InventoryCountList.tsx` reference is a web file).
+
+## Findings
+- Lock = `useAdminLocked()` = `posAdminLocked || isSatellite` (`src/renderer/store/mode-store.ts`). Today it:
+  hides product add / edit / delete (ProductList, ProductDetails); blocks `/products/stock`, `/users`, `/suppliers`,
+  `/suppliers/:id` with `ModeGuard`; hides Stock + Suppliers in the sidebar and the Users tile in Settings; stops
+  master-data upload (`sync-policy.ts`).
+- So products (read-only) and StockManagement (blocked) already match the todo. The change is Users and Suppliers.
+- A locked till still pulls users (`syncUsers`) and suppliers with their balance (`syncSuppliers`) every cycle, so
+  both lists are current. **Supplier transactions are not pulled**: on a locked till `/suppliers/:id` would show an
+  empty or stale history.
+- UserList actions: add, edit, activate/deactivate (debt link is read-only, stays). SupplierList: add, edit, delete,
+  view details. SupplierDetails: edit, add / edit / delete transaction.
+
+## Design
+- New selector `useCashierOnly()` = `posAdminLocked && !isSatellite`. Satellites keep today's behaviour exactly.
+- Routes: `/users` and `/suppliers` get a guard that blocks only satellites (cashier-only passes);
+  `/suppliers/:id` and `/products/stock` keep `ModeGuard` (blocked for both).
+- UserList: hide add, edit, activate/deactivate when locked.
+- SupplierList: hide add, edit, delete and the "view details" button when locked (details would mislead, see above).
+- Navigation: Suppliers back in the sidebar and the Users tile back in Settings for cashier-only; still hidden on
+  a satellite.
+- A one-line notice on both pages when locked: "Managed on the web dashboard" (ru + uz).
+- UI only, like the existing lock; upload policy unchanged. Offline-mode stores and unlocked online stores: no change.
+- POS-only: no server, schema or API change, so no N-1 concern. Version bump 1.35.2.
+
+## Steps
+1. Selector + route guard + tests (selector truth table; guard: satellite blocked, cashier-only passes, unlocked
+   passes). Prove red first.
+2. UserList, SupplierList, Sidebar, Settings tile, notice, i18n ru + uz.
+3. Bump 1.35.2, `/check`, `npx cross-env APP_MODE=pos electron-vite build`.
+4. Commits per concern; dev → staging → your OK; then the installer (`deploy:pos`, yours).
+
+## Outcome (2026-10-12, 1.35.2, uncommitted on feat/cashier-only-readonly — branched from feat/admin-mobile)
+- `mode-store.ts`: `isCashierOnly` / `useCashierOnly` (`posAdminLocked && !isSatellite`), `blocksRoute(state, allowCashierOnly)`.
+  `ModeGuard` takes `allowCashierOnly`; `/users` and `/suppliers` use it. `/suppliers/:id`, `/products/stock` unchanged.
+- UserList: actions column filtered out + add button hidden; SupplierList: same (incl. view-details button).
+  `ManagedOnWebNotice` (`common.managedOnWeb`, ru + uz) on both. Sidebar Suppliers + Settings Users tile shown for
+  cashier-only, still hidden on a satellite.
+- Tests: `mode-store.test.ts` +6 (isCashierOnly, blocksRoute); red proof: 2 failed of 9 against the old behaviour,
+  file restored (cmp). Lint 0 errors, tsc root + server, POS compile OK.
+- Not verified on screen (no `dev:pos` without the user): needs a look on a cashier-only till / staging.
+- Decision: SupplierDetails stays blocked (user, 2026-10-12).
+
+## Open question
+1. SupplierDetails on a cashier-only till: keep blocked (my default, since its history isn't synced), or open it
+   read-only showing only the supplier's balance?
+
+# Super-admin web pages mobile-responsive, cards instead of tables (2026-10-12), branch feat/admin-mobile (from dev). Todo #4. Approved 2026-10-12 (keep English; grouping Stores / Content / Logs / Settings, Landing + Downloads reachable); done 3af33d5 + a143208, awaiting staging OK
+
+## Findings
+- Super-admin routes (`App.tsx:126-137`): stores (list, new, detail, edit), logs, login-banner, subscription-plans,
+  landing, downloads, leads, news (list, editor). All in `src/web/src/pages/Admin`.
+- The pattern already exists: `components/common/MobileCard.tsx` (`MobileCard`, `MobileCardList` shown ≤768px,
+  `DesktopOnly` hidden ≤768px). `LogsPage` and `StockManagement` use it. `LogsPage` is done.
+- Tables left:
+  - `StoreList.tsx`: 10-column `<table>` (#, ID, name+address+deletion note, phone, plan+subscription line, users,
+    products, terminals, status, 4 icon actions), `white-space: nowrap`, no breakpoint. Unusable on a phone.
+  - `StoreDetailPage.tsx:915`: subscription ledger table (when, what, amount, balance) inside a horizontal scroll.
+- Every other page already has breakpoints (forms, grids collapse to 1 column at 600–700px). Possible leftovers to
+  confirm on a real 375px render, not guessed: `LoginBannerPage` preview `width: 340px; min-width: 280px`,
+  `LeadsPage` `1fr 160px` grid, `LogsPage` 180px filter, nowrap headers in `NewsAdminPage`/`LoginBannerPage`.
+- **Navigation gap:** the super-admin mobile bar (`Sidebar.tsx:264`) has Stores, Logs, Banner, Plans, Settings.
+  Leads and News can't be reached on a phone at all. Landing and Downloads are left out on purpose (comment: not
+  phone tasks).
+- Admin pages are hardcoded English, not ru/uz (CLAUDE.md wants bilingual UI).
+- Web-only: no server, no POS, no schema, no version bump, no N-1 impact. No large assets.
+
+## Design
+1. `StoreList`: `DesktopOnly` around the table + `MobileCardList` of `MobileCard`s. Title = name (+ deletion note),
+   subtitle = `#id · phone`; fields = plan badge + subscription line, status, users / products / terminals; actions =
+   the same 4 buttons, with tap targets ≥ 40px. Loading/empty states in both views. Header buttons wrap.
+2. `StoreDetailPage` ledger: same switch; one card per entry (title = what, subtitle = when, fields = amount ± colour,
+   balance after).
+3. Navigation: an admin `SubNav` (the existing `SubNav` + `useStockSubNav` pattern) so every page is two taps:
+   - Stores section: Stores · Leads · Plans
+   - Content section: Banner · News · Landing · Downloads
+   - Mobile bar becomes: Stores, Content, Logs, Settings (4 icons, under the 5-icon limit).
+   Desktop sidebar unchanged.
+4. Fix whatever the 375px pass finds on the other pages (overflow, fixed widths, nowrap), CSS only, smallest change.
+
+## Steps
+1. Render every super-admin page at 375×812 and 768px (web dev server + Chrome) and list the real overflows before
+   touching CSS. Per lessons: `MSYS_NO_PATHCONV=1` for route arguments from Git Bash.
+2. StoreList cards. 3. StoreDetailPage ledger cards. 4. Admin SubNav + mobile bar. 5. Fixes from step 1.
+6. Re-render at 375 / 768 / 1280 in light and dark; desktop must look unchanged.
+7. `npm --prefix src/web run build`, lint + `tsc` for `src/web`, `/check`.
+8. Commits: one per page/concern. Merge to dev → staging (`dev.pos.bobur-dev.uz/web`) → stop for your OK on a phone.
+
+## Outcome (2026-10-12)
+- `3af33d5` navigation: `ADMIN_STORES_TABS` / `ADMIN_CONTENT_TABS` in `SubNav.tsx`, strips on the 7 list pages,
+  mobile bar Stores / Content / Logs / Settings with `match` so a section stays lit on all its pages (`Sidebar.tsx`).
+  Gotcha: `styled(NavLink)` drops a function `className`, so the bar passes a string.
+- `a143208` cards: StoreList (≤768px), StoreDetail ledger (≤768px), News rows wrap (≤600px), Downloads meta uses
+  `overflow-wrap: anywhere` (was splitting words).
+- Verified with headless Chrome + fixture API (scratchpad `admin-mobile/check.mjs`): all 10 super-admin routes at
+  375 / 768 / 1280 light and 375 dark, scrollWidth = viewport everywhere, correct tab + bar highlight. Lint 0 errors,
+  tsc root + server, 1460 tests, `npm --prefix src/web run build`.
+- Left as is: at exactly 768px the desktop sidebar (≤767px breakpoint) shows with the card layout (MobileCard ≤768px),
+  pre-existing one-pixel mismatch. Content tab strip scrolls sideways at 375px ("Downloads" partly hidden), by design.
+
+## Open questions
+1. Keep admin pages English (only you use them), or move them to ru/uz i18n keys while I'm in there? (my default:
+   keep English, separate todo if wanted)
+2. Navigation grouping above (Stores / Content / Logs / Settings) OK, and should Landing and Downloads become
+   reachable on mobile too, or stay desktop-only as the comment intends? (my default: reachable through the Content
+   tabs; the pages themselves only get overflow fixes)
+
+# Debt amount differs between tills: match ledger rows by phone when the user id is unknown (2026-10-12), branch fix/debt-ledger-phone-match (from dev). Todo #3. Option 2 chosen by user; PARKED 2026-10-12 by user (plan kept, not approved, step 0 not done)
+
+## Findings (VPS, read-only, 2026-10-12)
+- Prod has `DEBT_BALANCE_FROM_LEDGER: "true"` (`docker-compose.yml:62`): every till's balance is the sum of the debt
+  records it holds (`debt-ledger-sync.ts` `alignBalances`).
+- PG: "Boburshoh" = `cmowt5i3n0005ykgru7ldpn7e`, store 1234, role `USER`, phone 998911234602, debt 0.00, no due date,
+  **0 rows in `debt_transactions`**. Store-wide drift (stored debt vs ledger sum) is empty: only rows that never
+  arrived are missing, which the server cannot see.
+- Pull cursor `2026-10-11 13:09:47.100 / cmv3uab…` is just "caught up": no rows after it. Not a stuck pull.
+- The due date is not the cause: it never enters a balance, and PG has none for this user.
+- API logs: 544 `users/sync-bulk` + 544 `debtors/sync-bulk` in 48 h, none failed. Skips are silent: both endpoints answer
+  200/201 and report skips only in the body.
+- Mechanism: `syncFromTerminal` (`debtors.service.ts:167`) skips a row whose `userId` is not a user of the store, no log.
+  The till keeps it `synced=false` and resends forever (`upload-sync.ts` `uploadDebtTransactions`). A till keeps its own
+  id for a person indefinitely: `syncUsers` (`products-sync.ts`) matches by id, then by phone, and on a phone match
+  updates the local row but never takes the server's id. `users/sync-bulk` also falls back to phone, so the profile
+  syncs fine while the ledger never does.
+- **Not yet confirmed on a till:** that its Boburshoh id differs from `cmowt5i…` and has `synced=0` rows
+  (`scratchpad/till-boburshoh.sql`). Step 0 below.
+
+## Design
+### Server (additive, flag `DEBT_LEDGER_MATCH_BY_PHONE`, default off = today's behaviour)
+- `SyncDebtTransactionDto.userPhone?: string` (optional, `@IsOptional() @IsString()`). Accepted whether the flag is on or
+  off, so a new till never gets a 400 from `forbidNonWhitelisted`.
+- `syncFromTerminal`: user not found by id in this store **and** flag on **and** `userPhone` present → look up
+  `storeId_phone`. Found → store the row under the **server's** user id, count it in `syncedIds`, recompute that user.
+  Not found → skip as today. Same rule for the existing-row check (a row is matched by its own id, unchanged).
+- `pullLedger`: each row gains `userPhone` (the user's phone, additive). The page gains `acceptsUserPhone: true`
+  (server capability, independent of the flag) and `matchByPhone: <flag>`.
+- `Logger.warn` on every skip and every phone match: row id + user id + reason. No phone numbers in logs.
+
+### POS (1.35.2)
+- Pull, `applyLedgerRows`: user not found by id → if `row.userPhone`, find the local user by phone; store / merge the
+  row under the **local** id and add the local id to `touchedUsers`. Still not found → block as today. Without this, a
+  till that knows the person under another id would stop at the first remapped row, and its whole ledger pull would
+  freeze (this includes the till that wrote the row).
+- Upload, `uploadDebtTransactions`: send `userPhone` (the local user's phone) only once the server has said
+  `acceptsUserPhone` (saved in `system_settings` like `debt_ledger_balance_mode`). An old server never sees the field.
+- Log the server's skip count when it is above 0 (`console.warn`, per lessons: no app logger on the sync path).
+
+## N-1 / rollout (the flag is what makes it safe)
+- **Old POS + new server, flag off:** identical to today. Field is optional, response fields are additive.
+- **Old POS + new server, flag ON:** an old till that knows a person under another id cannot map a remapped row and its
+  ledger pull freezes for everyone. So the flag goes on **only after every till runs ≥ 1.35.2**. The server does not
+  record till versions; you confirm per till.
+- **New POS + old server:** no `acceptsUserPhone` → no `userPhone` sent → today's behaviour.
+- No schema change, no migration, SQLite untouched.
+- Order: server on dev → staging → your OK → main (flag off) → POS 1.35.2 via `deploy:pos` (yours) → every till updated
+  → you set `DEBT_LEDGER_MATCH_BY_PHONE: "true"` in `docker-compose.yml` (prod + staging) → nightly deploy.
+- Rollback: set the flag back off. Rows already remapped stay (correct data); new mismatches go back to being skipped.
+- After the flag: the stuck rows upload on the next cycle, both tills pull them, balances align. Check with
+  `ledger/drift` + the till query.
+
+## Steps
+0. Confirm on a till copy with `till-boburshoh.sql`: Boburshoh id ≠ `cmowt5i…`, rows `synced=0`. If not, stop and rethink.
+1. Server: DTO field + `syncFromTerminal` phone fallback behind the flag + pull fields + logs. Tests in
+   `debtors.sync.test.ts`: unknown id + phone + flag on → stored under server id; flag off → skipped; phone of another
+   store → skipped; known id → unchanged; pull rows carry `userPhone`, page carries `acceptsUserPhone`. Prove red first.
+2. POS: pull fallback + capability setting + upload field + skip log. Tests in `debt-ledger-sync.test.ts`: remapped row
+   applied under the local id, own row merged not duplicated, unknown phone still blocks; upload sends `userPhone` only
+   after the capability. Bump 1.35.2.
+3. `/check`, `/api-compat`, `npx cross-env APP_MODE=pos electron-vite build`.
+4. Commits: server, POS, docs (one concern each). Merge to dev → staging. Stop for your OK.
+
+## Open questions
+1. Flag via env var in `docker-compose.yml`, like `DEBT_BALANCE_FROM_LEDGER`? (my default)
+2. Option 2 leaves each till with its own id for the person. Fine long-term, or also queue option 1 (re-key on the
+   till) as a later todo?
+
+# Todos for 2026-10-12 (not started; each one gets its own plan and approval before code)
+
+1. **Separate write-off page (POS offline mode only + web).** A store admin should be able to write off expired or
+   damaged products. Today a write-off is only possible at the end of an inventory count. Model the page on
+   `InventoryCountList.tsx`; build it in both the renderer (`src/renderer`, offline mode only) and the web dashboard
+   (`src/web`).
+2. **Stop button for fiscal backlog step 4** (`src/renderer/pages/Settings/FiscalBacklogCard.tsx`). Show it while step 4
+   is running. Pressing it must not abort mid-receipt: the run stops after the receipt currently being fiscalised is
+   done.
+3. **Debtor sync bug for "Boburshoh"** (`src/renderer/pages/Debtors/DebtorList.tsx`). This debtor's data does not sync.
+   Suspected cause: setting a due date for "Boburshoh". Check on the VPS (`ssh posgro-vps`). **Parked**: analysis and plan in the section above.
+4. **Super-admin web pages fully mobile-responsive** (`src/web/src/pages/Admin`). On mobile, show cards instead of
+   tables.
+5. **Online-mode stores: read-only product, user and supplier pages; no stock management.** In online mode, remove
+   adding, editing and deleting from `src/renderer/pages/Products/ProductList.tsx`, `Products/ProductDetails.tsx`,
+   `Users/UserList.tsx` and `Suppliers/SupplierList.tsx`. Disable `Products/StockManagement.tsx` entirely in online
+   mode. Offline-mode stores keep everything as today.
+6. **Telegram bot: Uzbek only.** Logs and messages the bot sends to a store admin
+   (`src/server/modules/telegram`) must be in Uzbek only.
+
 # Scan-time asl-belgisi check for marked goods + isValid reset on fiscalization (2026-10-09), branch feat/marking-circulation-gate (from dev). Approved 2026-10-09; implemented 1.35.0, not merged yet
 
 ## Decisions (user, 2026-10-09)
