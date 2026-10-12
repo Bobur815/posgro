@@ -1,3 +1,57 @@
+# "Cashier-only POS": Users and Suppliers become read-only instead of blocked (2026-10-12), branch feat/cashier-only-readonly (from dev). Todo #5. Approved 2026-10-12 (SupplierDetails stays blocked)
+
+## Decisions (user, 2026-10-12)
+- Option 3: change what "Cashier-only POS" (`posAdminLocked`) does; no server change, no new switch.
+- Live store is ONLINE but does not add or edit products, users or suppliers on the till.
+- Stocktake / inventory count: nothing to do; the POS has no such pages (they exist only on the web, so todo #1's
+  `InventoryCountList.tsx` reference is a web file).
+
+## Findings
+- Lock = `useAdminLocked()` = `posAdminLocked || isSatellite` (`src/renderer/store/mode-store.ts`). Today it:
+  hides product add / edit / delete (ProductList, ProductDetails); blocks `/products/stock`, `/users`, `/suppliers`,
+  `/suppliers/:id` with `ModeGuard`; hides Stock + Suppliers in the sidebar and the Users tile in Settings; stops
+  master-data upload (`sync-policy.ts`).
+- So products (read-only) and StockManagement (blocked) already match the todo. The change is Users and Suppliers.
+- A locked till still pulls users (`syncUsers`) and suppliers with their balance (`syncSuppliers`) every cycle, so
+  both lists are current. **Supplier transactions are not pulled**: on a locked till `/suppliers/:id` would show an
+  empty or stale history.
+- UserList actions: add, edit, activate/deactivate (debt link is read-only, stays). SupplierList: add, edit, delete,
+  view details. SupplierDetails: edit, add / edit / delete transaction.
+
+## Design
+- New selector `useCashierOnly()` = `posAdminLocked && !isSatellite`. Satellites keep today's behaviour exactly.
+- Routes: `/users` and `/suppliers` get a guard that blocks only satellites (cashier-only passes);
+  `/suppliers/:id` and `/products/stock` keep `ModeGuard` (blocked for both).
+- UserList: hide add, edit, activate/deactivate when locked.
+- SupplierList: hide add, edit, delete and the "view details" button when locked (details would mislead, see above).
+- Navigation: Suppliers back in the sidebar and the Users tile back in Settings for cashier-only; still hidden on
+  a satellite.
+- A one-line notice on both pages when locked: "Managed on the web dashboard" (ru + uz).
+- UI only, like the existing lock; upload policy unchanged. Offline-mode stores and unlocked online stores: no change.
+- POS-only: no server, schema or API change, so no N-1 concern. Version bump 1.35.2.
+
+## Steps
+1. Selector + route guard + tests (selector truth table; guard: satellite blocked, cashier-only passes, unlocked
+   passes). Prove red first.
+2. UserList, SupplierList, Sidebar, Settings tile, notice, i18n ru + uz.
+3. Bump 1.35.2, `/check`, `npx cross-env APP_MODE=pos electron-vite build`.
+4. Commits per concern; dev → staging → your OK; then the installer (`deploy:pos`, yours).
+
+## Outcome (2026-10-12, 1.35.2, uncommitted on feat/cashier-only-readonly — branched from feat/admin-mobile)
+- `mode-store.ts`: `isCashierOnly` / `useCashierOnly` (`posAdminLocked && !isSatellite`), `blocksRoute(state, allowCashierOnly)`.
+  `ModeGuard` takes `allowCashierOnly`; `/users` and `/suppliers` use it. `/suppliers/:id`, `/products/stock` unchanged.
+- UserList: actions column filtered out + add button hidden; SupplierList: same (incl. view-details button).
+  `ManagedOnWebNotice` (`common.managedOnWeb`, ru + uz) on both. Sidebar Suppliers + Settings Users tile shown for
+  cashier-only, still hidden on a satellite.
+- Tests: `mode-store.test.ts` +6 (isCashierOnly, blocksRoute); red proof: 2 failed of 9 against the old behaviour,
+  file restored (cmp). Lint 0 errors, tsc root + server, POS compile OK.
+- Not verified on screen (no `dev:pos` without the user): needs a look on a cashier-only till / staging.
+- Decision: SupplierDetails stays blocked (user, 2026-10-12).
+
+## Open question
+1. SupplierDetails on a cashier-only till: keep blocked (my default, since its history isn't synced), or open it
+   read-only showing only the supplier's balance?
+
 # Super-admin web pages mobile-responsive, cards instead of tables (2026-10-12), branch feat/admin-mobile (from dev). Todo #4. Approved 2026-10-12 (keep English; grouping Stores / Content / Logs / Settings, Landing + Downloads reachable); done 3af33d5 + a143208, awaiting staging OK
 
 ## Findings
