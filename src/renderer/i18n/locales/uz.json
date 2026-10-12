@@ -1,5 +1,6 @@
 {
   "common": {
+    "managedOnWeb": "Faqat ko'rish uchun — o'zgartirishlar saytdagi boshqaruv panelida kiritiladi.",
     "add": "Qo'shish",
     "confirm": "Tasdiqlash",
     "store": "Do'kon",

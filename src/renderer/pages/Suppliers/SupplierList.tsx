@@ -24,6 +24,8 @@ import { useSuppliers } from "../../hooks/useSuppliers";
 import { useProducts } from "../../hooks/useProducts";
 import { useToast } from "../../context/ToastContext";
 import { Supplier } from "@shared/types";
+import { ManagedOnWebNotice } from "../../components/common/ManagedOnWebNotice";
+import { useCashierOnly } from "../../store/mode-store";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { ChevronDown, ChevronUp, CirclePlus, Keyboard, X, Eye, Edit, Trash } from "lucide-react";
 
@@ -84,6 +86,9 @@ export function SupplierList() {
   const formatCurrency = (amount: number) =>
     formatCurrencyBase(amount, i18n.language as "ru" | "uz");
   const navigate = useNavigate();
+  // Cashier-only store: suppliers are edited on the web dashboard. The list stays, read-only; the
+  // details page does not open, because a supplier's transactions are not pulled to the till.
+  const readOnly = useCashierOnly();
   const toast = useToast();
   const { suppliers, isLoading, loadSuppliers, deleteSupplier, error } =
     useSuppliers();
@@ -252,7 +257,7 @@ export function SupplierList() {
         </div>
       ),
     },
-  ];
+  ].filter((column) => !(readOnly && column.key === "actions"));
 
   return (
     <Container>
@@ -260,15 +265,19 @@ export function SupplierList() {
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <Title>{t("suppliers.title")}</Title>
         </div>
-        <HeaderActions>
-          <Button
-            style={{ fontSize: "26px" }}
-            onClick={() => setModalState({ open: true, view: "form" })}
-          >
-            <CirclePlus size={24} /> {t("suppliers.add")}
-          </Button>
-        </HeaderActions>
+        {!readOnly && (
+          <HeaderActions>
+            <Button
+              style={{ fontSize: "26px" }}
+              onClick={() => setModalState({ open: true, view: "form" })}
+            >
+              <CirclePlus size={24} /> {t("suppliers.add")}
+            </Button>
+          </HeaderActions>
+        )}
       </Header>
+
+      {readOnly && <ManagedOnWebNotice />}
 
       <Filters>
         <SearchInputWrapper>

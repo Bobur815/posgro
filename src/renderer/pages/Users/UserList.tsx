@@ -11,6 +11,8 @@ import type { UserListItem } from "@shared/types";
 import { roleLabelKey } from "@shared/constants/roles";
 import { formatCurrency as formatCurrencyBase } from "@shared/utils";
 import { DebtorDetails } from "../Debtors/DebtorDetails";
+import { ManagedOnWebNotice } from "../../components/common/ManagedOnWebNotice";
+import { useCashierOnly } from "../../store/mode-store";
 import { ArrowLeft, Edit, Plus, UserCheck, UserX, Wallet } from "lucide-react";
 
 const Container = styled.div`
@@ -81,6 +83,8 @@ export function UserList() {
   const formatCurrency = (amount: number) =>
     formatCurrencyBase(amount, i18n.language as "ru" | "uz");
   const navigate = useNavigate();
+  // Cashier-only store: users are edited on the web dashboard; this list is read-only.
+  const readOnly = useCashierOnly();
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userToToggle, setUserToToggle] = useState<UserListItem | null>(null);
@@ -200,7 +204,7 @@ export function UserList() {
         </div>
       ),
     },
-  ];
+  ].filter((column) => !(readOnly && column.key === "actions"));
 
   return (
     <Container>
@@ -213,11 +217,15 @@ export function UserList() {
           <ArrowLeft size={20} />
         </BackButton>
         <Title>{t("users.title")}</Title>
-        <Button onClick={() => setFormState({ open: true })}>
-          <Plus size={16} />
-          {t("users.addUser")}
-        </Button>
+        {!readOnly && (
+          <Button onClick={() => setFormState({ open: true })}>
+            <Plus size={16} />
+            {t("users.addUser")}
+          </Button>
+        )}
       </Header>
+
+      {readOnly && <ManagedOnWebNotice />}
 
       <Table
         columns={columns}

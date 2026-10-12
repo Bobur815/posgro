@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { useAdminLocked, useModeStore } from "../../store/mode-store";
+import { useAdminLocked, useCashierOnly, useModeStore } from "../../store/mode-store";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import {
@@ -78,6 +78,7 @@ export function SettingsPage() {
   // Users are edited on the web for a cashier-only store and on the main for a satellite; the
   // route is ModeGuard-ed, so a tile here would only bounce back home.
   const adminLocked = useAdminLocked();
+  const cashierOnly = useCashierOnly();
 
   const settingsSections = [
     {
@@ -85,7 +86,8 @@ export function SettingsPage() {
       title: t("nav.users"),
       description: t("settings.usersDescription"),
       path: "/users",
-      hidden: adminLocked,
+      // A cashier-only store shows its users read-only; a satellite's live on its main.
+      hidden: adminLocked && !cashierOnly,
     },
     {
       icon: <UserCog size={32} />,
