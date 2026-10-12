@@ -91,3 +91,15 @@ export function blocksRoute(
   if (!isAdminLocked(state)) return false;
   return !(allowCashierOnly && isCashierOnly(state));
 }
+
+/**
+ * The terminal that owns an OFFLINE_ONLY store's stock: its write-offs happen here. An ONLINE
+ * store writes off on the web dashboard (the next product pull would overwrite a till's figure),
+ * and a satellite's stock lives on its main. A mode not learned yet counts as not offline: the
+ * page is new, so hiding it is today's behaviour.
+ */
+export function isOfflineMain(state: Pick<ModeState, 'mode' | 'isSatellite'>): boolean {
+  return state.mode === 'OFFLINE_ONLY' && !state.isSatellite;
+}
+
+export const useOfflineMain = (): boolean => useModeStore(isOfflineMain);

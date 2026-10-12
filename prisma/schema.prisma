@@ -89,6 +89,7 @@ model Store {
   soldMarkingCodes     SoldMarkingCode[]
   pendingMarkingCodes  PendingMarkingCode[]
   inventoryCounts      InventoryCount[]
+  writeOffs            WriteOff[]
   stockMovements       StockMovement[]
   smenas               Smena[]
   terminals            StoreTerminal[]
@@ -324,6 +325,7 @@ model Product {
   sales               SaleItem[]
   inventoryMovements  InventoryArrival[]
   inventoryCountItems InventoryCountItem[]
+  writeOffItems       WriteOffItem[]
   stockMovements      StockMovement[]
 
   @@unique([storeId, barcode]) // Same barcode can exist in different stores
@@ -519,6 +521,57 @@ model InventoryCountItem {
   @@index([countId])
   @@index([countId, barcode])
   @@map("inventory_count_items")
+}
+
+/// Goods removed from stock outside a stocktake: expired, damaged, or another stated reason.
+/// Posted on save: the document, its lines and the stock decrement commit together, and there is
+/// no draft and no undo — a mistake is corrected with an arrival. The id may come from the client,
+/// so a retried save finds the document it already wrote instead of writing off twice.
+model WriteOff {
+  id      String @id @default(cuid())
+  storeId String @map("store_id")
+  store   Store  @relation(fields: [storeId], references: [id])
+  number  Int // human-readable doc №, sequential per store
+
+  reason String // EXPIRY | DAMAGE | OTHER
+  note   String? @db.Text // required when reason = OTHER
+
+  createdById   String @map("created_by_id")
+  createdByName String @map("created_by_name") // denormalized for the list
+
+  // Summary, denormalized so the list renders without loading lines.
+  totalItems Int     @default(0) @map("total_items")
+  totalValue Decimal @default(0) @map("total_value") @db.Decimal(14, 2) // at cost
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  items WriteOffItem[]
+
+  @@unique([storeId, number])
+  @@index([storeId, createdAt])
+  @@map("write_offs")
+}
+
+model WriteOffItem {
+  id         String   @id @default(cuid())
+  writeOffId String   @map("write_off_id")
+  writeOff   WriteOff @relation(fields: [writeOffId], references: [id], onDelete: Cascade)
+
+  productId Int     @map("product_id")
+  product   Product @relation(fields: [productId], references: [id])
+
+  // Snapshot at write-off time, both names, like InventoryCountItem.
+  productName   String   @map("product_name") // nameRu
+  productNameUz String   @map("product_name_uz")
+  barcode       String
+  unit          String
+  quantity      Decimal  @db.Decimal(10, 3) // positive: how much left stock
+  cost          Decimal? @db.Decimal(10, 2) // unit cost at the time; null when unknown
+
+  @@unique([writeOffId, productId])
+  @@index([writeOffId])
+  @@index([productId])
+  @@map("write_off_items")
 }
 
 model Supplier {

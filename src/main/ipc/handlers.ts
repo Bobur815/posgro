@@ -8,6 +8,7 @@ import { setupScaleHandlers } from "./scale-handlers";
 import { setupLabelPrinterHandlers } from "./label-printer-handlers";
 import { setupSmenaHandlers } from "./smena-handlers";
 import { setupDebtorsHandlers } from "./debtors-handlers";
+import { setupWriteOffsHandlers } from "./write-offs-handlers";
 import { setupMarkingCodesHandlers } from "./marking-codes-handlers";
 import { setupMarkingCheckHandlers } from "./marking-check-handlers";
 import { setupFiscalHandlers } from "./fiscal-handlers";
@@ -65,6 +66,7 @@ export function setupIpcHandlers(): void {
   setupLabelPrinterHandlers();
   setupSmenaHandlers();
   setupDebtorsHandlers();
+  setupWriteOffsHandlers();
   setupAppHandlers();
   setupReceiptHandlers();
   setupMarkingCodesHandlers();
