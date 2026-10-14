@@ -1,4 +1,36 @@
-# Receipt settings on a satellite till (2026-10-12), branch feat/satellite-receipt-settings (from dev). Option 1 chosen by user: the satellite keeps its own layout; done 1.38.1
+# Stocktake: several categories per document + PLU/code lookup on the counting screen (2026-10-14), branch feat/inventory-multi-category (from dev). Design chosen: array column, checkbox list. Approved 2026-10-14; done 1.38.2, on dev
+
+## Outcome
+- PG `category_ids INTEGER[] NOT NULL DEFAULT '{}'` (migration 20261014000001, migration-reviewer: safe), SQLite
+  `category_ids TEXT` JSON via columnExists/ALTER. `categoryId` still written for a single category; readers
+  (`scopeCategoryIds`, server + local server) fall back to it, and bad JSON on a till falls back too.
+- Server and local server accept `categoryIds` and the old `categoryId` (merged). Local GET returns `categoryIds` as an array.
+- Detail page: KOD / PLU row after the search; product not found -> `products.noResults`, not in the document ->
+  `notInList`. "Add" in the quantity modal uses `/scan` only when the line's barcode is non-empty and unique in the
+  document; otherwise it sets current + qty (no server-side accumulation for those lines).
+- Tests: create.test (6), top-up multi-category, local-server integration, legacy-upgrade. /check green (1551).
+- Not seen in a browser yet. Telegram bot repo not grepped for `inventory_counts` (column is additive).
+
+## Plan
+1. Schema (additive, ask first):
+   - PG `inventory_counts.category_ids INTEGER[] NOT NULL DEFAULT '{}'` (new migration, read the SQL, migration-reviewer).
+   - SQLite `category_ids TEXT` (JSON array, nullable) via `columnExists` + `ALTER TABLE` in `sqlite-client.ts`
+     + `schema.sqlite.prisma`; extend `legacy-upgrade.test.ts`.
+   - `categoryId` stays: written when exactly one category is chosen. Readers use `categoryIds` if non-empty, else `[categoryId]`.
+2. Server: `CreateInventoryCountDto.categoryIds?: number[]` (optional, `categoryId` still accepted). CATEGORY scope
+   = union of both; every id must belong to the store (404 otherwise). `create` + `topUpScope` filter `categoryId: { in }`.
+   Tests: create with 2 categories, top-up picks a product moved into the 2nd category, foreign category rejected.
+3. POS local server `routes/inventory-counts.ts`: same rules (parse/serialize JSON). Version 1.38.1 → 1.38.2,
+   `npx cross-env APP_MODE=pos electron-vite build`.
+4. Web:
+   - `api/client.ts`: `categoryIds?: number[]` on create; `categoryIds` on detail (additive).
+   - `CreateInventoryCountModal`: checkbox list + "N selected"; submit disabled while none picked in CATEGORY scope.
+   - `InventoryCountDetail`: after the search input, "KOD / PLU" field (ID input, PLU input, SubmitButton — as in
+     StockManagement). Enter / button → `getById` or `findByInternalCode` (6-digit pad) → line by `productId` →
+     `ScanQuantityModal`. Not in the document → `notInList` toast. Hidden when read-only.
+   - i18n ru + uz for any new keys.
+5. Commits: schema → server → POS → web. `/check`, merge to `dev`, stop for staging confirmation.
+
 
 ## Outcome
 - `RECEIPT_LAYOUT_SETTINGS` (receipt_width/language/header/footer/logos/sizes + RECEIPT_SHOW_KEYS) are writable on a

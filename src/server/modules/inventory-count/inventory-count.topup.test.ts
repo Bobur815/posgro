@@ -31,6 +31,7 @@ interface Count {
   status: 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
   scope: 'FULL' | 'CATEGORY';
   categoryId: number | null;
+  categoryIds: number[];
   totalItems: number;
   countedItems: number;
 }
@@ -57,6 +58,7 @@ function setup(count: Partial<Count>, products: Product[], items: Item[]) {
     status: 'IN_PROGRESS',
     scope: 'CATEGORY',
     categoryId: 1,
+    categoryIds: [],
     totalItems: items.length,
     countedItems: items.filter((i) => i.counted).length,
     ...count,
@@ -77,7 +79,7 @@ function setup(count: Partial<Count>, products: Product[], items: Item[]) {
           where: {
             storeId: string;
             active: boolean;
-            categoryId: number;
+            categoryId: { in: number[] };
             inventoryCountItems: { none: { countId: string } };
           };
         }) =>
@@ -85,7 +87,7 @@ function setup(count: Partial<Count>, products: Product[], items: Item[]) {
             (p) =>
               p.storeId === where.storeId &&
               p.active === where.active &&
-              p.categoryId === where.categoryId &&
+              where.categoryId.in.includes(p.categoryId) &&
               !items.some(
                 (i) => i.productId === p.id && i.countId === where.inventoryCountItems.none.countId,
               ),
@@ -173,6 +175,16 @@ describe('InventoryCountService — category top-up', () => {
   it('a barcode outside the category is still refused', async () => {
     const { svc } = setup({}, [product(1), product(9, { categoryId: 2 })], [line(1)]);
     await expect(svc.scan('S1', 'C1', 'B9')).rejects.toThrow('Product not in this count');
+  });
+
+  it('a several-category document tops up from every one of its categories', async () => {
+    const { svc, items } = setup(
+      { categoryId: null, categoryIds: [1, 2] },
+      [product(1), product(2, { categoryId: 2 }), product(3, { categoryId: 3 })],
+      [line(1)],
+    );
+    await svc.findOne('S1', 'C1');
+    expect(items.map((i) => i.productId).sort()).toEqual([1, 2]);
   });
 
   it('leaves FULL-scope, closed and other-store documents alone', async () => {

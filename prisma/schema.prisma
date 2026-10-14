@@ -462,7 +462,10 @@ model InventoryCount {
 
   status     InventoryCountStatus @default(DRAFT)
   scope      InventoryCountScope  @default(FULL)
-  categoryId Int?                 @map("category_id") // set when scope = CATEGORY
+  categoryId Int?                 @map("category_id") // set when scope = CATEGORY with exactly one category
+  // Every category of a CATEGORY document. Empty on documents made before it existed — those
+  // read `categoryId` instead (see scopeCategoryIds).
+  categoryIds Int[]               @default([]) @map("category_ids")
   note       String?              @db.Text
 
   createdById   String    @map("created_by_id")

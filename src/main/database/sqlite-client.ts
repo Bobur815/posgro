@@ -822,6 +822,11 @@ async function runMigrations(prisma: PrismaClientType): Promise<void> {
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_count_items_count ON inventory_count_items(count_id)`;
   await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS idx_count_items_barcode ON inventory_count_items(count_id, barcode)`;
 
+  // A stocktake over several categories: JSON array, null on older documents (they use category_id).
+  if (!(await columnExists(prisma, 'inventory_counts', 'category_ids'))) {
+    await prisma.$executeRaw`ALTER TABLE inventory_counts ADD COLUMN category_ids TEXT`;
+  }
+
   // When a stocktake last set this product's stock to a physically counted figure.
   if (!(await columnExists(prisma, 'products', 'stock_counted_at'))) {
     await prisma.$executeRaw`ALTER TABLE products ADD COLUMN stock_counted_at DATETIME`;
