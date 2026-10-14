@@ -159,16 +159,20 @@ export class InventoryCountService {
     }
 
     const where: Prisma.ProductWhereInput = { storeId, active: true };
+    // `categoryId` is what older dashboards send; both are accepted and merged.
+    const categoryIds =
+      scope === 'CATEGORY'
+        ? [...new Set([...(dto.categoryIds ?? []), ...(dto.categoryId ? [dto.categoryId] : [])])]
+        : [];
     if (scope === 'CATEGORY') {
-      if (!dto.categoryId) {
-        throw new BadRequestException('categoryId is required for CATEGORY scope');
+      if (categoryIds.length === 0) {
+        throw new BadRequestException('categoryIds is required for CATEGORY scope');
       }
-      const category = await this.prisma.category.findFirst({
-        where: { id: dto.categoryId, storeId },
-        select: { id: true },
+      const found = await this.prisma.category.count({
+        where: { id: { in: categoryIds }, storeId },
       });
-      if (!category) throw new NotFoundException('Category not found');
-      where.categoryId = dto.categoryId;
+      if (found !== categoryIds.length) throw new NotFoundException('Category not found');
+      where.categoryId = { in: categoryIds };
     }
 
     const products = await this.prisma.product.findMany({
@@ -194,7 +198,10 @@ export class InventoryCountService {
         number,
         status: 'DRAFT',
         scope,
-        categoryId: scope === 'CATEGORY' ? dto.categoryId : null,
+        // A single category also fills `categoryId`, so the document reads the same to a
+        // server rolled back to before `categoryIds` existed.
+        categoryId: categoryIds.length === 1 ? categoryIds[0] : null,
+        categoryIds,
         note: dto.note,
         createdById: user.id,
         createdByName: user.nameRu,
@@ -264,7 +271,14 @@ export class InventoryCountService {
   async findOne(storeId: string, id: string) {
     const head = await this.prisma.inventoryCount.findUnique({
       where: { id },
-      select: { id: true, storeId: true, status: true, scope: true, categoryId: true },
+      select: {
+        id: true,
+        storeId: true,
+        status: true,
+        scope: true,
+        categoryId: true,
+        categoryIds: true,
+      },
     });
     if (!head || head.storeId !== storeId) throw new NotFoundException('Count not found');
     await this.topUpScope(storeId, head);
@@ -496,16 +510,23 @@ export class InventoryCountService {
    */
   private async topUpScope(
     storeId: string,
-    count: { id: string; status: InventoryCountStatus; scope: InventoryCountScope; categoryId: number | null },
+    count: {
+      id: string;
+      status: InventoryCountStatus;
+      scope: InventoryCountScope;
+      categoryId: number | null;
+      categoryIds: number[];
+    },
   ): Promise<number> {
-    if (count.scope !== 'CATEGORY' || count.categoryId == null) return 0;
+    const categoryIds = scopeCategoryIds(count);
+    if (count.scope !== 'CATEGORY' || categoryIds.length === 0) return 0;
     if (!OPEN_STATUSES.includes(count.status)) return 0;
 
     const missing = await this.prisma.product.findMany({
       where: {
         storeId,
         active: true,
-        categoryId: count.categoryId,
+        categoryId: { in: categoryIds },
         inventoryCountItems: { none: { countId: count.id } },
       },
       select: { id: true, nameRu: true, nameUz: true, barcode: true, unit: true, stock: true, cost: true },
@@ -535,7 +556,15 @@ export class InventoryCountService {
   private async loadOpenCount(storeId: string, id: string) {
     const count = await this.prisma.inventoryCount.findUnique({
       where: { id },
-      select: { id: true, storeId: true, status: true, totalItems: true, scope: true, categoryId: true },
+      select: {
+        id: true,
+        storeId: true,
+        status: true,
+        totalItems: true,
+        scope: true,
+        categoryId: true,
+        categoryIds: true,
+      },
     });
     if (!count || count.storeId !== storeId) throw new NotFoundException('Count not found');
     if (!OPEN_STATUSES.includes(count.status)) {
@@ -567,6 +596,18 @@ export class InventoryCountService {
 
     return { item, countedItems, totalItems, status };
   }
+}
+
+/**
+ * The categories a CATEGORY document covers. Documents made before `categoryIds` existed have
+ * it empty and carry their one category in `categoryId`.
+ */
+export function scopeCategoryIds(count: {
+  categoryId: number | null;
+  categoryIds: number[];
+}): number[] {
+  if (count.categoryIds.length > 0) return count.categoryIds;
+  return count.categoryId != null ? [count.categoryId] : [];
 }
 
 function chunked<T>(rows: T[], size: number): T[][] {
