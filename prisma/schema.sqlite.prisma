@@ -595,7 +595,10 @@ model InventoryCount {
 
   status     String  @default("DRAFT")
   scope      String  @default("FULL")
-  categoryId Int?    @map("category_id") // set when scope = CATEGORY
+  categoryId Int?    @map("category_id") // set when scope = CATEGORY with exactly one category
+  // JSON array of every category of a CATEGORY document (SQLite has no scalar lists). Null on
+  // documents made before it existed — those read `categoryId` instead.
+  categoryIds String? @map("category_ids")
   note       String?
 
   createdById   String    @map("created_by_id")

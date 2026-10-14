@@ -117,6 +117,34 @@ beforeAll(async () => {
     INSERT INTO product_invalid_reports (id, barcode, invalidated_at, error_code)
     VALUES ('rep-1', '4780047860466', '2026-10-05T10:30:00.000Z', 705511)
   `);
+  // A one-category stocktake as 1.38.1 created it — no category_ids column.
+  await seed.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS inventory_counts (
+      id TEXT PRIMARY KEY,
+      number INTEGER NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'DRAFT',
+      scope TEXT NOT NULL DEFAULT 'FULL',
+      category_id INTEGER,
+      note TEXT,
+      created_by_id TEXT NOT NULL,
+      created_by_name TEXT NOT NULL,
+      completed_by_id TEXT,
+      completed_at DATETIME,
+      total_items INTEGER NOT NULL DEFAULT 0,
+      counted_items INTEGER NOT NULL DEFAULT 0,
+      total_difference DECIMAL NOT NULL DEFAULT 0,
+      total_value_diff DECIMAL NOT NULL DEFAULT 0,
+      wrote_off_uncounted INTEGER NOT NULL DEFAULT 0,
+      written_off_items INTEGER NOT NULL DEFAULT 0,
+      write_off_value DECIMAL NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+      updated_at DATETIME NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  await seed.$executeRawUnsafe(`
+    INSERT INTO inventory_counts (id, number, scope, category_id, created_by_id, created_by_name)
+    VALUES ('cnt-1', 1, 'CATEGORY', 7, 'u1', 'Admin')
+  `);
   await seed.$disconnect();
 
   await initializeDatabase();
@@ -260,6 +288,14 @@ describe('upgrading a database created by an older build', () => {
     expect(old).not.toBeNull();
     expect(old.fiscalBatchId).toBeNull();
     expect(old.fiscalSentTiyin).toBeNull();
+  });
+
+  // Multi-category stocktakes: added in place, an existing document keeps its single category_id.
+  it('adds category_ids to an existing inventory_counts table, NULL on old documents', async () => {
+    const old = await getPrismaClient().inventoryCount.findUnique({ where: { id: 'cnt-1' } });
+    expect(old).not.toBeNull();
+    expect(old.categoryId).toBe(7);
+    expect(old.categoryIds).toBeNull();
   });
 
   // A rejection queued by 1.34 must still go up as a rejection.
