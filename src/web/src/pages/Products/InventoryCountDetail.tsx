@@ -8,13 +8,15 @@ import React, {
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import styled from "styled-components";
-import { ArrowLeft, Camera, Minus, Plus } from "lucide-react";
+import { ArrowLeft, Camera, Minus, Plus, SendHorizontal } from "lucide-react";
 import { Table } from "@components/common/Table";
 import { Button } from "@components/common/Button";
 import { Input } from "@components/common/Input";
 import { ConfirmDialog } from "@components/common/ConfirmDialog";
 import { Spinner } from "@components/common/Spinner";
 import { useToast } from "@context/ToastContext";
+import type { Product } from "@shared/types";
+import { useProducts } from "../../hooks/useProducts";
 import { formatCurrency } from "@shared/utils";
 import { formatDateTime } from "../../utils/formatters";
 import {
@@ -103,6 +105,99 @@ const IconButton = styled.button`
   background-color: ${({ theme }) => theme.colors.surface};
   color: ${({ theme }) => theme.colors.text};
   cursor: pointer;
+`;
+
+/* Item search + the KOD / PLU lookup, laid out like the SearchRow on the stock page. */
+const SearchRow = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.md};
+  align-items: flex-end;
+  flex-wrap: wrap;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+`;
+
+const SearchWrapper = styled.div`
+  flex: 1;
+  min-width: 200px;
+`;
+
+const PluField = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.spacing.xs};
+  flex: 1;
+  min-width: 120px;
+
+  @media (min-width: 769px) {
+    max-width: 320px;
+  }
+`;
+
+const SearchLabel = styled.div`
+  font-size: 12px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  text-transform: uppercase;
+  font-weight: 500;
+`;
+
+const CodeInputs = styled.div`
+  display: flex;
+  gap: 6px;
+  align-items: center;
+`;
+
+const SearchInput = styled.input`
+  width: 100%;
+  min-width: 0;
+  padding: ${({ theme }) => theme.spacing.sm} ${({ theme }) => theme.spacing.md};
+  font-size: 16px;
+  font-weight: bold;
+  border: 2px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  background-color: ${({ theme }) => theme.colors.background};
+  color: ${({ theme }) => theme.colors.text};
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+
+  &:focus {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.primary};
+  }
+`;
+
+const SubmitButton = styled.button`
+  height: 40px;
+  width: 46px;
+  min-width: 46px;
+  flex-shrink: 0;
+  border-radius: ${({ theme }) => theme.borderRadius};
+  border: none;
+  background-color: ${({ theme }) => theme.colors.success};
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color 0.2s,
+    transform 0.1s;
+
+  &:hover {
+    opacity: 0.9;
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 `;
 
 const Filters = styled.div`
@@ -331,12 +426,16 @@ export function InventoryCountDetail() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const toast = useToast();
+  const { getById, findByInternalCode } = useProducts();
 
   const [count, setCount] = useState<CountDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [barcode, setBarcode] = useState("");
   const [blindCount, setBlindCount] = useState(false);
   const [itemSearch, setItemSearch] = useState("");
+  const [idInput, setIdInput] = useState("");
+  const [pluInput, setPluInput] = useState("");
+  const [isLookingUp, setIsLookingUp] = useState(false);
   const [onlyUncounted, setOnlyUncounted] = useState(false);
   const [onlyWrittenOff, setOnlyWrittenOff] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -449,6 +548,56 @@ export function InventoryCountDetail() {
   );
 
   /**
+   * KOD / PLU lookup: resolve the product the same way the stock page does, then open the same
+   * quantity prompt as a camera scan — typing a code is one deliberate act too.
+   */
+  const openLineForProduct = useCallback(
+    (product: Product | null) => {
+      if (!count) return;
+      if (!product) {
+        toast.error(t("products.noResults"));
+        return;
+      }
+      const item = count.items.find((i) => i.productId === Number(product.id));
+      if (!item) {
+        toast.error(t("inventoryCount.detail.notInList"));
+        return;
+      }
+      setScannedItem(item);
+    },
+    [count, toast, t],
+  );
+
+  const handleCodeSubmit = useCallback(async () => {
+    if (isReadOnly || isLookingUp) return;
+    const code = idInput.trim();
+    const plu = pluInput.trim();
+    if (!code && !plu) return;
+    setIsLookingUp(true);
+    try {
+      if (code) {
+        openLineForProduct((await getById(code)) as Product | null);
+        setIdInput("");
+      } else {
+        // Scales print PLU zero-padded to six digits; the stock page pads the same way.
+        const internal = /^\d+$/.test(plu) ? plu.padStart(6, "0") : plu;
+        openLineForProduct((await findByInternalCode(internal)) as Product | null);
+        setPluInput("");
+      }
+    } finally {
+      setIsLookingUp(false);
+    }
+  }, [
+    isReadOnly,
+    isLookingUp,
+    idInput,
+    pluInput,
+    getById,
+    findByInternalCode,
+    openLineForProduct,
+  ]);
+
+  /**
    * "add" goes through the scan endpoint, which adds on the server to whatever the line holds
    * THERE — so a second counter's 117 lands on top of the first one's 68 even if this phone
    * still shows an older figure. "total" replaces the line, for correcting a double count.
@@ -463,6 +612,18 @@ export function InventoryCountDetail() {
           if (await setItemQty(scannedItem, qty)) setScannedItem(null);
           return;
         }
+        // The scan endpoint finds the line by barcode. A line reached by KOD / PLU may have no
+        // barcode, or share one with another line — then add on this screen's figure instead.
+        const barcodeIsUnique =
+          scannedItem.barcode.trim() !== "" &&
+          (count?.items.filter((i) => i.barcode === scannedItem.barcode).length ?? 0) === 1;
+        if (!barcodeIsUnique) {
+          const current = Number(scannedItem.countedQty ?? 0);
+          if (await setItemQty(scannedItem, Math.round((current + qty) * 1000) / 1000)) {
+            setScannedItem(null);
+          }
+          return;
+        }
         try {
           applyProgress(await inventoryCounts.scan(id, scannedItem.barcode, qty));
           setScannedItem(null);
@@ -473,7 +634,7 @@ export function InventoryCountDetail() {
         setIsSavingScan(false);
       }
     },
-    [scannedItem, id, isReadOnly, setItemQty, applyProgress, toast, t],
+    [scannedItem, id, isReadOnly, count, setItemQty, applyProgress, toast, t],
   );
 
   const visibleItems = useMemo(() => {
@@ -818,13 +979,56 @@ export function InventoryCountDetail() {
         </ScanRow>
       )}
 
+      <SearchRow>
+        <SearchWrapper>
+          <Input
+            value={itemSearch}
+            onChange={(e) => setItemSearch(e.target.value)}
+            placeholder={t("inventoryCount.detail.searchItems")}
+            style={{ paddingRight: "32px", fontSize: 18, fontWeight: "bold" }}
+          />
+        </SearchWrapper>
+
+        {!isReadOnly && (
+          <PluField>
+            <SearchLabel>KOD / PLU</SearchLabel>
+            <CodeInputs>
+              <SearchInput
+                value={idInput}
+                onChange={(e) => setIdInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleCodeSubmit();
+                  }
+                }}
+                placeholder={t("pos.id")}
+              />
+              <SearchInput
+                value={pluInput}
+                onChange={(e) => setPluInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleCodeSubmit();
+                  }
+                }}
+                placeholder="PLU"
+              />
+              <SubmitButton
+                type="button"
+                disabled={isLookingUp}
+                onClick={handleCodeSubmit}
+                aria-label="KOD / PLU"
+              >
+                <SendHorizontal size={22} />
+              </SubmitButton>
+            </CodeInputs>
+          </PluField>
+        )}
+      </SearchRow>
+
       <Filters>
-        <Input
-          value={itemSearch}
-          onChange={(e) => setItemSearch(e.target.value)}
-          placeholder={t("inventoryCount.detail.searchItems")}
-          style={{ paddingRight: "32px", fontSize: 18, fontWeight: "bold" }}
-        />
         <Toggle>
           <input
             type="checkbox"

@@ -85,16 +85,16 @@ export const inventoryCountRoutes: Route[] = [
       const open = await db().inventoryCount.findFirst({ where: { status: { in: OPEN_STATUSES } } });
       if (open) throw badRequest('Another stocktake is already in progress');
 
-      const categoryId = intParam(body?.categoryId != null ? String(body.categoryId) : undefined);
+      // `categoryId` is what older dashboards send; both are accepted and merged.
+      const categoryIds = scope === 'CATEGORY' ? requestedCategoryIds(body) : [];
       if (scope === 'CATEGORY') {
-        if (categoryId === undefined) throw badRequest('categoryId is required for CATEGORY scope');
-        if (!(await db().category.findUnique({ where: { id: categoryId } }))) {
-          throw notFound('Category not found');
-        }
+        if (categoryIds.length === 0) throw badRequest('categoryIds is required for CATEGORY scope');
+        const found = await db().category.count({ where: { id: { in: categoryIds } } });
+        if (found !== categoryIds.length) throw notFound('Category not found');
       }
 
       const products = await db().product.findMany({
-        where: { active: true, ...(scope === 'CATEGORY' ? { categoryId: categoryId! } : {}) },
+        where: { active: true, ...(scope === 'CATEGORY' ? { categoryId: { in: categoryIds } } : {}) },
         orderBy: { nameRu: 'asc' },
       });
       if (products.length === 0) throw badRequest('No products to count');
@@ -106,7 +106,10 @@ export const inventoryCountRoutes: Route[] = [
           number: (last?.number ?? 0) + 1,
           status: 'DRAFT',
           scope,
-          categoryId: scope === 'CATEGORY' ? categoryId! : null,
+          // A single category also fills `categoryId`, so a till downgraded to a build without
+          // `category_ids` still reads the document the same way.
+          categoryId: categoryIds.length === 1 ? categoryIds[0] : null,
+          categoryIds: scope === 'CATEGORY' ? JSON.stringify(categoryIds) : null,
           note: body?.note ?? null,
           createdById: user!.id,
           createdByName: await displayName(user!.id),
@@ -140,10 +143,12 @@ export const inventoryCountRoutes: Route[] = [
       const head = await db().inventoryCount.findUnique({ where: { id: params.id } });
       if (!head) throw notFound('Stocktake not found');
       await topUpScope(head);
-      return db().inventoryCount.findUnique({
+      const count = await db().inventoryCount.findUnique({
         where: { id: params.id },
         include: { items: { orderBy: { productName: 'asc' } } },
       });
+      // Same shape the VPS returns: an array, never the stored JSON text.
+      return count && { ...count, categoryIds: scopeCategoryIds(count) };
     },
   },
 
@@ -313,14 +318,16 @@ async function topUpScope(count: {
   status: string;
   scope: string;
   categoryId: number | null;
+  categoryIds: string | null;
 }): Promise<number> {
-  if (count.scope !== 'CATEGORY' || count.categoryId == null) return 0;
+  const categoryIds = scopeCategoryIds(count);
+  if (count.scope !== 'CATEGORY' || categoryIds.length === 0) return 0;
   if (!OPEN_STATUSES.includes(count.status)) return 0;
 
   const missing = await db().product.findMany({
     where: {
       active: true,
-      categoryId: count.categoryId,
+      categoryId: { in: categoryIds },
       inventoryCountItems: { none: { countId: count.id } },
     },
   });
@@ -345,6 +352,37 @@ async function topUpScope(count: {
     await db().inventoryCount.update({ where: { id: count.id }, data: { totalItems } });
   }
   return missing.length;
+}
+
+/** Positive integer ids from `categoryIds` (array) and the legacy single `categoryId`, deduplicated. */
+function requestedCategoryIds(body: { categoryId?: unknown; categoryIds?: unknown } | undefined): number[] {
+  const raw = [
+    ...(Array.isArray(body?.categoryIds) ? body.categoryIds : []),
+    ...(body?.categoryId != null ? [body.categoryId] : []),
+  ];
+  const ids = raw.map((v) => intParam(String(v)));
+  if (ids.some((id) => id === undefined)) throw badRequest('categoryIds must be integers');
+  return [...new Set(ids as number[])];
+}
+
+/**
+ * The categories a CATEGORY document covers. `category_ids` is JSON text, null on documents made
+ * before it existed (they carry their one category in `category_id`); unreadable text falls back
+ * the same way rather than failing the whole document.
+ */
+function scopeCategoryIds(count: { categoryId: number | null; categoryIds: string | null }): number[] {
+  if (count.categoryIds) {
+    try {
+      const parsed: unknown = JSON.parse(count.categoryIds);
+      if (Array.isArray(parsed)) {
+        const ids = parsed.filter((v): v is number => Number.isInteger(v));
+        if (ids.length > 0) return ids;
+      }
+    } catch {
+      // fall through to the legacy column
+    }
+  }
+  return count.categoryId != null ? [count.categoryId] : [];
 }
 
 async function displayName(userId: string): Promise<string> {

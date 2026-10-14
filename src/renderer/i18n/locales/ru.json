@@ -533,12 +533,16 @@
     "scope": {
       "label": "Охват",
       "full": "Полная",
-      "category": "По категории",
+      "category": "По категориям",
       "custom": "Выборочно"
     },
     "form": {
       "category": "Категория",
       "selectCategory": "Выберите категорию",
+      "categories": "Категории",
+      "selectedCount": "Выбрано: {{n}}",
+      "selectAll": "Выбрать все",
+      "clearAll": "Снять все",
       "note": "Примечание",
       "notePlaceholder": "Например: месячная инвентаризация",
       "submit": "Создать"
