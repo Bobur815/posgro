@@ -427,3 +427,12 @@ every loaded full run — the "flaky" `local-server.integration.test.ts` failure
 **Rule:** stopping a server we own closes idle connections at once and caps in-flight ones
 (`closeServer(instance, STOP_GRACE_MS)`). A suite that only fails its hook under load is a real
 bug in the code being torn down, not a timeout to raise — time each teardown step before deciding.
+
+## Never `git stash` while a background check is running
+
+To compare lint warnings before/after, I stashed the working tree while `npm test` ran in the
+background. For those seconds the suite could read the old service with the new (untracked, so
+unstashed) test file — a red or green from that window means nothing.
+
+**Rule:** compare against the base with `git show main:path > scratch` or a worktree, never by
+changing the working tree under a running job.

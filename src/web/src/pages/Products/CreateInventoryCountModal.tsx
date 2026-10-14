@@ -15,6 +15,68 @@ const Form = styled.form`
   gap: ${({ theme }) => theme.spacing.md};
 `;
 
+const Field = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.spacing.xs};
+`;
+
+const FieldHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: ${({ theme }) => theme.spacing.sm};
+  font-size: 14px;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const Count = styled.span`
+  font-size: 13px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
+const LinkButton = styled.button`
+  min-height: 32px;
+  padding: 0 ${({ theme }) => theme.spacing.xs};
+  border: none;
+  background: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: ${({ theme }) => theme.colors.primary};
+  cursor: pointer;
+`;
+
+/* Scrolls on its own so a store with many categories doesn't push Save off the modal. */
+const CategoryList = styled.div`
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius};
+`;
+
+const CategoryOption = styled.label`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.sm};
+  min-height: 44px;
+  padding: 0 ${({ theme }) => theme.spacing.sm};
+  font-size: 14px;
+  color: ${({ theme }) => theme.colors.text};
+  cursor: pointer;
+
+  & + & {
+    border-top: 1px solid ${({ theme }) => theme.colors.border};
+  }
+
+  input {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+`;
+
 const Actions = styled.div`
   display: flex;
   gap: ${({ theme }) => theme.spacing.sm};
@@ -39,7 +101,7 @@ export function CreateInventoryCountModal({
   const { categories, loadCategories } = useProducts();
 
   const [scope, setScope] = useState<InventoryCountScope>("FULL");
-  const [categoryId, setCategoryId] = useState("");
+  const [categoryIds, setCategoryIds] = useState<number[]>([]);
   const [note, setNote] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -50,13 +112,13 @@ export function CreateInventoryCountModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
-    if (scope === "CATEGORY" && !categoryId) return;
+    if (scope === "CATEGORY" && categoryIds.length === 0) return;
 
     setIsSaving(true);
     try {
       const created = await inventoryCounts.create({
         scope,
-        ...(scope === "CATEGORY" ? { categoryId: Number(categoryId) } : {}),
+        ...(scope === "CATEGORY" ? { categoryIds } : {}),
         ...(note.trim() ? { note: note.trim() } : {}),
       });
       toast.success(t("inventoryCount.created"));
@@ -73,6 +135,14 @@ export function CreateInventoryCountModal({
     }
   };
 
+  const toggleCategory = (id: number, checked: boolean) =>
+    setCategoryIds((prev) =>
+      checked ? [...prev, id] : prev.filter((c) => c !== id),
+    );
+
+  const allSelected =
+    categories.length > 0 && categoryIds.length === categories.length;
+
   return (
     <Modal title={t("inventoryCount.create")} onClose={onClose}>
       <Form onSubmit={handleSubmit}>
@@ -87,17 +157,42 @@ export function CreateInventoryCountModal({
         />
 
         {scope === "CATEGORY" && (
-          <Select
-            label={t("inventoryCount.form.category")}
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-            placeholder={t("inventoryCount.form.selectCategory")}
-            options={categories.map((c) => ({
-              value: String(c.id),
-              label: i18n.language === "uz" ? c.nameUz : c.nameRu,
-            }))}
-            required
-          />
+          <Field>
+            <FieldHeader>
+              <span>
+                {t("inventoryCount.form.categories")}{" "}
+                <Count>
+                  {categoryIds.length > 0
+                    ? t("inventoryCount.form.selectedCount", {
+                        n: categoryIds.length,
+                      })
+                    : t("inventoryCount.form.selectCategory")}
+                </Count>
+              </span>
+              <LinkButton
+                type="button"
+                onClick={() =>
+                  setCategoryIds(allSelected ? [] : categories.map((c) => c.id))
+                }
+              >
+                {allSelected
+                  ? t("inventoryCount.form.clearAll")
+                  : t("inventoryCount.form.selectAll")}
+              </LinkButton>
+            </FieldHeader>
+            <CategoryList>
+              {categories.map((c) => (
+                <CategoryOption key={c.id}>
+                  <input
+                    type="checkbox"
+                    checked={categoryIds.includes(c.id)}
+                    onChange={(e) => toggleCategory(c.id, e.target.checked)}
+                  />
+                  {i18n.language === "uz" ? c.nameUz : c.nameRu}
+                </CategoryOption>
+              ))}
+            </CategoryList>
+          </Field>
         )}
 
         <Input
@@ -115,7 +210,9 @@ export function CreateInventoryCountModal({
           <Button
             type="submit"
             variant="primary"
-            disabled={isSaving || (scope === "CATEGORY" && !categoryId)}
+            disabled={
+              isSaving || (scope === "CATEGORY" && categoryIds.length === 0)
+            }
           >
             {isSaving ? t("common.saving") : t("inventoryCount.form.submit")}
           </Button>

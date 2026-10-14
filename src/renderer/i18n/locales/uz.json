@@ -521,12 +521,16 @@
     "scope": {
       "label": "Qamrov",
       "full": "To'liq",
-      "category": "Kategoriya bo'yicha",
+      "category": "Kategoriyalar bo'yicha",
       "custom": "Tanlab"
     },
     "form": {
       "category": "Kategoriya",
       "selectCategory": "Kategoriyani tanlang",
+      "categories": "Kategoriyalar",
+      "selectedCount": "Tanlandi: {{n}}",
+      "selectAll": "Hammasini tanlash",
+      "clearAll": "Hammasini olib tashlash",
       "note": "Izoh",
       "notePlaceholder": "Masalan: oylik inventarizatsiya",
       "submit": "Yaratish"

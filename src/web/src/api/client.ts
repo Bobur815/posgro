@@ -316,6 +316,8 @@ export interface InventoryCountItem {
 export interface InventoryCountDetail extends InventoryCountSummary {
   storeId: string;
   categoryId: number | null;
+  /** Every category of a CATEGORY document; empty (VPS) or absent on older documents — read categoryId then. */
+  categoryIds?: number[];
   completedById: string | null;
   updatedAt: string;
   items: InventoryCountItem[];
@@ -417,7 +419,7 @@ export const inventoryCounts = {
   },
   create: async (payload: {
     scope?: InventoryCountScope;
-    categoryId?: number;
+    categoryIds?: number[];
     note?: string;
   }): Promise<{ id: string; number: number }> => {
     const { data } = await axiosInstance.post("/inventory-counts", payload);
