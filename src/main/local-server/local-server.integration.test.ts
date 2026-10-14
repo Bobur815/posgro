@@ -772,6 +772,37 @@ describe('stocktake', () => {
 
     await api('POST', `/inventory-counts/${id}/cancel`);
   });
+
+  it('counts several categories in one document, topping up from each', async () => {
+    const prisma = getPrismaClient();
+    const catA = await prisma.category.create({ data: { nameRu: 'Мульти A', nameUz: 'Multi A' } });
+    const catB = await prisma.category.create({ data: { nameRu: 'Мульти B', nameUz: 'Multi B' } });
+    const catC = await prisma.category.create({ data: { nameRu: 'Мульти C', nameUz: 'Multi C' } });
+    const make = (barcode: string, categoryId: number) =>
+      prisma.product.create({
+        data: { barcode, nameRu: barcode, nameUz: barcode, price: 1000, stock: 3, unit: 'шт', categoryId },
+      });
+    await make('MULTI-A', catA.id);
+    await make('MULTI-B', catB.id);
+    await make('MULTI-C', catC.id);
+
+    const created = await api('POST', '/inventory-counts', { scope: 'CATEGORY', categoryIds: [catA.id, catB.id] });
+    expect(created.json.totalItems).toBe(2);
+    const id = created.json.id;
+
+    const late = await make('MULTI-B2', catB.id);
+    const doc = (await api('GET', `/inventory-counts/${id}`)).json;
+    expect(doc.categoryIds).toEqual([catA.id, catB.id]);
+    expect(doc.categoryId).toBeNull();
+    expect(doc.items.map((i: { barcode: string }) => i.barcode).sort()).toEqual(['MULTI-A', 'MULTI-B', 'MULTI-B2']);
+    expect(doc.items.some((i: { productId: number }) => i.productId === late.id)).toBe(true);
+
+    await api('POST', `/inventory-counts/${id}/cancel`);
+
+    // An unknown category refuses the whole document.
+    const bad = await api('POST', '/inventory-counts', { scope: 'CATEGORY', categoryIds: [catA.id, 999999] });
+    expect(bad.status).toBe(404);
+  });
 });
 
 describe('reports', () => {
