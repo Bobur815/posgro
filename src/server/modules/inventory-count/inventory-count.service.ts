@@ -23,14 +23,30 @@ const OPEN_STATUSES: InventoryCountStatus[] = ['DRAFT', 'IN_PROGRESS'];
 /** Rows per set-based UPDATE on completion — keeps the bound-parameter count sane. */
 const COMPLETE_CHUNK_SIZE = 500;
 
+/**
+ * Under it, completion keeps what moved after a line was counted: sales and arrivals between the
+ * count and pressing "complete" were already applied to live stock, and writing the counted
+ * figure over them erased them (store 1234, stocktake #3: 8 sales of one drink over 3 days lost).
+ * Off = today's absolute write.
+ */
+export const carrySalesIntoCount = (): boolean => process.env.STOCKTAKE_CARRY_SALES === 'true';
+
 /** One product's resulting state, ready to be written by the completion SQL. */
 export interface CompletionLine {
   itemId: string;
   productId: number;
-  /** Quantity the product ends at — the counted figure, or 0 for a write-off. */
+  /** The physically counted figure, or 0 for a write-off. */
   countedQty: string;
   difference: string;
   writtenOff: boolean;
+  /**
+   * Live stock when the line was counted, set only when completion carries later movements: the
+   * product then ends at countedQty + (live stock at completion − this). Null = it ends at
+   * countedQty, as before.
+   */
+  stockAtCount: string | null;
+  /** When the line was counted; becomes the product's stock_counted_at. Null = completion time. */
+  countedAt: Date | null;
 }
 
 export interface CompletionPlan {
@@ -47,7 +63,8 @@ export interface CompletionPlan {
 type PlannableItem = Pick<
   Prisma.InventoryCountItemGetPayload<object>,
   'id' | 'productId' | 'counted' | 'countedQty' | 'expectedQty' | 'cost'
->;
+> &
+  Partial<Pick<Prisma.InventoryCountItemGetPayload<object>, 'countedAt' | 'stockAtCount'>>;
 
 /**
  * Which uncounted lines to write off: `true` = every eligible one, `false` = none, or an
@@ -72,10 +89,15 @@ export type WriteOffSelection = boolean | ReadonlySet<string>;
  * Selection is an intersection, never a widening: an id that isn't an eligible uncounted
  * line of THIS document is ignored, so a stale or hand-crafted id list can't reach a line
  * the document doesn't own or overwrite one the cashier actually counted.
+ *
+ * `carrySales` (STOCKTAKE_CARRY_SALES): a counted line with a count-time snapshot is measured
+ * against that snapshot — what the books said when the shelf was counted — not against
+ * `expectedQty`, which also holds every sale made between opening the document and counting.
  */
 export function planCompletion(
   items: PlannableItem[],
   writeOff: WriteOffSelection,
+  carrySales = false,
 ): CompletionPlan {
   let totalDifference = new Prisma.Decimal(0);
   let totalValueDiff = new Prisma.Decimal(0);
@@ -86,7 +108,12 @@ export function planCompletion(
     resultingQty: Prisma.Decimal,
     writtenOff: boolean,
   ): CompletionLine => {
-    const difference = resultingQty.minus(item.expectedQty);
+    // A write-off has no count moment: it zeroes the product as before.
+    const snapshot =
+      carrySales && !writtenOff && item.stockAtCount != null
+        ? new Prisma.Decimal(item.stockAtCount)
+        : null;
+    const difference = resultingQty.minus(snapshot ?? item.expectedQty);
     totalDifference = totalDifference.plus(difference);
     if (item.cost) {
       const value = difference.times(item.cost);
@@ -99,6 +126,8 @@ export function planCompletion(
       countedQty: resultingQty.toString(),
       difference: difference.toString(),
       writtenOff,
+      stockAtCount: snapshot?.toString() ?? null,
+      countedAt: snapshot ? (item.countedAt ?? null) : null,
     };
   };
 
@@ -126,6 +155,21 @@ export function planCompletion(
     totalValueDiff,
     writeOffValue,
   };
+}
+
+/**
+ * Where completion leaves a product. Without a snapshot: the counted figure. With one: the
+ * counted figure plus whatever live stock did since the count — sold 8 after counting 14 → 6.
+ * Floored at 0 like the sale decrement, since the shelf cannot hold less than nothing.
+ */
+export function resultingStock(
+  line: Pick<CompletionLine, 'countedQty' | 'stockAtCount'>,
+  liveStock: Prisma.Decimal.Value | null,
+): Prisma.Decimal {
+  const counted = new Prisma.Decimal(line.countedQty);
+  if (line.stockAtCount === null || liveStock === null) return counted;
+  const carried = counted.plus(new Prisma.Decimal(liveStock)).minus(line.stockAtCount);
+  return Prisma.Decimal.max(0, carried);
 }
 
 @Injectable()
@@ -297,7 +341,7 @@ export class InventoryCountService {
 
     const existing = await this.prisma.inventoryCountItem.findUnique({
       where: { id: itemId },
-      select: { countId: true },
+      select: { countId: true, productId: true },
     });
     if (!existing || existing.countId !== id) {
       throw new NotFoundException('Count line not found');
@@ -305,7 +349,7 @@ export class InventoryCountService {
 
     const item = await this.prisma.inventoryCountItem.update({
       where: { id: itemId },
-      data: { countedQty, counted: true },
+      data: { countedQty, counted: true, ...(await this.countSnapshot(existing.productId)) },
     });
 
     return this.refreshProgress(id, count.status, count.totalItems, item);
@@ -328,7 +372,11 @@ export class InventoryCountService {
     const next = (item.countedQty ? Number(item.countedQty) : 0) + qty;
     const updated = await this.prisma.inventoryCountItem.update({
       where: { id: item.id },
-      data: { countedQty: Math.max(0, next), counted: true },
+      data: {
+        countedQty: Math.max(0, next),
+        counted: true,
+        ...(await this.countSnapshot(item.productId)),
+      },
     });
 
     return this.refreshProgress(id, count.status, count.totalItems, updated);
@@ -365,7 +413,7 @@ export class InventoryCountService {
       throw new BadRequestException('Count cannot be completed');
     }
 
-    const plan = planCompletion(count.items, writeOff);
+    const plan = planCompletion(count.items, writeOff, carrySalesIntoCount());
     // Load-bearing guard: without it, "create a count, count nothing, tick write-off"
     // would zero the document's entire scope in one click.
     if (plan.countedItems === 0) throw new BadRequestException('Nothing counted yet');
@@ -381,16 +429,42 @@ export class InventoryCountService {
 
     return this.prisma.$transaction(
       async (tx) => {
+        // Lines carrying later movements need live stock, read under a row lock so a sale
+        // syncing right now waits for the write below instead of landing between read and write.
+        const liveStock = new Map<number, Prisma.Decimal>();
+        const carried = rows.filter((r) => r.stockAtCount !== null);
+        for (const chunk of chunked(carried, COMPLETE_CHUNK_SIZE)) {
+          const locked = await tx.$queryRaw<{ id: number; stock: Prisma.Decimal }[]>`
+            SELECT id, stock FROM products
+            WHERE store_id = ${storeId}
+              AND id IN (${Prisma.join(chunk.map((r) => r.productId))})
+            FOR UPDATE
+          `;
+          for (const p of locked) liveStock.set(p.id, p.stock);
+        }
+        const endStock = new Map(
+          rows.map((r) => [r.itemId, resultingStock(r, liveStock.get(r.productId) ?? null)]),
+        );
+
         for (const chunk of chunked(rows, COMPLETE_CHUNK_SIZE)) {
           // `updated_at = NOW()` is mandatory: raw SQL bypasses Prisma's @updatedAt, and
           // terminals pull product changes via an `updatedAfter` cursor. Without it the
           // count would never reach the POS terminals.
+          // stock_counted_at is the line's count moment when it has one: a late-synced sale made
+          // after the count is not in the shelf figure and must still decrement.
           await tx.$executeRaw`
             UPDATE products p
-            SET stock = v.counted, stock_counted_at = NOW(), updated_at = NOW()
+            SET stock = v.stock,
+                stock_counted_at = COALESCE(v.counted_at, NOW()),
+                updated_at = NOW()
             FROM (VALUES ${Prisma.join(
-              chunk.map((r) => Prisma.sql`(${r.productId}::int, ${r.countedQty}::numeric)`),
-            )}) AS v(product_id, counted)
+              chunk.map(
+                (r) =>
+                  // ISO text, not a Date: a zone in text cast to `timestamp` is dropped, so the
+                  // UTC wall clock lands as-is whatever the session TimeZone is.
+                  Prisma.sql`(${r.productId}::int, ${endStock.get(r.itemId)!.toString()}::numeric, ${r.countedAt?.toISOString() ?? null}::timestamp)`,
+              ),
+            )}) AS v(product_id, stock, counted_at)
             WHERE p.id = v.product_id AND p.store_id = ${storeId}
           `;
 
@@ -440,7 +514,7 @@ export class InventoryCountService {
               productId: r.productId,
               type: r.writtenOff ? 'STOCKTAKE_WRITE_OFF' : 'STOCKTAKE_ADJUSTMENT',
               quantity: r.difference,
-              balanceAfter: r.countedQty,
+              balanceAfter: endStock.get(r.itemId)!.toString(),
               unitCost: costByItemId.get(r.itemId) ?? null,
               unitPrice: priceById.get(r.productId) ?? null,
               sourceType: MovementSource.COUNT,
@@ -487,6 +561,20 @@ export class InventoryCountService {
   }
 
   // ─── internals ──────────────────────────────────────────────────────────────
+
+  /**
+   * The moment a line is counted and the live stock at that moment. Recorded on every count,
+   * flag or not — it is what lets completion tell sales before the count (already missing from
+   * the shelf) from sales after it (still to be taken off). Latest write wins: a figure entered
+   * describes the shelf now.
+   */
+  private async countSnapshot(productId: number) {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      select: { stock: true },
+    });
+    return { countedAt: new Date(), stockAtCount: product?.stock ?? null };
+  }
 
   /** Next per-store document number — same aggregate pattern as `storeProductCode`. */
   private async getNextCountNumber(storeId: string): Promise<number> {
