@@ -17,7 +17,8 @@
    `difference = counted − stock_at_count`, `stock_counted_at = counted_at`. Write-offs and lines without the
    snapshot behave as today. Ledger: quantity = difference, balanceAfter = resulting stock. Staging compose on.
 4. Tests: plan (pure), complete with flag on/off, legacy line without snapshot.
-5. POS local server port (same columns, same arithmetic) — separate commit, version bump; flag source to decide.
+5. ~~POS local server port~~ — not now: only an OFFLINE_ONLY store runs a stocktake on a till, and there is
+   none in the field (user, 2026-10-16). Port it (SQLite columns + same arithmetic + local flag) before one exists.
 6. Data: adjustment for doc #3 — preview (read-only) + guarded apply script (`WHERE stock = <previewed>`,
    `updated_at = NOW()`, audit rows). Per-line count time from nginx logs if readable (PATCH carries the item id),
    otherwise upper bound. Backup (`/pg-backup`) before apply; the user runs it.
