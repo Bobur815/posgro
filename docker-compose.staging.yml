@@ -44,6 +44,10 @@ services:
       LEADS_ENABLED: "true"
       NEWS_ENABLED: "true"
       BANK_TURNOVER_ENABLED: "true"
+      # Stocktake completion keeps sales/arrivals made after a line was counted instead of
+      # overwriting them with the counted figure (store 1234, stocktake #3). Staging only until
+      # confirmed; production adds it to docker-compose.yml.
+      STOCKTAKE_CARRY_SALES: "true"
       # Nasiya balances follow the replicated ledger, not the total each till uploads (last till
       # wins — it wiped another till's credit sale on store 1234, 2026-10-03). Staging only, same
       # reason as above. Balances are recomputed per customer as their ledger rows sync; production

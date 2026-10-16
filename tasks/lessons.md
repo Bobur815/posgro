@@ -436,3 +436,13 @@ unstashed) test file — a red or green from that window means nothing.
 
 **Rule:** compare against the base with `git show main:path > scratch` or a worktree, never by
 changing the working tree under a running job.
+
+## Staging holds a copy of the live store — a "dry run" there is a real write
+
+To syntax-check a prod stock-correction script (guarded `WHERE store_id = '1234' AND stock = <seen>`),
+I ran it against `posgro_staging`, assuming store 1234 did not exist there. It does: staging carries a
+copy of the live store's catalogue, and three products happened to have the same stock as the prod
+preview, so the "dry run" corrected them on staging (2026-10-16: 625, 684, 705).
+
+**Rule:** a dry run ends in `ROLLBACK`, never `COMMIT`, wherever it runs — and check what the target
+database holds before assuming a guard will match nothing.

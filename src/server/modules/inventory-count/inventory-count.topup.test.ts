@@ -72,6 +72,10 @@ function setup(count: Partial<Count>, products: Product[], items: Item[]) {
       update: jest.fn(async ({ data }: { data: Partial<Count> }) => Object.assign(doc, data)),
     },
     product: {
+      findUnique: jest.fn(
+        async ({ where }: { where: { id: number } }) =>
+          products.find((p) => p.id === where.id) ?? null,
+      ),
       findMany: jest.fn(
         async ({
           where,
