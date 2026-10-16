@@ -1,3 +1,32 @@
+# Stocktake completion keeps sales made after a line was counted (2026-10-16), branch fix/stocktake-carry-sales (from dev). Approved 2026-10-16
+
+## Problem (prod, store 1234, stocktake #3 "Salqin ichimliklar", open 8 Oct 05:32 → completed 11 Oct 14:57 UTC)
+- `complete()` writes `stock = counted_qty` absolutely and stamps `stock_counted_at = NOW()`. Sales between counting a
+  line and completing the document were decremented live, then overwritten. Product 634: counted 14, 8 sold while
+  open, 3 after → book 11, shelf 2 (expected 3).
+- Late-synced offline sales made after counting but before completion are also suppressed by the watermark.
+- Doc #3: 200 counted lines had sales while open, 1 198 pcs, ~8.76 M so'm at cost (upper bound: no count time stored).
+
+## Plan
+1. Schema (additive): `inventory_count_items.counted_at TIMESTAMP(3) NULL`, `stock_at_count DECIMAL(10,3) NULL`.
+   PG migration + SQLite `columnExists`/`ALTER` + `schema.sqlite.prisma`; migration-reviewer.
+2. Server: `setItemCount` / `scan` record `counted_at = now` and `stock_at_count = product.stock` (always — recording
+   is harmless). Latest write wins: a figure entered describes the shelf at that moment.
+3. Server `complete()` behind `STOCKTAKE_CARRY_SALES` (default off = today's behaviour). On, for a counted line with
+   `stock_at_count`: lock products FOR UPDATE, `stock = max(0, counted + (live − stock_at_count))`,
+   `difference = counted − stock_at_count`, `stock_counted_at = counted_at`. Write-offs and lines without the
+   snapshot behave as today. Ledger: quantity = difference, balanceAfter = resulting stock. Staging compose on.
+4. Tests: plan (pure), complete with flag on/off, legacy line without snapshot.
+5. ~~POS local server port~~ — not now: only an OFFLINE_ONLY store runs a stocktake on a till, and there is
+   none in the field (user, 2026-10-16). Port it (SQLite columns + same arithmetic + local flag) before one exists.
+6. Data: adjustment for doc #3 — preview (read-only) + guarded apply script (`WHERE stock = <previewed>`,
+   `updated_at = NOW()`, audit rows). Per-line count time from nginx logs if readable (PATCH carries the item id),
+   otherwise upper bound. Backup (`/pg-backup`) before apply; the user runs it.
+
+## Known limitation
+- An offline sale made BEFORE a line was counted but synced AFTER is in the shelf figure and also in the live delta →
+  subtracted twice. Needs the sale-sync side to know the line's count time; not in this change.
+
 # Stocktake: several categories per document + PLU/code lookup on the counting screen (2026-10-14), branch feat/inventory-multi-category (from dev). Design chosen: array column, checkbox list. Approved 2026-10-14; done 1.38.2, on dev
 
 ## Outcome
