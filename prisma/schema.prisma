@@ -520,6 +520,12 @@ model InventoryCountItem {
   // this is what separates "missing, written off" from "counted and found zero".
   writtenOff Boolean  @default(false) @map("written_off")
 
+  // When the line was last counted, and the product's live stock at that instant. Completion
+  // carries the sales/arrivals made after this moment into the result instead of overwriting
+  // them. Null on lines counted before these existed — those complete as before.
+  countedAt    DateTime? @map("counted_at")
+  stockAtCount Decimal?  @map("stock_at_count") @db.Decimal(10, 3)
+
   @@unique([countId, productId])
   @@index([countId])
   @@index([countId, barcode])
